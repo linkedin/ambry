@@ -596,7 +596,7 @@ public class ReplicationTest {
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
       ReplicationMetrics replicationMetrics =
-          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>(),
+          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new HashMap<String,List<ReplicaThread>>(),
               replicaIds);
       StoreKeyFactory storeKeyFactory = null;
       try {
@@ -614,7 +614,7 @@ public class ReplicationTest {
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -625,7 +625,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -636,7 +636,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false,"localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 2);
@@ -646,7 +646,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -654,7 +654,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
@@ -663,7 +663,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -671,7 +671,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -803,7 +803,7 @@ public class ReplicationTest {
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
       ReplicationMetrics replicationMetrics =
-          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>(),
+          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new HashMap<String, List<ReplicaThread>>(),
               replicaIds);
       StoreKeyFactory storeKeyFactory = null;
       try {
@@ -821,7 +821,7 @@ public class ReplicationTest {
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -832,7 +832,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -843,7 +843,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 1);
@@ -853,7 +853,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -861,7 +861,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
@@ -870,7 +870,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -878,7 +878,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 1);
@@ -888,7 +888,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -896,7 +896,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -1041,7 +1041,7 @@ public class ReplicationTest {
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
       ReplicationMetrics replicationMetrics =
-          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new ArrayList<ReplicaThread>(),
+          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(), new HashMap<String, List<ReplicaThread>>(),
               replicaIds);
       StoreKeyFactory storeKeyFactory = null;
       try {
@@ -1059,7 +1059,7 @@ public class ReplicationTest {
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -1070,7 +1070,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 0);
@@ -1081,7 +1081,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         // one message is corrupt
@@ -1092,7 +1092,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -1100,7 +1100,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertEquals(response.get(i).missingStoreKeys.size(), 3);
@@ -1109,7 +1109,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -1117,7 +1117,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         // one message is corrupt
@@ -1128,7 +1128,7 @@ public class ReplicationTest {
       replicaThread.fixMissingStoreKeys(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          response, false);
+          response, false, "localhost");
       for (int i = 0; i < response.size(); i++) {
         replicasToReplicate.get(dataNodeId).get(i).setToken(response.get(i).remoteToken);
       }
@@ -1136,7 +1136,7 @@ public class ReplicationTest {
       response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 4), replicasToReplicate.get(dataNodeId), false,
-          false);
+          false, "localhost");
       Assert.assertEquals(response.size(), replicasToReplicate.get(dataNodeId).size());
       for (int i = 0; i < response.size(); i++) {
         Assert.assertTrue(response.get(i).missingStoreKeys.size() == 0);
