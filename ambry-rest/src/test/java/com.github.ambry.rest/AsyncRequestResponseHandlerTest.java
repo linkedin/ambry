@@ -3,12 +3,12 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.router.ScheduledWriteChannel;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
@@ -693,7 +693,7 @@ class IntermittentRSC implements ReadableStreamChannel {
   }
 
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     // NOTE: This class will be removed once changes are made to AsyncRequestResponseHandler that make this test
     // obsolete. No need to implement this function.
     throw new IllegalStateException("Not implemented");
@@ -744,7 +744,7 @@ class HaltingRSC implements ReadableStreamChannel {
   }
 
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     try {
       halted.countDown();
       // halt until released.
@@ -752,7 +752,7 @@ class HaltingRSC implements ReadableStreamChannel {
     } catch (InterruptedException e) {
       // move on.
     }
-    return rsc.readInto(scheduledWriteChannel, callback);
+    return rsc.readInto(asyncWritableChannel, callback);
   }
 
   @Override
@@ -797,7 +797,7 @@ class BadRSC implements ReadableStreamChannel {
   }
 
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     throw new IllegalStateException("Not implemented");
   }
 
@@ -962,7 +962,7 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     throw new IllegalStateException("Not implemented");
   }
 }

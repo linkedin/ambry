@@ -12,7 +12,7 @@ import java.util.concurrent.Future;
  * The ordering in which data is submitted to the channel (even across multiple threads) is the order in which data
  * will be written to any underlying I/O channels or data structures.
  */
-public interface ScheduledWriteChannel extends Channel {
+public interface AsyncWritableChannel extends Channel {
 
   /**
    * The data in {@code src} will be eventually written to the channel and the {@code callback} will be invoked once the

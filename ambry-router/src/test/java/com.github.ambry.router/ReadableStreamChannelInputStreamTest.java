@@ -160,7 +160,7 @@ public class ReadableStreamChannelInputStreamTest {
 
 /**
  * {@link ReadableStreamChannel} implementation that either has an {@link Exception} on
- * {@link #readInto(ScheduledWriteChannel, Callback)} or executes an incomplete read.
+ * {@link #readInto(AsyncWritableChannel, Callback)} or executes an incomplete read.
  */
 class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
@@ -181,13 +181,13 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
 
   /**
    * Either throws the exception provided or returns immediately saying no bytes were read.
-   * @param scheduledWriteChannel the {@link ScheduledWriteChannel} to read the data into.
+   * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
    * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
-   *                 into the {@code scheduledWriteChannel} or if there is an exception in doing so. This can be null.
+   *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
    * @return
    */
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     Exception exception = null;
     RuntimeException runtimeException = null;
     if (!channelOpen.get()) {

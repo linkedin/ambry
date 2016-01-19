@@ -1,8 +1,8 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
-import com.github.ambry.router.ScheduledWriteChannel;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -88,7 +88,7 @@ public class MockRestRequest implements RestRequest {
   private final List<EventListener> listeners = new ArrayList<EventListener>();
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
 
-  private volatile ScheduledWriteChannel writeChannel = null;
+  private volatile AsyncWritableChannel writeChannel = null;
   private volatile ReadIntoCallbackWrapper callbackWrapper = null;
 
   /**
@@ -169,7 +169,7 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     ReadIntoCallbackWrapper tempWrapper = new ReadIntoCallbackWrapper(callback);
     contentLock.lock();
     try {
@@ -181,11 +181,11 @@ public class MockRestRequest implements RestRequest {
       Iterator<ByteBuffer> bufferIterator = requestContents.iterator();
       while (bufferIterator.hasNext()) {
         ByteBuffer buffer = bufferIterator.next();
-        writeContent(scheduledWriteChannel, tempWrapper, buffer);
+        writeContent(asyncWritableChannel, tempWrapper, buffer);
         bufferIterator.remove();
       }
       callbackWrapper = tempWrapper;
-      writeChannel = scheduledWriteChannel;
+      writeChannel = asyncWritableChannel;
     } finally {
       contentLock.unlock();
     }
@@ -254,11 +254,11 @@ public class MockRestRequest implements RestRequest {
 
   /**
    * Writes the provided {@code content} to the given {@code writeChannel}.
-   * @param writeChannel the {@link ScheduledWriteChannel} to write the {@code content} to.
+   * @param writeChannel the {@link AsyncWritableChannel} to write the {@code content} to.
    * @param callbackWrapper the {@link ReadIntoCallbackWrapper} for the read operation.
    * @param content the piece of {@link ByteBuffer} that needs to be written to the {@code writeChannel}.
    */
-  private void writeContent(ScheduledWriteChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
+  private void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
       ByteBuffer content) {
     ContentWriteCallback writeCallback;
     if (content == null) {
@@ -338,7 +338,7 @@ public class MockRestRequest implements RestRequest {
 }
 
 /**
- * Callback for each write into the given {@link ScheduledWriteChannel}.
+ * Callback for each write into the given {@link AsyncWritableChannel}.
  */
 class ContentWriteCallback implements Callback<Long> {
   private final boolean isLast;
@@ -372,11 +372,11 @@ class ContentWriteCallback implements Callback<Long> {
 }
 
 /**
- * Wrapper for callbacks provided to {@link MockRestRequest#readInto(ScheduledWriteChannel, Callback)}.
+ * Wrapper for callbacks provided to {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)}.
  */
 class ReadIntoCallbackWrapper {
   /**
-   * The {@link Future} where the result of {@link MockRestRequest#readInto(ScheduledWriteChannel, Callback)} will
+   * The {@link Future} where the result of {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)} will
    * eventually be updated.
    */
   public final FutureResult<Long> futureResult = new FutureResult<Long>();
@@ -394,7 +394,7 @@ class ReadIntoCallbackWrapper {
   }
 
   /**
-   * Updates the number of bytes that have been successfully read into the given {@link ScheduledWriteChannel}.
+   * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
    * @param delta the number of bytes read in the current invocation.
    * @return the total number of bytes read until now.
    */

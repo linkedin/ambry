@@ -15,14 +15,14 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link ByteBufferScheduledWriteChannel}.
+ * Unit tests for {@link ByteBufferAsyncWritableChannel}.
  */
-public class ByteBufferScheduledWriteChannelTest {
+public class ByteBufferAsyncWritableChannelTest {
 
   @Test
   public void commonCaseTest()
       throws Exception {
-    ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     assertTrue("Channel is not open", channel.isOpen());
     assertNull("There should have been no chunk returned", channel.getNextChunk(0));
     ChannelWriter channelWriter = new ChannelWriter(channel);
@@ -53,7 +53,7 @@ public class ByteBufferScheduledWriteChannelTest {
   @Test
   public void closeBeforeFullReadTest()
       throws Exception {
-    ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     assertTrue("Channel is not open", channel.isOpen());
     ChannelWriter channelWriter = new ChannelWriter(channel);
     channelWriter.writeToChannel(10);
@@ -82,7 +82,7 @@ public class ByteBufferScheduledWriteChannelTest {
   public void writeExceptionsTest()
       throws Exception {
     // null input.
-    ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     try {
       channel.write(null, null);
       fail("Write should have failed");
@@ -108,7 +108,7 @@ public class ByteBufferScheduledWriteChannelTest {
   @Test
   public void resolveChunkExceptionTest()
       throws InterruptedException {
-    ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     ByteBuffer bogusChunk = ByteBuffer.allocate(5);
     // before any chunks are added.
     try {
@@ -132,13 +132,13 @@ public class ByteBufferScheduledWriteChannelTest {
   }
 
   /**
-   * Checks the case where a {@link ByteBufferScheduledWriteChannel} is used after it has been closed.
+   * Checks the case where a {@link ByteBufferAsyncWritableChannel} is used after it has been closed.
    * @throws Exception
    */
   @Test
   public void useAfterCloseTest()
       throws Exception {
-    ByteBufferScheduledWriteChannel channel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     channel.write(ByteBuffer.allocate(5), null);
     ByteBuffer chunk = channel.getNextChunk();
     channel.close();
@@ -185,10 +185,10 @@ public class ByteBufferScheduledWriteChannelTest {
 
 class ChannelWriter {
   public final List<WriteData> writes = new ArrayList<WriteData>();
-  private final ByteBufferScheduledWriteChannel channel;
+  private final ByteBufferAsyncWritableChannel channel;
   private final Random random = new Random();
 
-  public ChannelWriter(ByteBufferScheduledWriteChannel channel) {
+  public ChannelWriter(ByteBufferAsyncWritableChannel channel) {
     this.channel = channel;
   }
 
@@ -217,7 +217,7 @@ class WriteData {
 }
 
 /**
- * Callback for all write operations on {@link ByteBufferScheduledWriteChannel}.
+ * Callback for all write operations on {@link ByteBufferAsyncWritableChannel}.
  */
 class WriteCallback implements Callback<Long> {
   public volatile long bytesWritten;
