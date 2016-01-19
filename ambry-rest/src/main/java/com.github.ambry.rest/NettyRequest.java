@@ -1,8 +1,8 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
-import com.github.ambry.router.ScheduledWriteChannel;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -47,7 +47,7 @@ class NettyRequest implements RestRequest {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  private volatile ScheduledWriteChannel writeChannel = null;
+  private volatile AsyncWritableChannel writeChannel = null;
   private volatile ReadIntoCallbackWrapper callbackWrapper = null;
 
   /**
@@ -182,7 +182,7 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     ReadIntoCallbackWrapper tempWrapper = new ReadIntoCallbackWrapper(callback);
     contentLock.lock();
     try {
@@ -192,11 +192,11 @@ class NettyRequest implements RestRequest {
         throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }
       while (requestContents.peek() != null) {
-        writeContent(scheduledWriteChannel, tempWrapper, requestContents.peek());
+        writeContent(asyncWritableChannel, tempWrapper, requestContents.peek());
         ReferenceCountUtil.release(requestContents.poll());
       }
       callbackWrapper = tempWrapper;
-      writeChannel = scheduledWriteChannel;
+      writeChannel = asyncWritableChannel;
     } finally {
       contentLock.unlock();
     }
@@ -236,11 +236,11 @@ class NettyRequest implements RestRequest {
 
   /**
    * Writes the data in the provided {@code httpContent} to the given {@code writeChannel}.
-   * @param writeChannel the {@link ScheduledWriteChannel} to write the data of {@code httpContent} to.
+   * @param writeChannel the {@link AsyncWritableChannel} to write the data of {@code httpContent} to.
    * @param callbackWrapper the {@link ReadIntoCallbackWrapper} for the read operation.
    * @param httpContent the piece of {@link HttpContent} that needs to be written to the {@code writeChannel}.
    */
-  private void writeContent(ScheduledWriteChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
+  private void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
       HttpContent httpContent) {
     boolean retained = false;
     ByteBuffer contentBuffer;
@@ -275,7 +275,7 @@ class NettyRequest implements RestRequest {
 }
 
 /**
- * Callback for each write into the given {@link ScheduledWriteChannel}.
+ * Callback for each write into the given {@link AsyncWritableChannel}.
  */
 class ContentWriteCallback implements Callback<Long> {
   private final HttpContent httpContent;
@@ -317,11 +317,11 @@ class ContentWriteCallback implements Callback<Long> {
 }
 
 /**
- * Wrapper for callbacks provided to {@link NettyRequest#readInto(ScheduledWriteChannel, Callback)}.
+ * Wrapper for callbacks provided to {@link NettyRequest#readInto(AsyncWritableChannel, Callback)}.
  */
 class ReadIntoCallbackWrapper {
   /**
-   * The {@link Future} where the result of {@link NettyRequest#readInto(ScheduledWriteChannel, Callback)} will
+   * The {@link Future} where the result of {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} will
    * eventually be updated.
    */
   public final FutureResult<Long> futureResult = new FutureResult<Long>();
@@ -339,7 +339,7 @@ class ReadIntoCallbackWrapper {
   }
 
   /**
-   * Updates the number of bytes that have been successfully read into the given {@link ScheduledWriteChannel}.
+   * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
    * @param delta the number of bytes read in the current invocation.
    * @return the total number of bytes read until now.
    */

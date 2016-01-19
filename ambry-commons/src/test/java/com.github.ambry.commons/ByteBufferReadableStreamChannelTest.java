@@ -1,8 +1,8 @@
 package com.github.ambry.commons;
 
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
-import com.github.ambry.router.ScheduledWriteChannel;
 import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -33,7 +33,7 @@ public class ByteBufferReadableStreamChannelTest {
   public void commonCaseTest()
       throws Exception {
     readToWBCTest();
-    readToSWCTest();
+    readToAWCTest();
   }
 
   /**
@@ -65,21 +65,21 @@ public class ByteBufferReadableStreamChannelTest {
   }
 
   /**
-   * Tests that the right exceptions are thrown when reading into {@link ScheduledWriteChannel} fails.
+   * Tests that the right exceptions are thrown when reading into {@link AsyncWritableChannel} fails.
    * @throws Exception
    */
   @Test
-  public void readIntoSWCFailureTest()
+  public void readIntoAWCFailureTest()
       throws Exception {
     String errMsg = "@@ExpectedExceptionMessage@@";
     byte[] in = fillRandomBytes(new byte[1]);
 
-    // Bad SWC.
+    // Bad AWC.
     ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     ReadIntoCallback callback = new ReadIntoCallback();
     try {
-      readableStreamChannel.readInto(new BadSWC(new IOException(errMsg)), callback).get();
-      fail("Should have failed because BadSWC would have thrown exception");
+      readableStreamChannel.readInto(new BadAsyncWritableChannel(new IOException(errMsg)), callback).get();
+      fail("Should have failed because BadAsyncWritableChannel would have thrown exception");
     } catch (ExecutionException e) {
       Exception exception = getRootCause(e);
       assertEquals("Exception message does not match expected (future)", errMsg, exception.getMessage());
@@ -88,7 +88,7 @@ public class ByteBufferReadableStreamChannelTest {
 
     // Reading more than once.
     readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-    ByteBufferScheduledWriteChannel writeChannel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
     readableStreamChannel.readInto(writeChannel, null);
     try {
       readableStreamChannel.readInto(writeChannel, null);
@@ -100,7 +100,7 @@ public class ByteBufferReadableStreamChannelTest {
     // Read after close.
     readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     readableStreamChannel.close();
-    writeChannel = new ByteBufferScheduledWriteChannel();
+    writeChannel = new ByteBufferAsyncWritableChannel();
     callback = new ReadIntoCallback();
     try {
       readableStreamChannel.readInto(writeChannel, callback).get();
@@ -132,7 +132,7 @@ public class ByteBufferReadableStreamChannelTest {
     ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
     assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
     assertEquals("Size returned by ByteBufferReadableStreamChannel is not 0", 0, readableStreamChannel.getSize());
-    ByteBufferScheduledWriteChannel writeChannel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
     ReadIntoCallback callback = new ReadIntoCallback();
     Future<Long> future = readableStreamChannel.readInto(writeChannel, callback);
     ByteBuffer chunk = writeChannel.getNextChunk(0);
@@ -217,17 +217,17 @@ public class ByteBufferReadableStreamChannelTest {
   }
 
   /**
-   * Tests reading into a {@link ScheduledWriteChannel}.
+   * Tests reading into a {@link AsyncWritableChannel}.
    * @throws Exception
    */
-  private void readToSWCTest()
+  private void readToAWCTest()
       throws Exception {
     ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
     ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(content);
     assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
     assertEquals("Size returned by ByteBufferReadableStreamChannel did not match source array size", content.capacity(),
         readableStreamChannel.getSize());
-    ByteBufferScheduledWriteChannel writeChannel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
     ReadIntoCallback callback = new ReadIntoCallback();
     Future<Long> future = readableStreamChannel.readInto(writeChannel, callback);
     ByteBuffer contentWrapper = ByteBuffer.wrap(content.array());
@@ -301,18 +301,18 @@ class BadWritableChannel implements WritableByteChannel {
 }
 
 /**
- * A {@link ScheduledWriteChannel} that throws a custom exception (provided at construction time) on a call to
+ * A {@link AsyncWritableChannel} that throws a custom exception (provided at construction time) on a call to
  * {@link #write(ByteBuffer, Callback)}.
  */
-class BadSWC implements ScheduledWriteChannel {
+class BadAsyncWritableChannel implements AsyncWritableChannel {
   private final Exception exceptionToThrow;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
 
   /**
-   * Creates an instance of BadSWC that throws {@code exceptionToThrow} on write.
+   * Creates an instance of BadAsyncWritableChannel that throws {@code exceptionToThrow} on write.
    * @param exceptionToThrow the {@link Exception} to throw on write.
    */
-  public BadSWC(Exception exceptionToThrow) {
+  public BadAsyncWritableChannel(Exception exceptionToThrow) {
     this.exceptionToThrow = exceptionToThrow;
   }
 

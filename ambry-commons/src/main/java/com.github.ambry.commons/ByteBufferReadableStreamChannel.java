@@ -1,9 +1,9 @@
 package com.github.ambry.commons;
 
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
-import com.github.ambry.router.ScheduledWriteChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -57,7 +57,7 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   }
 
   @Override
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     Future<Long> future;
     if (!channelOpen.get()) {
       ClosedChannelException closedChannelException = new ClosedChannelException();
@@ -70,7 +70,7 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     } else if (!channelEmptied.compareAndSet(false, true)) {
       throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
     } else {
-      future = scheduledWriteChannel.write(buffer, callback);
+      future = asyncWritableChannel.write(buffer, callback);
     }
     return future;
   }

@@ -265,7 +265,7 @@ class InMemoryBlobPoster implements Runnable {
   private ByteBuffer readBlob(ReadableStreamChannel postContent)
       throws InterruptedException {
     ByteBuffer blobData = ByteBuffer.allocate((int) postContent.getSize());
-    ByteBufferSWC channel = new ByteBufferSWC();
+    ByteBufferAWC channel = new ByteBufferAWC();
     postContent.readInto(channel, new CloseWriteChannelCallback(channel));
     ByteBuffer chunk = channel.getNextChunk();
     IllegalStateException exception = null;
@@ -357,16 +357,16 @@ class InMemoryBlob {
 }
 
 /**
- * Callback for {@link ByteBufferSWC} that closes the channel on {@link #onCompletion(Long, Exception)}.
+ * Callback for {@link ByteBufferAWC} that closes the channel on {@link #onCompletion(Long, Exception)}.
  */
 class CloseWriteChannelCallback implements Callback<Long> {
-  private final ByteBufferSWC channel;
+  private final ByteBufferAWC channel;
 
   /**
    * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
-   * @param channel the {@link ByteBufferSWC} that needs to be closed.
+   * @param channel the {@link ByteBufferAWC} that needs to be closed.
    */
-  public CloseWriteChannelCallback(ByteBufferSWC channel) {
+  public CloseWriteChannelCallback(ByteBufferAWC channel) {
     this.channel = channel;
   }
 

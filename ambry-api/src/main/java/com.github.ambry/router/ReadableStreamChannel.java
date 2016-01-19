@@ -22,18 +22,18 @@ public interface ReadableStreamChannel extends Channel {
   public long getSize();
 
   /**
-   * Reads all the data inside this channel into the given {@code scheduledWriteChannel} asynchronously. The
+   * Reads all the data inside this channel into the given {@code asyncWritableChannel} asynchronously. The
    * {@code callback} will be invoked once the read is complete. The {@code callback} and the future returned will
    * contain the bytes read (that should be equal to the size of the channel if there were no exceptions) on success
    * or failure. If the read failed, they will also contain the exception that caused the failure.
    * <p/>
    * It is guaranteed that a read will be acknowledged as either a success or failure.
-   * @param scheduledWriteChannel the {@link ScheduledWriteChannel} to read the data into.
+   * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
    * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
-   *                 into the {@code scheduledWriteChannel} or if there is an exception in doing so. This can be null.
+   *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
    * @return the {@link Future} that will eventually contain the result of the operation.
    */
-  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback);
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback);
 
   /**
    * This function is deprecated and will be removed in the future. The following documentation might not be up to date.

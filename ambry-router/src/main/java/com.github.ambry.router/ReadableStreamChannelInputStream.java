@@ -1,6 +1,6 @@
 package com.github.ambry.router;
 
-import com.github.ambry.commons.ByteBufferScheduledWriteChannel;
+import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -12,8 +12,8 @@ import java.nio.ByteBuffer;
  *  This class is not thread-safe and will result in undefined behaviour if accesses to the stream are not synchronized.
  */
 class ReadableStreamChannelInputStream extends InputStream {
-  private final ByteBufferScheduledWriteChannel scheduledWriteChannel = new ByteBufferScheduledWriteChannel();
-  private final CloseWriteChannelCallback callback = new CloseWriteChannelCallback(scheduledWriteChannel);
+  private final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
+  private final CloseWriteChannelCallback callback = new CloseWriteChannelCallback(asyncWritableChannel);
   private final ReadableStreamChannel readableStreamChannel;
 
   private ByteBuffer currentChunk = null;
@@ -27,7 +27,7 @@ class ReadableStreamChannelInputStream extends InputStream {
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
     this.readableStreamChannel = readableStreamChannel;
     bytesAvailable = readableStreamChannel.getSize();
-    readableStreamChannel.readInto(scheduledWriteChannel, callback);
+    readableStreamChannel.readInto(asyncWritableChannel, callback);
   }
 
   @Override
@@ -77,7 +77,7 @@ class ReadableStreamChannelInputStream extends InputStream {
   public void close()
       throws IOException {
     readableStreamChannel.close();
-    scheduledWriteChannel.close();
+    asyncWritableChannel.close();
   }
 
   /**
@@ -90,10 +90,10 @@ class ReadableStreamChannelInputStream extends InputStream {
       throws IOException {
     if (currentChunk == null || !currentChunk.hasRemaining()) {
       if (currentChunk != null) {
-        scheduledWriteChannel.resolveChunk(currentChunk, null);
+        asyncWritableChannel.resolveChunk(currentChunk, null);
       }
       try {
-        currentChunk = scheduledWriteChannel.getNextChunk();
+        currentChunk = asyncWritableChannel.getNextChunk();
       } catch (InterruptedException e) {
         throw new IllegalStateException(e);
       }
@@ -113,7 +113,7 @@ class ReadableStreamChannelInputStream extends InputStream {
   }
 
   /**
-   * Callback for {@link ByteBufferScheduledWriteChannel} that closes the channel on
+   * Callback for {@link ByteBufferAsyncWritableChannel} that closes the channel on
    * {@link #onCompletion(Long, Exception)}.
    */
   private static class CloseWriteChannelCallback implements Callback<Long> {
@@ -121,13 +121,13 @@ class ReadableStreamChannelInputStream extends InputStream {
      * Stores any exception that occurred.
      */
     public Exception exception = null;
-    private final ByteBufferScheduledWriteChannel channel;
+    private final ByteBufferAsyncWritableChannel channel;
 
     /**
      * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
-     * @param channel the {@link ByteBufferScheduledWriteChannel} that needs to be closed.
+     * @param channel the {@link ByteBufferAsyncWritableChannel} that needs to be closed.
      */
-    public CloseWriteChannelCallback(ByteBufferScheduledWriteChannel channel) {
+    public CloseWriteChannelCallback(ByteBufferAsyncWritableChannel channel) {
       this.channel = channel;
     }
 

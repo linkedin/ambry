@@ -1,10 +1,10 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.ByteBufferScheduledWriteChannel;
+import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
-import com.github.ambry.router.ScheduledWriteChannel;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -136,7 +136,7 @@ public class NettyRequestTest {
     nettyRequest.close();
 
     // operations that will throw exceptions.
-    ScheduledWriteChannel writeChannel = new ByteBufferScheduledWriteChannel();
+    AsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
     ReadIntoCallback callback = new ReadIntoCallback();
     try {
       nettyRequest.readInto(writeChannel, callback).get();
@@ -158,7 +158,7 @@ public class NettyRequestTest {
 
   /**
    * Tests {@link NettyRequest#addContent(HttpContent)} and
-   * {@link NettyRequest#readInto(ScheduledWriteChannel, Callback)} by creating a {@link NettyRequest}, adding a few
+   * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} by creating a {@link NettyRequest}, adding a few
    * pieces of content to it and then reading from it to match the stream with the added content.
    * <p/>
    * The read happens at different points of time w.r.t content addition (before, during, after).
@@ -171,7 +171,7 @@ public class NettyRequestTest {
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     ByteBuffer content = generateContent(httpContents);
-    ByteBufferScheduledWriteChannel writeChannel = new ByteBufferScheduledWriteChannel();
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
     ReadIntoCallback callback = new ReadIntoCallback();
     Future<Long> future = nettyRequest.readInto(writeChannel, callback);
 
@@ -194,7 +194,7 @@ public class NettyRequestTest {
     nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     httpContents = new ArrayList<HttpContent>();
     content = generateContent(httpContents);
-    writeChannel = new ByteBufferScheduledWriteChannel();
+    writeChannel = new ByteBufferAsyncWritableChannel();
     callback = new ReadIntoCallback();
 
     // add content initially
@@ -232,7 +232,7 @@ public class NettyRequestTest {
     nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     httpContents = new ArrayList<HttpContent>();
     content = generateContent(httpContents);
-    writeChannel = new ByteBufferScheduledWriteChannel();
+    writeChannel = new ByteBufferAsyncWritableChannel();
     callback = new ReadIntoCallback();
 
     for (HttpContent httpContent : httpContents) {
@@ -253,8 +253,8 @@ public class NettyRequestTest {
   }
 
   /**
-   * Tests exception scenarios of {@link NettyRequest#readInto(ScheduledWriteChannel, Callback)} and behavior of
-   * {@link NettyRequest} when {@link ScheduledWriteChannel} instances fail.
+   * Tests exception scenarios of {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} and behavior of
+   * {@link NettyRequest} when {@link AsyncWritableChannel} instances fail.
    * @throws InterruptedException
    * @throws IOException
    * @throws RestServiceException
@@ -264,7 +264,7 @@ public class NettyRequestTest {
       throws InterruptedException, IOException, RestServiceException {
     // try to call readInto twice.
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
-    ScheduledWriteChannel writeChannel = new ByteBufferScheduledWriteChannel();
+    AsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
     nettyRequest.readInto(writeChannel, null);
 
     try {
@@ -282,7 +282,7 @@ public class NettyRequestTest {
     assertTrue("Not enough content has been generated", httpContents.size() > 2);
     String expectedMsg = "@@expectedMsg@@";
     Exception exception = new Exception(expectedMsg);
-    writeChannel = new BadSWC(exception);
+    writeChannel = new BadAsyncWritableChannel(exception);
     ReadIntoCallback callback = new ReadIntoCallback();
 
     // add content initially
@@ -318,7 +318,7 @@ public class NettyRequestTest {
     httpContents = new ArrayList<HttpContent>();
     generateContent(httpContents);
     exception = new IllegalStateException(expectedMsg);
-    writeChannel = new BadSWC(exception);
+    writeChannel = new BadAsyncWritableChannel(exception);
     callback = new ReadIntoCallback();
 
     for (HttpContent httpContent : httpContents) {
@@ -340,7 +340,7 @@ public class NettyRequestTest {
     httpContents = new ArrayList<HttpContent>();
     generateContent(httpContents);
     exception = new IllegalStateException(expectedMsg);
-    writeChannel = new BadSWC(exception);
+    writeChannel = new BadAsyncWritableChannel(exception);
     callback = new ReadIntoCallback();
 
     nettyRequest.readInto(writeChannel, callback);
@@ -595,11 +595,11 @@ public class NettyRequestTest {
    * Reads from the provided {@code writeChannel} and verifies that the bytes received match the original content
    * provided through {@code content}.
    * @param readLengthDesired desired length of bytes to read.
-   * @param writeChannel the {@link ByteBufferScheduledWriteChannel} to read from.
+   * @param writeChannel the {@link ByteBufferAsyncWritableChannel} to read from.
    * @param content the original content that serves as the source of truth.
    * @throws InterruptedException
    */
-  private void readAndVerify(int readLengthDesired, ByteBufferScheduledWriteChannel writeChannel, ByteBuffer content)
+  private void readAndVerify(int readLengthDesired, ByteBufferAsyncWritableChannel writeChannel, ByteBuffer content)
       throws InterruptedException {
     int bytesRead = 0;
     while (bytesRead < readLengthDesired) {
@@ -633,17 +633,17 @@ class ReadIntoCallback implements Callback<Long> {
 }
 
 /**
- * Used to test for {@link NettyRequest} behavior when a {@link ScheduledWriteChannel} throws exceptions.
+ * Used to test for {@link NettyRequest} behavior when a {@link AsyncWritableChannel} throws exceptions.
  */
-class BadSWC implements ScheduledWriteChannel {
+class BadAsyncWritableChannel implements AsyncWritableChannel {
   private final Exception exceptionToThrow;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
 
   /**
-   * Creates an instance of BadSWC that throws {@code exceptionToThrow} on write.
+   * Creates an instance of BadAsyncWritableChannel that throws {@code exceptionToThrow} on write.
    * @param exceptionToThrow the {@link Exception} to throw on write.
    */
-  public BadSWC(Exception exceptionToThrow) {
+  public BadAsyncWritableChannel(Exception exceptionToThrow) {
     this.exceptionToThrow = exceptionToThrow;
   }
 
