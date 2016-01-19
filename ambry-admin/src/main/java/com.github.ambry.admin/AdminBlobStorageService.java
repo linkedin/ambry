@@ -702,9 +702,9 @@ class HeadCallback implements Callback<BlobInfo> {
       restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
     }
     byte[] userMetadataArray = blobInfo.getUserMetadata();
-    Map<String, String> userMetadata = RestUtils.getUserMetadataFromByteArray(userMetadataArray);
-    for (String key : userMetadata.keySet()) {
-      restResponseChannel.setHeader(key, userMetadata.get(key));
+    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
+    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
+      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
     }
   }
 }

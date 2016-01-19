@@ -221,7 +221,7 @@ public class RestUtils {
    * @param userMetadata the byte array which has the user metadata
    * @return Map<String,String> the user metadata that is read from the byte array
    */
-  public static Map<String, String> getUserMetadataFromByteArray(byte[] userMetadata)
+  public static Map<String, String> buildUserMetadata(byte[] userMetadata)
       throws RestServiceException {
     Map<String, String> toReturn = new HashMap<String, String>();
     boolean oldStyle = false;
