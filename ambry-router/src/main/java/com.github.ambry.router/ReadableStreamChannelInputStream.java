@@ -13,6 +13,8 @@ import java.nio.ByteBuffer;
  */
 class ReadableStreamChannelInputStream extends InputStream {
   private final ByteBufferScheduledWriteChannel scheduledWriteChannel = new ByteBufferScheduledWriteChannel();
+  private final CloseWriteChannelCallback callback = new CloseWriteChannelCallback(scheduledWriteChannel);
+  private final ReadableStreamChannel readableStreamChannel;
 
   private ByteBuffer currentChunk = null;
   private volatile long bytesAvailable;
@@ -23,8 +25,9 @@ class ReadableStreamChannelInputStream extends InputStream {
    * {@link InputStream}.
    */
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
+    this.readableStreamChannel = readableStreamChannel;
     bytesAvailable = readableStreamChannel.getSize();
-    readableStreamChannel.readInto(scheduledWriteChannel, new CloseWriteChannelCallback(scheduledWriteChannel));
+    readableStreamChannel.readInto(scheduledWriteChannel, callback);
   }
 
   @Override
@@ -33,7 +36,8 @@ class ReadableStreamChannelInputStream extends InputStream {
   }
 
   @Override
-  public int read() {
+  public int read()
+      throws IOException {
     int data = -1;
     if (loadData()) {
       data = currentChunk.get() & 0xFF;
@@ -59,19 +63,20 @@ class ReadableStreamChannelInputStream extends InputStream {
       currentChunk.get(b, off, toRead);
       len -= toRead;
       off += toRead;
+      bytesAvailable -= toRead;
     }
 
     int bytesRead = off - startOff;
-    if (bytesRead > 0) {
-      bytesAvailable -= bytesRead;
-    } else {
+    if (bytesRead <= 0) {
       bytesRead = -1;
     }
     return bytesRead;
   }
 
   @Override
-  public void close() {
+  public void close()
+      throws IOException {
+    readableStreamChannel.close();
     scheduledWriteChannel.close();
   }
 
@@ -79,8 +84,10 @@ class ReadableStreamChannelInputStream extends InputStream {
    * Loads more data for reading. Blocks until data is either available or no more data is expected.
    * @return {@code true} if data is available for reading. {@link false} otherwise.
    * @throws IllegalStateException if the wait for the next chunk is interrupted.
+   * @throws IOException if there is any problem with I/O.
    */
-  private boolean loadData() {
+  private boolean loadData()
+      throws IOException {
     if (currentChunk == null || !currentChunk.hasRemaining()) {
       if (currentChunk != null) {
         scheduledWriteChannel.resolveChunk(currentChunk, null);
@@ -91,27 +98,44 @@ class ReadableStreamChannelInputStream extends InputStream {
         throw new IllegalStateException(e);
       }
     }
+    if (currentChunk == null) {
+      if (callback.exception != null) {
+        if (callback.exception instanceof IOException) {
+          throw (IOException) callback.exception;
+        } else {
+          throw new IllegalStateException(callback.exception);
+        }
+      } else if (bytesAvailable != 0) {
+        throw new IllegalStateException("All the bytes available could not be read");
+      }
+    }
     return currentChunk != null;
   }
-}
-
-/**
- * Callback for {@link ByteBufferScheduledWriteChannel} that closes the channel on
- * {@link #onCompletion(Long, Exception)}.
- */
-class CloseWriteChannelCallback implements Callback<Long> {
-  private final ByteBufferScheduledWriteChannel channel;
 
   /**
-   * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
-   * @param channel the {@link ByteBufferScheduledWriteChannel} that needs to be closed.
+   * Callback for {@link ByteBufferScheduledWriteChannel} that closes the channel on
+   * {@link #onCompletion(Long, Exception)}.
    */
-  public CloseWriteChannelCallback(ByteBufferScheduledWriteChannel channel) {
-    this.channel = channel;
-  }
+  private static class CloseWriteChannelCallback implements Callback<Long> {
+    /**
+     * Stores any exception that occurred.
+     */
+    public Exception exception = null;
+    private final ByteBufferScheduledWriteChannel channel;
 
-  @Override
-  public void onCompletion(Long result, Exception exception) {
-    channel.close();
+    /**
+     * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
+     * @param channel the {@link ByteBufferScheduledWriteChannel} that needs to be closed.
+     */
+    public CloseWriteChannelCallback(ByteBufferScheduledWriteChannel channel) {
+      this.channel = channel;
+    }
+
+    @Override
+    public void onCompletion(Long result, Exception exception) {
+      this.exception = exception;
+      channel.close();
+    }
   }
 }
+

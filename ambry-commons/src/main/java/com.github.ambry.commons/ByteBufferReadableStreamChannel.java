@@ -60,12 +60,12 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
     Future<Long> future;
     if (!channelOpen.get()) {
-      ClosedChannelException cce = new ClosedChannelException();
+      ClosedChannelException closedChannelException = new ClosedChannelException();
       FutureResult<Long> futureResult = new FutureResult<Long>();
-      futureResult.done(0L, new IllegalStateException(cce));
+      futureResult.done(0L, new IllegalStateException(closedChannelException));
       future = futureResult;
       if (callback != null) {
-        callback.onCompletion(0L, cce);
+        callback.onCompletion(0L, closedChannelException);
       }
     } else if (!channelEmptied.compareAndSet(false, true)) {
       throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");

@@ -240,6 +240,7 @@ public class ByteBufferReadableStreamChannelTest {
       }
       writeChannel.resolveChunk(recvdContent, null);
     }
+    assertNull("There should have been no more data in the channel", writeChannel.getNextChunk(0));
     writeChannel.close();
     if (callback.exception != null) {
       throw callback.exception;

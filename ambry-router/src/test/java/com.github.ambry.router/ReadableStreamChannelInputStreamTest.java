@@ -4,8 +4,12 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -83,6 +87,38 @@ public class ReadableStreamChannelInputStreamTest {
     assertEquals("Available should be 0", 0, dstInputStream.available());
   }
 
+  /**
+   * Tests for the case when reads are incomplete either because exceptions were thrown or the read simply did not
+   * complete.
+   * @throws IOException
+   */
+  @Test
+  public void incompleteReadsTest()
+      throws IOException {
+    // Exception during read
+    String exceptionMsg = "@@randomMsg@@";
+    Exception exceptionToThrow = new Exception(exceptionMsg);
+    ReadableStreamChannel channel = new IncompleteReadReadableStreamChannel(exceptionToThrow);
+    InputStream inputStream = new ReadableStreamChannelInputStream(channel);
+    try {
+      inputStream.read();
+    } catch (Exception e) {
+      while (e.getCause() != null) {
+        e = (Exception) e.getCause();
+      }
+      assertEquals("Exception messages do not match", exceptionMsg, e.getMessage());
+    }
+
+    // incomplete read
+    channel = new IncompleteReadReadableStreamChannel(null);
+    inputStream = new ReadableStreamChannelInputStream(channel);
+    try {
+      inputStream.read();
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
+  }
+
   // helpers
   // commonCaseTest() helpers
   private void readByteByByteTest(byte[] in)
@@ -119,5 +155,72 @@ public class ReadableStreamChannelInputStreamTest {
     assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));
     assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
     assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
+  }
+}
+
+/**
+ * {@link ReadableStreamChannel} implementation that either has an {@link Exception} on
+ * {@link #readInto(ScheduledWriteChannel, Callback)} or executes an incomplete read.
+ */
+class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final Exception exceptionToThrow;
+
+  /**
+   * Create an instance of {@link IncompleteReadReadableStreamChannel} with an {@code exceptionToThrow}.
+   * @param exceptionToThrow if desired, provide an exception that will thrown on read. Can be null.
+   */
+  public IncompleteReadReadableStreamChannel(Exception exceptionToThrow) {
+    this.exceptionToThrow = exceptionToThrow;
+  }
+
+  @Override
+  public long getSize() {
+    return 1;
+  }
+
+  /**
+   * Either throws the exception provided or returns immediately saying no bytes were read.
+   * @param scheduledWriteChannel the {@link ScheduledWriteChannel} to read the data into.
+   * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
+   *                 into the {@code scheduledWriteChannel} or if there is an exception in doing so. This can be null.
+   * @return
+   */
+  @Override
+  public Future<Long> readInto(ScheduledWriteChannel scheduledWriteChannel, Callback<Long> callback) {
+    Exception exception = null;
+    RuntimeException runtimeException = null;
+    if (!channelOpen.get()) {
+      exception = new ClosedChannelException();
+    } else {
+      exception = exceptionToThrow;
+    }
+    if (exception != null) {
+      runtimeException = new IllegalStateException(exception);
+    }
+    FutureResult<Long> futureResult = new FutureResult<Long>();
+    futureResult.done(0L, runtimeException);
+    if (callback != null) {
+      callback.onCompletion(0L, exception);
+    }
+    return futureResult;
+  }
+
+  @Deprecated
+  @Override
+  public int read(WritableByteChannel channel)
+      throws IOException {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public boolean isOpen() {
+    return channelOpen.get();
+  }
+
+  @Override
+  public void close()
+      throws IOException {
+    channelOpen.set(false);
   }
 }

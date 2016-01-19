@@ -60,7 +60,7 @@ public class ByteBufferSWC implements ScheduledWriteChannel {
     if (channelOpen.compareAndSet(true, false)) {
       lock.lock();
       try {
-        resolveAllRemainingChunks();
+        resolveAllRemainingChunks(new ClosedChannelException());
         chunks.add(new ChunkData(null, null));
       } finally {
         lock.unlock();
@@ -157,63 +157,63 @@ public class ByteBufferSWC implements ScheduledWriteChannel {
 
   /**
    * Resolves all the remaining chunks with {@link ClosedChannelException}.
+   * @param e the exception to use to resolve all the chunks.
    */
-  private void resolveAllRemainingChunks() {
+  private void resolveAllRemainingChunks(Exception e) {
     while (chunksAwaitingResolution.peek() != null) {
-      chunksAwaitingResolution.poll().resolveChunk(new ClosedChannelException());
+      chunksAwaitingResolution.poll().resolveChunk(e);
     }
     while (chunks.peek() != null) {
-      chunks.poll().resolveChunk(new ClosedChannelException());
+      chunks.poll().resolveChunk(e);
     }
   }
-}
-
-/**
- * Representation of all the data associated with a chunk i.e. the actual bytes and the future and callback that need to
- * be invoked on resolution.
- */
-class ChunkData {
-  /**
-   * The future that will be set on chunk resolution.
-   */
-  public final FutureResult<Long> future = new FutureResult<Long>();
-  /**
-   * The bytes associated with this chunk.
-   */
-  public final ByteBuffer buffer;
-
-  private final int startPos;
-  private final Callback<Long> callback;
 
   /**
-   * Create a new instance of ChunkData with the given parameters.
-   * @param buffer the bytes of data associated with the chunk.
-   * @param callback the {@link Callback} that will be invoked on chunk resolution.
+   * Representation of all the data associated with a chunk i.e. the actual bytes and the future and callback that need
+   * to be invoked on resolution.
    */
-  public ChunkData(ByteBuffer buffer, Callback<Long> callback) {
-    this.buffer = buffer;
-    if (buffer != null) {
-      startPos = buffer.position();
-    } else {
-      startPos = 0;
+  private static class ChunkData {
+    /**
+     * The future that will be set on chunk resolution.
+     */
+    public final FutureResult<Long> future = new FutureResult<Long>();
+    /**
+     * The bytes associated with this chunk.
+     */
+    public final ByteBuffer buffer;
+    private final int startPos;
+    private final Callback<Long> callback;
+
+    /**
+     * Create a new instance of ChunkData with the given parameters.
+     * @param buffer the bytes of data associated with the chunk.
+     * @param callback the {@link Callback} that will be invoked on chunk resolution.
+     */
+    public ChunkData(ByteBuffer buffer, Callback<Long> callback) {
+      this.buffer = buffer;
+      if (buffer != null) {
+        startPos = buffer.position();
+      } else {
+        startPos = 0;
+      }
+      this.callback = callback;
     }
-    this.callback = callback;
-  }
 
-  /**
-   * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
-   * resolved, the data inside it is considered void.
-   * @param exception the reason for chunk handling failure.
-   */
-  public void resolveChunk(Exception exception) {
-    long bytesWritten = buffer.position() - startPos;
-    IllegalStateException ise = null;
-    if (exception != null) {
-      ise = new IllegalStateException(exception);
-    }
-    future.done(bytesWritten, ise);
-    if (callback != null) {
-      callback.onCompletion(bytesWritten, exception);
+    /**
+     * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
+     * resolved, the data inside it is considered void.
+     * @param exception the reason for chunk handling failure.
+     */
+    public void resolveChunk(Exception exception) {
+      long bytesWritten = buffer.position() - startPos;
+      IllegalStateException ise = null;
+      if (exception != null) {
+        ise = new IllegalStateException(exception);
+      }
+      future.done(bytesWritten, ise);
+      if (callback != null) {
+        callback.onCompletion(bytesWritten, exception);
+      }
     }
   }
 }
