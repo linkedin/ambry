@@ -4,7 +4,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import java.io.IOException;
-import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -95,7 +94,7 @@ public class InMemoryRouter implements Router {
     ReadableStreamChannel operationResult = null;
     Exception exception = null;
     if (blobId == null || blobId.length() != BLOB_ID_SIZE) {
-      completeOperation(futureResult, callback, operationResult,
+      completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
     } else {
       try {
@@ -261,7 +260,6 @@ class InMemoryBlobPoster implements Runnable {
    * Reads blob data and returns the content as a {@link ByteBuffer}.
    * @param postContent the blob data.
    * @return the blob data in a {@link ByteBuffer}.
-   * @throws BufferOverflowException
    * @throws InterruptedException
    */
   private ByteBuffer readBlob(ReadableStreamChannel postContent)
@@ -270,10 +268,10 @@ class InMemoryBlobPoster implements Runnable {
     ByteBufferSWC channel = new ByteBufferSWC();
     postContent.readInto(channel, new CloseWriteChannelCallback(channel));
     ByteBuffer chunk = channel.getNextChunk();
-    BufferOverflowException exception = null;
+    IllegalStateException exception = null;
     while (chunk != null) {
       if (chunk.remaining() > blobData.remaining()) {
-        exception = new BufferOverflowException();
+        exception = new IllegalStateException("Data size advertized does not match actual size of data");
       } else {
         blobData.put(chunk);
       }
