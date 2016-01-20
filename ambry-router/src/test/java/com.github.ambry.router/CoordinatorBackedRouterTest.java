@@ -198,8 +198,7 @@ public class CoordinatorBackedRouterTest {
       future.get();
       fail("Callback had an exception but future.get() did not throw exception");
     } catch (Exception e) {
-      assertEquals("Callback and future exceptions do not match", routerOperationCallback.getException(),
-          e.getCause().getCause());
+      assertEquals("Callback and future exceptions do not match", routerOperationCallback.getException(), e.getCause());
     }
   }
 

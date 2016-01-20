@@ -215,11 +215,7 @@ public class InMemoryRouter implements Router {
    */
   protected static void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
       Exception exception) {
-    RuntimeException runtimeException = null;
-    if (exception != null) {
-      runtimeException = new RuntimeException(exception);
-    }
-    futureResult.done(operationResult, runtimeException);
+    futureResult.done(operationResult, exception);
     if (callback != null) {
       callback.onCompletion(operationResult, exception);
     }
