@@ -409,11 +409,7 @@ class ReadIntoCallbackWrapper {
    */
   public void invokeCallback(Exception exception) {
     if (callbackInvoked.compareAndSet(false, true)) {
-      IllegalStateException ise = null;
-      if (exception != null) {
-        ise = new IllegalStateException(exception);
-      }
-      futureResult.done(totalBytesRead.get(), ise);
+      futureResult.done(totalBytesRead.get(), exception);
       if (callback != null) {
         callback.onCompletion(totalBytesRead.get(), exception);
       }

@@ -346,11 +346,7 @@ class BadAsyncWritableChannel implements AsyncWritableChannel {
    */
   private Future<Long> markFutureInvokeCallback(Callback<Long> callback, long totalBytesWritten, Exception exception) {
     FutureResult<Long> futureResult = new FutureResult<Long>();
-    IllegalStateException ise = null;
-    if (exception != null) {
-      ise = new IllegalStateException(exception);
-    }
-    futureResult.done(totalBytesWritten, ise);
+    futureResult.done(totalBytesWritten, exception);
     if (callback != null) {
       callback.onCompletion(totalBytesWritten, exception);
     }

@@ -62,7 +62,7 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     if (!channelOpen.get()) {
       ClosedChannelException closedChannelException = new ClosedChannelException();
       FutureResult<Long> futureResult = new FutureResult<Long>();
-      futureResult.done(0L, new IllegalStateException(closedChannelException));
+      futureResult.done(0L, closedChannelException);
       future = futureResult;
       if (callback != null) {
         callback.onCompletion(0L, closedChannelException);

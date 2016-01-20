@@ -189,17 +189,13 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     Exception exception = null;
-    RuntimeException runtimeException = null;
     if (!channelOpen.get()) {
       exception = new ClosedChannelException();
     } else {
       exception = exceptionToThrow;
     }
-    if (exception != null) {
-      runtimeException = new IllegalStateException(exception);
-    }
     FutureResult<Long> futureResult = new FutureResult<Long>();
-    futureResult.done(0L, runtimeException);
+    futureResult.done(0L, exception);
     if (callback != null) {
       callback.onCompletion(0L, exception);
     }

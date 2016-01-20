@@ -214,11 +214,7 @@ class ChunkData {
    */
   public void resolveChunk(Exception exception) {
     long bytesWritten = buffer.position() - startPos;
-    IllegalStateException ise = null;
-    if (exception != null) {
-      ise = new IllegalStateException(exception);
-    }
-    future.done(bytesWritten, ise);
+    future.done(bytesWritten, exception);
     if (callback != null) {
       callback.onCompletion(bytesWritten, exception);
     }
