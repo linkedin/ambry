@@ -4,9 +4,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
@@ -296,13 +294,10 @@ public class RestUtils {
     Map<String, String> toReturn = new HashMap<String, String>();
     int sizeRead = 0;
     int counter = 0;
-    ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
     while (sizeRead < totalSize) {
       String key = Headers.UserMetaData_OldStyle_Prefix + counter++;
       int sizeToRead = Math.min(totalSize - sizeRead, Max_UserMetadata_Value_Size);
-      byte[] userMetadataPart = new byte[sizeToRead];
-      userMetadataBuffer.get(userMetadataPart);
-      String value = new String(userMetadataPart, "US-ASCII");
+      String value = new String(userMetadata, sizeRead, sizeToRead, "US-ASCII");
       toReturn.put(key, value);
       sizeRead += sizeToRead;
     }
