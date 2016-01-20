@@ -8,6 +8,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -220,67 +221,44 @@ public class RestUtils {
       throws RestServiceException {
     Map<String, String> toReturn = new HashMap<String, String>();
     boolean oldStyle = false;
-    try {
-      if (userMetadata.length > 0) {
-        try {
-          ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
-          short version = userMetadataBuffer.getShort();
-          switch (version) {
-            case UserMetadata_Version_V1:
-              int sizeToRead = userMetadataBuffer.getInt();
-              int entryCount = userMetadataBuffer.getInt();
-              int counter = 0;
-              while (counter++ < entryCount) {
-                String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
-                String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
-                toReturn.put(key, value);
-              }
-              long actualCRC = userMetadataBuffer.getLong();
-              Crc32 crc32 = new Crc32();
-              crc32.update(userMetadata, 0, userMetadata.length - Crc_Size);
-              long expectedCRC = crc32.getValue();
-              if (actualCRC != expectedCRC) {
-                logger.error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC "
-                    + actualCRC);
-                throw new IllegalStateException("User metadata is corrupt");
-              }
-              break;
-            default:
-              logger.trace("Failed to parse version in new format. Returning as old format");
-              oldStyle = true;
-          }
-        } catch (RuntimeException e) {
-          logger.trace("Runtime Exception on parsing user metadata. Returning as old format");
-          oldStyle = true;
+    if (userMetadata.length > 0) {
+      try {
+        ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
+        short version = userMetadataBuffer.getShort();
+        switch (version) {
+          case UserMetadata_Version_V1:
+            int sizeToRead = userMetadataBuffer.getInt();
+            int entryCount = userMetadataBuffer.getInt();
+            int counter = 0;
+            while (counter++ < entryCount) {
+              String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              toReturn.put(key, value);
+            }
+            long actualCRC = userMetadataBuffer.getLong();
+            Crc32 crc32 = new Crc32();
+            crc32.update(userMetadata, 0, userMetadata.length - Crc_Size);
+            long expectedCRC = crc32.getValue();
+            if (actualCRC != expectedCRC) {
+              logger.error(
+                  "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+              throw new IllegalStateException("User metadata is corrupt");
+            }
+            break;
+          default:
+            logger.trace("Failed to parse version in new format. Returning as old format");
+            oldStyle = true;
         }
+      } catch (RuntimeException e) {
+        logger.trace("Runtime Exception on parsing user metadata. Returning as old format");
+        oldStyle = true;
       }
-      if (oldStyle) {
-        toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
-      }
-    } catch (UnsupportedEncodingException e) {
-      throw new IllegalStateException(e);
     }
-    return toReturn;
-  }
+    if (oldStyle) {
+      toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
+    }
 
-  /**
-   * Deserialize User Metadata to a {@link ByteBuffer}
-   * @param crcStream Stream from which User metadata has to be deserialized
-   * @return ByteBuffer which contains the user metadata
-   * @throws IOException
-   */
-  private static ByteBuffer deserializeUserMetadata(CrcInputStream crcStream)
-      throws IOException {
-    DataInputStream dataStream = new DataInputStream(crcStream);
-    int usermetadataSize = dataStream.readInt();
-    byte[] userMetadaBuffer = Utils.readBytesFromStream(dataStream, usermetadataSize);
-    long actualCRC = crcStream.getValue();
-    long expectedCRC = dataStream.readLong();
-    if (actualCRC != expectedCRC) {
-      logger.error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
-      throw new IllegalStateException("User metadata is corrupt");
-    }
-    return ByteBuffer.wrap(userMetadaBuffer);
+    return toReturn;
   }
 
   /**
@@ -288,8 +266,7 @@ public class RestUtils {
    * @param userMetadata byte[] which contains the user metadata in old style
    * @return Map<String, String> user metadata in the form of Map<String, String>
    */
-  private static Map<String, String> getOldStyleUserMetadataAsHashMap(byte[] userMetadata)
-      throws UnsupportedEncodingException {
+  private static Map<String, String> getOldStyleUserMetadataAsHashMap(byte[] userMetadata) {
     int totalSize = userMetadata.length;
     Map<String, String> toReturn = new HashMap<String, String>();
     int sizeRead = 0;
@@ -297,7 +274,7 @@ public class RestUtils {
     while (sizeRead < totalSize) {
       String key = Headers.UserMetaData_OldStyle_Prefix + counter++;
       int sizeToRead = Math.min(totalSize - sizeRead, Max_UserMetadata_Value_Size);
-      String value = new String(userMetadata, sizeRead, sizeToRead, "US-ASCII");
+      String value = new String(userMetadata, sizeRead, sizeToRead, StandardCharsets.US_ASCII);
       toReturn.put(key, value);
       sizeRead += sizeToRead;
     }

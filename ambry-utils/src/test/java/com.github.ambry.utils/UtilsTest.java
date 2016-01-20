@@ -4,6 +4,7 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
 import org.junit.Test;
 import java.util.Random;
@@ -223,14 +224,14 @@ public class UtilsTest {
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeAsciiEncodedString(outputBuffer, randomString);
     outputBuffer.flip();
-    String outputString = Utils.deserializeAsciiEncodedString(outputBuffer);
+    String outputString = Utils.deserializeAsciiEncodedString(outputBuffer, StandardCharsets.US_ASCII);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
     randomString = getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
     Utils.serializeAsciiEncodedString(outputBuffer, randomString);
     outputBuffer.flip();
-    outputString = Utils.deserializeAsciiEncodedString(outputBuffer);
+    outputString = Utils.deserializeAsciiEncodedString(outputBuffer, StandardCharsets.US_ASCII);
     randomString = randomString.substring(0, randomString.length() - 1) + "?";
     assertEquals("Input and output strings don't match", randomString, outputString);
 
@@ -238,7 +239,7 @@ public class UtilsTest {
     outputBuffer = ByteBuffer.allocate(4);
     Utils.serializeAsciiEncodedString(outputBuffer, randomString);
     outputBuffer.flip();
-    outputString = Utils.deserializeAsciiEncodedString(outputBuffer);
+    outputString = Utils.deserializeAsciiEncodedString(outputBuffer, StandardCharsets.US_ASCII);
     assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
   }
 

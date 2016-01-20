@@ -437,7 +437,7 @@ public class Utils {
    * @param inputBuffer The input buffer to serialize the value to
    * @return the deserialized string
    */
-  public static String deserializeAsciiEncodedString(ByteBuffer inputBuffer) {
+  public static String deserializeAsciiEncodedString(ByteBuffer inputBuffer, Charset charset) {
     String valueStr = null;
     if (inputBuffer.remaining() >= 4) {
       int size = inputBuffer.getInt();
@@ -446,11 +446,7 @@ public class Utils {
       }
       byte[] value = new byte[size];
       inputBuffer.get(value);
-      try {
-        valueStr = new String(value, "US-ASCII");
-      } catch (UnsupportedEncodingException e) {
-        throw new IllegalArgumentException(e);
-      }
+      valueStr = new String(value, charset);
     } else {
       throw new IllegalStateException("No sufficient data to read from input buffer");
     }
