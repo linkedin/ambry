@@ -265,14 +265,13 @@ public class RestUtilsTest {
     assertEquals("User metadata key1 value don't match ", new String(userMetadataByteArray, "US-ASCII"),
         userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
 
-
-    // user metadata with wrong size
+    // wrong total number of entries
     userMetadataByteArray = new byte[47];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
     String key = new String(RestUtils.Headers.UserMetaData_Header_Prefix+"key1");
-    byteBuffer.putInt(6);
-    byteBuffer.putInt(1);
+    byteBuffer.putInt(33);
+    byteBuffer.putInt(2);
     byteBuffer.putInt(key.getBytes("US-ASCII").length);
     byteBuffer.put(key.getBytes("US-ASCII"));
     String value = new String("value1");
@@ -288,24 +287,6 @@ public class RestUtilsTest {
         userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
     assertEquals("User metadata key1 value don't match ", new String(userMetadataByteArray, "US-ASCII"),
         userMetadataMap.get(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0"));
-
-    // wrong total number of entries
-    userMetadataByteArray = new byte[47];
-    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
-    byteBuffer.putShort((short) 1);
-    key = new String(RestUtils.Headers.UserMetaData_Header_Prefix+"key1");
-    byteBuffer.putInt(33);
-    byteBuffer.putInt(2);
-    byteBuffer.putInt(key.getBytes("US-ASCII").length);
-    byteBuffer.put(key.getBytes("US-ASCII"));
-    value = new String("value1");
-    byteBuffer.putInt(value.getBytes("US-ASCII").length);
-    byteBuffer.put(value.getBytes("US-ASCII"));
-    crc32 = new Crc32();
-    crc32.update(userMetadataByteArray, 0, userMetadataByteArray.length - 8);
-    byteBuffer.putLong(crc32.getValue());
-    byteBuffer.flip();
-    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
 
     // diff key length
     userMetadataByteArray = new byte[47];

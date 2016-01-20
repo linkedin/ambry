@@ -69,7 +69,7 @@ public class RestUtils {
   public static final int Crc_Size = 8;
   public static final short UserMetadata_Version_V1 = 1;
   // Max size of a value for user metadata as key value pairs
-  public static final int Max_UserMetadata_Value_Size = 1024 * 1024 * 8;
+  public static final int Max_UserMetadata_Value_Size = 1024 * 8;
 
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
@@ -157,10 +157,6 @@ public class RestUtils {
    *
    *  key2 size      - Size of 2nd key
    *
-   *  key2           - Content of key2
-   *
-   *  value2 size    - Size of 2nd value
-   *
    *  crc        - The crc of the user metadata record
    *
    */
@@ -202,6 +198,7 @@ public class RestUtils {
       sizeToAllocate += Crc_Size;
       userMetadata = ByteBuffer.allocate(sizeToAllocate);
       userMetadata.putShort(UserMetadata_Version_V1);
+      // total size = sizeToAllocate - version size - sizeToAllocate size - crc size
       userMetadata.putInt(sizeToAllocate - 6 - Crc_Size);
       userMetadata.putInt(userMetadataMap.size());
       for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
@@ -228,29 +225,32 @@ public class RestUtils {
     try {
       if (userMetadata.length > 0) {
         try {
-          CrcInputStream crcstream = new CrcInputStream(new ByteArrayInputStream(userMetadata));
-          DataInputStream streamData = new DataInputStream(crcstream);
-          short version = streamData.readShort();
+          ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
+          short version = userMetadataBuffer.getShort();
           switch (version) {
             case UserMetadata_Version_V1:
-              ByteBuffer userMetadataBuffer = deserializeUserMetadata(crcstream);
-              if (userMetadataBuffer.hasRemaining()) {
-                int size = userMetadataBuffer.getInt();
-                int counter = 0;
-                while (counter++ < size) {
-                  String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
-                  String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
-                  toReturn.put(key, value);
-                }
+              int sizeToRead = userMetadataBuffer.getInt();
+              int entryCount = userMetadataBuffer.getInt();
+              int counter = 0;
+              while (counter++ < entryCount) {
+                String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
+                String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer);
+                toReturn.put(key, value);
+              }
+              long actualCRC = userMetadataBuffer.getLong();
+              Crc32 crc32 = new Crc32();
+              crc32.update(userMetadata, 0, userMetadata.length - Crc_Size);
+              long expectedCRC = crc32.getValue();
+              if (actualCRC != expectedCRC) {
+                logger.error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC "
+                    + actualCRC);
+                throw new IllegalStateException("User metadata is corrupt");
               }
               break;
             default:
               logger.trace("Failed to parse version in new format. Returning as old format");
               oldStyle = true;
           }
-        } catch (IOException e) {
-          logger.trace("IOException on parsing user metadata. Returning as old format");
-          oldStyle = true;
         } catch (RuntimeException e) {
           logger.trace("Runtime Exception on parsing user metadata. Returning as old format");
           oldStyle = true;
