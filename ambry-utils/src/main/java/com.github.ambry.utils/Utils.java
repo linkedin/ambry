@@ -412,45 +412,25 @@ public class Utils {
   }
 
   /**
-   * Serializes an ascii encoded string into byte buffer
-   *
+   * Serializes a string into byte buffer
    * @param outputBuffer The output buffer to serialize the value to
    * @param value The value to serialize
    */
-  public static void serializeAsciiEncodedString(ByteBuffer outputBuffer, String value) {
-    if (outputBuffer.remaining() < 4) {
-      throw new IllegalStateException("No sufficient space to add data to output buffer");
-    }
+  public static void serializeString(ByteBuffer outputBuffer, String value, Charset charset) {
     outputBuffer.putInt(value.length());
-    try {
-      if (outputBuffer.remaining() < value.length()) {
-        throw new IllegalStateException("No sufficient data to add to output buffer");
-      }
-      outputBuffer.put(value.getBytes("US-ASCII"));
-    } catch (UnsupportedEncodingException e) {
-      throw new IllegalArgumentException(e);
-    }
+    outputBuffer.put(value.getBytes(charset));
   }
 
   /**
-   * Deserializes an ascii encoded string from byte buffer
+   * Deserializes a string from byte buffer
    * @param inputBuffer The input buffer to serialize the value to
    * @return the deserialized string
    */
-  public static String deserializeAsciiEncodedString(ByteBuffer inputBuffer, Charset charset) {
-    String valueStr = null;
-    if (inputBuffer.remaining() >= 4) {
-      int size = inputBuffer.getInt();
-      if (inputBuffer.remaining() < size) {
-        throw new IllegalStateException("No sufficient data to read from input buffer");
-      }
-      byte[] value = new byte[size];
-      inputBuffer.get(value);
-      valueStr = new String(value, charset);
-    } else {
-      throw new IllegalStateException("No sufficient data to read from input buffer");
-    }
-    return valueStr;
+  public static String deserializeString(ByteBuffer inputBuffer, Charset charset) {
+    int size = inputBuffer.getInt();
+    byte[] value = new byte[size];
+    inputBuffer.get(value);
+    return new String(value, charset);
   }
 
   /**

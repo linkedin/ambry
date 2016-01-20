@@ -179,10 +179,10 @@ public class UtilsTest {
   }
 
   @Test
-  public void testSerializeASCIIEncodedString() {
+  public void testSerializeString() {
     String randomString = getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
-    Utils.serializeAsciiEncodedString(outputBuffer, randomString);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
     int length = outputBuffer.getInt();
     assertEquals("Input and output string lengths don't match", randomString.getBytes().length, length);
@@ -194,7 +194,7 @@ public class UtilsTest {
 
     randomString = getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
-    Utils.serializeAsciiEncodedString(outputBuffer, randomString);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
     length = outputBuffer.getInt();
     assertEquals("Input and output string lengths don't match ", (randomString.getBytes().length - 1), length);
@@ -207,7 +207,7 @@ public class UtilsTest {
 
     randomString = "";
     outputBuffer = ByteBuffer.allocate(4);
-    Utils.serializeAsciiEncodedString(outputBuffer, randomString);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
     length = outputBuffer.getInt();
     assertEquals("Input and output string lengths don't match", 0, length);
@@ -216,31 +216,50 @@ public class UtilsTest {
     assertTrue("Output buffer shouldn't have any remaining " + outputBuffer.remaining(), !outputBuffer.hasRemaining());
     outputString = new String(output);
     assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
+
+    randomString = getRandomString(10);
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length - 1);
+    try {
+      Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+      Assert.fail("Serialization should have failed due to insufficient space");
+    } catch (RuntimeException e) {
+    }
   }
 
   @Test
-  public void testDeserializeASCIIString() {
+  public void testDeserializeString() {
     String randomString = getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
-    Utils.serializeAsciiEncodedString(outputBuffer, randomString);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
-    String outputString = Utils.deserializeAsciiEncodedString(outputBuffer, StandardCharsets.US_ASCII);
+    String outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
     assertEquals("Input and output strings don't match", randomString, outputString);
 
     randomString = getRandomString(10) + "Ò";
     outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
-    Utils.serializeAsciiEncodedString(outputBuffer, randomString);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
-    outputString = Utils.deserializeAsciiEncodedString(outputBuffer, StandardCharsets.US_ASCII);
+    outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
     randomString = randomString.substring(0, randomString.length() - 1) + "?";
     assertEquals("Input and output strings don't match", randomString, outputString);
 
     randomString = "";
     outputBuffer = ByteBuffer.allocate(4);
-    Utils.serializeAsciiEncodedString(outputBuffer, randomString);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
     outputBuffer.flip();
-    outputString = Utils.deserializeAsciiEncodedString(outputBuffer, StandardCharsets.US_ASCII);
+    outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
     assertTrue("Output string \"" + outputString + "\" expected to be empty", (outputString.equals("")));
+
+    randomString = getRandomString(10);
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    outputBuffer.putInt(12);
+    outputBuffer.put(randomString.getBytes());
+    outputBuffer.flip();
+    try {
+      outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
+      Assert.fail("Deserialization should have failed " + randomString);
+    } catch (RuntimeException e) {
+    }
   }
 
   @Test

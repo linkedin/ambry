@@ -2,11 +2,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Crc32;
-import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -202,8 +198,8 @@ public class RestUtils {
       userMetadata.putInt(userMetadataMap.size());
       for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
         String key = entry.getKey();
-        Utils.serializeAsciiEncodedString(userMetadata, key);
-        Utils.serializeAsciiEncodedString(userMetadata, entry.getValue());
+        Utils.serializeString(userMetadata, key, StandardCharsets.US_ASCII);
+        Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
       }
       Crc32 crc = new Crc32();
       crc.update(userMetadata.array(), 0, sizeToAllocate - Crc_Size);
@@ -231,8 +227,8 @@ public class RestUtils {
             int entryCount = userMetadataBuffer.getInt();
             int counter = 0;
             while (counter++ < entryCount) {
-              String key = Utils.deserializeAsciiEncodedString(userMetadataBuffer, StandardCharsets.US_ASCII);
-              String value = Utils.deserializeAsciiEncodedString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
+              String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
               toReturn.put(key, value);
             }
             long actualCRC = userMetadataBuffer.getLong();
@@ -242,7 +238,7 @@ public class RestUtils {
             if (actualCRC != expectedCRC) {
               logger.error(
                   "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
-              throw new IllegalStateException("User metadata is corrupt");
+              oldStyle = true;
             }
             break;
           default:
@@ -257,7 +253,6 @@ public class RestUtils {
     if (oldStyle) {
       toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
     }
-
     return toReturn;
   }
 
