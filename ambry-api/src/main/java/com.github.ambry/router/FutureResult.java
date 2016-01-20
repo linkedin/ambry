@@ -13,7 +13,7 @@ import java.util.concurrent.TimeoutException;
 public class FutureResult<T> implements Future<T> {
 
   private final CountDownLatch latch = new CountDownLatch(1);
-  private volatile RuntimeException error;
+  private volatile Exception error;
   private volatile T result;
 
   /**
@@ -21,7 +21,7 @@ public class FutureResult<T> implements Future<T> {
    * @param result The result for this request
    * @param error The error that occurred if there was one, or null.
    */
-  public void done(T result, RuntimeException error) {
+  public void done(T result, Exception error) {
     this.error = error;
     this.result = result;
     this.latch.countDown();
@@ -56,7 +56,7 @@ public class FutureResult<T> implements Future<T> {
   /**
    * The error thrown (generally on the server) while processing this request
    */
-  public RuntimeException error() {
+  public Exception error() {
     return error;
   }
 
