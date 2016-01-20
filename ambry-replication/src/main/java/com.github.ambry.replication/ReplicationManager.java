@@ -297,7 +297,8 @@ public final class ReplicationManager {
                 == 0) {
               updateReplicasToReplicate(replicasToReplicateIntraDC, remoteReplicaInfo);
             } else {
-              updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), replicasToReplicateInterDC, remoteReplicaInfo);
+              updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), replicasToReplicateInterDC,
+                  remoteReplicaInfo);
             }
           }
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(),
@@ -331,7 +332,7 @@ public final class ReplicationManager {
       logger.info("Number of intra DC replica threads: " + replicationConfig.replicationNumOfIntraDCReplicaThreads);
       logger.info("Number of intra DC nodes to replicate from: " + replicasToReplicateIntraDC.size());
       assignReplicasToThreads(replicasToReplicateIntraDC, replicationConfig.replicationNumOfIntraDCReplicaThreads,
-          replicationIntraDCThreads, "Intra DC");
+          replicationIntraDCThreads, "Intra DC", dataNodeId.getDatacenterName());
 
       logger.trace("Assigning thread pools for Inter DC replication");
       assignReplicasToThreadPools(replicasToReplicateInterDC, replicationConfig.replicationNumOfInterDCReplicaThreads);
@@ -483,7 +484,7 @@ public final class ReplicationManager {
   private void updateReplicasToReplicate(String datacenter,
       Map<String, Map<DataNodeId, List<RemoteReplicaInfo>>> replicasToReplicateMap,
       RemoteReplicaInfo remoteReplicaInfo) {
-    if(!replicasToReplicateMap.containsKey(datacenter)){
+    if (!replicasToReplicateMap.containsKey(datacenter)) {
       replicasToReplicateMap.put(datacenter, new HashMap<DataNodeId, List<RemoteReplicaInfo>>());
     }
     List<RemoteReplicaInfo> replicaListForNode =
@@ -518,8 +519,9 @@ public final class ReplicationManager {
       logger.info("Number of inter-" + datacenter + " replica threads: " + numberOfReplicaThreads);
       logger.info(
           "Number of inter-" + datacenter + " nodes to replicate from: " + replicasToReplicate.get(datacenter).size());
+      boolean isSSLEnabled = sslEnabledDatacenters.contains(datacenter);
       assignReplicasToTheadPoolPerDatacenter(datacenter, replicasToReplicate.get(datacenter), numberOfReplicaThreads,
-          "Inter-" + datacenter);
+          "Inter-" + datacenter, isSSLEnabled);
     }
   }
 
@@ -529,9 +531,11 @@ public final class ReplicationManager {
    * @param replicasToReplicate Mapping of data nodes to remote replicas for the datacenter in context
    * @param numberOfReplicaThreads The total number of replica threads
    * @param threadIdentity The identity that uniquely identifies the group of threads
+   * @param isSSLEnabled whether ssl connection should be established or not
    */
   private void assignReplicasToTheadPoolPerDatacenter(String datacenter,
-      Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate, int numberOfReplicaThreads, String threadIdentity) {
+      Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate, int numberOfReplicaThreads, String threadIdentity,
+      boolean isSSLEnabled) {
     if (numberOfReplicaThreads == 0) {
       logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads");
       return;
@@ -569,10 +573,12 @@ public final class ReplicationManager {
         replicasForThread.put(dataNodeId, replicasToReplicate.get(dataNodeId));
         remainingNodes--;
       }
+
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
               correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
-              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry);
+              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry, true, isSSLEnabled,
+              datacenter);
       if (replicaThreadPools.containsKey(datacenter)) {
         replicaThreadPools.get(datacenter).add(replicaThread);
       } else {
@@ -589,7 +595,7 @@ public final class ReplicationManager {
    * @param threadIdentity The identity that uniquely identifies the group of threads
    */
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
-      int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity) {
+      int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity, String datcenterName) {
     if (numberOfReplicaThreads == 0) {
       logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads");
       return;
@@ -627,10 +633,12 @@ public final class ReplicationManager {
         mapIterator.remove();
         remainingNodes--;
       }
+      boolean isSSLEnabled = sslEnabledDatacenters.contains(datcenterName);
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
               correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
-              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry);
+              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry, false, isSSLEnabled,
+              datcenterName);
       replicaThreadList.add(replicaThread);
     }
   }
