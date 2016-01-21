@@ -342,7 +342,7 @@ public class AdminBlobStorageServiceTest {
     Map<String, String> userMetadata = new HashMap<String, String>();
     userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
     userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
-    RestUtilsTest.setAmbryHeaders(headers, userMetadata);
+    RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
     getHeadAndVerify(blobId, headers);

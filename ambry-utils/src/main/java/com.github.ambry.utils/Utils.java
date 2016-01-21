@@ -415,6 +415,7 @@ public class Utils {
    * Serializes a string into byte buffer
    * @param outputBuffer The output buffer to serialize the value to
    * @param value The value to serialize
+   * @param charset {@link Charset} to be used to encode
    */
   public static void serializeString(ByteBuffer outputBuffer, String value, Charset charset) {
     outputBuffer.putInt(value.length());
@@ -423,7 +424,8 @@ public class Utils {
 
   /**
    * Deserializes a string from byte buffer
-   * @param inputBuffer The input buffer to serialize the value to
+   * @param inputBuffer The input buffer to deserialize the value from
+   * @param charset {@link Charset} to be used to decode
    * @return the deserialized string
    */
   public static String deserializeString(ByteBuffer inputBuffer, Charset charset) {
@@ -666,5 +668,16 @@ public class Utils {
       return newBuffer;
     }
     return existingBuffer;
+  }
+
+  private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  static Random random = new Random();
+
+  public static String getRandomString(int length) {
+    StringBuilder sb = new StringBuilder(length);
+    for (int i = 0; i < length; i++) {
+      sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
+    }
+    return sb.toString();
   }
 }

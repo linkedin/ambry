@@ -224,6 +224,10 @@ public class RestUtils {
         switch (version) {
           case UserMetadata_Version_V1:
             int sizeToRead = userMetadataBuffer.getInt();
+            if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
+              logger.trace("Size didn't match. Returning as old format");
+              oldStyle = true;
+            }
             int entryCount = userMetadataBuffer.getInt();
             int counter = 0;
             while (counter++ < entryCount) {
@@ -236,7 +240,7 @@ public class RestUtils {
             crc32.update(userMetadata, 0, userMetadata.length - Crc_Size);
             long expectedCRC = crc32.getValue();
             if (actualCRC != expectedCRC) {
-              logger.error(
+              logger.trace(
                   "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
               oldStyle = true;
             }
@@ -257,7 +261,7 @@ public class RestUtils {
   }
 
   /**
-   * Returns old style user metadata as a HashMap<String, String> to be sent in as headers
+   * Returns a default representation of user metadata that is not in the expected format
    * @param userMetadata byte[] which contains the user metadata in old style
    * @return Map<String, String> user metadata in the form of Map<String, String>
    */
