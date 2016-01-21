@@ -227,22 +227,23 @@ public class RestUtils {
             if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
               logger.trace("Size didn't match. Returning as old format");
               oldStyle = true;
-            }
-            int entryCount = userMetadataBuffer.getInt();
-            int counter = 0;
-            while (counter++ < entryCount) {
-              String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-              String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-              toReturn.put(key, value);
-            }
-            long actualCRC = userMetadataBuffer.getLong();
-            Crc32 crc32 = new Crc32();
-            crc32.update(userMetadata, 0, userMetadata.length - Crc_Size);
-            long expectedCRC = crc32.getValue();
-            if (actualCRC != expectedCRC) {
-              logger.trace(
-                  "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
-              oldStyle = true;
+            } else {
+              int entryCount = userMetadataBuffer.getInt();
+              int counter = 0;
+              while (counter++ < entryCount) {
+                String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
+                String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
+                toReturn.put(key, value);
+              }
+              long actualCRC = userMetadataBuffer.getLong();
+              Crc32 crc32 = new Crc32();
+              crc32.update(userMetadata, 0, userMetadata.length - Crc_Size);
+              long expectedCRC = crc32.getValue();
+              if (actualCRC != expectedCRC) {
+                logger.trace("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC "
+                    + actualCRC);
+                oldStyle = true;
+              }
             }
             break;
           default:

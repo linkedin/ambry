@@ -669,15 +669,4 @@ public class Utils {
     }
     return existingBuffer;
   }
-
-  private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  static Random random = new Random();
-
-  public static String getRandomString(int length) {
-    StringBuilder sb = new StringBuilder(length);
-    for (int i = 0; i < length; i++) {
-      sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
-    }
-    return sb.toString();
-  }
 }

@@ -3,6 +3,7 @@ package com.github.ambry.rest;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -203,8 +204,8 @@ public class RestUtilsTest {
 
     // key4 should match
     key = RestUtils.Headers.UserMetaData_Header_Prefix + "key4";
-         assertTrue(key+" not found in user metadata map ", userMetadataMap.containsKey(key));
-         assertEquals("Value for " + key + " didnt match input value ", userMetadata.get(key), userMetadataMap.get(key));
+    assertTrue(key + " not found in user metadata map ", userMetadataMap.containsKey(key));
+    assertEquals("Value for " + key + " didnt match input value ", userMetadata.get(key), userMetadataMap.get(key));
 
     assertEquals("Size of map unexpected ", 2, userMetadataMap.size());
   }
@@ -396,7 +397,7 @@ public class RestUtilsTest {
         userMetadataMap.get(RestUtils.Headers.UserMetaData_Header_Prefix + "key1"));
 
     // mimicing old style user metadata which will result in more than one key value pairs
-    userMetadataByteArray = Utils.getRandomString(RestUtils.Max_UserMetadata_Value_Size + 2).getBytes();
+    userMetadataByteArray = UtilsTest.getRandomString(RestUtils.Max_UserMetadata_Value_Size + 2).getBytes();
     userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
     assertEquals("User metadata size don't match ", userMetadataMap.size(), 2);
     assertTrue("User metadata key1 not found in user metadata ", userMetadataMap.containsKey(key1));
