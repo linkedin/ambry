@@ -80,7 +80,7 @@ class ReplicaThread implements Runnable {
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
-      boolean validateMessageStream, MetricRegistry metricRegistry, boolean isRemoteNode, boolean isSSLEnabled,
+      boolean validateMessageStream, MetricRegistry metricRegistry, boolean isRemoteColo, boolean isSSLEnabled,
       String remoteDatacenterName) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
@@ -97,7 +97,7 @@ class ReplicaThread implements Runnable {
     this.storeKeyFactory = storeKeyFactory;
     this.validateMessageStream = validateMessageStream;
     this.metricRegistry = metricRegistry;
-    this.isRemoteColo = isRemoteNode;
+    this.isRemoteColo = isRemoteColo;
     this.isSSLEnabled = isSSLEnabled;
     this.remoteDatacenterName = remoteDatacenterName;
   }
@@ -130,10 +130,6 @@ class ReplicaThread implements Runnable {
           DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
           logger.trace("Remote node: {} Thread name: {} Remote replicas: {}", remoteNode, threadName,
               replicasToReplicatePerNode);
-          boolean isRemoteColo = true;
-          if (dataNodeId.getDatacenterName().equals(remoteNode.getDatacenterName())) {
-            isRemoteColo = false;
-          }
           Timer.Context context = null;
           Timer.Context portTypeBasedContext = null;
           if (isRemoteColo) {
@@ -521,7 +517,7 @@ class ReplicaThread implements Runnable {
       needToWaitForReplicaLag = false;
     }
     if (isRemoteColo) {
-      replicationMetrics.interColoReplicationWaitTime.get(remoteNode.getDatacenterName())
+      replicationMetrics.interColoReplicationWaitTime.get(remoteDatacenterName)
           .update(SystemTime.getInstance().milliseconds() - startTime);
     } else {
       replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);

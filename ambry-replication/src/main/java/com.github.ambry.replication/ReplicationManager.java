@@ -593,6 +593,7 @@ public final class ReplicationManager {
    * @param numberOfReplicaThreads The total number of replica threads between which the partition needs to be done
    * @param replicaThreadList The list of replica threads
    * @param threadIdentity The identity that uniquely identifies the group of threads
+   * @param datcenterName name of the datacenter to replicate from
    */
   private void assignReplicasToThreads(Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
       int numberOfReplicaThreads, List<ReplicaThread> replicaThreadList, String threadIdentity, String datcenterName) {
