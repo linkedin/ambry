@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Map;
 
 
 /**
@@ -503,6 +504,10 @@ class MockHeadCallback implements Callback<BlobInfo> {
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
     }
-    // TODO: send user metadata also as header after discussion with team.
+    byte[] userMetadataArray = blobInfo.getUserMetadata();
+    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
+    for (String key : userMetadata.keySet()) {
+      restResponseChannel.setHeader(key, userMetadata.get(key));
+    }
   }
 }

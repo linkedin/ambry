@@ -1,9 +1,15 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -11,6 +17,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 
@@ -146,6 +153,267 @@ public class RestUtilsTest {
     assertArrayEquals("Unexpected user metadata", new byte[0], usermetadata);
   }
 
+  /**
+   * Tests building of User Metadata with good input
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataGoodInputTest()
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
+        Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
+    Map<String, String> userMetadata = new HashMap<String, String>();
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
+    setUserMetadataHeaders(headers, userMetadata);
+    verifyBlobPropertiesConstructionSuccess(headers);
+    verifyUserMetadataConstructionSuccess(headers, userMetadata);
+  }
+
+  /**
+   * Tests building of User Metadata with unusual input
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataUnusualInputTest()
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
+        Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
+    Map<String, String> userMetadata = new HashMap<String, String>();
+    String key1 = RestUtils.Headers.UserMetaData_Header_Prefix + "key1";
+    userMetadata.put(key1, "value1");
+    // no valid prefix
+    userMetadata.put("key2", "value2_1");
+    // valid prefix as suffix
+    userMetadata.put("key3" + RestUtils.Headers.UserMetaData_Header_Prefix, "value3");
+    // empty value
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key4", "");
+    setUserMetadataHeaders(headers, userMetadata);
+    verifyBlobPropertiesConstructionSuccess(headers);
+
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
+    Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+
+    // key1, output should be same as input
+    String key = RestUtils.Headers.UserMetaData_Header_Prefix + "key1";
+    assertTrue(key + " not found in user metadata map ", userMetadataMap.containsKey(key));
+    assertEquals("Value for " + key + " didnt match input value ", userMetadata.get(key), userMetadataMap.get(key));
+
+    // key4 should match
+    key = RestUtils.Headers.UserMetaData_Header_Prefix + "key4";
+    assertTrue(key + " not found in user metadata map ", userMetadataMap.containsKey(key));
+    assertEquals("Value for " + key + " didnt match input value ", userMetadata.get(key), userMetadataMap.get(key));
+
+    assertEquals("Size of map unexpected ", 2, userMetadataMap.size());
+  }
+
+  /**
+   * Tests building of User Metadata with empty input
+   * @throws Exception
+   */
+  @Test
+  public void getEmptyUserMetadataInputTest()
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
+        Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
+    Map<String, String> userMetadata = new HashMap<String, String>();
+    setUserMetadataHeaders(headers, userMetadata);
+    verifyBlobPropertiesConstructionSuccess(headers);
+
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
+    Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertTrue("UserMetadata should have been empty " + userMetadataMap, userMetadataMap.size() == 0);
+  }
+
+  /**
+   * Tests getting back user metadata (old style) from byte array
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataFromByteArrayComplexTest()
+      throws Exception {
+
+    Map<String, String> userMetadataMap = null;
+    String key1 = RestUtils.Headers.UserMetaData_OldStyle_Prefix + "0";
+    String key2 = RestUtils.Headers.UserMetaData_OldStyle_Prefix + "1";
+    // user metadata of size 1 byte
+    byte[] userMetadataByteArray = new byte[1];
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("User metadata size don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // user metadata with just the version
+    userMetadataByteArray = new byte[4];
+    ByteBuffer byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // wrong size
+    userMetadataByteArray = new byte[47];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    String key = new String(RestUtils.Headers.UserMetaData_Header_Prefix + "key1");
+    byte[] keyInBytes = key.getBytes(StandardCharsets.US_ASCII);
+    int keyLength = keyInBytes.length;
+    byteBuffer.putInt(30);
+    byteBuffer.putInt(1);
+    byteBuffer.putInt(keyLength);
+    byteBuffer.put(keyInBytes);
+    String value = new String("value1");
+    byte[] valueInBytes = value.getBytes(StandardCharsets.US_ASCII);
+    int valueLength = valueInBytes.length;
+    byteBuffer.putInt(valueLength);
+    byteBuffer.put(valueInBytes);
+    Crc32 crc32 = new Crc32();
+    crc32.update(userMetadataByteArray, 0, userMetadataByteArray.length - 8);
+    byteBuffer.putLong(crc32.getValue());
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // wrong total number of entries
+    userMetadataByteArray = new byte[47];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(33);
+    byteBuffer.putInt(2);
+    byteBuffer.putInt(keyLength);
+    byteBuffer.put(keyInBytes);
+    byteBuffer.putInt(valueLength);
+    byteBuffer.put(valueInBytes);
+    crc32 = new Crc32();
+    crc32.update(userMetadataByteArray, 0, userMetadataByteArray.length - 8);
+    byteBuffer.putLong(crc32.getValue());
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // diff key length
+    userMetadataByteArray = new byte[47];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(33);
+    byteBuffer.putInt(1);
+    byteBuffer.putInt(keyLength + 1);
+    byteBuffer.put(keyInBytes);
+    byteBuffer.putInt(valueLength);
+    byteBuffer.put(valueInBytes);
+    crc32 = new Crc32();
+    crc32.update(userMetadataByteArray, 0, userMetadataByteArray.length - 8);
+    byteBuffer.putLong(crc32.getValue());
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // diff value length
+    userMetadataByteArray = new byte[47];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(33);
+    byteBuffer.putInt(1);
+    byteBuffer.putInt(keyLength);
+    byteBuffer.put(keyInBytes);
+    byteBuffer.putInt(valueLength + 1);
+    byteBuffer.put(valueInBytes);
+    crc32 = new Crc32();
+    crc32.update(userMetadataByteArray, 0, userMetadataByteArray.length - 8);
+    byteBuffer.putLong(crc32.getValue());
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // no crc
+    userMetadataByteArray = new byte[47];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(33);
+    byteBuffer.putInt(1);
+    byteBuffer.putInt(keyLength);
+    byteBuffer.put(keyInBytes);
+    byteBuffer.putInt(valueLength);
+    byteBuffer.put(valueInBytes);
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // wrong crc
+    userMetadataByteArray = new byte[47];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(33);
+    byteBuffer.putInt(1);
+    byteBuffer.putInt(keyLength);
+    byteBuffer.put(keyInBytes);
+    byteBuffer.putInt(valueLength);
+    byteBuffer.put(valueInBytes);
+    crc32 = new Crc32();
+    crc32.update(userMetadataByteArray, 0, userMetadataByteArray.length - 8);
+    byteBuffer.putLong(crc32.getValue() - 1);
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + key1 + " not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertEquals("User metadata " + key1 + " value don't match ",
+        new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
+
+    // correct crc
+    userMetadataByteArray = new byte[47];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(33);
+    byteBuffer.putInt(1);
+    byteBuffer.putInt(keyLength);
+    byteBuffer.put(keyInBytes);
+    byteBuffer.putInt(valueLength);
+    byteBuffer.put(valueInBytes);
+    crc32 = new Crc32();
+    crc32.update(userMetadataByteArray, 0, userMetadataByteArray.length - 8);
+    byteBuffer.putLong(crc32.getValue());
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
+    assertTrue("User metadata " + RestUtils.Headers.UserMetaData_Header_Prefix + "key1 not found in user metadata ",
+        userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_Header_Prefix + "key1"));
+    assertEquals("User metadata " + RestUtils.Headers.UserMetaData_Header_Prefix + "key1 value don't match ", value,
+        userMetadataMap.get(RestUtils.Headers.UserMetaData_Header_Prefix + "key1"));
+
+    // mimicing old style user metadata which will result in more than one key value pairs
+    userMetadataByteArray = UtilsTest.getRandomString(RestUtils.Max_UserMetadata_Value_Size + 2).getBytes();
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertEquals("User metadata size don't match ", userMetadataMap.size(), 2);
+    assertTrue("User metadata key1 not found in user metadata ", userMetadataMap.containsKey(key1));
+    assertTrue("User metadata key2 not found in user metadata ",
+        userMetadataMap.containsKey(RestUtils.Headers.UserMetaData_OldStyle_Prefix + "1"));
+    byte[] value1 = new byte[RestUtils.Max_UserMetadata_Value_Size];
+    ByteBuffer byteBufferPart = ByteBuffer.wrap(userMetadataByteArray);
+    byteBufferPart.get(value1);
+    assertEquals("User metadata key1 value don't match ", new String(value1, StandardCharsets.US_ASCII),
+        userMetadataMap.get(key1));
+    byte[] value2 = new byte[2];
+    byteBufferPart.get(value2);
+    assertEquals("User metadata key1 value don't match ", new String(value2, StandardCharsets.US_ASCII),
+        userMetadataMap.get(key2));
+  }
+
   // helpers.
   // general.
 
@@ -238,6 +506,27 @@ public class RestUtilsTest {
     }
   }
 
+  /**
+   * Verifies that a request with headers defined by {@code headers} builds UserMetadata successfully and
+   * matches the values with those in {@code headers}.
+   * @param headers the headers that need to go with the request that is used to construct the User Metadata
+   * @throws Exception
+   */
+  private void verifyUserMetadataConstructionSuccess(JSONObject headers, Map<String, String> inputUserMetadata)
+      throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] userMetadata = RestUtils.buildUsermetadata(restRequest);
+    Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadata);
+    assertEquals("Total number of entries doesnt match ", inputUserMetadata.size(), userMetadataMap.size());
+    for (String key : userMetadataMap.keySet()) {
+      boolean keyFromInputMap = inputUserMetadata.containsKey(key);
+      assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
+      assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
+          + ", and output map value " + userMetadataMap.get(key),
+          inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
+    }
+  }
+
   // getBlobPropertiesVariedInputTest() helpers.
 
   /**
@@ -276,6 +565,19 @@ public class RestUtilsTest {
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Sets entries from the passed in HashMap to the @{link JSONObject} headers
+   * @param headers  {@link JSONObject} to which the new headers are to be added
+   * @param userMetadata {@link Map} which has the new entries that has to be added
+   * @throws org.json.JSONException
+   */
+  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata)
+      throws JSONException {
+    for (String key : userMetadata.keySet()) {
+      headers.put(key, userMetadata.get(key));
     }
   }
 }
