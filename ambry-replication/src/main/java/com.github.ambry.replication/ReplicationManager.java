@@ -1,21 +1,17 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.SSLConfig;
-import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
-import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.Store;
@@ -25,21 +21,23 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.IOException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 final class RemoteReplicaInfo {
@@ -66,15 +64,12 @@ final class RemoteReplicaInfo {
       long tokenPersistIntervalInMs, Time time, Port port) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
-    this.currentToken = token;
-    this.candidateTokenToPersist = token;
-    this.tokenSafeToPersist = token;
-    this.timeCandidateSetInMs = time.milliseconds();
-    this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
     this.totalBytesReadFromLocalStore = 0;
     this.localStore = localStore;
     this.time = time;
     this.port = port;
+    this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
+    initializeTokens(token);
   }
 
   public ReplicaId getReplicaId() {
@@ -120,6 +115,15 @@ final class RemoteReplicaInfo {
     // not important here
     synchronized (lock) {
       this.currentToken = token;
+    }
+  }
+
+  void initializeTokens(FindToken token) {
+    synchronized (lock) {
+      this.currentToken = token;
+      this.candidateTokenToPersist = token;
+      this.tokenSafeToPersist = token;
+      this.timeCandidateSetInMs = time.milliseconds();
     }
   }
 
@@ -571,7 +575,7 @@ public final class ReplicationManager {
                       .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
                           token);
                   if (partitionInfo.getStore().getSizeInBytes() > 0) {
-                    remoteReplicaInfo.setToken(token);
+                    remoteReplicaInfo.initializeTokens(token);
                     remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                   } else {
                     // if the local replica is empty, it could have been newly created. In this case, the offset in
