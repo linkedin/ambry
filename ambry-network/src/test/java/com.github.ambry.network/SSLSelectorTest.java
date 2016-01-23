@@ -31,7 +31,6 @@ public class SSLSelectorTest {
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
-    List<Processor> processorThreads = new ArrayList<Processor>();
     SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     SSLConfig clientSSLConfig =
         TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
@@ -40,8 +39,8 @@ public class SSLSelectorTest {
     this.server = new EchoServer(serverSSLFactory, 18383);
     this.server.start();
     this.selector =
-        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry(), processorThreads),
-            SystemTime.getInstance(), clientSSLFactory);
+        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry()), SystemTime.getInstance(),
+            clientSSLFactory);
   }
 
   @After
