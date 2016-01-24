@@ -23,7 +23,6 @@ import static org.junit.Assert.assertTrue;
 public class SelectorTest {
 
   private static final int BUFFER_SIZE = 4 * 1024;
-  private SocketRequestResponseChannel socketRequestResponseChannel;
   private EchoServer server;
   private Selector selector;
 
@@ -32,9 +31,8 @@ public class SelectorTest {
       throws Exception {
     this.server = new EchoServer(18283);
     this.server.start();
-    socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
     this.selector =
-        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry()), SystemTime.getInstance(),
+        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(),
             null);
   }
 

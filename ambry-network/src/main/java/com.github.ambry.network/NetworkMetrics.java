@@ -17,10 +17,6 @@ import java.util.concurrent.atomic.AtomicLong;
 class NetworkMetrics {
   private final MetricRegistry registry;
 
-  // SocketRequestResponseChannel metrics
-  private final List<Gauge<Integer>> responseQueueSize;
-  private final Gauge<Integer> requestQueueSize;
-
   // Selector metrics
   public final Counter sendInFlight;
   public final Counter selectorConnectionClosed;
@@ -69,29 +65,9 @@ class NetworkMetrics {
   // the count of renegotiation after initial handshake done
   public final Counter sslRenegotiationCount;
 
-  public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry) {
+  public NetworkMetrics(MetricRegistry registry) {
     this.registry = registry;
-    requestQueueSize = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return channel.getRequestQueueSize();
-      }
-    };
-    registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, "RequestQueueSize"), requestQueueSize);
-    responseQueueSize = new ArrayList<Gauge<Integer>>(channel.getNumberOfProcessors());
-
-    for (int i = 0; i < channel.getNumberOfProcessors(); i++) {
-      final int index = i;
-      responseQueueSize.add(i, new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return channel.getResponseQueueSize(index);
-        }
-      });
-      registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + "-ResponseQueueSize"),
-          responseQueueSize.get(i));
-    }
-    sendInFlight = registry.counter(MetricRegistry.name(SocketServer.class, "SendInFlight"));
+    sendInFlight = registry.counter(MetricRegistry.name(Selector.class, "SendInFlight"));
     selectorConnectionClosed = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionClosed"));
     selectorConnectionCreated = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionCreated"));
     selectorSelectRate = registry.counter(MetricRegistry.name(Selector.class, "SelectorSelectRate"));
@@ -188,6 +164,10 @@ class NetworkMetrics {
 }
 
 class ServerNetworkMetrics extends NetworkMetrics {
+  // SocketRequestResponseChannel metrics
+  private final List<Gauge<Integer>> responseQueueSize;
+  private final Gauge<Integer> requestQueueSize;
+
   // SocketServer metrics
   public final Counter acceptConnectionErrorCount;
   public final Counter acceptorShutDownErrorCount;
@@ -197,7 +177,27 @@ class ServerNetworkMetrics extends NetworkMetrics {
 
   public ServerNetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
       final List<Processor> processorThreads) {
-    super(channel, registry);
+    super(registry);
+    requestQueueSize = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return channel.getRequestQueueSize();
+      }
+    };
+    registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, "RequestQueueSize"), requestQueueSize);
+    responseQueueSize = new ArrayList<Gauge<Integer>>(channel.getNumberOfProcessors());
+
+    for (int i = 0; i < channel.getNumberOfProcessors(); i++) {
+      final int index = i;
+      responseQueueSize.add(i, new Gauge<Integer>() {
+        @Override
+        public Integer getValue() {
+          return channel.getResponseQueueSize(index);
+        }
+      });
+      registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + "-ResponseQueueSize"),
+          responseQueueSize.get(i));
+    }
     numberOfProcessorThreads = new Gauge<Integer>() {
       @Override
       public Integer getValue() {

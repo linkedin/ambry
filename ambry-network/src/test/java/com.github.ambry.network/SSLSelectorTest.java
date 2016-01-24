@@ -21,7 +21,6 @@ import static org.junit.Assert.assertTrue;
 public class SSLSelectorTest {
 
   private static final int BUFFER_SIZE = 4 * 1024;
-  private SocketRequestResponseChannel socketRequestResponseChannel;
   private EchoServer server;
   private Selector selector;
   private File trustStoreFile;
@@ -30,7 +29,6 @@ public class SSLSelectorTest {
   public void setup()
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
     SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     SSLConfig clientSSLConfig =
         TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
@@ -39,7 +37,7 @@ public class SSLSelectorTest {
     this.server = new EchoServer(serverSSLFactory, 18383);
     this.server.start();
     this.selector =
-        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry()), SystemTime.getInstance(),
+        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(),
             clientSSLFactory);
   }
 
