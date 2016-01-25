@@ -56,6 +56,10 @@ public class RestUtils {
      */
     public final static String UserMetaData_Header_Prefix = "x-ambry-um-";
     /**
+     * Length of the UserMetaData_Header_Prefix
+     */
+    public final static int UserMetaData_Header_Prefix_Length = UserMetaData_Header_Prefix.length();
+    /**
      * prefix for old style user metadata that will be served as headers
      */
     public final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
@@ -171,9 +175,9 @@ public class RestUtils {
       if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
         // key size
         sizeToAllocate += 4;
-        sizeToAllocate += key.getBytes().length;
+        sizeToAllocate += key.substring(Headers.UserMetaData_Header_Prefix_Length).getBytes().length;
         String value = getHeader(args, key, true);
-        userMetadataMap.put(key, value);
+        userMetadataMap.put(key.substring(Headers.UserMetaData_Header_Prefix_Length), value);
         // value size
         sizeToAllocate += 4;
         sizeToAllocate += value.getBytes().length;
@@ -233,7 +237,7 @@ public class RestUtils {
               while (counter++ < entryCount) {
                 String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
                 String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-                toReturn.put(key, value);
+                toReturn.put(Headers.UserMetaData_Header_Prefix + key, value);
               }
               long actualCRC = userMetadataBuffer.getLong();
               Crc32 crc32 = new Crc32();
