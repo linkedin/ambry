@@ -7,13 +7,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -22,11 +15,16 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Iterator;
-import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -48,7 +46,7 @@ public class SocketServer implements NetworkServer {
   private volatile ArrayList<Acceptor> acceptors;
   private final SocketRequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private final NetworkMetrics metrics;
+  private final ServerNetworkMetrics metrics;
   private final HashMap<PortType, Port> ports;
   private SSLFactory sslFactory;
 
@@ -62,7 +60,7 @@ public class SocketServer implements NetworkServer {
     this.maxRequestSize = config.socketRequestMaxBytes;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
-    metrics = new NetworkMetrics(requestResponseChannel, registry, processors);
+    metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
     this.acceptors = new ArrayList<Acceptor>();
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);
@@ -254,11 +252,11 @@ class Acceptor extends AbstractServerThread {
   private final ServerSocketChannel serverChannel;
   private final java.nio.channels.Selector nioSelector;
   private static final long selectTimeOutMs = 500;
-  private final NetworkMetrics metrics;
+  private final ServerNetworkMetrics metrics;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
   public Acceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
-      NetworkMetrics metrics)
+      ServerNetworkMetrics metrics)
       throws IOException {
     this.host = host;
     this.port = port;
@@ -371,7 +369,7 @@ class Acceptor extends AbstractServerThread {
 class SSLAcceptor extends Acceptor {
 
   public SSLAcceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
-      NetworkMetrics metrics)
+      ServerNetworkMetrics metrics)
       throws IOException {
     super(host, port, processors, sendBufferSize, recvBufferSize, metrics);
   }
@@ -399,10 +397,11 @@ class Processor extends AbstractServerThread {
   private final ConcurrentLinkedQueue<SocketChannelPortTypePair> newConnections =
       new ConcurrentLinkedQueue<SocketChannelPortTypePair>();
   private final Selector selector;
-  private final NetworkMetrics metrics;
+  private final ServerNetworkMetrics metrics;
   private static final long pollTimeoutMs = 300;
 
-  Processor(int id, int maxRequestSize, RequestResponseChannel channel, NetworkMetrics metrics, SSLFactory sslFactory)
+  Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
+      SSLFactory sslFactory)
       throws IOException {
     this.maxRequestSize = maxRequestSize;
     this.channel = (SocketRequestResponseChannel) channel;
