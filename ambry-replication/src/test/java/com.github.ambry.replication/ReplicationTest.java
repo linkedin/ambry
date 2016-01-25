@@ -3,6 +3,7 @@ package com.github.ambry.replication;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -47,8 +48,10 @@ import com.github.ambry.store.StoreManager;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -709,6 +712,60 @@ public class ReplicationTest {
       e.printStackTrace();
       Assert.assertTrue(false);
     }
+  }
+
+  @Test
+  public void replicaTokenTest()
+      throws InterruptedException {
+    final long tokenPersistInterval = 100;
+    Time time = new MockTime();
+    MockFindToken token1 = new MockFindToken(0, 0);
+    RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(new MockReplicaId(), new MockReplicaId(),
+        new MockStore(new ArrayList<MessageInfo>(), new ArrayList<ByteBuffer>()), token1, tokenPersistInterval, time,
+        new Port(5000, PortType.PLAINTEXT));
+
+    // The equality check is for the reference, which is fine.
+    // Initially, the current token and the token to persist are the same.
+    Assert.assertEquals(remoteReplicaInfo.getToken(), token1);
+    Assert.assertEquals(remoteReplicaInfo.getTokenToPersist(), token1);
+    MockFindToken token2 = new MockFindToken(100, 100);
+
+    remoteReplicaInfo.initializeTokens(token2);
+    // Both tokens should be the newly initialized token.
+    Assert.assertEquals(remoteReplicaInfo.getToken(), token2);
+    Assert.assertEquals(remoteReplicaInfo.getTokenToPersist(), token2);
+    remoteReplicaInfo.onTokenPersisted();
+
+    MockFindToken token3 = new MockFindToken(200, 200);
+
+    remoteReplicaInfo.setToken(token3);
+    // Token to persist should still be the old token.
+    Assert.assertEquals(remoteReplicaInfo.getToken(), token3);
+    Assert.assertEquals(remoteReplicaInfo.getTokenToPersist(), token2);
+    remoteReplicaInfo.onTokenPersisted();
+
+    // Sleep for shorter than token persist interval.
+    time.sleep(tokenPersistInterval - 1);
+    // Token to persist should still be the old token.
+    Assert.assertEquals(remoteReplicaInfo.getToken(), token3);
+    Assert.assertEquals(remoteReplicaInfo.getTokenToPersist(), token2);
+    remoteReplicaInfo.onTokenPersisted();
+
+    MockFindToken token4 = new MockFindToken(200, 200);
+    remoteReplicaInfo.setToken(token4);
+
+    time.sleep(2);
+    // Token to persist should be the most recent token as of currentTime - tokenToPersistInterval
+    // which is token3 at this time.
+    Assert.assertEquals(remoteReplicaInfo.getToken(), token4);
+    Assert.assertEquals(remoteReplicaInfo.getTokenToPersist(), token3);
+    remoteReplicaInfo.onTokenPersisted();
+
+    time.sleep(tokenPersistInterval + 1);
+    // The most recently set token as of currentTime - tokenToPersistInterval is token4
+    Assert.assertEquals(remoteReplicaInfo.getToken(), token4);
+    Assert.assertEquals(remoteReplicaInfo.getTokenToPersist(), token4);
+    remoteReplicaInfo.onTokenPersisted();
   }
 
   @Test
