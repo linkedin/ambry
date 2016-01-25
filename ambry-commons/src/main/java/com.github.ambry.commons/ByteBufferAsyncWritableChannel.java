@@ -76,8 +76,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * <p/>
    * If the channel is not closed, this function blocks until the next chunk is available. Once the channel is closed,
    * this function starts returning {@code null}.
-   * <p/>
-   * This function is *not* meant to used concurrently and may cause unpredictable behaviour.
    * @return a {@link ByteBuffer} representing the next chunk of data if the channel is not closed. {@code null} if the
    *         channel is closed.
    * @throws InterruptedException if the wait for a chunk is interrupted.
@@ -96,8 +94,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * <p/>
    * If the channel is not closed, this function waits for {@code timeoutInMs} ms for a chunk. If the channel is closed
    * or if {@code timeoutInMs} expires, this function returns {@code null}.
-   * <p/>
-   * This function is *not* meant to used concurrently and may cause unpredictable behaviour.
    * @param timeoutInMs the time in ms to wait for a chunk.
    * @return a {@link ByteBuffer} representing the next chunk of data if the channel is not closed and a chunk becomes
    *          available within {@code timeoutInMs}. {@code null} if the channel is closed or if {@code timeoutInMs}
@@ -118,8 +114,6 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * resolved, the data inside it is considered void.
    * <p/>
    * This function assumes that chunks are resolved in the same order that they were obtained.
-   * <p/>
-   * This function is *not* meant to used concurrently and may cause unpredictable behaviour.
    * @param chunkBuf the {@link ByteBuffer} that represents the chunk that was handled.
    * @param exception any {@link Exception} that occurred during the handling that needs to be notified.
    * @throws IllegalArgumentException if {@code chunk} is not a valid chunk that is eligible for resolution.
