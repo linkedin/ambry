@@ -171,9 +171,10 @@ public class RestUtils {
       if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
         // key size
         sizeToAllocate += 4;
-        sizeToAllocate += key.getBytes().length;
+        String keyToStore = key.substring(Headers.UserMetaData_Header_Prefix.length());
+        sizeToAllocate += keyToStore.length();
         String value = getHeader(args, key, true);
-        userMetadataMap.put(key, value);
+        userMetadataMap.put(keyToStore, value);
         // value size
         sizeToAllocate += 4;
         sizeToAllocate += value.getBytes().length;
@@ -233,7 +234,7 @@ public class RestUtils {
               while (counter++ < entryCount) {
                 String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
                 String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-                toReturn.put(key, value);
+                toReturn.put(Headers.UserMetaData_Header_Prefix + key, value);
               }
               long actualCRC = userMetadataBuffer.getLong();
               Crc32 crc32 = new Crc32();

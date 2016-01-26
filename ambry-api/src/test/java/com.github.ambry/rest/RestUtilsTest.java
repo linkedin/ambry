@@ -260,17 +260,17 @@ public class RestUtilsTest {
         new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
 
     // wrong size
-    userMetadataByteArray = new byte[47];
+    userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    String key = new String(RestUtils.Headers.UserMetaData_Header_Prefix + "key1");
+    String key = "key1";
     byte[] keyInBytes = key.getBytes(StandardCharsets.US_ASCII);
     int keyLength = keyInBytes.length;
-    byteBuffer.putInt(30);
+    byteBuffer.putInt(21);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
-    String value = new String("value1");
+    String value = "value1";
     byte[] valueInBytes = value.getBytes(StandardCharsets.US_ASCII);
     int valueLength = valueInBytes.length;
     byteBuffer.putInt(valueLength);
@@ -285,10 +285,10 @@ public class RestUtilsTest {
         new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
 
     // wrong total number of entries
-    userMetadataByteArray = new byte[47];
+    userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    byteBuffer.putInt(33);
+    byteBuffer.putInt(22);
     byteBuffer.putInt(2);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
@@ -304,10 +304,10 @@ public class RestUtilsTest {
         new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
 
     // diff key length
-    userMetadataByteArray = new byte[47];
+    userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    byteBuffer.putInt(33);
+    byteBuffer.putInt(22);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength + 1);
     byteBuffer.put(keyInBytes);
@@ -323,10 +323,10 @@ public class RestUtilsTest {
         new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
 
     // diff value length
-    userMetadataByteArray = new byte[47];
+    userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    byteBuffer.putInt(33);
+    byteBuffer.putInt(22);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
@@ -342,10 +342,10 @@ public class RestUtilsTest {
         new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
 
     // no crc
-    userMetadataByteArray = new byte[47];
+    userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    byteBuffer.putInt(33);
+    byteBuffer.putInt(22);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
@@ -358,10 +358,10 @@ public class RestUtilsTest {
         new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
 
     // wrong crc
-    userMetadataByteArray = new byte[47];
+    userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    byteBuffer.putInt(33);
+    byteBuffer.putInt(22);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
@@ -377,10 +377,10 @@ public class RestUtilsTest {
         new String(userMetadataByteArray, StandardCharsets.US_ASCII), userMetadataMap.get(key1));
 
     // correct crc
-    userMetadataByteArray = new byte[47];
+    userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    byteBuffer.putInt(33);
+    byteBuffer.putInt(22);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
