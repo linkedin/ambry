@@ -521,8 +521,6 @@ class ReplicaThread implements Runnable {
     if (replicatingFromRemoteColo) {
       replicationMetrics.interColoReplicationWaitTime.get(datacenterName)
           .update(SystemTime.getInstance().milliseconds() - startTime);
-    } else {
-      replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }
   }
 

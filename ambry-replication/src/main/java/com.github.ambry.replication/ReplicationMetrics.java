@@ -72,7 +72,6 @@ public class ReplicationMetrics {
   public final Map<String, Histogram> sslInterColoReplicationMetadataRequestTime = new HashMap<String, Histogram>();
   public final Histogram sslIntraColoReplicationMetadataRequestTime;
   public final Map<String, Histogram> interColoReplicationWaitTime = new HashMap<String, Histogram>();
-  public final Histogram intraColoReplicationWaitTime;
   public final Map<String, Histogram> interColoCheckMissingKeysTime = new HashMap<String, Histogram>();
   public final Histogram intraColoCheckMissingKeysTime;
   public final Map<String, Histogram> interColoProcessMetadataResponseTime = new HashMap<String, Histogram>();
@@ -164,8 +163,6 @@ public class ReplicationMetrics {
         .histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoReplicationMetadataRequestTime"));
     sslIntraColoReplicationMetadataRequestTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoReplicationMetadataRequestTime"));
-    intraColoReplicationWaitTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationWaitTime"));
     intraColoCheckMissingKeysTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoCheckMissingKeysTime"));
     intraColoProcessMetadataResponseTime =
@@ -192,6 +189,13 @@ public class ReplicationMetrics {
     populateInvalidMessageMetricForReplicas(replicaIds);
   }
 
+  /**
+   * Updates per colo metrics for each thread pool
+   * @param localDatacenter from which replication happens
+   * @param datacenters List of datacenters to replicate from
+   * @param replicaThreadPools Mapping of datacenter to List of {@link ReplicaThread} that is responsible for
+   *                           replicating from that datacenter
+   */
   public void populatePerColoMetrics(String localDatacenter, Set<String> datacenters,
       final Map<String, List<ReplicaThread>> replicaThreadPools) {
     trackLiveThreadsCount(replicaThreadPools, localDatacenter);
