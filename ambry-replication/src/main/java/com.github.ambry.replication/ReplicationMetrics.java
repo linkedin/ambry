@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -95,7 +96,6 @@ public class ReplicationMetrics {
   public final Map<String, Histogram> sslInterColoTotalReplicationTime = new HashMap<String, Histogram>();
   public final Histogram sslIntraColoTotalReplicationTime;
 
-  public Gauge<Integer> numberOfIntraDCReplicaThreads;
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
   private Map<String, Counter> metadataRequestErrorMap;
@@ -103,8 +103,7 @@ public class ReplicationMetrics {
   private Map<String, Counter> localStoreErrorMap;
   private Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter;
 
-  public ReplicationMetrics(MetricRegistry registry, final List<ReplicaThread> replicaIntraDCThreads,
-      final Map<String, List<ReplicaThread>> replicaThreadPools, List<ReplicaId> replicaIds) {
+  public ReplicationMetrics(MetricRegistry registry, List<ReplicaId> replicaIds) {
     metadataRequestErrorMap = new HashMap<String, Counter>();
     getRequestErrorMap = new HashMap<String, Counter>();
     localStoreErrorMap = new HashMap<String, Counter>();
@@ -188,8 +187,15 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoTotalReplicationTime"));
     sslIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoTotalReplicationTime"));
+    this.registry = registry;
+    this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
+    populateInvalidMessageMetricForReplicas(replicaIds);
+  }
 
-    for (String datacenter : replicaThreadPools.keySet()) {
+  public void populatePerColoMetrics(String localDatacenter, Set<String> datacenters,
+      final Map<String, List<ReplicaThread>> replicaThreadPools) {
+    trackLiveThreadsCount(replicaThreadPools, localDatacenter);
+    for (String datacenter : datacenters) {
       Meter interColoReplicationBytesRatePerDC =
           registry.meter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBytesRate"));
       interColoReplicationBytesRate.put(datacenter, interColoReplicationBytesRatePerDC);
@@ -291,22 +297,10 @@ public class ReplicationMetrics {
           .histogram(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-TotalReplicationTime"));
       sslInterColoTotalReplicationTime.put(datacenter, sslInterColoTotalReplicationTimePerDC);
     }
-
-    this.registry = registry;
-    numberOfIntraDCReplicaThreads = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return getLiveThreads(replicaIntraDCThreads);
-      }
-    };
-    registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfIntraDCReplicaThreads"),
-        numberOfIntraDCReplicaThreads);
-    populateInterDCReplicaThreadMetrics(replicaThreadPools);
-    this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
-    populateInvalidMessageMetricForReplicas(replicaIds);
   }
 
-  private void populateInterDCReplicaThreadMetrics(final Map<String, List<ReplicaThread>> replicaThreadPools) {
+  private void trackLiveThreadsCount(final Map<String, List<ReplicaThread>> replicaThreadPools,
+      String localDatacenter) {
     for (final String datacenter : replicaThreadPools.keySet()) {
       Gauge<Integer> liveThreadsPerDatacenter = new Gauge<Integer>() {
         @Override
@@ -314,8 +308,13 @@ public class ReplicationMetrics {
           return getLiveThreads(replicaThreadPools.get(datacenter));
         }
       };
-      registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInter-" + datacenter + "-ReplicaThreads"),
-          liveThreadsPerDatacenter);
+      if (localDatacenter.equals(datacenter)) {
+        registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfIntra-Colo-ReplicaThreads"),
+            liveThreadsPerDatacenter);
+      } else {
+        registry.register(MetricRegistry.name(ReplicaThread.class, "NumberOfInter-" + datacenter + "-ReplicaThreads"),
+            liveThreadsPerDatacenter);
+      }
     }
   }
 
@@ -451,6 +450,14 @@ public class ReplicationMetrics {
         plainTextIntraColoMetadataExchangeCount.inc();
         plainTextIntraColoExchangeMetadataTime.update(exchangeMetadataTime);
       }
+    }
+  }
+
+  public void updateCheckMissingKeysTime(long checkMissingKeyTime, boolean remoteColo, String datacenterName) {
+    if (remoteColo) {
+      interColoCheckMissingKeysTime.get(datacenterName).update(checkMissingKeyTime);
+    } else {
+      intraColoCheckMissingKeysTime.update(checkMissingKeyTime);
     }
   }
 

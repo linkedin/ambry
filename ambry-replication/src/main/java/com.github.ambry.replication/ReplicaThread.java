@@ -72,16 +72,15 @@ class ReplicaThread implements Runnable {
   private final StoreKeyFactory storeKeyFactory;
   private final boolean validateMessageStream;
   private final MetricRegistry metricRegistry;
-  private final boolean isRemoteColo;
-  private final boolean isSSLEnabled;
-  private final String remoteDatacenterName;
+  private final boolean replicatingFromRemoteColo;
+  private final boolean replicatingOverSsl;
+  private final String datacenterName;
 
   public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
-      boolean validateMessageStream, MetricRegistry metricRegistry, boolean isRemoteColo, boolean isSSLEnabled,
-      String remoteDatacenterName) {
+      boolean validateMessageStream, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -97,9 +96,9 @@ class ReplicaThread implements Runnable {
     this.storeKeyFactory = storeKeyFactory;
     this.validateMessageStream = validateMessageStream;
     this.metricRegistry = metricRegistry;
-    this.isRemoteColo = isRemoteColo;
-    this.isSSLEnabled = isSSLEnabled;
-    this.remoteDatacenterName = remoteDatacenterName;
+    this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
+    this.replicatingOverSsl = replicatingOverSsl;
+    this.datacenterName = datacenterName;
   }
 
   public String getName() {
@@ -132,9 +131,9 @@ class ReplicaThread implements Runnable {
               replicasToReplicatePerNode);
           Timer.Context context = null;
           Timer.Context portTypeBasedContext = null;
-          if (isRemoteColo) {
+          if (replicatingFromRemoteColo) {
             context = replicationMetrics.interColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
-            if (isSSLEnabled) {
+            if (replicatingOverSsl) {
               portTypeBasedContext =
                   replicationMetrics.sslInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
             } else {
@@ -143,7 +142,7 @@ class ReplicaThread implements Runnable {
             }
           } else {
             context = replicationMetrics.intraColoReplicationLatency.time();
-            if (isSSLEnabled) {
+            if (replicatingOverSsl) {
               portTypeBasedContext = replicationMetrics.sslIntraColoReplicationLatency.time();
             } else {
               portTypeBasedContext = replicationMetrics.plainTextIntraColoReplicationLatency.time();
@@ -193,7 +192,7 @@ class ReplicaThread implements Runnable {
             } else {
               logger.error(strBuilder.toString() + e);
             }
-            replicationMetrics.incrementReplicationErrors(isSSLEnabled);
+            replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
             if (connectedChannel != null) {
               connectionPool.destroyConnection(connectedChannel);
               connectedChannel = null;
@@ -203,7 +202,7 @@ class ReplicaThread implements Runnable {
                 " Thread name: " + threadName +
                 " Remote replicas: " + replicasToReplicatePerNode +
                 " Throwable exception while replicating with remote replica ", e);
-            replicationMetrics.incrementReplicationErrors(isSSLEnabled);
+            replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
             if (connectedChannel != null) {
               connectionPool.destroyConnection(connectedChannel);
               connectedChannel = null;
@@ -211,7 +210,8 @@ class ReplicaThread implements Runnable {
           } finally {
             long totalReplicationTime = SystemTime.getInstance().milliseconds() - replicationStartTimeInMs;
             replicationMetrics
-                .updateTotalReplicationTime(totalReplicationTime, isRemoteColo, isSSLEnabled, remoteDatacenterName);
+                .updateTotalReplicationTime(totalReplicationTime, replicatingFromRemoteColo, replicatingOverSsl,
+                    datacenterName);
             if (connectedChannel != null) {
               connectionPool.checkInConnection(connectedChannel);
             }
@@ -262,7 +262,7 @@ class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              checkNeedWaitTime(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+              waitIfRequired(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               Set<StoreKey> missingStoreKeys =
                   getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
@@ -293,7 +293,8 @@ class ReplicaThread implements Runnable {
       } finally {
         long exchangeMetadataTime = SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs;
         replicationMetrics
-            .updateExchangeMetadataTime(exchangeMetadataTime, isRemoteColo, isSSLEnabled, remoteDatacenterName);
+            .updateExchangeMetadataTime(exchangeMetadataTime, replicatingFromRemoteColo, replicatingOverSsl,
+                datacenterName);
       }
     }
     return exchangeMetadataResponseList;
@@ -329,7 +330,8 @@ class ReplicaThread implements Runnable {
     } finally {
       long fixMissingStoreKeysTime = SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs;
       replicationMetrics
-          .updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, isRemoteColo, isSSLEnabled, remoteDatacenterName);
+          .updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo, replicatingOverSsl,
+              datacenterName);
     }
   }
 
@@ -370,7 +372,8 @@ class ReplicaThread implements Runnable {
         ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenFactory, clusterMap);
 
     long metadataRequestTime = SystemTime.getInstance().milliseconds() - replicaMetadataRequestStartTime;
-    replicationMetrics.updateMetadataRequestTime(metadataRequestTime, isRemoteColo, isSSLEnabled, remoteDatacenterName);
+    replicationMetrics
+        .updateMetadataRequestTime(metadataRequestTime, replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
 
     if (response.getError() != ServerErrorCode.No_Error
         || response.getReplicaMetadataResponseInfoList().size() != replicasToReplicatePerNode.size()) {
@@ -410,12 +413,9 @@ class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
     }
-    if (isRemoteColo) {
-      replicationMetrics.interColoCheckMissingKeysTime.get(remoteDatacenterName)
-          .update(SystemTime.getInstance().milliseconds() - startTime);
-    } else {
-      replicationMetrics.intraColoCheckMissingKeysTime.update(SystemTime.getInstance().milliseconds() - startTime);
-    }
+    replicationMetrics
+        .updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime, replicatingFromRemoteColo,
+            datacenterName);
     return missingStoreKeys;
   }
 
@@ -481,8 +481,8 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    if (isRemoteColo) {
-      replicationMetrics.interColoProcessMetadataResponseTime.get(remoteDatacenterName)
+    if (replicatingFromRemoteColo) {
+      replicationMetrics.interColoProcessMetadataResponseTime.get(datacenterName)
           .update(SystemTime.getInstance().milliseconds() - startTime);
     } else {
       replicationMetrics.intraColoProcessMetadataResponseTime
@@ -497,14 +497,16 @@ class ReplicaThread implements Runnable {
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @throws InterruptedException
    */
-  private void checkNeedWaitTime(ReplicaMetadataResponseInfo replicaMetadataResponseInfo, DataNodeId remoteNode,
+  private void waitIfRequired(ReplicaMetadataResponseInfo replicaMetadataResponseInfo, DataNodeId remoteNode,
       RemoteReplicaInfo remoteReplicaInfo)
       throws InterruptedException {
     long remoteReplicaLag = replicaMetadataResponseInfo.getRemoteReplicaLagInBytes();
 
     long startTime = SystemTime.getInstance().milliseconds();
-    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes && needToWaitForReplicaLag
-        && !isRemoteColo) {
+    if (!replicatingFromRemoteColo) {
+      needToWaitForReplicaLag = false;
+    }
+    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes && needToWaitForReplicaLag) {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote replica lag: {} "
           + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(),
@@ -516,8 +518,8 @@ class ReplicaThread implements Runnable {
       Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
       needToWaitForReplicaLag = false;
     }
-    if (isRemoteColo) {
-      replicationMetrics.interColoReplicationWaitTime.get(remoteDatacenterName)
+    if (replicatingFromRemoteColo) {
+      replicationMetrics.interColoReplicationWaitTime.get(datacenterName)
           .update(SystemTime.getInstance().milliseconds() - startTime);
     } else {
       replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
@@ -563,7 +565,8 @@ class ReplicaThread implements Runnable {
     ChannelOutput channelOutput = connectedChannel.receive();
     GetResponse getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
     long getRequestTime = SystemTime.getInstance().milliseconds() - startTime;
-    replicationMetrics.updateGetRequestTime(getRequestTime, isRemoteColo, isSSLEnabled, remoteDatacenterName);
+    replicationMetrics
+        .updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
     if (getResponse.getError() != ServerErrorCode.No_Error) {
       logger.error("Remote node: " + remoteNode +
           " Thread name: " + threadName +
@@ -670,8 +673,8 @@ class ReplicaThread implements Runnable {
     }
     long batchStoreWriteTime = SystemTime.getInstance().milliseconds() - startTime;
     replicationMetrics
-        .updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed, isRemoteColo, isSSLEnabled,
-            remoteDatacenterName);
+        .updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed, replicatingFromRemoteColo,
+            replicatingOverSsl, datacenterName);
   }
 
   class ExchangeMetadataResponse {

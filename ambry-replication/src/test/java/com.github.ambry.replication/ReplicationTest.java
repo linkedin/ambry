@@ -595,9 +595,11 @@ public class ReplicationTest {
       }
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
-      ReplicationMetrics replicationMetrics =
-          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(),
-              new HashMap<String, List<ReplicaThread>>(), replicaIds);
+      Map<String, List<ReplicaThread>> replicaThreadMap = new HashMap<String, List<ReplicaThread>>();
+      replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
+      ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
+      replicationMetrics
+          .populatePerColoMetrics("localhost", new HashSet<String>(Arrays.asList("localhost")), replicaThreadMap);
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -610,7 +612,7 @@ public class ReplicationTest {
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
-              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, false, "localhost");
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost");
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId));
@@ -794,10 +796,11 @@ public class ReplicationTest {
         }
       }
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
-
-      ReplicationMetrics replicationMetrics =
-          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(),
-              new HashMap<String, List<ReplicaThread>>(), replicaIds);
+      Map<String, List<ReplicaThread>> replicaThreadMap = new HashMap<String, List<ReplicaThread>>();
+      replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
+      ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
+      replicationMetrics
+          .populatePerColoMetrics("localhost", new HashSet<String>(Arrays.asList("localhost")), replicaThreadMap);
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -810,7 +813,7 @@ public class ReplicationTest {
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
-              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, false, "localhost");
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost");
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId));
@@ -1023,10 +1026,11 @@ public class ReplicationTest {
         }
       }
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
-
-      ReplicationMetrics replicationMetrics =
-          new ReplicationMetrics(new MetricRegistry(), new ArrayList<ReplicaThread>(),
-              new HashMap<String, List<ReplicaThread>>(), replicaIds);
+      Map<String, List<ReplicaThread>> replicaThreadMap = new HashMap<String, List<ReplicaThread>>();
+      replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
+      ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
+      replicationMetrics
+          .populatePerColoMetrics("localhost", new HashSet<String>(Arrays.asList("localhost")), replicaThreadMap);
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -1039,7 +1043,7 @@ public class ReplicationTest {
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
-              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, false, "localhost");
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost");
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId));
