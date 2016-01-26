@@ -172,7 +172,7 @@ public class RestUtils {
         // key size
         sizeToAllocate += 4;
         String keyToStore = key.substring(Headers.UserMetaData_Header_Prefix.length());
-        sizeToAllocate += keyToStore.getBytes().length;
+        sizeToAllocate += keyToStore.length();
         String value = getHeader(args, key, true);
         userMetadataMap.put(keyToStore, value);
         // value size
