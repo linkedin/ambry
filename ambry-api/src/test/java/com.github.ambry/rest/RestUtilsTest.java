@@ -263,14 +263,14 @@ public class RestUtilsTest {
     userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
     byteBuffer.putShort((short) 1);
-    String key = new String("key1");
+    String key = "key1";
     byte[] keyInBytes = key.getBytes(StandardCharsets.US_ASCII);
     int keyLength = keyInBytes.length;
     byteBuffer.putInt(21);
     byteBuffer.putInt(1);
     byteBuffer.putInt(keyLength);
     byteBuffer.put(keyInBytes);
-    String value = new String("value1");
+    String value = "value1";
     byte[] valueInBytes = value.getBytes(StandardCharsets.US_ASCII);
     int valueLength = valueInBytes.length;
     byteBuffer.putInt(valueLength);
