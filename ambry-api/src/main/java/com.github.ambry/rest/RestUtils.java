@@ -56,10 +56,6 @@ public class RestUtils {
      */
     public final static String UserMetaData_Header_Prefix = "x-ambry-um-";
     /**
-     * Length of the UserMetaData_Header_Prefix
-     */
-    public final static int UserMetaData_Header_Prefix_Length = UserMetaData_Header_Prefix.length();
-    /**
      * prefix for old style user metadata that will be served as headers
      */
     public final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
@@ -175,9 +171,10 @@ public class RestUtils {
       if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
         // key size
         sizeToAllocate += 4;
-        sizeToAllocate += key.substring(Headers.UserMetaData_Header_Prefix_Length).getBytes().length;
+        String keyToStore = key.substring(Headers.UserMetaData_Header_Prefix.length());
+        sizeToAllocate += keyToStore.getBytes().length;
         String value = getHeader(args, key, true);
-        userMetadataMap.put(key.substring(Headers.UserMetaData_Header_Prefix_Length), value);
+        userMetadataMap.put(keyToStore, value);
         // value size
         sizeToAllocate += 4;
         sizeToAllocate += value.getBytes().length;
