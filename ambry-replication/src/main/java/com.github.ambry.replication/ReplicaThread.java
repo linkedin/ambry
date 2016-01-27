@@ -262,7 +262,9 @@ class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              waitIfRequired(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+              if (replicatingFromRemoteColo) {
+                waitIfRequired(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+              }
               Set<StoreKey> missingStoreKeys =
                   getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
@@ -501,11 +503,7 @@ class ReplicaThread implements Runnable {
       RemoteReplicaInfo remoteReplicaInfo)
       throws InterruptedException {
     long remoteReplicaLag = replicaMetadataResponseInfo.getRemoteReplicaLagInBytes();
-
     long startTime = SystemTime.getInstance().milliseconds();
-    if (!replicatingFromRemoteColo) {
-      needToWaitForReplicaLag = false;
-    }
     if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes && needToWaitForReplicaLag) {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote replica lag: {} "
           + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
