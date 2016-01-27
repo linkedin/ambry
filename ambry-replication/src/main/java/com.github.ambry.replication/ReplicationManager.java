@@ -478,10 +478,10 @@ public final class ReplicationManager {
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) {
     int replicaThreadCount = numberOfReplicaThreads.get(datacenter);
     if (replicaThreadCount <= 0) {
-      logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads");
+      logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {} ", datacenter);
       return;
     } else if (replicasToReplicate.size() == 0) {
-      logger.warn("Number of nodes to replicate from is 0, not starting any replica threads");
+      logger.warn("Number of nodes to replicate from is 0, not starting any replica threads for {} ", datacenter);
       return;
     }
     int dataNodesCount = replicasToReplicate.size();
@@ -497,20 +497,22 @@ public final class ReplicationManager {
     int numberOfNodesPerThread = replicasToReplicate.size() / replicaThreadCount;
     int remainingNodes = replicasToReplicate.size() % replicaThreadCount;
 
-    Iterator<DataNodeId> dataNodeIterator = replicasToReplicate.keySet().iterator();
+    Iterator<Map.Entry<DataNodeId, List<RemoteReplicaInfo>>> mapIterator = replicasToReplicate.entrySet().iterator();
 
     for (int i = 0; i < replicaThreadCount; i++) {
       // create the list of nodes for the replica thread
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasForThread = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       int nodesAssignedToThread = 0;
       while (nodesAssignedToThread < numberOfNodesPerThread) {
-        DataNodeId dataNodeId = dataNodeIterator.next();
-        replicasForThread.put(dataNodeId, replicasToReplicate.get(dataNodeId));
+        Map.Entry<DataNodeId, List<RemoteReplicaInfo>> mapEntry = mapIterator.next();
+        replicasForThread.put(mapEntry.getKey(), mapEntry.getValue());
+        mapIterator.remove();
         nodesAssignedToThread++;
       }
       if (remainingNodes > 0) {
-        DataNodeId dataNodeId = dataNodeIterator.next();
-        replicasForThread.put(dataNodeId, replicasToReplicate.get(dataNodeId));
+        Map.Entry<DataNodeId, List<RemoteReplicaInfo>> mapEntry = mapIterator.next();
+        replicasForThread.put(mapEntry.getKey(), mapEntry.getValue());
+        mapIterator.remove();
         remainingNodes--;
       }
       boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);
