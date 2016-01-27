@@ -332,8 +332,8 @@ public final class ReplicationManager {
       }
 
       // start all replica threads
-      for (String datacenter : replicaThreadPools.keySet()) {
-        for (ReplicaThread thread : replicaThreadPools.get(datacenter)) {
+      for (List<ReplicaThread> replicaThreads : replicaThreadPools.values()) {
+        for (ReplicaThread thread : replicaThreads) {
           Thread replicaThread = Utils.newThread(thread.getName(), thread, false);
           logger.info("Starting replica thread " + thread.getName());
           replicaThread.start();
@@ -428,8 +428,8 @@ public final class ReplicationManager {
       throws ReplicationException {
     try {
       // stop all replica threads
-      for (String datacenter : replicaThreadPools.keySet()) {
-        for (ReplicaThread replicaThread : replicaThreadPools.get(datacenter)) {
+      for (List<ReplicaThread> replicaThreads: replicaThreadPools.values()) {
+        for (ReplicaThread replicaThread : replicaThreads) {
           replicaThread.shutdown();
         }
       }
