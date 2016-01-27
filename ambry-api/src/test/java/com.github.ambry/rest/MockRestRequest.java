@@ -1,5 +1,8 @@
 package com.github.ambry.rest;
 
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -14,7 +17,9 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -43,9 +48,10 @@ public class MockRestRequest implements RestRequest {
     GetUri,
     GetArgs,
     GetSize,
-    Read,
+    ReadInto,
     IsOpen,
-    Close
+    Close,
+    GetMetricsTracker
   }
 
   /**
@@ -79,9 +85,11 @@ public class MockRestRequest implements RestRequest {
   private final ReentrantLock contentLock = new ReentrantLock();
   private final List<ByteBuffer> requestContents;
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final AtomicBoolean streamEnded = new AtomicBoolean(false);
   private final List<EventListener> listeners = new ArrayList<EventListener>();
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
+
+  private volatile AsyncWritableChannel writeChannel = null;
+  private volatile ReadIntoCallbackWrapper callbackWrapper = null;
 
   /**
    * Create a MockRestRequest.
@@ -154,65 +162,35 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten;
-    if (!channelOpen.get()) {
-      throw new ClosedChannelException();
-    } else if (streamEnded.get()) {
-      bytesWritten = -1;
-    } else {
-      bytesWritten = 0;
-      contentLock.lock();
-      try {
-        // We read from the ByteBuffer at the head of the list until :-
-        // 1. The writable channel can hold no more data or there is no more data immediately available - while loop
-        //      ends.
-        // 2. The ByteBuffer runs out of content - remove it from the head of the list and start reading from new head
-        //      if it is available.
-        // Content may be added at any time and it is not necessary that the list have any elements at the time of
-        // reading. Read returns -1 only when a null is encountered in the content list. If stream has not ended and
-        // there is no content in the list, we return 0.
-        // Cases to consider:
-        // 1. Writable channel can consume no content (nothing to do. Should return 0).
-        // 2. Writable channel can consume data limited to one ByteBuffer (might rollover).
-        //      a. There is content available in the ByteBuffer at the head of the list (don't rollover).
-        //      b. Request content stream ended when we tried to read from the ByteBuffer at the head of the list (end
-        //          of stream).
-        //      b. There is no content available right now in the ByteBuffer at the head of the list but it has not
-        //          finished its content (don't rollover).
-        //      c. There is no content available in the ByteBuffer at the head of the list because it just finished its
-        //          content (rollover).
-        //            i. More ByteBuffer available in the list (continue read).
-        //            ii. No more ByteBuffer in the list currently (cannot continue read).
-        // 3. Writable channel can consume data across ByteBuffers (will rollover).
-        //      a. More ByteBuffer is available in the list (continue read).
-        //      b. Request content stream has not ended but more ByteBuffer is not available in the list (cannot
-        //          continue read).
-        //      c. Request content stream has ended (end of stream).
-        int currentBytesWritten = requestContents.size() > 0 ? channel.write(requestContents.get(0)) : 0;
-        while (currentBytesWritten != 0) {
-          if (currentBytesWritten == -1) {
-            requestContents.remove(0);
-            if (requestContents.get(0) == null) {
-              streamEnded.set(true);
-              requestContents.remove(0);
-            }
-          } else {
-            bytesWritten += currentBytesWritten;
-          }
+    throw new IllegalStateException("Not implemented");
+  }
 
-          currentBytesWritten = 0;
-          if (!streamEnded.get() && requestContents.size() > 0) {
-            currentBytesWritten = channel.write(requestContents.get(0));
-          }
-        }
-      } finally {
-        contentLock.unlock();
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    ReadIntoCallbackWrapper tempWrapper = new ReadIntoCallbackWrapper(callback);
+    contentLock.lock();
+    try {
+      if (!channelOpen.get()) {
+        tempWrapper.invokeCallback(new ClosedChannelException());
+      } else if (writeChannel != null) {
+        throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }
+      Iterator<ByteBuffer> bufferIterator = requestContents.iterator();
+      while (bufferIterator.hasNext()) {
+        ByteBuffer buffer = bufferIterator.next();
+        writeContent(asyncWritableChannel, tempWrapper, buffer);
+        bufferIterator.remove();
+      }
+      callbackWrapper = tempWrapper;
+      writeChannel = asyncWritableChannel;
+    } finally {
+      contentLock.unlock();
     }
-    onEventComplete(Event.Read);
-    return bytesWritten;
+    onEventComplete(Event.ReadInto);
+    return tempWrapper.futureResult;
   }
 
   @Override
@@ -230,6 +208,7 @@ public class MockRestRequest implements RestRequest {
 
   @Override
   public RestRequestMetricsTracker getMetricsTracker() {
+    onEventComplete(Event.GetMetricsTracker);
     return restRequestMetricsTracker;
   }
 
@@ -255,17 +234,40 @@ public class MockRestRequest implements RestRequest {
       throws IOException {
     if (!RestMethod.POST.equals(getRestMethod()) && content != null) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
+    } else if (!isOpen()) {
+      throw new ClosedChannelException();
     } else {
       contentLock.lock();
       try {
         if (!isOpen()) {
           throw new ClosedChannelException();
+        } else if (writeChannel != null) {
+          writeContent(writeChannel, callbackWrapper, content);
+        } else {
+          requestContents.add(content);
         }
-        requestContents.add(content);
       } finally {
         contentLock.unlock();
       }
     }
+  }
+
+  /**
+   * Writes the provided {@code content} to the given {@code writeChannel}.
+   * @param writeChannel the {@link AsyncWritableChannel} to write the {@code content} to.
+   * @param callbackWrapper the {@link ReadIntoCallbackWrapper} for the read operation.
+   * @param content the piece of {@link ByteBuffer} that needs to be written to the {@code writeChannel}.
+   */
+  private void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
+      ByteBuffer content) {
+    ContentWriteCallback writeCallback;
+    if (content == null) {
+      writeCallback = new ContentWriteCallback(true, callbackWrapper);
+      content = ByteBuffer.allocate(0);
+    } else {
+      writeCallback = new ContentWriteCallback(false, callbackWrapper);
+    }
+    writeChannel.write(content, writeCallback);
   }
 
   /**
@@ -330,6 +332,86 @@ public class MockRestRequest implements RestRequest {
         } catch (Exception ee) {
           // too bad.
         }
+      }
+    }
+  }
+}
+
+/**
+ * Callback for each write into the given {@link AsyncWritableChannel}.
+ */
+class ContentWriteCallback implements Callback<Long> {
+  private final boolean isLast;
+  private final ReadIntoCallbackWrapper callbackWrapper;
+
+  /**
+   * Creates a new instance of ContentWriteCallback.
+   * @param isLast if this is the last piece of content for this request.
+   * @param callbackWrapper the {@link ReadIntoCallbackWrapper} that will receive updates of bytes read and one that
+   *                        should be invoked in {@link #onCompletion(Long, Exception)} if {@code isLast} is
+   *                        {@code true} or exception passed is not null.
+   */
+  public ContentWriteCallback(boolean isLast, ReadIntoCallbackWrapper callbackWrapper) {
+    this.isLast = isLast;
+    this.callbackWrapper = callbackWrapper;
+  }
+
+  /**
+   * Updates the number of bytes read and invokes {@link ReadIntoCallbackWrapper#invokeCallback(Exception)} if
+   * {@code exception} is not {@code null} or if this is the last piece of content in the request.
+   * @param result The result of the request. This would be non null when the request executed successfully
+   * @param exception The exception that was reported on execution of the request
+   */
+  @Override
+  public void onCompletion(Long result, Exception exception) {
+    callbackWrapper.updateBytesRead(result);
+    if (exception != null || isLast) {
+      callbackWrapper.invokeCallback(exception);
+    }
+  }
+}
+
+/**
+ * Wrapper for callbacks provided to {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)}.
+ */
+class ReadIntoCallbackWrapper {
+  /**
+   * The {@link Future} where the result of {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)} will
+   * eventually be updated.
+   */
+  public final FutureResult<Long> futureResult = new FutureResult<Long>();
+
+  private final Callback<Long> callback;
+  private final AtomicLong totalBytesRead = new AtomicLong(0);
+  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+
+  /**
+   * Creates an instance of ReadIntoCallbackWrapper with the given {@code callback}.
+   * @param callback the {@link Callback} to invoke on operation completion.
+   */
+  public ReadIntoCallbackWrapper(Callback<Long> callback) {
+    this.callback = callback;
+  }
+
+  /**
+   * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
+   * @param delta the number of bytes read in the current invocation.
+   * @return the total number of bytes read until now.
+   */
+  public long updateBytesRead(long delta) {
+    return totalBytesRead.addAndGet(delta);
+  }
+
+  /**
+   * Invokes the callback and updates the future once this is called. This function ensures that the callback is invoked
+   * just once.
+   * @param exception the {@link Exception}, if any, to pass to the callback.
+   */
+  public void invokeCallback(Exception exception) {
+    if (callbackInvoked.compareAndSet(false, true)) {
+      futureResult.done(totalBytesRead.get(), exception);
+      if (callback != null) {
+        callback.onCompletion(totalBytesRead.get(), exception);
       }
     }
   }

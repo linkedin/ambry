@@ -21,6 +21,8 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -43,6 +45,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -1046,6 +1049,7 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     List<ByteBuffer> contents = new LinkedList<ByteBuffer>();
     contents.add(content);
+    contents.add(null);
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doPost(restRequest, restResponseChannel);
@@ -1335,9 +1339,15 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     throw new IOException("Not implemented");
+  }
+
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
   }
 }
 
@@ -1352,9 +1362,15 @@ class BadRSC implements ReadableStreamChannel {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     throw new IOException("Not implemented");
+  }
+
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

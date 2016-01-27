@@ -58,7 +58,7 @@ class NettyMetrics {
   public final Counter nettyServerStartError;
 
   // Other
-  // NettyContent
+  // NettyRequest
   public final Counter contentCopyCount;
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
@@ -149,7 +149,7 @@ class NettyMetrics {
 
     // Other
     // NettyContent
-    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyContent.class, "ContentCopyCount"));
+    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
     // NettyMessageProcessor
     channelReadIntervalInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));

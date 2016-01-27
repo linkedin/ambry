@@ -3,7 +3,9 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteBufferRSC;
+import com.github.ambry.router.Callback;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -21,6 +23,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONException;
@@ -955,6 +958,7 @@ class IntermittentRSC implements ReadableStreamChannel {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     int bytesWritten;
@@ -973,6 +977,13 @@ class IntermittentRSC implements ReadableStreamChannel {
       halt = true;
     }
     return bytesWritten;
+  }
+
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    // NOTE: This class will be removed once changes are made to AsyncRequestResponseHandler that make this test
+    // obsolete. No need to implement this function.
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
@@ -1006,6 +1017,7 @@ class HaltingRSC implements ReadableStreamChannel {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     try {
@@ -1016,6 +1028,18 @@ class HaltingRSC implements ReadableStreamChannel {
       // move on.
     }
     return rsc.read(channel);
+  }
+
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    try {
+      halted.countDown();
+      // halt until released.
+      release.await();
+    } catch (InterruptedException e) {
+      // move on.
+    }
+    return rsc.readInto(asyncWritableChannel, callback);
   }
 
   @Override
@@ -1053,9 +1077,15 @@ class BadRSC implements ReadableStreamChannel {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     throw new IOException("Not implemented");
+  }
+
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
@@ -1212,8 +1242,14 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
     throw new IOException("Not implemented");
+  }
+
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
   }
 }
