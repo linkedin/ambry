@@ -71,7 +71,7 @@ public class ReplicationMetrics {
   public final Histogram plainTextIntraColoReplicationMetadataRequestTime;
   public final Map<String, Histogram> sslInterColoReplicationMetadataRequestTime = new HashMap<String, Histogram>();
   public final Histogram sslIntraColoReplicationMetadataRequestTime;
-  public final Map<String, Histogram> interColoReplicationWaitTime = new HashMap<String, Histogram>();
+  public final Histogram intraColoReplicationWaitTime;
   public final Map<String, Histogram> interColoCheckMissingKeysTime = new HashMap<String, Histogram>();
   public final Histogram intraColoCheckMissingKeysTime;
   public final Map<String, Histogram> interColoProcessMetadataResponseTime = new HashMap<String, Histogram>();
@@ -157,6 +157,8 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoFixMissingKeysTime"));
     sslIntraColoFixMissingKeysTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoFixMissingKeysTime"));
+    intraColoReplicationWaitTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationWaitTime"));
     intraColoReplicationMetadataRequestTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationMetadataRequestTime"));
     plainTextIntraColoReplicationMetadataRequestTime = registry
@@ -264,9 +266,6 @@ public class ReplicationMetrics {
       Histogram sslInterColoReplicationMetadataRequestTimePerDC = registry.histogram(
           MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-ReplicationMetadataRequestTime"));
       sslInterColoReplicationMetadataRequestTime.put(datacenter, sslInterColoReplicationMetadataRequestTimePerDC);
-      Histogram interColoReplicationWaitTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationWaitTime"));
-      interColoReplicationWaitTime.put(datacenter, interColoReplicationWaitTimePerDC);
       Histogram interColoCheckMissingKeysTimePerDC =
           registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-CheckMissingKeysTime"));
       interColoCheckMissingKeysTime.put(datacenter, interColoCheckMissingKeysTimePerDC);

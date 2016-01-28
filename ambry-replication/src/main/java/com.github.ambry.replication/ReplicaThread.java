@@ -262,7 +262,7 @@ class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              if (replicatingFromRemoteColo) {
+              if (!replicatingFromRemoteColo) {
                 waitIfRequired(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               }
               Set<StoreKey> missingStoreKeys =
@@ -516,10 +516,7 @@ class ReplicaThread implements Runnable {
       Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
       needToWaitForReplicaLag = false;
     }
-    if (replicatingFromRemoteColo) {
-      replicationMetrics.interColoReplicationWaitTime.get(datacenterName)
-          .update(SystemTime.getInstance().milliseconds() - startTime);
-    }
+    replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
   }
 
   /**
