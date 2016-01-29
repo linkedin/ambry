@@ -1,5 +1,6 @@
 package com.github.ambry.utils;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import org.json.JSONException;
@@ -323,15 +324,15 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if(ctor.getParameterTypes().length == objects.length){
+      if (ctor.getParameterTypes().length == objects.length) {
         int i = 0;
-        for(; i < objects.length; i++) {
-          if(!ctor.getParameterTypes()[i].isAssignableFrom(objects[i].getClass())) {
+        for (; i < objects.length; i++) {
+          if (!ctor.getParameterTypes()[i].isAssignableFrom(objects[i].getClass())) {
             break;
           }
         }
-        if(i == objects.length) {
-          return (T)ctor.newInstance(objects);
+        if (i == objects.length) {
+          return (T) ctor.newInstance(objects);
         }
       }
     }
@@ -408,6 +409,30 @@ public class Utils {
       outputBuffer.putInt(value.length());
       outputBuffer.put(value.getBytes());
     }
+  }
+
+  /**
+   * Serializes a string into byte buffer
+   * @param outputBuffer The output buffer to serialize the value to
+   * @param value The value to serialize
+   * @param charset {@link Charset} to be used to encode
+   */
+  public static void serializeString(ByteBuffer outputBuffer, String value, Charset charset) {
+    outputBuffer.putInt(value.length());
+    outputBuffer.put(value.getBytes(charset));
+  }
+
+  /**
+   * Deserializes a string from byte buffer
+   * @param inputBuffer The input buffer to deserialize the value from
+   * @param charset {@link Charset} to be used to decode
+   * @return the deserialized string
+   */
+  public static String deserializeString(ByteBuffer inputBuffer, Charset charset) {
+    int size = inputBuffer.getInt();
+    byte[] value = new byte[size];
+    inputBuffer.get(value);
+    return new String(value, charset);
   }
 
   /**

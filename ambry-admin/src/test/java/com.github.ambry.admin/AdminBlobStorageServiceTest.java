@@ -20,6 +20,7 @@ import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.InMemoryRouter;
@@ -36,6 +37,8 @@ import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -324,7 +327,10 @@ public class AdminBlobStorageServiceTest {
     String ownerId = "postGetHeadDeleteOwnerID";
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
-
+    Map<String, String> userMetadata = new HashMap<String, String>();
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
+    RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
     getHeadAndVerify(blobId, headers);
@@ -1111,6 +1117,25 @@ public class AdminBlobStorageServiceTest {
       assertEquals(RestUtils.Headers.Owner_Id + " does not match",
           expectedHeaders.getString(RestUtils.Headers.Owner_Id),
           restResponseChannel.getHeader(RestUtils.Headers.Owner_Id));
+    }
+    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
+  }
+
+  /**
+   * Verifies User metadata headers from output, to that sent in during input
+   * @param expectedHeaders the expected headers in the response.
+   * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
+   * @throws JSONException
+   */
+  private void verifyUserMetadataHeaders(JSONObject expectedHeaders, MockRestResponseChannel restResponseChannel)
+      throws JSONException {
+    Iterator itr = expectedHeaders.keys();
+    while (itr.hasNext()) {
+      String key = (String) itr.next();
+      if (key.startsWith(RestUtils.Headers.UserMetaData_Header_Prefix)) {
+        String outValue = restResponseChannel.getHeader(key);
+        assertEquals("Value for " + key + "does not match in user metadata", expectedHeaders.getString(key), outValue);
+      }
     }
   }
 

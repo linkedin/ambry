@@ -263,13 +263,14 @@ class NettyRequest implements RestRequest {
       // no need to retain httpContent since we have a copy.
       writeCallback = new ContentWriteCallback(null, isLast, callbackWrapper);
     }
+    boolean asyncWriteCalled = false;
     try {
       writeChannel.write(contentBuffer, writeCallback);
-    } catch (RuntimeException e) {
-      if (retained) {
+      asyncWriteCalled = true;
+    } finally {
+      if (retained && !asyncWriteCalled) {
         ReferenceCountUtil.release(httpContent);
       }
-      throw e;
     }
   }
 }

@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -674,6 +675,10 @@ class HeadCallback implements Callback<BlobInfo> {
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
     }
-    // TODO: send user metadata also as header after discussion with team.
+    byte[] userMetadataArray = blobInfo.getUserMetadata();
+    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
+    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
+      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
+    }
   }
 }
