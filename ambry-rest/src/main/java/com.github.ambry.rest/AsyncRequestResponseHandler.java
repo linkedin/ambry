@@ -660,8 +660,24 @@ class AsyncResponseHandler implements Closeable {
     try {
       if (exception != null) {
         restServerMetrics.responseExceptionCount.inc();
-        logger.error("Unexpected error handling request {} with method {}.", restRequest.getUri(),
-            restRequest.getRestMethod(), exception);
+        if (exception instanceof RestServiceException) {
+          RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
+          ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
+          if (responseStatus == ResponseStatus.InternalServerError) {
+            logger.error("Internal error handling request {} with method {}.", restRequest.getUri(),
+                restRequest.getRestMethod(), exception);
+          } else if (responseStatus == ResponseStatus.BadRequest) {
+            logger
+                .debug("Request {} with method {} is a bad request.", restRequest.getUri(), restRequest.getRestMethod(),
+                    exception);
+          } else {
+            logger.trace("Error handling request {} with method {}.", restRequest.getUri(), restRequest.getRestMethod(),
+                exception);
+          }
+        } else {
+          logger.error("Unexpected error handling request {} with method {}.", restRequest.getUri(),
+              restRequest.getRestMethod(), exception);
+        }
       }
       restRequest.getMetricsTracker().scalingMetricsTracker.markRequestCompleted();
       restResponseChannel.onResponseComplete(exception);
