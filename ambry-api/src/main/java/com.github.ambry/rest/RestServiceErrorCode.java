@@ -70,14 +70,6 @@ public enum RestServiceErrorCode {
    */
   InternalServerError,
   /**
-   * Indicates that an error occurred while data was being written to a channel.
-   */
-  ChannelWriteError,
-  /**
-   * Indicates that a state transition while generating response metadata is invalid.
-   */
-  IllegalResponseMetadataStateTransition,
-  /**
    * Indicates that an object that is needed for the request could not be created due to an internal server error.
    */
   InternalObjectCreationError,

@@ -32,10 +32,8 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
       throw new IllegalArgumentException("RestServerMetrics instance provided is null");
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Response handler scaling unit count has to be > 0. Is " + handlerCount);
-    } else {
-      AsyncRequestResponseHandler responseHandler = getInstance(restServerMetrics);
-      responseHandler.setResponseWorkersCount(handlerCount);
     }
+    buildInstance(restServerMetrics);
     logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestResponseHandler");
   }
 
@@ -54,7 +52,7 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Request handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
-      AsyncRequestResponseHandler requestHandler = getInstance(restServerMetrics);
+      AsyncRequestResponseHandler requestHandler = buildInstance(restServerMetrics);
       requestHandler.setRequestWorkersCount(handlerCount);
       requestHandler.setBlobStorageService(blobStorageService);
     }
@@ -85,7 +83,7 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
    * @param restServerMetrics the {@link RestServerMetrics} instance that should be used for metrics.
    * @return an instance of {@link AsyncRequestResponseHandler}.
    */
-  private static AsyncRequestResponseHandler getInstance(RestServerMetrics restServerMetrics) {
+  private static AsyncRequestResponseHandler buildInstance(RestServerMetrics restServerMetrics) {
     lock.lock();
     try {
       if (instance == null) {

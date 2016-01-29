@@ -164,7 +164,7 @@ class TestMetrics {
 
     restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingTime(scRequestProcessingTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingTime(scResponseProcessingTime);
-    restRequestMetricsTracker.scalingMetricsTracker.addToProcessingWaitTime(scRequestProcessingWaitTime);
+    restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingWaitTime(scRequestProcessingWaitTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingWaitTime(scResponseProcessingWaitTime);
   }
 
