@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +26,7 @@ public class RequestResponseHandler implements Runnable {
   private final SSLFactory factory;
   private final Time time;
   private final Thread requestResponseHandlerThread;
-  private volatile boolean isRunning;
+  private AtomicBoolean isRunning;
   private final CountDownLatch shutDownLatch;
   // @todo: these numbers need to be determined.
   private static final int POLL_TIMEOUT_MS = 1 * Time.MsPerSec;
@@ -39,7 +40,7 @@ public class RequestResponseHandler implements Runnable {
     this.metrics = new NetworkMetrics(registry);
     this.factory = factory;
     this.time = time;
-    this.isRunning = true;
+    this.isRunning = new AtomicBoolean(true);
     this.shutDownLatch = new CountDownLatch(1);
     requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
     this.selector = new Selector(metrics, time, factory);
@@ -56,9 +57,10 @@ public class RequestResponseHandler implements Runnable {
    */
   public void close()
       throws InterruptedException {
-    isRunning = false;
-    shutDownLatch.await();
-    selector.close();
+    if (isRunning.compareAndSet(true, false)) {
+      shutDownLatch.await();
+      selector.close();
+    }
   }
 
   /**
@@ -75,8 +77,9 @@ public class RequestResponseHandler implements Runnable {
 
   @Override
   public void run() {
+    Exception exception = null;
     try {
-      while (isRunning) {
+      while (isRunning.get()) {
         try {
           List<NetworkSend> sends = requestor.poll();
           selector.poll(POLL_TIMEOUT_MS, sends);
@@ -85,13 +88,13 @@ public class RequestResponseHandler implements Runnable {
         } catch (IOException e) {
           logger.error("Encountered IO Exception during poll, continuing.", e);
         } catch (Exception e) {
-          requestor.onClose(e);
+          exception = e;
           break;
         }
       }
     } finally {
-      isRunning = false;
       shutDownLatch.countDown();
+      requestor.onClose(exception);
     }
   }
 }

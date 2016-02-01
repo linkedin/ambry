@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,11 +54,10 @@ class OperationController implements Requestor {
   private final MetricRegistry registry;
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
-  private volatile boolean isRunning;
+  private AtomicBoolean isRunning;
 
   public OperationController(NonBlockingRouter router, SSLFactory sslFactory, RouterConfig routerConfig,
-      MetricRegistry registry,
-      NotificationSystem notificationSystem, ClusterMap clusterMap)
+      MetricRegistry registry, NotificationSystem notificationSystem, ClusterMap clusterMap)
       throws IOException {
     this.router = router;
     this.routerConfig = routerConfig;
@@ -70,12 +70,12 @@ class OperationController implements Requestor {
     putManager = new PutManager(routerConfig.routerMaxChunkSize, connectionManager, routerConfig, clusterMap);
     getManager = new GetManager(connectionManager, clusterMap);
     deleteManager = new DeleteManager(connectionManager, clusterMap);
-    isRunning = true;
+    isRunning = new AtomicBoolean(true);
     requestResponseHandler.start();
   }
 
   public void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
-    if (isRunning) {
+    if (isRunning.get()) {
       getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     } else {
       router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
@@ -84,7 +84,7 @@ class OperationController implements Requestor {
 
   public void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
       Callback<ReadableStreamChannel> callback) {
-    if (isRunning) {
+    if (isRunning.get()) {
       getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     } else {
       router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
@@ -93,7 +93,7 @@ class OperationController implements Requestor {
 
   public void putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       FutureResult<String> futureResult, Callback<String> callback) {
-    if (isRunning) {
+    if (isRunning.get()) {
       putManager.submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, usermetadata, channel,
           callback);
     } else {
@@ -102,21 +102,21 @@ class OperationController implements Requestor {
   }
 
   public void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
-    if (isRunning) {
+    if (isRunning.get()) {
       deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, callback);
     } else {
       router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
     }
   }
 
-  public void close()
-      throws IOException {
-    if (isRunning) {
-      isRunning = false;
+  public void close() {
+    if (isRunning.compareAndSet(true, false)) {
       try {
         requestResponseHandler.close();
       } catch (InterruptedException e) {
-        throw new IOException("requestResponseHandler did not shutdown cleanly");
+        logger.error("RequestResponseHandler did not shutdown cleanly");
+      } finally {
+        router.onClose(this);
       }
     }
   }
@@ -167,7 +167,7 @@ class OperationController implements Requestor {
     } else {
       logger.info("RequestResponseHandler is shutting down");
     }
-    router.onClose(this);
+    close();
   }
 
   private void handleResponsePayload(ByteBuffer response) {
