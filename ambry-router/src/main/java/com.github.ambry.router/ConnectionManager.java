@@ -15,10 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * to checkout and checkin connections.
  */
 
-public class ConnectionManager {
-  // hostportString to HostPortPoolManager.
+class ConnectionManager {
   private final ConcurrentHashMap<String, HostPortPoolManager> hostPortToPoolManager;
-  // connectionId to HostPortPoolManager.
   private final ConcurrentHashMap<String, HostPortPoolManager> connectionIdToPoolManager;
   private final RequestResponseHandler requestResponseHandler;
   private final RouterConfig routerConfig;
@@ -30,18 +28,18 @@ public class ConnectionManager {
     this.routerConfig = routerConfig;
   }
 
-  static String getHostPortString(String host, int port) {
+  private static String getHostPortString(String host, int port) {
     return host + ":" + Integer.toString(port);
   }
 
   /**
-   * Returns the {@link HostPortPoolManager} associated with the (host, port) pair. Creates one if one is not available
+   * Returns the {@link HostPortPoolManager} associated with the (host, port) pair. Creates one if not available
    * already.
    * @param host The hostname
    * @param port The port
    * @return a HostPortPoolManager for the associated (host, port) pair.
    */
-  HostPortPoolManager getHostPortPoolManager(String host, Port port) {
+  private HostPortPoolManager getHostPortPoolManager(String host, Port port) {
     String lookupStr = getHostPortString(host, port.getPort());
     HostPortPoolManager poolManager = hostPortToPoolManager.get(lookupStr);
     if (poolManager == null) {
@@ -82,7 +80,7 @@ public class ConnectionManager {
    * Adds a connectionId as an available connection that can be checked out in the future.
    * @param connectionId The connection id to add to the list of available connections.
    */
-  public void addToAvailablePool(String connectionId) {
+  void addToAvailablePool(String connectionId) {
     connectionIdToPoolManager.get(connectionId).addToAvailablePool(connectionId);
   }
 
@@ -90,7 +88,7 @@ public class ConnectionManager {
    * Removes the given connectionId from the list of available connections.
    * @param connectionId The connection id to remove from the list of available connections.
    */
-  public void destroyConnection(String connectionId) {
+  void destroyConnection(String connectionId) {
     connectionIdToPoolManager.get(connectionId).destroyConnection(connectionId);
     connectionIdToPoolManager.remove(connectionId);
   }
@@ -100,11 +98,11 @@ public class ConnectionManager {
    * creates one for every (host, port) pair it knows of.
    */
   private class HostPortPoolManager {
-    String host;
-    Port port;
-    private final int maxConnectionsToHostPort;
-    private final ConcurrentLinkedQueue<String> availableConnections;
-    AtomicInteger poolCount = new AtomicInteger(0);
+    final String host;
+    final Port port;
+    final int maxConnectionsToHostPort;
+    final ConcurrentLinkedQueue<String> availableConnections;
+    final AtomicInteger poolCount = new AtomicInteger(0);
 
     HostPortPoolManager(String host, Port port) {
       this.host = host;

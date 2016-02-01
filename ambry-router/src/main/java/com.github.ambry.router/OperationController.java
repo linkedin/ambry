@@ -9,6 +9,7 @@ import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.NetworkSend;
 import com.github.ambry.network.RequestResponseHandler;
 import com.github.ambry.network.Requestor;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.SystemTime;
@@ -17,7 +18,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,64 +33,91 @@ enum OperationType {
   DeleteBlob
 }
 
-public class OperationController implements Requestor {
+/**
+ *  OperationController class used by the {@link NonBlockingRouter} to submit put, get and delete operations.
+ *  This is the scaling unit for the router. OperationController internally uses {@link PutManager},
+ *  {@link GetManager}, and {@link DeleteManager} to handle the respective operation.
+ */
+
+class OperationController implements Requestor {
   private static final Logger logger = LoggerFactory.getLogger(OperationController.class);
+  private final NonBlockingRouter router;
   private final PutManager putManager;
   private final GetManager getManager;
   private final DeleteManager deleteManager;
   private final ConnectionManager connectionManager;
   private final RequestResponseHandler requestResponseHandler;
   private final RouterConfig routerConfig;
-  // @todo make this part of routerConfig; provide reasoning based on the blob size that a metadata chunk can support.
-  private static final int MAX_CHUNK_SIZE = 4 * 1024 * 1024;
   private static final AtomicLong operationIdGenerator = new AtomicLong(0);
-  Time time;
-  MetricRegistry registry;
-  ClusterMap clusterMap;
+  private final Time time;
+  private final MetricRegistry registry;
+  private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
+  private volatile boolean isRunning;
 
-  public OperationController(RouterConfig routerConfig, MetricRegistry registry, NotificationSystem notificationSystem,
-      ClusterMap clusterMap)
+  public OperationController(NonBlockingRouter router, SSLFactory sslFactory, RouterConfig routerConfig,
+      MetricRegistry registry,
+      NotificationSystem notificationSystem, ClusterMap clusterMap)
       throws IOException {
+    this.router = router;
     this.routerConfig = routerConfig;
     this.registry = registry;
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
     time = SystemTime.getInstance();
-    // @todo: plug in sslFactory.
-    requestResponseHandler = new RequestResponseHandler(this, registry, null, time);
-    requestResponseHandler.start();
+    requestResponseHandler = new RequestResponseHandler(this, registry, sslFactory, time);
     connectionManager = new ConnectionManager(requestResponseHandler, routerConfig);
-    putManager = new PutManager(MAX_CHUNK_SIZE, connectionManager, routerConfig, clusterMap);
+    putManager = new PutManager(routerConfig.routerMaxChunkSize, connectionManager, routerConfig, clusterMap);
     getManager = new GetManager(connectionManager, clusterMap);
     deleteManager = new DeleteManager(connectionManager, clusterMap);
+    isRunning = true;
+    requestResponseHandler.start();
   }
 
-  public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
-    return getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, callback);
+  public void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
+    if (isRunning) {
+      getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
+    } else {
+      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
+    }
   }
 
-  public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
-    return getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, callback);
+  public void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
+      Callback<ReadableStreamChannel> callback) {
+    if (isRunning) {
+      getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
+    } else {
+      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
+    }
   }
 
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      Callback<String> callback) {
-    return putManager
-        .submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, usermetadata, channel,
-            callback);
+  public void putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+      FutureResult<String> futureResult, Callback<String> callback) {
+    if (isRunning) {
+      putManager.submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, usermetadata, channel,
+          callback);
+    } else {
+      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
+    }
   }
 
-  public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
-    return deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, callback);
+  public void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
+    if (isRunning) {
+      deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, callback);
+    } else {
+      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
+    }
   }
 
   public void close()
       throws IOException {
-    try {
-      requestResponseHandler.shutDown();
-    } catch (InterruptedException e) {
-      throw new IOException("requestResponseHandler did not shutdown cleanly");
+    if (isRunning) {
+      isRunning = false;
+      try {
+        requestResponseHandler.close();
+      } catch (InterruptedException e) {
+        throw new IOException("requestResponseHandler did not shutdown cleanly");
+      }
     }
   }
 
@@ -99,11 +126,13 @@ public class OperationController implements Requestor {
     // these are ids that were successfully put for an operation that eventually failed
     List<String> idsToDelete = putManager.getIdsToDelete();
 
-    // this is a best effort to delete ids for cleanup purposes (these may fail and we will
-    // not do anything about it at this time).
-    for (String id : idsToDelete) {
-      // possibly add a batch api going forward.
-      deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), id, null);
+    if (idsToDelete != null) {
+      // this is a best effort to delete ids for cleanup purposes (these may fail and we will
+      // not do anything about it at this time).
+      for (String id : idsToDelete) {
+        // possibly add a batch api going forward.
+        deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), id, null);
+      }
     }
 
     List<NetworkSend> requests = new ArrayList<NetworkSend>();
@@ -113,8 +142,6 @@ public class OperationController implements Requestor {
     return requests;
   }
 
-  // the poll for the respective managers simply iterates over the operations to give them
-  // a chance to execute their business logic and get more requests to return.
   @Override
   public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
       List<NetworkReceive> completedReceives) {
@@ -133,9 +160,14 @@ public class OperationController implements Requestor {
   }
 
   @Override
-  public void onException(Exception e) {
-    logger.error("Exception received", e);
-    // @todo not much can be done, but figure out.
+  public void onClose(Exception e) {
+    if (e != null) {
+      logger.error("RequestResponseHandler is shutting down", e);
+      // @todo: add a metric.
+    } else {
+      logger.info("RequestResponseHandler is shutting down");
+    }
+    router.onClose(this);
   }
 
   private void handleResponsePayload(ByteBuffer response) {

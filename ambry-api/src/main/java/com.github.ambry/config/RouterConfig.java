@@ -42,6 +42,13 @@ public class RouterConfig {
   public final int routerMaxConnectionsPerPortSSL;
 
   /**
+   * The max chunk size to be used for put operations.
+   */
+  @Config("router.max.chunk.size")
+  @Default("4*1024*1024")
+  public final int routerMaxChunkSize;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -53,5 +60,6 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.max.connections.per.port.plain.text", 5, 1, 20);
     routerMaxConnectionsPerPortSSL =
         verifiableProperties.getIntInRange("router.max.connections.per.port.ssl", 2, 1, 20);
+    routerMaxChunkSize = verifiableProperties.getInt("router.max.chunk.size", 4*1024*1024);
   }
 }

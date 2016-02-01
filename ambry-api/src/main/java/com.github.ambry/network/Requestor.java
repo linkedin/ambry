@@ -27,8 +27,8 @@ public interface Requestor {
       List<NetworkReceive> completedReceives);
 
   /**
-   * Notifies the Requestor of any exception encountered.
-   * @param e the exception encountered.
+   * Notifies the Requestor that the RequestResponseHandler is closing.
+   * @param e the exception encountered, if any.
    */
-  public void onException(Exception e);
+  public void onClose(Exception e);
 }

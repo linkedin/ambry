@@ -153,12 +153,15 @@ public class NonBlockingRouterTest {
     NonBlockingRouter router = null;
     try {
       router =
-          new NonBlockingRouter(routerConfig, metricRegistry, new LoggingNotificationSystem(), mockClusterMap);
+          new NonBlockingRouter(verifiableProperties, routerConfig, metricRegistry, new LoggingNotificationSystem(),
+              mockClusterMap);
     } catch (Exception e) {
       Assert.assertTrue("Received exception " + e.getMessage(), false);
     }
 
     //tests to be added when puts are implemented.
     router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+
+    router.close();
   }
 }

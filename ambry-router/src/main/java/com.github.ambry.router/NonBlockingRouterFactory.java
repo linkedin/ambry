@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getRouter()}.
  */
 public class NonBlockingRouterFactory implements RouterFactory {
+  private final VerifiableProperties properties;
   private final RouterConfig routerConfig;
   private final NonBlockingRouterMetrics routerMetrics;
   private final MetricRegistry registry;
@@ -35,6 +36,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem) {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
+      this.properties = verifiableProperties;
       routerConfig = new RouterConfig(verifiableProperties);
       registry = clusterMap.getMetricRegistry();
       routerMetrics = new NonBlockingRouterMetrics(registry);
@@ -42,7 +44,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
       this.notificationSystem = notificationSystem;
     } else {
       StringBuilder errorMessage =
-          new StringBuilder("Null arg(s) received during instantiation of CoordinatorBackedRouterFactory -");
+          new StringBuilder("Null arg(s) received during instantiation of NonBlockingRouterFactory");
       if (verifiableProperties == null) {
         errorMessage.append(" [VerifiableProperties] ");
       }
@@ -61,8 +63,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter()
       throws InstantiationException {
     try {
-      return new NonBlockingRouter(routerConfig, registry, notificationSystem, clusterMap);
-    } catch (IOException e) {
+      return new NonBlockingRouter(properties, routerConfig, registry, notificationSystem, clusterMap);
+    } catch (Exception e) {
       throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());
     }
   }

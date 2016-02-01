@@ -12,7 +12,7 @@ import java.util.List;
  * PutManager class. This is just a template for now.
  *
  */
-public class PutManager {
+class PutManager {
 
   public PutManager(int maxChunkSize, ConnectionManager connectionManager, RouterConfig routerConfig,
       ClusterMap clusterMap) {

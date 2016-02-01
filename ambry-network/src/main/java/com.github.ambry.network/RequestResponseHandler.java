@@ -11,22 +11,29 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * RequestResponseHandler that polls a {@link Requestor} for requests that is to be sent across the network. It
+ * internally uses a {@link Selector} to create channels, and multiplexes over it to send requests and receive
+ * responses.
+ */
+
 public class RequestResponseHandler implements Runnable {
-  private static final Logger logger = LoggerFactory.getLogger(RequestResponseHandler.class);
   private final Requestor requestor;
-  private Selector selector;
+  private final Selector selector;
   private final MetricRegistry registry;
   private final NetworkMetrics metrics;
-  private SSLFactory factory;
-  private Time time;
-  private Thread requestResponseHandlerThread;
-  private boolean isRunning;
+  private final SSLFactory factory;
+  private final Time time;
+  private final Thread requestResponseHandlerThread;
+  private volatile boolean isRunning;
   private final CountDownLatch shutDownLatch;
   // @todo: these numbers need to be determined.
-  private final int POLL_TIMEOUT_MS = 1 * Time.MsPerSec;
-  private static int BUFFER_SIZE = 4 * 1024;
+  private static final int POLL_TIMEOUT_MS = 1 * Time.MsPerSec;
+  private static final int BUFFER_SIZE = 4 * 1024;
+  private static final Logger logger = LoggerFactory.getLogger(RequestResponseHandler.class);
 
-  public RequestResponseHandler(Requestor requestor, MetricRegistry registry, SSLFactory factory, Time time) {
+  public RequestResponseHandler(Requestor requestor, MetricRegistry registry, SSLFactory factory, Time time)
+      throws IOException {
     this.requestor = requestor;
     this.registry = registry;
     this.metrics = new NetworkMetrics(registry);
@@ -34,22 +41,33 @@ public class RequestResponseHandler implements Runnable {
     this.time = time;
     this.isRunning = true;
     this.shutDownLatch = new CountDownLatch(1);
+    requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
+    this.selector = new Selector(metrics, time, factory);
   }
 
   public void start()
       throws IOException {
-    this.selector = new Selector(metrics, time, factory);
-    requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
     requestResponseHandlerThread.start();
   }
 
-  public void shutDown()
+  /**
+   * Close the requestResponseHandler.
+   * @throws InterruptedException
+   */
+  public void close()
       throws InterruptedException {
     isRunning = false;
     shutDownLatch.await();
     selector.close();
   }
 
+  /**
+   * Initiate a connection to the given host at the given port.
+   * @param host the host to which the connection is to be initiated.
+   * @param port the port on the host to which the connection is to be initiated.
+   * @return a connection id for the initiated connection.
+   * @throws IOException
+   */
   public String connect(String host, Port port)
       throws IOException {
     return selector.connect(new InetSocketAddress(host, port.getPort()), BUFFER_SIZE, BUFFER_SIZE, port.getPortType());
@@ -67,7 +85,7 @@ public class RequestResponseHandler implements Runnable {
         } catch (IOException e) {
           logger.error("Encountered IO Exception during poll, continuing.", e);
         } catch (Exception e) {
-          requestor.onException(e);
+          requestor.onClose(e);
           break;
         }
       }

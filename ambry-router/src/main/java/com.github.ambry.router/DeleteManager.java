@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * DeleteManager handles Delete operations. This is just a template for now.
  */
-public class DeleteManager {
+class DeleteManager {
   public DeleteManager(ConnectionManager connectionManager, ClusterMap clusterMap) {
     //@todo
   }

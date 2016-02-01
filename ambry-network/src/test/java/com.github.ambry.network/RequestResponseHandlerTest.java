@@ -97,7 +97,7 @@ public class RequestResponseHandlerTest {
     mockRequestor.setRequests(requests);
     sendComplete.await();
 
-    requestResponseHandler.shutDown();
+    requestResponseHandler.close();
     server1.shutdown();
     server2.shutdown();
   }
@@ -149,7 +149,7 @@ public class RequestResponseHandlerTest {
      * @param e the exception encountered.
      */
     @Override
-    public void onException(Exception e) {
+    public void onClose(Exception e) {
       Assert.assertTrue("Exception received: " + e.getMessage(), false);
     }
   }

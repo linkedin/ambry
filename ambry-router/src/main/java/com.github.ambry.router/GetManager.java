@@ -9,25 +9,24 @@ import java.util.List;
 
 /**
  * GetManager manages GetBlob and GetBlobInfo operations. This is just a template for now.
+ * These methods have to be thread safe.
  */
-public class GetManager {
-  public GetManager(ConnectionManager connectionManager, ClusterMap clusterMap) {
+class GetManager {
+  GetManager(ConnectionManager connectionManager, ClusterMap clusterMap) {
     //@todo
   }
 
-  public FutureResult<ReadableStreamChannel> submitGetBlobOperation(long operationId, String blobId,
-      Callback<ReadableStreamChannel> callback) {
+  void submitGetBlobOperation(long operationId, String blobId,
+      FutureResult<ReadableStreamChannel> futureResult, Callback<ReadableStreamChannel> callback) {
     //@todo
-    return null;
   }
 
-  public FutureResult<BlobInfo> submitGetBlobInfoOperation(long operationId, String blobId,
-      Callback<BlobInfo> callback) {
+  void submitGetBlobInfoOperation(long operationId, String blobId,
+      FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
     //@todo
-    return null;
   }
 
-  public void poll(List<NetworkSend> requests) {
+  void poll(List<NetworkSend> requests) {
     //@todo
   }
 

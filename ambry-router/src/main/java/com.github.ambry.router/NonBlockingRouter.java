@@ -3,39 +3,72 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Random;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Streaming, non-blocking router implementation for Ambry.
  */
 public class NonBlockingRouter implements Router {
+  private final VerifiableProperties properties;
   private final RouterConfig routerConfig;
   private final MetricRegistry metricRegistry;
-  private final ArrayList<OperationController> ocList;
-  private final Random randomForOCSelection;
+  private final SSLFactory sslFactory;
+  private AtomicReference<ArrayList<OperationController>> ocListRef;
+  private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
+  static final RouterException ROUTER_CLOSED_EXCEPTION =
+      new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
 
-  public NonBlockingRouter(RouterConfig routerConfig, MetricRegistry metricRegistry,
+  public NonBlockingRouter(VerifiableProperties properties, RouterConfig routerConfig, MetricRegistry metricRegistry,
       NotificationSystem notificationSystem, ClusterMap clusterMap)
-      throws IOException {
+      throws Exception {
+    this.properties = properties;
     this.routerConfig = routerConfig;
     this.metricRegistry = metricRegistry;
-    ocList = new ArrayList<OperationController>();
-    for (int i = 0; i < routerConfig.routerScalingUnitCount; i++) {
-      ocList.add(new OperationController(routerConfig, metricRegistry, notificationSystem, clusterMap));
+    SSLConfig sslConfig = new SSLConfig(properties);
+    if (sslConfig.sslEnabledDatacenters.length() > 0) {
+      this.sslFactory = new SSLFactory(sslConfig);
+    } else {
+      this.sslFactory = null;
     }
-    randomForOCSelection = new Random();
+    ocListRef = new AtomicReference<ArrayList<OperationController>>(
+        new ArrayList<OperationController>(routerConfig.routerScalingUnitCount));
+    for (int i = 0; i < routerConfig.routerScalingUnitCount; i++) {
+      ocListRef.get().add(new OperationController(this, sslFactory, routerConfig, metricRegistry, notificationSystem,
+          clusterMap));
+    }
   }
 
   private OperationController getOperationController() {
-    return ocList.get(randomForOCSelection.nextInt(ocList.size()));
+    ArrayList<OperationController> ocList = ocListRef.get();
+    if (ocList.size() == 0) {
+      return null;
+    } else {
+      return ocList.get(ThreadLocalRandom.current().nextInt(ocList.size()));
+    }
+  }
+
+  /**
+   * Notify that an OperationController is closed.
+   * This method is synchronized to ensure concurrent updates are exclusive.
+   * @param oc the OperationController that has closed.
+   */
+  synchronized void onClose(OperationController oc) {
+    ArrayList<OperationController> newList = new ArrayList<OperationController>(ocListRef.get());
+    newList.remove(oc);
+    ocListRef.set(newList);
   }
 
   /**
@@ -46,7 +79,14 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId) {
-    return getOperationController().getBlobInfo(blobId, null);
+    FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.getBlobInfo(blobId, futureResult, null);
+    }
+    return futureResult;
   }
 
   /**
@@ -57,7 +97,14 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
-    return getOperationController().getBlobInfo(blobId, callback);
+    FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.getBlobInfo(blobId, futureResult, callback);
+    }
+    return futureResult;
   }
 
   /**
@@ -68,7 +115,14 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId) {
-    return getOperationController().getBlob(blobId, null);
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.getBlob(blobId, futureResult, null);
+    }
+    return futureResult;
   }
 
   /**
@@ -79,7 +133,14 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
-    return getOperationController().getBlob(blobId, callback);
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.getBlob(blobId, futureResult, null);
+    }
+    return futureResult;
   }
 
   /**
@@ -92,7 +153,14 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
-    return getOperationController().putBlob(blobProperties, usermetadata, channel, null);
+    FutureResult<String> futureResult = new FutureResult<String>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.putBlob(blobProperties, usermetadata, channel, futureResult, null);
+    }
+    return futureResult;
   }
 
   /**
@@ -106,7 +174,14 @@ public class NonBlockingRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
-    return getOperationController().putBlob(blobProperties, usermetadata, channel, callback);
+    FutureResult<String> futureResult = new FutureResult<String>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.putBlob(blobProperties, usermetadata, channel, futureResult, null);
+    }
+    return futureResult;
   }
 
   /**
@@ -117,7 +192,14 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<Void> deleteBlob(String blobId) {
-    return getOperationController().deleteBlob(blobId, null);
+    FutureResult<Void> futureResult = new FutureResult<Void>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.deleteBlob(blobId, futureResult, null);
+    }
+    return futureResult;
   }
 
   /**
@@ -128,7 +210,14 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
-    return getOperationController().deleteBlob(blobId, callback);
+    FutureResult<Void> futureResult = new FutureResult<Void>();
+    OperationController oc = getOperationController();
+    if (oc == null) {
+      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      oc.deleteBlob(blobId, futureResult, null);
+    }
+    return futureResult;
   }
 
   /**
@@ -143,8 +232,30 @@ public class NonBlockingRouter implements Router {
   @Override
   public void close()
       throws IOException {
-    for (OperationController oc : ocList) {
+    for (OperationController oc : ocListRef.get()) {
       oc.close();
+    }
+  }
+
+  /**
+   * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with
+   * {@code operationResult} (if any) and {@code exception} (if any).
+   * @param futureResult the {@link FutureResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   * @param operationResult the result of the operation (if any).
+   * @param exception {@link Exception} encountered while performing the operation (if any).
+   */
+  void completeOperation(FutureResult futureResult, Callback callback, Object operationResult, Exception exception) {
+    try {
+      futureResult.done(operationResult, exception);
+      if (callback != null) {
+        callback.onCompletion(operationResult, exception);
+      }
+    } catch (Exception e) {
+      //@todo add metric.
+      logger.error("Exception caught during future and callback completion", e);
+    } finally {
+      //@todo add metric.
     }
   }
 }
