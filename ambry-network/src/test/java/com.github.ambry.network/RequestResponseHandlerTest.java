@@ -23,8 +23,8 @@ import org.junit.Test;
  * Tests the functionality of {@link RequestResponseHandler}
  */
 public class RequestResponseHandlerTest {
-  static List<NetworkSend> requests;
-  Object requestListlock = new Object();
+  private static List<NetworkSend> requests;
+  private Object requestListlock = new Object();
   private SocketServer server1 = null;
   private SocketServer server2 = null;
   private static File trustStoreFile = null;
