@@ -7,6 +7,7 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Time;
 import java.util.Arrays;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -234,7 +235,7 @@ public final class ReplicationManager {
   private final ConnectionPool connectionPool;
   private final ReplicationMetrics replicationMetrics;
   private final NotificationSystem notification;
-  private final Map<String, Map<DataNodeId, List<RemoteReplicaInfo>>> replicasToReplicate;
+  private final Map<String, DataNodeRemoteReplicaInfos> dataNodeRemoteReplicaInfosPerDC;
   private final StoreKeyFactory storeKeyFactory;
   private final MetricRegistry metricRegistry;
   private final ArrayList<String> sslEnabledDatacenters;
@@ -268,7 +269,7 @@ public final class ReplicationManager {
       this.connectionPool = connectionPool;
       this.notification = requestNotification;
       this.metricRegistry = metricRegistry;
-      this.replicasToReplicate = new HashMap<String, Map<DataNodeId, List<RemoteReplicaInfo>>>();
+      this.dataNodeRemoteReplicaInfosPerDC = new HashMap<String, DataNodeRemoteReplicaInfos>();
       this.sslEnabledDatacenters = Utils.splitString(sslConfig.sslEnabledDatacenters, ",");
       this.numberOfReplicaThreads = new HashMap<String, Integer>();
 
@@ -289,8 +290,7 @@ public final class ReplicationManager {
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
-            updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), replicasToReplicate,
-                remoteReplicaInfo);
+            updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), remoteReplicaInfo);
           }
           PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(),
               storeManager.getStore(replicaId.getPartitionId()), replicaId);
@@ -320,16 +320,14 @@ public final class ReplicationManager {
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
         readFromFileAndPersistIfNecessary(mountPath);
       }
-      // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
-      // number of nodes. Otherwise, assign one thread to one node.
-      if (replicasToReplicate.size() == 0) {
-        logger.warn("Number of nodes to replicate from is 0, not starting any replica threads");
+      if (dataNodeRemoteReplicaInfosPerDC.size() == 0) {
+        logger.warn("Number of Datacenters to replicate from is 0, not starting any replica threads");
         return;
       }
 
-      for (String datacenter : replicasToReplicate.keySet()) {
-        assignReplicasToThreadPool(datacenter, replicasToReplicate.get(datacenter));
-      }
+      // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
+      // number of nodes. Otherwise, assign one thread to one node.
+      assignReplicasToThreadPool();
 
       // start all replica threads
       for (List<ReplicaThread> replicaThreads : replicaThreadPools.values()) {
@@ -428,9 +426,19 @@ public final class ReplicationManager {
       throws ReplicationException {
     try {
       // stop all replica threads
-      for (List<ReplicaThread> replicaThreads: replicaThreadPools.values()) {
-        for (ReplicaThread replicaThread : replicaThreads) {
-          replicaThread.shutdown();
+      for (Map.Entry<String, List<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
+        if (replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
+          for (ReplicaThread replicaThread : replicaThreads.getValue()) {
+            replicaThread.shutdown();
+          }
+        }
+      }
+
+      for (Map.Entry<String, List<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
+        if (!replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
+          for (ReplicaThread replicaThread : replicaThreads.getValue()) {
+            replicaThread.shutdown();
+          }
         }
       }
       // persist replica tokens
@@ -442,90 +450,96 @@ public final class ReplicationManager {
   }
 
   /**
-   * Updates the {@code replicasToReplicateMap} with the remoteReplicaInfo and populates {@code numberOfReplicaThreads}
+   * Updates the {@code dataNodeRemoteReplicaInfosPerDC} with the remoteReplicaInfo and also populates
+   * {@code numberOfReplicaThreads}
    * @param datacenter remote datacenter name
-   * @param replicasToReplicateMap Mapping of data nodes to remote replicas for each datacenter
-   * @param remoteReplicaInfo The remote replica that needs to be added to the map
+   * @param remoteReplicaInfo The remote replica that needs to be added to the mapping
    */
-  private void updateReplicasToReplicate(String datacenter,
-      Map<String, Map<DataNodeId, List<RemoteReplicaInfo>>> replicasToReplicateMap,
-      RemoteReplicaInfo remoteReplicaInfo) {
-    if (!replicasToReplicateMap.containsKey(datacenter)) {
-      replicasToReplicateMap.put(datacenter, new HashMap<DataNodeId, List<RemoteReplicaInfo>>());
+  private void updateReplicasToReplicate(String datacenter, RemoteReplicaInfo remoteReplicaInfo) {
+    DataNodeRemoteReplicaInfos dataNodeRemoteReplicaInfos = dataNodeRemoteReplicaInfosPerDC.get(datacenter);
+    if (dataNodeRemoteReplicaInfos != null) {
+      dataNodeRemoteReplicaInfos.addRemoteReplica(remoteReplicaInfo);
+    } else {
+      dataNodeRemoteReplicaInfos = new DataNodeRemoteReplicaInfos(datacenter, remoteReplicaInfo);
+      // update numberOfReplicaThreads
       if (datacenter.equals(dataNodeId.getDatacenterName())) {
         this.numberOfReplicaThreads.put(datacenter, replicationConfig.replicationNumOfIntraDCReplicaThreads);
       } else {
         this.numberOfReplicaThreads.put(datacenter, replicationConfig.replicationNumOfInterDCReplicaThreads);
       }
     }
-    List<RemoteReplicaInfo> replicaListForNode =
-        replicasToReplicateMap.get(datacenter).get(remoteReplicaInfo.getReplicaId().getDataNodeId());
-    if (replicaListForNode == null) {
-      replicaListForNode = new ArrayList<RemoteReplicaInfo>();
-      replicaListForNode.add(remoteReplicaInfo);
-      replicasToReplicateMap.get(datacenter).put(remoteReplicaInfo.getReplicaId().getDataNodeId(), replicaListForNode);
-    } else {
-      replicaListForNode.add(remoteReplicaInfo);
-    }
+    dataNodeRemoteReplicaInfosPerDC.put(datacenter, dataNodeRemoteReplicaInfos);
   }
 
   /**
-   * Partitions the list of data nodes to remote replica list mapping between given set of replica threads
-   * @param datacenter datacenter to which assignment of replicas to ReplicaThread has to be done
-   * @param replicasToReplicate Mapping of data nodes to remote replicas for the datacenter in context
+   * Partitions the list of data nodes between given set of replica threads for the given DC
    */
-  private void assignReplicasToThreadPool(String datacenter,
-      Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) {
-    int replicaThreadCount = numberOfReplicaThreads.get(datacenter);
-    if (replicaThreadCount <= 0) {
-      logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {} ", datacenter);
-      return;
-    } else if (replicasToReplicate.size() == 0) {
-      logger.warn("Number of nodes to replicate from is 0, not starting any replica threads for {} ", datacenter);
-      return;
-    }
-    int dataNodesCount = replicasToReplicate.size();
-    logger.info("Number of replica threads to replicate from {}: {}", datacenter, replicaThreadCount);
-    logger.info("Number of dataNodes to replicate :", replicasToReplicate.size());
-
-    if (dataNodesCount < replicaThreadCount) {
-      logger.warn("Number of replica threads: {} is more than the number of nodes to replicate from: {}",
-          replicaThreadCount, dataNodesCount);
-      replicaThreadCount = dataNodesCount;
-    }
-
-    int numberOfNodesPerThread = replicasToReplicate.size() / replicaThreadCount;
-    int remainingNodes = replicasToReplicate.size() % replicaThreadCount;
-
-    Iterator<Map.Entry<DataNodeId, List<RemoteReplicaInfo>>> mapIterator = replicasToReplicate.entrySet().iterator();
-
-    for (int i = 0; i < replicaThreadCount; i++) {
-      // create the list of nodes for the replica thread
-      Map<DataNodeId, List<RemoteReplicaInfo>> replicasForThread = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
-      int nodesAssignedToThread = 0;
-      while (nodesAssignedToThread < numberOfNodesPerThread) {
-        Map.Entry<DataNodeId, List<RemoteReplicaInfo>> mapEntry = mapIterator.next();
-        replicasForThread.put(mapEntry.getKey(), mapEntry.getValue());
-        mapIterator.remove();
-        nodesAssignedToThread++;
+  private void assignReplicasToThreadPool() {
+    Iterator<Map.Entry<String, DataNodeRemoteReplicaInfos>> mapIterator =
+        dataNodeRemoteReplicaInfosPerDC.entrySet().iterator();
+    while (mapIterator.hasNext()) {
+      Map.Entry<String, DataNodeRemoteReplicaInfos> mapEntry = mapIterator.next();
+      String datacenter = mapEntry.getKey();
+      DataNodeRemoteReplicaInfos dataNodeRemoteReplicaInfos = mapEntry.getValue();
+      Set<DataNodeId> dataNodesToReplicate = dataNodeRemoteReplicaInfos.getDataNodeIds();
+      int dataNodesCount = dataNodesToReplicate.size();
+      int replicaThreadCount = numberOfReplicaThreads.get(datacenter);
+      if (replicaThreadCount <= 0) {
+        logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {} ",
+            datacenter);
+        return;
+      } else if (dataNodesCount == 0) {
+        logger.warn("Number of nodes to replicate from is 0, not starting any replica threads for {} ", datacenter);
+        return;
       }
-      if (remainingNodes > 0) {
-        Map.Entry<DataNodeId, List<RemoteReplicaInfo>> mapEntry = mapIterator.next();
-        replicasForThread.put(mapEntry.getKey(), mapEntry.getValue());
-        mapIterator.remove();
-        remainingNodes--;
+
+      // Divide the nodes between the replica threads if the number of replica threads is less than or equal to the
+      // number of nodes. Otherwise, assign one thread to one node.
+      logger.info("Number of replica threads to replicate from {}: {}", datacenter, replicaThreadCount);
+      logger.info("Number of dataNodes to replicate :", dataNodesCount);
+
+      if (dataNodesCount < replicaThreadCount) {
+        logger.warn("Number of replica threads: {} is more than the number of nodes to replicate from: {}",
+            replicaThreadCount, dataNodesCount);
+        replicaThreadCount = dataNodesCount;
       }
-      boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);
-      String threadIdentity =
-          "Replica Thread-" + (dataNodeId.getDatacenterName().equals(datacenter) ? "Intra-" : "Inter") + i;
-      ReplicaThread replicaThread =
-          new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator, dataNodeId,
-              connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
-              replicationConfig.replicationValidateMessageStream, metricRegistry, replicatingOverSsl, datacenter);
-      if (replicaThreadPools.containsKey(datacenter)) {
-        replicaThreadPools.get(datacenter).add(replicaThread);
-      } else {
-        replicaThreadPools.put(datacenter, new ArrayList<ReplicaThread>(Arrays.asList(replicaThread)));
+
+      int numberOfNodesPerThread = dataNodesCount / replicaThreadCount;
+      int remainingNodes = dataNodesCount % replicaThreadCount;
+
+      Iterator<DataNodeId> dataNodeIdIterator = dataNodesToReplicate.iterator();
+
+      for (int i = 0; i < replicaThreadCount; i++) {
+        // create the list of nodes for the replica thread
+        Map<DataNodeId, List<RemoteReplicaInfo>> replicasForThread = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
+        int nodesAssignedToThread = 0;
+        while (nodesAssignedToThread < numberOfNodesPerThread) {
+          DataNodeId dataNodeToReplicate = dataNodeIdIterator.next();
+          replicasForThread.put(dataNodeToReplicate,
+              dataNodeRemoteReplicaInfos.getRemoteReplicaListForDataNode(dataNodeToReplicate));
+          dataNodeIdIterator.remove();
+          nodesAssignedToThread++;
+        }
+        if (remainingNodes > 0) {
+          DataNodeId dataNodeToReplicate = dataNodeIdIterator.next();
+          replicasForThread.put(dataNodeToReplicate,
+              dataNodeRemoteReplicaInfos.getRemoteReplicaListForDataNode(dataNodeToReplicate));
+          dataNodeIdIterator.remove();
+          remainingNodes--;
+        }
+        boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);
+        String threadIdentity =
+            "Replica Thread-" + (dataNodeId.getDatacenterName().equals(datacenter) ? "Intra-" : "Inter") + i
+                + datacenter;
+        ReplicaThread replicaThread =
+            new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator,
+                dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
+                replicationConfig.replicationValidateMessageStream, metricRegistry, replicatingOverSsl, datacenter);
+        if (replicaThreadPools.containsKey(datacenter)) {
+          replicaThreadPools.get(datacenter).add(replicaThread);
+        } else {
+          replicaThreadPools.put(datacenter, Arrays.asList(replicaThread));
+        }
       }
     }
   }
@@ -694,6 +708,40 @@ public final class ReplicationManager {
       } catch (Exception e) {
         logger.error("Error while persisting the replica tokens {}", e);
       }
+    }
+  }
+
+  /**
+   * Holds a list of {@link DataNodeId} for a Datacenter
+   * Also contains the mapping of {@link RemoteReplicaInfo} list for every {@link DataNodeId}
+   */
+  class DataNodeRemoteReplicaInfos {
+    private final String datacenter;
+    private Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToReplicaLists;
+
+    public DataNodeRemoteReplicaInfos(String datacenter, RemoteReplicaInfo remoteReplicaInfo) {
+      this.datacenter = datacenter;
+      this.dataNodeToReplicaLists = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
+      this.dataNodeToReplicaLists.put(remoteReplicaInfo.getReplicaId().getDataNodeId(),
+          Arrays.asList(remoteReplicaInfo));
+    }
+
+    public void addRemoteReplica(RemoteReplicaInfo remoteReplicaInfo) {
+      DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
+      List<RemoteReplicaInfo> replicaInfos = dataNodeToReplicaLists.get(dataNodeIdToReplicate);
+      if (replicaInfos == null) {
+        replicaInfos = new ArrayList<RemoteReplicaInfo>();
+      }
+      replicaInfos.add(remoteReplicaInfo);
+      dataNodeToReplicaLists.put(dataNodeIdToReplicate, replicaInfos);
+    }
+
+    public Set<DataNodeId> getDataNodeIds() {
+      return this.dataNodeToReplicaLists.keySet();
+    }
+
+    public List<RemoteReplicaInfo> getRemoteReplicaListForDataNode(DataNodeId dataNodeId) {
+      return dataNodeToReplicaLists.get(dataNodeId);
     }
   }
 }
