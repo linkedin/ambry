@@ -5,9 +5,8 @@ import java.util.List;
 
 /**
  * The interface that needs to be implemented by any component that needs to use the RequestResponseHandler to
- * send out requests and receive responses. The latter should be initialized with an instance of an implementing class
- * of this interface, which will be used by it to poll for requests to send out and notify about connections,
- * disconnections, completed sends and receives.
+ * send out requests and receive responses. The RequestResponseHandler will use the Requestor to poll for requests to
+ * send out and notify it about connections established, disconnections, completed sends and receives.
  */
 public interface Requestor {
   /**
@@ -30,5 +29,5 @@ public interface Requestor {
    * Notifies the Requestor that the RequestResponseHandler is closing.
    * @param e the exception encountered, if any.
    */
-  public void onClose(Exception e);
+  public void onRequestResponseHandlerShutDown(Exception e);
 }

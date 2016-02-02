@@ -14,7 +14,8 @@ class DeleteManager {
     //@todo
   }
 
-  public FutureResult<Void> submitDeleteBlobOperation(long operationId, String blobId, Callback<Void> callback) {
+  public FutureResult<Void> submitDeleteBlobOperation(long operationId, String blobId, FutureResult<Void> futureResult,
+      Callback<Void> callback) {
     //@todo
     return null;
   }

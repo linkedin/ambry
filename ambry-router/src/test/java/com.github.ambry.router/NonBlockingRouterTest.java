@@ -1,20 +1,27 @@
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.SSLFactory;
+import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ListIterator;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.Future;
 import junit.framework.Assert;
 import org.junit.Test;
 
@@ -37,7 +44,8 @@ public class NonBlockingRouterTest {
       props.setProperty("router.datacenter.name", "DC1");
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       RouterFactory routerFactory =
-          new NonBlockingRouterFactory(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
+          new NonBlockingRouterFactory(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(),
+              new MockTime());
       Router router = routerFactory.getRouter();
       Assert.assertEquals(NonBlockingRouter.class.getCanonicalName(), router.getClass().getCanonicalName());
     } catch (Exception e) {
@@ -91,7 +99,7 @@ public class NonBlockingRouterTest {
 
     ListIterator<String> iter = mockRequestResponseHandler.getConnectionIds().listIterator();
     while (iter.hasNext()) {
-      connectionManager.addToAvailablePool(iter.next());
+      connectionManager.checkInConnection(iter.next());
       iter.remove();
     }
 
@@ -126,7 +134,7 @@ public class NonBlockingRouterTest {
   }
 
   /**
-   * Test OperationController
+   * Test OperationController with single scaling unit
    */
   @Test
   public void testOperationController()
@@ -136,9 +144,7 @@ public class NonBlockingRouterTest {
     props.setProperty("router.datacenter.name", "DC1");
     props.setProperty("router.max.connections.per.port.plain.text", "3");
     props.setProperty("router.scaling.unit.count", "1");
-    MetricRegistry metricRegistry = new MetricRegistry();
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     MockClusterMap mockClusterMap = new MockClusterMap();
     BlobProperties putBlobProperties =
         new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -150,18 +156,113 @@ public class NonBlockingRouterTest {
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
 
     //Instantiation test
-    NonBlockingRouter router = null;
+    Router router = null;
     try {
-      router =
-          new NonBlockingRouter(verifiableProperties, routerConfig, metricRegistry, new LoggingNotificationSystem(),
-              mockClusterMap);
+      router = new NonBlockingRouterFactory(verifiableProperties, mockClusterMap, new LoggingNotificationSystem(),
+          new MockTime()).getRouter();
     } catch (Exception e) {
       Assert.assertTrue("Received exception " + e.getMessage(), false);
     }
 
     //tests to be added when puts are implemented.
     router.putBlob(putBlobProperties, putUserMetadata, putChannel);
-
     router.close();
+    //submission after closing should return a future that is already done.
+    Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    Assert.assertTrue(future.isDone());
+  }
+
+  /**
+   * Test that multiple {@link OperationController} can be instantiated, can be closed, and that
+   * closing one will close the router.
+   * @throws IOException
+   */
+  @Test
+  public void testOperationControllerMultiple()
+      throws IOException {
+    Properties props = new Properties();
+    props.setProperty("router.hostname", "localhost");
+    props.setProperty("router.datacenter.name", "DC1");
+    props.setProperty("router.max.connections.per.port.plain.text", "3");
+    props.setProperty("router.scaling.unit.count", "3");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    BlobProperties putBlobProperties =
+        new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    Random random = new Random();
+    byte[] putUserMetadata = new byte[10];
+    random.nextBytes(putUserMetadata);
+    byte[] putContent = new byte[100];
+    random.nextBytes(putContent);
+    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+
+    //Instantiation test
+    TestNonBlockingRouter router = null;
+    try {
+      router = new TestNonBlockingRouterFactory(verifiableProperties, mockClusterMap, new LoggingNotificationSystem(),
+          new MockTime()).getRouter();
+    } catch (Exception e) {
+      Assert.assertTrue("Received exception " + e.getMessage(), false);
+    }
+
+    for (OperationController oc : router.getOperationControllers()) {
+      Assert.assertTrue(oc.isRunning());
+    }
+
+    //tests to be added when puts are implemented.
+    router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+
+    //test closing down flow when the operation controller closes by itself.
+    router.closeOperationController();
+    for (OperationController oc : router.getOperationControllers()) {
+      Assert.assertFalse(oc.isRunning());
+    }
+
+    Assert.assertFalse(router.isRunning());
+
+    //Ensure the router completes the future
+    Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    Assert.assertTrue(future.isDone());
+
+    //Ensure router close just works.
+    router.close();
+  }
+}
+
+/**
+ * A factory that utilizes {@link NonBlockingRouterFactory} to return a {@link TestNonBlockingRouter}
+ */
+class TestNonBlockingRouterFactory extends NonBlockingRouterFactory {
+  public TestNonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      NotificationSystem notificationSystem, Time time)
+      throws Exception {
+    super(verifiableProperties, clusterMap, notificationSystem, time);
+  }
+
+  public TestNonBlockingRouter getRouter()
+      throws InstantiationException {
+    try {
+      return new TestNonBlockingRouter(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory,
+          notificationSystem, clusterMap, time);
+    } catch (Exception e) {
+      throw new InstantiationException("Could not instantiate TestRouter");
+    }
+  }
+}
+
+/**
+ * A {@link Router} that used for testing a {@link NonBlockingRouter}.
+ */
+class TestNonBlockingRouter extends NonBlockingRouter {
+  TestNonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      NetworkConfig networkConfig, NetworkMetrics networkMetrics, SSLFactory sslFactory,
+      NotificationSystem notificationSystem, ClusterMap clusterMap, Time time)
+      throws Exception {
+    super(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory, notificationSystem, clusterMap,
+        time);
+  }
+
+  void closeOperationController() {
+    super.onOperationControllerClose();
   }
 }

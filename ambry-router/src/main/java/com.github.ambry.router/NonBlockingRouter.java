@@ -1,19 +1,19 @@
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.config.SSLConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
-import java.io.IOException;
+import com.github.ambry.utils.Time;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,54 +21,38 @@ import org.slf4j.LoggerFactory;
 /**
  * Streaming, non-blocking router implementation for Ambry.
  */
-public class NonBlockingRouter implements Router {
-  private final VerifiableProperties properties;
+class NonBlockingRouter implements Router {
   private final RouterConfig routerConfig;
-  private final MetricRegistry metricRegistry;
-  private final SSLFactory sslFactory;
-  private AtomicReference<ArrayList<OperationController>> ocListRef;
+  private final NonBlockingRouterMetrics routerMetrics;
+  private final ArrayList<OperationController> ocList;
+  private final Time time;
+  private final AtomicBoolean isRunning = new AtomicBoolean(true);
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
-  static final RouterException ROUTER_CLOSED_EXCEPTION =
-      new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
 
-  public NonBlockingRouter(VerifiableProperties properties, RouterConfig routerConfig, MetricRegistry metricRegistry,
-      NotificationSystem notificationSystem, ClusterMap clusterMap)
+  NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, NetworkConfig networkConfig,
+      NetworkMetrics networkMetrics, SSLFactory sslFactory, NotificationSystem notificationSystem,
+      ClusterMap clusterMap, Time time)
       throws Exception {
-    this.properties = properties;
     this.routerConfig = routerConfig;
-    this.metricRegistry = metricRegistry;
-    SSLConfig sslConfig = new SSLConfig(properties);
-    if (sslConfig.sslEnabledDatacenters.length() > 0) {
-      this.sslFactory = new SSLFactory(sslConfig);
-    } else {
-      this.sslFactory = null;
-    }
-    ocListRef = new AtomicReference<ArrayList<OperationController>>(
-        new ArrayList<OperationController>(routerConfig.routerScalingUnitCount));
+    this.routerMetrics = routerMetrics;
+    this.time = time;
+    ocList = new ArrayList<OperationController>(routerConfig.routerScalingUnitCount);
     for (int i = 0; i < routerConfig.routerScalingUnitCount; i++) {
-      ocListRef.get().add(new OperationController(this, sslFactory, routerConfig, metricRegistry, notificationSystem,
-          clusterMap));
+      ocList.add(
+          new OperationController(this, routerConfig, networkConfig, networkMetrics, sslFactory, notificationSystem,
+              clusterMap, time));
     }
   }
 
   private OperationController getOperationController() {
-    ArrayList<OperationController> ocList = ocListRef.get();
-    if (ocList.size() == 0) {
-      return null;
-    } else {
-      return ocList.get(ThreadLocalRandom.current().nextInt(ocList.size()));
-    }
+    return ocList.get(ThreadLocalRandom.current().nextInt(ocList.size()));
   }
 
   /**
    * Notify that an OperationController is closed.
-   * This method is synchronized to ensure concurrent updates are exclusive.
-   * @param oc the OperationController that has closed.
    */
-  synchronized void onClose(OperationController oc) {
-    ArrayList<OperationController> newList = new ArrayList<OperationController>(ocListRef.get());
-    newList.remove(oc);
-    ocListRef.set(newList);
+  void onOperationControllerClose() {
+    close();
   }
 
   /**
@@ -79,14 +63,7 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId) {
-    FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
-    } else {
-      oc.getBlobInfo(blobId, futureResult, null);
-    }
-    return futureResult;
+    return getBlobInfo(blobId, null);
   }
 
   /**
@@ -98,11 +75,11 @@ public class NonBlockingRouter implements Router {
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
     FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    if (isRunning.get()) {
+      getOperationController().getBlobInfo(blobId, futureResult, callback);
     } else {
-      oc.getBlobInfo(blobId, futureResult, callback);
+      completeOperation(futureResult, null, callback,
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
   }
@@ -115,14 +92,7 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId) {
-    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
-    } else {
-      oc.getBlob(blobId, futureResult, null);
-    }
-    return futureResult;
+    return getBlob(blobId, null);
   }
 
   /**
@@ -134,11 +104,11 @@ public class NonBlockingRouter implements Router {
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    if (isRunning.get()) {
+      getOperationController().getBlob(blobId, futureResult, null);
     } else {
-      oc.getBlob(blobId, futureResult, null);
+      completeOperation(futureResult, null, callback,
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
   }
@@ -153,14 +123,7 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
-    FutureResult<String> futureResult = new FutureResult<String>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
-    } else {
-      oc.putBlob(blobProperties, usermetadata, channel, futureResult, null);
-    }
-    return futureResult;
+    return putBlob(blobProperties, usermetadata, channel, null);
   }
 
   /**
@@ -175,11 +138,11 @@ public class NonBlockingRouter implements Router {
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
     FutureResult<String> futureResult = new FutureResult<String>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    if (isRunning.get()) {
+      getOperationController().putBlob(blobProperties, usermetadata, channel, futureResult, null);
     } else {
-      oc.putBlob(blobProperties, usermetadata, channel, futureResult, null);
+      completeOperation(futureResult, null, callback,
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
   }
@@ -192,14 +155,7 @@ public class NonBlockingRouter implements Router {
    */
   @Override
   public Future<Void> deleteBlob(String blobId) {
-    FutureResult<Void> futureResult = new FutureResult<Void>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, null, ROUTER_CLOSED_EXCEPTION);
-    } else {
-      oc.deleteBlob(blobId, futureResult, null);
-    }
-    return futureResult;
+    return deleteBlob(blobId, null);
   }
 
   /**
@@ -211,11 +167,11 @@ public class NonBlockingRouter implements Router {
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
     FutureResult<Void> futureResult = new FutureResult<Void>();
-    OperationController oc = getOperationController();
-    if (oc == null) {
-      completeOperation(futureResult, null, callback, ROUTER_CLOSED_EXCEPTION);
+    if (isRunning.get()) {
+      getOperationController().deleteBlob(blobId, futureResult, null);
     } else {
-      oc.deleteBlob(blobId, futureResult, null);
+      completeOperation(futureResult, null, callback,
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
   }
@@ -227,13 +183,13 @@ public class NonBlockingRouter implements Router {
    * After a router is closed, any further attempt to invoke Router operations will cause a {@link RouterException} with
    * error code {@link RouterErrorCode#RouterClosed} to be returned as part of the {@link Future} and {@link Callback}
    * if any.
-   * @throws IOException if an I/O error occurs.
    */
   @Override
-  public void close()
-      throws IOException {
-    for (OperationController oc : ocListRef.get()) {
-      oc.close();
+  public void close() {
+    if (isRunning.compareAndSet(true, false)) {
+      for (OperationController oc : ocList) {
+        oc.close();
+      }
     }
   }
 
@@ -245,7 +201,8 @@ public class NonBlockingRouter implements Router {
    * @param operationResult the result of the operation (if any).
    * @param exception {@link Exception} encountered while performing the operation (if any).
    */
-  void completeOperation(FutureResult futureResult, Callback callback, Object operationResult, Exception exception) {
+  private void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
+      Exception exception) {
     try {
       futureResult.done(operationResult, exception);
       if (callback != null) {
@@ -257,5 +214,13 @@ public class NonBlockingRouter implements Router {
     } finally {
       //@todo add metric.
     }
+  }
+
+  protected boolean isRunning() {
+    return isRunning.get();
+  }
+
+  protected List<OperationController> getOperationControllers() {
+    return ocList;
   }
 }

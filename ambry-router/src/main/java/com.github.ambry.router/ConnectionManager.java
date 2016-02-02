@@ -77,14 +77,6 @@ class ConnectionManager {
   }
 
   /**
-   * Adds a connectionId as an available connection that can be checked out in the future.
-   * @param connectionId The connection id to add to the list of available connections.
-   */
-  void addToAvailablePool(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).addToAvailablePool(connectionId);
-  }
-
-  /**
    * Removes the given connectionId from the list of available connections.
    * @param connectionId The connection id to remove from the list of available connections.
    */
@@ -129,10 +121,6 @@ class ConnectionManager {
     }
 
     void checkInConnection(String connectionId) {
-      availableConnections.add(connectionId);
-    }
-
-    void addToAvailablePool(String connectionId) {
       availableConnections.add(connectionId);
     }
 

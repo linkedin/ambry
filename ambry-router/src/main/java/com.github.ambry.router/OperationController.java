@@ -1,10 +1,11 @@
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.NetworkSend;
 import com.github.ambry.network.RequestResponseHandler;
@@ -12,7 +13,6 @@ import com.github.ambry.network.Requestor;
 import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -41,7 +41,6 @@ enum OperationType {
  */
 
 class OperationController implements Requestor {
-  private static final Logger logger = LoggerFactory.getLogger(OperationController.class);
   private final NonBlockingRouter router;
   private final PutManager putManager;
   private final GetManager getManager;
@@ -49,25 +48,25 @@ class OperationController implements Requestor {
   private final ConnectionManager connectionManager;
   private final RequestResponseHandler requestResponseHandler;
   private final RouterConfig routerConfig;
-  private static final AtomicLong operationIdGenerator = new AtomicLong(0);
   private final Time time;
-  private final MetricRegistry registry;
   private final ClusterMap clusterMap;
   private final NotificationSystem notificationSystem;
-  private AtomicBoolean isRunning;
+  private final AtomicBoolean isRunning;
+  private static final AtomicLong operationIdGenerator = new AtomicLong(0);
+  private static final Logger logger = LoggerFactory.getLogger(OperationController.class);
 
-  public OperationController(NonBlockingRouter router, SSLFactory sslFactory, RouterConfig routerConfig,
-      MetricRegistry registry, NotificationSystem notificationSystem, ClusterMap clusterMap)
+  public OperationController(NonBlockingRouter router, RouterConfig routerConfig, NetworkConfig networkConfig,
+      NetworkMetrics networkMetrics, SSLFactory sslFactory, NotificationSystem notificationSystem,
+      ClusterMap clusterMap, Time time)
       throws IOException {
     this.router = router;
     this.routerConfig = routerConfig;
-    this.registry = registry;
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
-    time = SystemTime.getInstance();
-    requestResponseHandler = new RequestResponseHandler(this, registry, sslFactory, time);
+    this.time = time;
+    requestResponseHandler = new RequestResponseHandler(this, networkConfig, networkMetrics, sslFactory, time);
     connectionManager = new ConnectionManager(requestResponseHandler, routerConfig);
-    putManager = new PutManager(routerConfig.routerMaxChunkSize, connectionManager, routerConfig, clusterMap);
+    putManager = new PutManager(routerConfig.routerMaxChunkSizeBytes, connectionManager, routerConfig, clusterMap);
     getManager = new GetManager(connectionManager, clusterMap);
     deleteManager = new DeleteManager(connectionManager, clusterMap);
     isRunning = new AtomicBoolean(true);
@@ -75,50 +74,38 @@ class OperationController implements Requestor {
   }
 
   public void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
-    if (isRunning.get()) {
-      getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
-    } else {
-      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
-    }
+    getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
   }
 
   public void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
       Callback<ReadableStreamChannel> callback) {
-    if (isRunning.get()) {
-      getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
-    } else {
-      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
-    }
+    getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
   }
 
   public void putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       FutureResult<String> futureResult, Callback<String> callback) {
-    if (isRunning.get()) {
-      putManager.submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, usermetadata, channel,
-          callback);
-    } else {
-      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
-    }
+    putManager.submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, usermetadata, channel,
+        futureResult, callback);
   }
 
   public void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
-    if (isRunning.get()) {
-      deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, callback);
-    } else {
-      router.completeOperation(futureResult, callback, null, NonBlockingRouter.ROUTER_CLOSED_EXCEPTION);
-    }
+    deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
   }
 
   public void close() {
     if (isRunning.compareAndSet(true, false)) {
       try {
-        requestResponseHandler.close();
+        requestResponseHandler.shutDown();
       } catch (InterruptedException e) {
         logger.error("RequestResponseHandler did not shutdown cleanly");
       } finally {
-        router.onClose(this);
+        router.onOperationControllerClose();
       }
     }
+  }
+
+  boolean isRunning() {
+    return isRunning.get();
   }
 
   @Override
@@ -131,7 +118,8 @@ class OperationController implements Requestor {
       // not do anything about it at this time).
       for (String id : idsToDelete) {
         // possibly add a batch api going forward.
-        deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), id, null);
+        deleteManager
+            .submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), id, new FutureResult<Void>(), null);
       }
     }
 
@@ -146,7 +134,7 @@ class OperationController implements Requestor {
   public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
       List<NetworkReceive> completedReceives) {
     for (String conn : connected) {
-      connectionManager.addToAvailablePool(conn);
+      connectionManager.checkInConnection(conn);
     }
 
     for (String conn : disconnected) {
@@ -160,7 +148,7 @@ class OperationController implements Requestor {
   }
 
   @Override
-  public void onClose(Exception e) {
+  public void onRequestResponseHandlerShutDown(Exception e) {
     if (e != null) {
       logger.error("RequestResponseHandler is shutting down", e);
       // @todo: add a metric.

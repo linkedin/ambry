@@ -1,12 +1,13 @@
 package com.github.ambry.network;
 
-import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,44 +22,45 @@ import org.slf4j.LoggerFactory;
 public class RequestResponseHandler implements Runnable {
   private final Requestor requestor;
   private final Selector selector;
-  private final MetricRegistry registry;
-  private final NetworkMetrics metrics;
-  private final SSLFactory factory;
+  private final NetworkConfig networkConfig;
+  private final NetworkMetrics networkMetrics;
   private final Time time;
   private final Thread requestResponseHandlerThread;
-  private AtomicBoolean isRunning;
-  private final CountDownLatch shutDownLatch;
+  private final AtomicBoolean isRunning = new AtomicBoolean(true);
+  private final CountDownLatch shutDownLatch = new CountDownLatch(1);
   // @todo: these numbers need to be determined.
-  private static final int POLL_TIMEOUT_MS = 1 * Time.MsPerSec;
-  private static final int BUFFER_SIZE = 4 * 1024;
+  private static final int POLL_TIMEOUT_MS = 30;
+  private static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   private static final Logger logger = LoggerFactory.getLogger(RequestResponseHandler.class);
 
-  public RequestResponseHandler(Requestor requestor, MetricRegistry registry, SSLFactory factory, Time time)
+  public RequestResponseHandler(Requestor requestor, NetworkConfig networkConfig, NetworkMetrics networkMetrics,
+      SSLFactory sslFactory, Time time)
       throws IOException {
     this.requestor = requestor;
-    this.registry = registry;
-    this.metrics = new NetworkMetrics(registry);
-    this.factory = factory;
+    this.networkConfig = networkConfig;
+    this.networkMetrics = networkMetrics;
     this.time = time;
-    this.isRunning = new AtomicBoolean(true);
-    this.shutDownLatch = new CountDownLatch(1);
     requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
-    this.selector = new Selector(metrics, time, factory);
+    selector = new Selector(networkMetrics, time, sslFactory);
   }
 
-  public void start()
-      throws IOException {
+  /**
+   * Start the RequestResponseHandler thread.
+   */
+  public void start() {
     requestResponseHandlerThread.start();
   }
 
   /**
-   * Close the requestResponseHandler.
+   * Shut down the requestResponseHandler.
    * @throws InterruptedException
    */
-  public void close()
+  public void shutDown()
       throws InterruptedException {
     if (isRunning.compareAndSet(true, false)) {
-      shutDownLatch.await();
+      if (!shutDownLatch.await(SHUTDOWN_WAIT_MS, TimeUnit.MILLISECONDS)) {
+        logger.error("RequestResponseHandler did not shut down gracefully, forcing shut down");
+      }
       selector.close();
     }
   }
@@ -72,7 +74,8 @@ public class RequestResponseHandler implements Runnable {
    */
   public String connect(String host, Port port)
       throws IOException {
-    return selector.connect(new InetSocketAddress(host, port.getPort()), BUFFER_SIZE, BUFFER_SIZE, port.getPortType());
+    return selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
+        networkConfig.socketReceiveBufferBytes, port.getPortType());
   }
 
   @Override
@@ -80,21 +83,17 @@ public class RequestResponseHandler implements Runnable {
     Exception exception = null;
     try {
       while (isRunning.get()) {
-        try {
-          List<NetworkSend> sends = requestor.poll();
-          selector.poll(POLL_TIMEOUT_MS, sends);
-          requestor.onResponse(selector.connected(), selector.disconnected(), selector.completedSends(),
-              selector.completedReceives());
-        } catch (IOException e) {
-          logger.error("Encountered IO Exception during poll, continuing.", e);
-        } catch (Exception e) {
-          exception = e;
-          break;
-        }
+        List<NetworkSend> sends = requestor.poll();
+        selector.poll(POLL_TIMEOUT_MS, sends);
+        requestor.onResponse(selector.connected(), selector.disconnected(), selector.completedSends(),
+            selector.completedReceives());
       }
+    } catch (Exception e) {
+      logger.error("Encountered Exception during poll, continuing.", e);
+      exception = e;
     } finally {
       shutDownLatch.countDown();
-      requestor.onClose(exception);
+      requestor.onRequestResponseHandlerShutDown(exception);
     }
   }
 }

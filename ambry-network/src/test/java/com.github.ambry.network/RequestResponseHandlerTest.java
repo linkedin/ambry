@@ -77,9 +77,11 @@ public class RequestResponseHandlerTest {
   @Test
   public void testRequestResponseHandler()
       throws IOException, InterruptedException {
+    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     MockRequestor mockRequestor = new MockRequestor();
     RequestResponseHandler requestResponseHandler =
-        new RequestResponseHandler(mockRequestor, new MetricRegistry(), sslFactory, new MockTime());
+        new RequestResponseHandler(mockRequestor, new NetworkConfig(verifiableProperties),
+            new NetworkMetrics(new MetricRegistry()), sslFactory, new MockTime());
     requestResponseHandler.start();
     connectComplete = new CountDownLatch(3);
     String conn1 = requestResponseHandler.connect("localhost", new Port(6667, PortType.PLAINTEXT));
@@ -97,7 +99,7 @@ public class RequestResponseHandlerTest {
     mockRequestor.setRequests(requests);
     sendComplete.await();
 
-    requestResponseHandler.close();
+    requestResponseHandler.shutDown();
     server1.shutdown();
     server2.shutdown();
   }
@@ -136,10 +138,10 @@ public class RequestResponseHandlerTest {
     @Override
     public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
         List<NetworkReceive> completedReceives) {
-      for (String s: connected) {
+      for (String s : connected) {
         connectComplete.countDown();
       }
-      for (NetworkSend send: completedSends) {
+      for (NetworkSend send : completedSends) {
         sendComplete.countDown();
       }
     }
@@ -149,7 +151,7 @@ public class RequestResponseHandlerTest {
      * @param e the exception encountered.
      */
     @Override
-    public void onClose(Exception e) {
+    public void onRequestResponseHandlerShutDown(Exception e) {
       Assert.assertTrue("Exception received: " + e.getMessage(), false);
     }
   }

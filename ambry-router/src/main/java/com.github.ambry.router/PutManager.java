@@ -20,7 +20,8 @@ class PutManager {
   }
 
   public FutureResult<String> submitPutBlobOperation(long operationId, BlobProperties blobProperties,
-      byte[] usermetadata, ReadableStreamChannel channel, Callback<String> callback) {
+      byte[] usermetadata, ReadableStreamChannel channel, FutureResult<String> futureResult,
+      Callback<String> callback) {
     //@todo
     return null;
   }

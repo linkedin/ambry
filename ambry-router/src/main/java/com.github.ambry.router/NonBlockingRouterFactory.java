@@ -2,10 +2,15 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkMetrics;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
-import java.io.IOException;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,13 +22,16 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getRouter()}.
  */
 public class NonBlockingRouterFactory implements RouterFactory {
-  private final VerifiableProperties properties;
-  private final RouterConfig routerConfig;
-  private final NonBlockingRouterMetrics routerMetrics;
-  private final MetricRegistry registry;
-  private final ClusterMap clusterMap;
-  private final NotificationSystem notificationSystem;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  protected final VerifiableProperties properties;
+  protected final RouterConfig routerConfig;
+  protected final NonBlockingRouterMetrics routerMetrics;
+  protected final ClusterMap clusterMap;
+  protected final NetworkConfig networkConfig;
+  protected final NetworkMetrics networkMetrics;
+  protected final SSLFactory sslFactory;
+  protected final NotificationSystem notificationSystem;
+  protected final Time time;
+  private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
    * Creates an instance of NonBlockingRouterFactory with the given {@code verifiableProperties},
@@ -34,27 +42,22 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem) {
+      NotificationSystem notificationSystem, Time time)
+      throws Exception {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
       this.properties = verifiableProperties;
       routerConfig = new RouterConfig(verifiableProperties);
-      registry = clusterMap.getMetricRegistry();
+      MetricRegistry registry = clusterMap.getMetricRegistry();
       routerMetrics = new NonBlockingRouterMetrics(registry);
       this.clusterMap = clusterMap;
       this.notificationSystem = notificationSystem;
+      networkConfig = new NetworkConfig(properties);
+      networkMetrics = new NetworkMetrics(registry);
+      SSLConfig sslConfig = new SSLConfig(properties);
+      sslFactory = sslConfig.sslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
+      this.time = time;
     } else {
-      StringBuilder errorMessage =
-          new StringBuilder("Null arg(s) received during instantiation of NonBlockingRouterFactory");
-      if (verifiableProperties == null) {
-        errorMessage.append(" [VerifiableProperties] ");
-      }
-      if (clusterMap == null) {
-        errorMessage.append(" [ClusterMap] ");
-      }
-      if (notificationSystem == null) {
-        errorMessage.append(" [NotificationSystem] ");
-      }
-      throw new IllegalArgumentException(errorMessage.toString());
+      throw new IllegalArgumentException("Null argument passed in");
     }
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
@@ -63,7 +66,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter()
       throws InstantiationException {
     try {
-      return new NonBlockingRouter(properties, routerConfig, registry, notificationSystem, clusterMap);
+      return new NonBlockingRouter(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory,
+          notificationSystem, clusterMap, time);
     } catch (Exception e) {
       throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());
     }
