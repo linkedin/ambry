@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getRouter()}.
  */
 public class NonBlockingRouterFactory implements RouterFactory {
-  protected final VerifiableProperties properties;
   protected final RouterConfig routerConfig;
   protected final NonBlockingRouterMetrics routerMetrics;
   protected final ClusterMap clusterMap;
@@ -42,20 +41,19 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, Time time)
+      NotificationSystem notificationSystem)
       throws Exception {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
-      this.properties = verifiableProperties;
       routerConfig = new RouterConfig(verifiableProperties);
       MetricRegistry registry = clusterMap.getMetricRegistry();
       routerMetrics = new NonBlockingRouterMetrics(registry);
       this.clusterMap = clusterMap;
       this.notificationSystem = notificationSystem;
-      networkConfig = new NetworkConfig(properties);
+      networkConfig = new NetworkConfig(verifiableProperties);
       networkMetrics = new NetworkMetrics(registry);
-      SSLConfig sslConfig = new SSLConfig(properties);
+      SSLConfig sslConfig = new SSLConfig(verifiableProperties);
       sslFactory = sslConfig.sslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
-      this.time = time;
+      this.time = SystemTime.getInstance();
     } else {
       throw new IllegalArgumentException("Null argument passed in");
     }

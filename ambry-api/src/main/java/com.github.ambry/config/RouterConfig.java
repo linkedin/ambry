@@ -39,27 +39,36 @@ public class RouterConfig {
    */
   @Config("router.max.connections.per.port.ssl")
   @Default("2")
-  public final int routerMaxConnectionsPerPortSSL;
+  public final int routerMaxConnectionsPerPortSsl;
 
   /**
    * The max chunk size to be used for put operations.
    */
   @Config("router.max.put.chunk.size.bytes")
   @Default("4*1024*1024")
-  public final int routerMaxChunkSizeBytes;
+  public final int routerMaxPutChunkSizeBytes;
+
+  /**
+   * The factory class to use to create the router.
+   */
+  @Config("router.factory")
+  @Default("com.github.ambry.router.NonBlockingRouterFactory")
+  public final String routerFactory;
 
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
+    routerFactory =
+        verifiableProperties.getString("router.factory", "com.github.ambry.router.NonBlockingRouterFactory");
     routerScalingUnitCount = verifiableProperties.getIntInRange("router.scaling.unit.count", 1, 0, 10);
     routerHostname = verifiableProperties.getString("router.hostname");
     routerDatacenterName = verifiableProperties.getString("router.datacenter.name");
     routerMaxConnectionsPerPortPlainText =
         verifiableProperties.getIntInRange("router.max.connections.per.port.plain.text", 5, 1, 20);
-    routerMaxConnectionsPerPortSSL =
+    routerMaxConnectionsPerPortSsl =
         verifiableProperties.getIntInRange("router.max.connections.per.port.ssl", 2, 1, 20);
-    routerMaxChunkSizeBytes = verifiableProperties.getInt("router.max.chunk.size.bytes", 4 * 1024 * 1024);
+    routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.chunk.size.bytes", 4 * 1024 * 1024);
   }
 }

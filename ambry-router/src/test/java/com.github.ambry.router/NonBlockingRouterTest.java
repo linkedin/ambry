@@ -1,149 +1,54 @@
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkMetrics;
+import com.github.ambry.network.NetworkReceive;
+import com.github.ambry.network.NetworkSend;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLFactory;
+import com.github.ambry.network.Send;
+import com.github.ambry.network.SocketServer;
+import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ListIterator;
+import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 
 
 /**
- * Class to test the {@link ConnectionManager}
+ * Class to test the {@link NonBlockingRouter}
  */
 public class NonBlockingRouterTest {
 
   /**
-   * Tests if {@link NonBlockingRouterFactory} instantiation and functionality.
-   * @throws IOException
-   * @throws InstantiationException
+   * Test Router with a single scaling unit.
    */
   @Test
-  public void testNonBlockingRouterFactoryTest() {
-    try {
-      Properties props = new Properties();
-      props.setProperty("router.hostname", "localhost");
-      props.setProperty("router.datacenter.name", "DC1");
-      VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-      RouterFactory routerFactory =
-          new NonBlockingRouterFactory(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(),
-              new MockTime());
-      Router router = routerFactory.getRouter();
-      Assert.assertEquals(NonBlockingRouter.class.getCanonicalName(), router.getClass().getCanonicalName());
-    } catch (Exception e) {
-      Assert.assertTrue("Received exception " + e.getMessage(), false);
-    }
-  }
-
-  /**
-   * Tests the ConnectionManager. Checks out and checks in connections and ensures that the pool limit is honored.
-   * @throws IOException
-   */
-  @Test
-  public void testConnectionManager()
-      throws IOException {
-    Properties props = new Properties();
-    props.setProperty("router.hostname", "localhost");
-    props.setProperty("router.datacenter.name", "DC1");
-    props.setProperty("router.max.connections.per.port.plain.text", "3");
-    props.setProperty("router.max.connections.per.port.ssl", "3");
-    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    RouterConfig routerConfig = new RouterConfig(verifiableProperties);
-    MockRequestResponseHandler mockRequestResponseHandler = new MockRequestResponseHandler();
-    ConnectionManager connectionManager = new ConnectionManager(mockRequestResponseHandler, routerConfig);
-
-    //When no connections were ever made to a host:port, connectionManager should return null, but
-    //initiate connections.
-    Port port1 = new Port(100, PortType.PLAINTEXT);
-    String conn11 = connectionManager.checkOutConnection("host1", port1);
-    Assert.assertNull(conn11);
-    String conn12 = connectionManager.checkOutConnection("host1", port1);
-    Assert.assertNull(conn12);
-    String conn13 = connectionManager.checkOutConnection("host1", port1);
-    Assert.assertNull(conn13);
-    String conn14 = connectionManager.checkOutConnection("host1", port1);
-    Assert.assertNull(conn14);
-
-    Assert.assertEquals(3, mockRequestResponseHandler.count());
-
-    Port port2 = new Port(200, PortType.SSL);
-    String conn21 = connectionManager.checkOutConnection("host2", port2);
-    Assert.assertNull(conn21);
-    String conn22 = connectionManager.checkOutConnection("host2", port2);
-    Assert.assertNull(conn22);
-    String conn23 = connectionManager.checkOutConnection("host2", port2);
-    Assert.assertNull(conn23);
-    String conn24 = connectionManager.checkOutConnection("host2", port2);
-    Assert.assertNull(conn24);
-
-    Assert.assertEquals(6, mockRequestResponseHandler.count());
-    //Assume a connection was made.
-
-    ListIterator<String> iter = mockRequestResponseHandler.getConnectionIds().listIterator();
-    while (iter.hasNext()) {
-      connectionManager.checkInConnection(iter.next());
-      iter.remove();
-    }
-
-    conn21 = connectionManager.checkOutConnection("host2", port2);
-    Assert.assertNotNull(conn21);
-    //Check this connection id back in. This should be returned in a future
-    //checkout.
-    connectionManager.checkInConnection(conn21);
-    conn22 = connectionManager.checkOutConnection("host2", port2);
-    Assert.assertNotNull(conn22);
-    conn23 = connectionManager.checkOutConnection("host2", port2);
-    Assert.assertNotNull(conn23);
-    Assert.assertEquals(conn21, connectionManager.checkOutConnection("host2", port2));
-    //Now that the pool has been exhausted, checkOutConnection should return null.
-    Assert.assertNull(connectionManager.checkOutConnection("host2", port2));
-    //And it should not have initiated a new connection.
-    Assert.assertEquals(0, mockRequestResponseHandler.count());
-
-    conn11 = connectionManager.checkOutConnection("host1", port1);
-    Assert.assertNotNull(conn11);
-    conn12 = connectionManager.checkOutConnection("host1", port1);
-    Assert.assertNotNull(conn12);
-    //Remove a checked out connection.
-    connectionManager.destroyConnection(conn12);
-    connectionManager.checkInConnection(conn11);
-    Assert.assertNotNull(connectionManager.checkOutConnection("host1", port1));
-    Assert.assertNotNull(connectionManager.checkOutConnection("host1", port1));
-    Assert.assertNull(connectionManager.checkOutConnection("host1", port1));
-    Assert.assertNull(connectionManager.checkOutConnection("host1", port1));
-    //One new connection should have been initialized.
-    Assert.assertEquals(1, mockRequestResponseHandler.count());
-  }
-
-  /**
-   * Test OperationController with single scaling unit
-   */
-  @Test
-  public void testOperationController()
-      throws IOException {
-    Properties props = new Properties();
-    props.setProperty("router.hostname", "localhost");
-    props.setProperty("router.datacenter.name", "DC1");
-    props.setProperty("router.max.connections.per.port.plain.text", "3");
-    props.setProperty("router.scaling.unit.count", "1");
+  public void testRouterBasic()
+      throws Exception {
+    Properties props = RouterTestUtils.getProps();
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();
     BlobProperties putBlobProperties =
@@ -155,35 +60,27 @@ public class NonBlockingRouterTest {
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
 
-    //Instantiation test
-    Router router = null;
-    try {
-      router = new NonBlockingRouterFactory(verifiableProperties, mockClusterMap, new LoggingNotificationSystem(),
-          new MockTime()).getRouter();
-    } catch (Exception e) {
-      Assert.assertTrue("Received exception " + e.getMessage(), false);
-    }
+    Router router =
+        new NonBlockingRouterFactory(verifiableProperties, mockClusterMap, new LoggingNotificationSystem()).getRouter();
 
     //tests to be added when puts are implemented.
     router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    router.getBlob("nonExistentblobId");
+    router.deleteBlob("nonExistentblobId");
     router.close();
+
     //submission after closing should return a future that is already done.
     Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
     Assert.assertTrue(future.isDone());
   }
 
   /**
-   * Test that multiple {@link OperationController} can be instantiated, can be closed, and that
-   * closing one will close the router.
-   * @throws IOException
+   * Test that multiple scaling units can be instantiated, closed, and that closing one will close the router.
    */
   @Test
-  public void testOperationControllerMultiple()
-      throws IOException {
-    Properties props = new Properties();
-    props.setProperty("router.hostname", "localhost");
-    props.setProperty("router.datacenter.name", "DC1");
-    props.setProperty("router.max.connections.per.port.plain.text", "3");
+  public void testMultipleScalingUnit()
+      throws Exception {
+    Properties props = RouterTestUtils.getProps();
     props.setProperty("router.scaling.unit.count", "3");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();
@@ -196,73 +93,214 @@ public class NonBlockingRouterTest {
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
 
-    //Instantiation test
-    TestNonBlockingRouter router = null;
-    try {
-      router = new TestNonBlockingRouterFactory(verifiableProperties, mockClusterMap, new LoggingNotificationSystem(),
-          new MockTime()).getRouter();
-    } catch (Exception e) {
-      Assert.assertTrue("Received exception " + e.getMessage(), false);
-    }
-
-    for (OperationController oc : router.getOperationControllers()) {
-      Assert.assertTrue(oc.isRunning());
-    }
+    NonBlockingRouter router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
+        new LoggingNotificationSystem()).getRouter();
 
     //tests to be added when puts are implemented.
     router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    router.close();
 
-    //test closing down flow when the operation controller closes by itself.
-    router.closeOperationController();
-    for (OperationController oc : router.getOperationControllers()) {
-      Assert.assertFalse(oc.isRunning());
-    }
-
-    Assert.assertFalse(router.isRunning());
-
-    //Ensure the router completes the future
+    //submission after closing should return a future that is already done.
     Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
     Assert.assertTrue(future.isDone());
+  }
 
-    //Ensure router close just works.
+  /**
+   * Starts up SocketServers, makes connections and sends requests.
+   * @throws Exception
+   */
+  @Test
+  public void testRequestHandling()
+      throws Exception {
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig serverSSLConfig1 = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER,  trustStoreFile, "server1");
+    SSLConfig serverSSLConfig2 = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER,  trustStoreFile, "server2");
+
+    //Start up the SocketServers
+    Properties serverProps = new Properties();
+    serverProps.setProperty("port", "6667");
+    VerifiableProperties serverVProps = new VerifiableProperties(serverProps);
+    NetworkConfig config = new NetworkConfig(serverVProps);
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(6667, PortType.PLAINTEXT));
+    ports.add(new Port(7667, PortType.SSL));
+    SocketServer server1 = new SocketServer(config, serverSSLConfig1, new MetricRegistry(), ports);
+    server1.start();
+
+    serverProps.setProperty("port", "6668");
+    serverVProps = new VerifiableProperties(serverProps);
+    config = new NetworkConfig(serverVProps);
+    ports = new ArrayList<Port>();
+    ports.add(new Port(6668, PortType.PLAINTEXT));
+    ports.add(new Port(7668, PortType.SSL));
+    SocketServer server2 = new SocketServer(config, serverSSLConfig2, new MetricRegistry(), ports);
+    server2.start();
+
+    Properties props = RouterTestUtils.getProps();
+    TestSSLUtils.addSSLProperties(props, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    NonBlockingRouterWrapper router =
+        (NonBlockingRouterWrapper) new NonBlockingRouterFactoryWrapper(verifiableProperties, mockClusterMap,
+            new LoggingNotificationSystem()).getRouter();
+
+    //@todo: Add SSL tests.
+    ArrayList<MockRequest> mockRequests = new ArrayList<MockRequest>();
+    mockRequests.add(new MockRequest(ByteBuffer.allocate(16), "localhost", new Port(6667, PortType.PLAINTEXT)));
+    mockRequests.add(new MockRequest(ByteBuffer.allocate(16), "localhost", new Port(6668, PortType.PLAINTEXT)));
+    mockRequests.add(new MockRequest(ByteBuffer.allocate(16), "localhost", new Port(6667, PortType.PLAINTEXT)));
+
+    router.sendRequests(mockRequests);
+
     router.close();
+
+    server1.shutdown();
+    server2.shutdown();
   }
 }
 
 /**
- * A factory that utilizes {@link NonBlockingRouterFactory} to return a {@link TestNonBlockingRouter}
+ * A wrapper over {@link NonBlockingRouterFactory} that simply returns a {@link NonBlockingRouterWrapper}
+ * instead.
  */
-class TestNonBlockingRouterFactory extends NonBlockingRouterFactory {
-  public TestNonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, Time time)
+class NonBlockingRouterFactoryWrapper extends NonBlockingRouterFactory {
+  NonBlockingRouterFactoryWrapper(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
+      NotificationSystem notificationSystem)
       throws Exception {
-    super(verifiableProperties, clusterMap, notificationSystem, time);
+    super(verifiableProperties, clusterMap, notificationSystem);
   }
 
-  public TestNonBlockingRouter getRouter()
+  @Override
+  public Router getRouter()
       throws InstantiationException {
     try {
-      return new TestNonBlockingRouter(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory,
+      return new NonBlockingRouterWrapper(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory,
           notificationSystem, clusterMap, time);
-    } catch (Exception e) {
-      throw new InstantiationException("Could not instantiate TestRouter");
+    } catch (IOException e) {
+      throw new InstantiationException();
     }
   }
 }
 
 /**
- * A {@link Router} that used for testing a {@link NonBlockingRouter}.
+ * A wrapper over {@link NonBlockingRouter} that overrides the poll() method of the internal {@link OperationController}
+ * to send {@link MockRequest} requests and exposes a few methods for testing.
  */
-class TestNonBlockingRouter extends NonBlockingRouter {
-  TestNonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+class NonBlockingRouterWrapper extends NonBlockingRouter {
+  OperationController oc;
+  Object requestListlock = new Object();
+  List<NetworkSend> requests;
+  private CountDownLatch connectComplete;
+  private CountDownLatch sendComplete;
+
+  NonBlockingRouterWrapper(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkConfig networkConfig, NetworkMetrics networkMetrics, SSLFactory sslFactory,
       NotificationSystem notificationSystem, ClusterMap clusterMap, Time time)
-      throws Exception {
-    super(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory, notificationSystem, clusterMap,
-        time);
+      throws IOException {
+    super(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory, notificationSystem, clusterMap, time);
+    oc = new TestOperationController();
   }
 
-  void closeOperationController() {
-    super.onOperationControllerClose();
+  @Override
+  protected OperationController getOperationController() {
+    return oc;
+  }
+
+  public void sendRequests(List<MockRequest> mockRequests)
+      throws Exception {
+    MockTime time = new MockTime();
+    connectComplete = new CountDownLatch(mockRequests.size());
+    synchronized (requestListlock) {
+      for (MockRequest request : mockRequests) {
+        // this will just initiate the connections
+        oc.connectionManager.checkOutConnection(request.host, request.port);
+      }
+    }
+    // wait till the connections are established
+    connectComplete.await();
+    synchronized (requestListlock) {
+      requests = new ArrayList<NetworkSend>();
+      for (MockRequest request : mockRequests) {
+        // the connections have been established now, so checkout should return valid ids.
+        String connId = oc.connectionManager.checkOutConnection(request.host, request.port);
+        requests.add(new NetworkSend(connId, request, null, time));
+      }
+    }
+    sendComplete = new CountDownLatch(mockRequests.size());
+    // the requests will be sent in the next poll. Once those are successfully sent,
+    // sendComplete will be counted down.
+    sendComplete.await();
+  }
+
+  /**
+   * A wrapper over {@link OperationController} that overrides poll() and onResponse()
+   */
+  class TestOperationController extends OperationController {
+    TestOperationController()
+        throws IOException {
+      super();
+    }
+
+    // Simply returns the requests that were set in a previous sendRequests() call.
+    @Override
+    public List<NetworkSend> poll() {
+      synchronized (requestListlock) {
+        List<NetworkSend> requestsToReturn = requests;
+        requests = null;
+        return requestsToReturn;
+      }
+    }
+
+    @Override
+    public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
+        List<NetworkReceive> completedReceives) {
+      super.onResponse(connected, disconnected, completedSends, completedReceives);
+      for (String s : connected) {
+        connectComplete.countDown();
+      }
+      for (NetworkSend send : completedSends) {
+        sendComplete.countDown();
+      }
+    }
+
+    public String connect(String host, Port port)
+        throws IOException {
+      return connectionManager.checkOutConnection(host, port);
+    }
+  }
+}
+
+/**
+ * An implementation of Send that simply writes out a buffer that it is
+ * initialized with to the given host and port.
+ */
+class MockRequest implements Send {
+  ByteBuffer buffer;
+  int size;
+  String host;
+  Port port;
+
+  public MockRequest(ByteBuffer buffer, String host, Port port) {
+    this.buffer = buffer;
+    this.host = host;
+    this.port = port;
+    size = buffer.remaining();
+  }
+
+  @Override
+  public long writeTo(WritableByteChannel channel)
+      throws IOException {
+    long written = channel.write(buffer);
+    return written;
+  }
+
+  @Override
+  public boolean isSendComplete() {
+    return buffer.remaining() == 0;
+  }
+
+  @Override
+  public long sizeInBytes() {
+    return size;
   }
 }

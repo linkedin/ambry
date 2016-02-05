@@ -4,9 +4,9 @@ import java.util.List;
 
 
 /**
- * The interface that needs to be implemented by any component that needs to use the RequestResponseHandler to
- * send out requests and receive responses. The RequestResponseHandler will use the Requestor to poll for requests to
- * send out and notify it about connections established, disconnections, completed sends and receives.
+ * The interface to use for sending out requests and receive responses. An implementing class will be polled for
+ * requests and notified on completion of sends, on receiving responses and on connection establishments and
+ * disconnections.
  */
 public interface Requestor {
   /**
@@ -16,7 +16,7 @@ public interface Requestor {
   public List<NetworkSend> poll();
 
   /**
-   * Notifies the Requestor about Network events
+   * Notifies the Requestor about network events
    * @param connected a list of connection ids for any connections established.
    * @param disconnected a list of connection ids for any disconnections.
    * @param completedSends a list of {@link NetworkSend} for requests that were successufully sent out.

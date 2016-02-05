@@ -1,10 +1,8 @@
-package com.github.ambry.router;
+package com.github.ambry.network;
 
-import com.github.ambry.config.RouterConfig;
-import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
-import com.github.ambry.network.RequestResponseHandler;
+import com.github.ambry.config.NetworkConfig;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -15,17 +13,22 @@ import java.util.concurrent.atomic.AtomicInteger;
  * to checkout and checkin connections.
  */
 
-class ConnectionManager {
+public class ConnectionManager {
   private final ConcurrentHashMap<String, HostPortPoolManager> hostPortToPoolManager;
   private final ConcurrentHashMap<String, HostPortPoolManager> connectionIdToPoolManager;
-  private final RequestResponseHandler requestResponseHandler;
-  private final RouterConfig routerConfig;
+  private final Selector selector;
+  private final NetworkConfig networkConfig;
+  private final int maxConnectionsPerPortPlainText;
+  private final int maxConnectionsPerPortSsl;
 
-  ConnectionManager(RequestResponseHandler requestResponseHandler, RouterConfig routerConfig) {
+  public ConnectionManager(Selector selector, NetworkConfig networkConfig, int maxConnectionsPerPortPlainText,
+      int maxConnectionsPerPortPlainSsl) {
     hostPortToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
     connectionIdToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
-    this.requestResponseHandler = requestResponseHandler;
-    this.routerConfig = routerConfig;
+    this.selector = selector;
+    this.networkConfig = networkConfig;
+    this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
+    this.maxConnectionsPerPortSsl = maxConnectionsPerPortPlainSsl;
   }
 
   private static String getHostPortString(String host, int port) {
@@ -60,7 +63,7 @@ class ConnectionManager {
    * @param port The port on the host to connect to.
    * @return connectionId, if there is one available to use, null otherwise.
    */
-  String checkOutConnection(String host, Port port)
+  public String checkOutConnection(String host, Port port)
       throws IOException {
     // if any available, give that
     // else if max connections to hostport is reached, return null
@@ -72,7 +75,7 @@ class ConnectionManager {
    * Check in a previously checked out connection.
    * @param connectionId the id of the previously checked out connection.
    */
-  void checkInConnection(String connectionId) {
+  public void checkInConnection(String connectionId) {
     connectionIdToPoolManager.get(connectionId).checkInConnection(connectionId);
   }
 
@@ -80,7 +83,7 @@ class ConnectionManager {
    * Removes the given connectionId from the list of available connections.
    * @param connectionId The connection id to remove from the list of available connections.
    */
-  void destroyConnection(String connectionId) {
+  public void destroyConnection(String connectionId) {
     connectionIdToPoolManager.get(connectionId).destroyConnection(connectionId);
     connectionIdToPoolManager.remove(connectionId);
   }
@@ -100,9 +103,9 @@ class ConnectionManager {
       this.host = host;
       this.port = port;
       if (port.getPortType() == PortType.SSL) {
-        this.maxConnectionsToHostPort = routerConfig.routerMaxConnectionsPerPortSSL;
+        this.maxConnectionsToHostPort = maxConnectionsPerPortSsl;
       } else {
-        this.maxConnectionsToHostPort = routerConfig.routerMaxConnectionsPerPortPlainText;
+        this.maxConnectionsToHostPort = maxConnectionsPerPortPlainText;
       }
       availableConnections = new ConcurrentLinkedQueue<String>();
     }
@@ -112,7 +115,9 @@ class ConnectionManager {
       String connectionId = availableConnections.poll();
       if (connectionId == null) {
         if (poolCount.incrementAndGet() <= maxConnectionsToHostPort) {
-          connectionIdToPoolManager.put(requestResponseHandler.connect(host, port), this);
+          connectionIdToPoolManager.put(selector
+              .connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
+                  networkConfig.socketReceiveBufferBytes, port.getPortType()), this);
         } else {
           poolCount.decrementAndGet();
         }
