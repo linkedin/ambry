@@ -101,7 +101,8 @@ public class ServerHardDeleteTest {
            blobN_blobReadOptions
            --
            length_of_blob1_messageStoreRecoveryInfo
-           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion,
+            blobType, blobStreamSize}
            length_of_blob2_messageStoreRecoveryInfo
            blob2_messageStoreRecoveryInfo
            ....
@@ -152,6 +153,7 @@ public class ServerHardDeleteTest {
             short userMetadataVersion = stream.readShort();
             int userMetadataSize = stream.readInt();
             short blobRecordVersion = stream.readShort();
+            int blobType = stream.readInt();
             long blobStreamSize = stream.readLong();
             StoreKey key = storeKeyFactory.getStoreKey(stream);
             Assert.assertTrue(storeKeyList.get(i).equals(key));
@@ -168,7 +170,7 @@ public class ServerHardDeleteTest {
     Assert.assertEquals(expectedTokenValue, parsedTokenValue);
   }
 
-  @Test
+  // @Test
   public void endToEndTestHardDeletes()
       throws Exception {
     MockClusterMap clusterMap = cluster.getClusterMap();

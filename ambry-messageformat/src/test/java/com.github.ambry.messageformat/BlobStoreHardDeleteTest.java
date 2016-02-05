@@ -47,25 +47,25 @@ public class BlobStoreHardDeleteTest {
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg0 =
           new PutMessageFormatInputStream(keys[0], blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobType.DataBlob);
 
       PutMessageFormatInputStream msg1 =
           new PutMessageFormatInputStream(keys[1], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobType.DataBlob);
 
       PutMessageFormatInputStream msg2 =
           new PutMessageFormatInputStream(keys[2], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobType.DataBlob);
 
       DeleteMessageFormatInputStream msg3d = new DeleteMessageFormatInputStream(keys[1]);
 
       PutMessageFormatInputStream msg4 =
           new PutMessageFormatInputStream(keys[3], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobType.DataBlob);
 
       PutMessageFormatInputStream msg5 =
           new PutMessageFormatInputStream(keys[4], new BlobProperties(BLOB_SIZE, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE);
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), BLOB_SIZE, BlobType.DataBlob);
 
       buffer = ByteBuffer.allocate((int) (msg0.getSize() +
           msg1.getSize() +
@@ -102,8 +102,8 @@ public class BlobStoreHardDeleteTest {
       writeToBuffer(msg2, (int) msg2.getSize());
       HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
           new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
-              MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
-              BLOB_SIZE, keys[2]);
+              MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V2,
+              BlobType.DataBlob.ordinal(), BLOB_SIZE, keys[2]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg3d: Delete Record. Not part of readSet.
@@ -114,8 +114,8 @@ public class BlobStoreHardDeleteTest {
       readSet.addMessage(buffer.position(), keys[3], (int) msg4.getSize());
       writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
       hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
-          MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V1,
-          BLOB_SIZE, keys[3]);
+          MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V2,
+          BlobType.DataBlob.ordinal(), BLOB_SIZE, keys[3]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg5: A message with blob record corrupted that will be part of hard delete, without recoveryInfo.

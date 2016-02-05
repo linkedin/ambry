@@ -8,6 +8,7 @@ import java.io.InputStream;
  */
 public class BlobOutput {
   private long size;
+  private BlobType blobType;
   private InputStream stream;
 
   /**
@@ -15,8 +16,9 @@ public class BlobOutput {
    * @param size The size of the blob
    * @param stream The stream that contains the blob
    */
-  public BlobOutput(long size, InputStream stream) {
+  public BlobOutput(long size, BlobType blobType, InputStream stream) {
     this.size = size;
+    this.blobType = blobType;
     this.stream = stream;
   }
 
@@ -26,5 +28,9 @@ public class BlobOutput {
 
   public InputStream getStream() {
     return stream;
+  }
+
+  public BlobType getBlobType(){
+    return this.blobType;
   }
 }

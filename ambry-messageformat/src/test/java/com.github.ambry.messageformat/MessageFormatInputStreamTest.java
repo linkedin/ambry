@@ -32,7 +32,7 @@ public class MessageFormatInputStreamTest {
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop);
     int userMetadataSize =
         MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata));
-    long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(2000);
+    long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(2000);
 
     Assert.assertEquals(messageFormatStream.getSize(), headerSize + blobPropertiesRecordSize +
         userMetadataSize + blobSize + key.sizeInBytes());
@@ -90,7 +90,8 @@ public class MessageFormatInputStreamTest {
     // verify blob
     CrcInputStream crcstream = new CrcInputStream(messageFormatStream);
     DataInputStream streamData = new DataInputStream(crcstream);
-    Assert.assertEquals(streamData.readShort(), 1);
+    Assert.assertEquals(streamData.readShort(), 2);
+    Assert.assertEquals(streamData.readInt(), BlobType.DataBlob.ordinal());
     Assert.assertEquals(streamData.readLong(), 2000);
     for (int i = 0; i < 2000; i++) {
       Assert.assertEquals((byte) streamData.read(), data[i]);
