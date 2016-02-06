@@ -93,7 +93,8 @@ class MockBlockingChannel extends BlockingChannel {
         BlobId blobId = putRequest.getBlobId();
         BlobProperties blobProperties = putRequest.getBlobProperties();
         ByteBuffer userMetadata = putRequest.getUsermetadata();
-        BlobOutput blobOutput = new BlobOutput(putRequest.getBlobSize(), putRequest.getBlobType(), putRequest.getBlobStream());
+        BlobOutput blobOutput =
+            new BlobOutput(putRequest.getBlobSize(), putRequest.getBlobType(), putRequest.getBlobStream());
 
         ServerErrorCode error = mockDataNode.put(blobId, new Blob(blobProperties, userMetadata, blobOutput));
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);

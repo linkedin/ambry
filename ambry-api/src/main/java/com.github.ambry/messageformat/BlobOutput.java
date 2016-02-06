@@ -14,6 +14,7 @@ public class BlobOutput {
   /**
    * The blob output that helps to read a blob
    * @param size The size of the blob
+   * @param blobType {@BlobType} of the blob
    * @param stream The stream that contains the blob
    */
   public BlobOutput(long size, BlobType blobType, InputStream stream) {

@@ -536,13 +536,13 @@ public class MessageFormatRecord {
   /**
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |           |            |            |            |
-   * | version | BlobType  |    size    |  content   |     Crc    |
+   * | version | blobType  |    size    |  content   |     Crc    |
    * |(2 bytes)| (8 bytes) |  (8 bytes) |  (n bytes) |  (8 bytes) |
    * |         |           |            |            |            |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version    - The version of the blob record
    *
-   *  BlobType   - Type of the blob, whether it is a data blob or metadata blob
+   *  blobType   - Type of the blob, whether it is a data blob or metadata blob
    *
    *  size       - The size of the blob content
    *
@@ -600,7 +600,7 @@ public class MessageFormatRecord {
   /**
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |               |               |           |            |         |            |
-   * | version |   no of keys  |    key size   |  key1     |   key2     |  .....  |   Crc      |
+   * | version |   no of keys  |    key size   |    key1   |     key2   |  .....  |   Crc      |
    * |(2 bytes)|    (4 bytes)  |   ( 4 bytes)  | (key size |  (key size |  .....  |  (8 bytes) |
    * |         |               |               |   bytes)  |    bytes)  |         |            |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
