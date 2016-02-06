@@ -312,7 +312,7 @@ class HardDeleteRecoveryMetadata {
         !MessageFormatRecord.isValidBlobRecordVersion(blobRecordVersion)) {
       throw new IOException(
           "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
-              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion +" blobType " + blobType);
+              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion + " blobType " + blobType);
     }
     storeKey = factory.getStoreKey(stream);
   }
@@ -352,7 +352,7 @@ class HardDeleteRecoveryMetadata {
         MessageFormatRecord.Version_Field_Size_In_Bytes +
         Integer.SIZE / 8 +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
-        Integer.SIZE / 4 +
+        Integer.SIZE / 8 +
         Long.SIZE / 8 +
         storeKey.sizeInBytes()];
 

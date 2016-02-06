@@ -26,7 +26,7 @@ public class MessageFormatInputStreamTest {
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
 
     MessageFormatInputStream messageFormatStream =
-        new PutMessageFormatInputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, 2000);
+        new PutMessageFormatInputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, 2000, BlobType.DataBlob);
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop);
