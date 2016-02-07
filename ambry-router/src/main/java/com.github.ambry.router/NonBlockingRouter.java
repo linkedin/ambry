@@ -252,7 +252,7 @@ class NonBlockingRouter implements Router {
     private static final int POLL_TIMEOUT_MS = 30;
     private static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
 
-    public OperationController()
+    OperationController()
         throws IOException {
       selector = new Selector(networkMetrics, time, sslFactory);
       connectionManager =
@@ -265,26 +265,26 @@ class NonBlockingRouter implements Router {
       requestResponseHandlerThread.start();
     }
 
-    public void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
+    void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
       getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     }
 
-    public void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
+    void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
         Callback<ReadableStreamChannel> callback) {
       getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     }
 
-    public void putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+    void putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
       putManager.submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, usermetadata, channel,
           futureResult, callback);
     }
 
-    public void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
+    void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
       deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     }
 
-    public void shutdown() {
+    void shutdown() {
       logger.info("OperationController is shutting down");
       boolean cleanShutdown = false;
       try {
@@ -301,7 +301,7 @@ class NonBlockingRouter implements Router {
       selector.close();
     }
 
-    public List<NetworkSend> poll() {
+    List<NetworkSend> poll() {
       // these are ids that were successfully put for an operation that eventually failed
       List<String> idsToDelete = putManager.getIdsToDelete();
 
@@ -322,7 +322,7 @@ class NonBlockingRouter implements Router {
       return requests;
     }
 
-    public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
+    void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
         List<NetworkReceive> completedReceives) {
       for (String conn : connected) {
         connectionManager.checkInConnection(conn);

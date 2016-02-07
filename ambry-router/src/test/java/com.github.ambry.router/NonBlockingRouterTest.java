@@ -243,7 +243,7 @@ class NonBlockingRouterWrapper extends NonBlockingRouter {
 
     // Simply returns the requests that were set in a previous sendRequests() call.
     @Override
-    public List<NetworkSend> poll() {
+    protected List<NetworkSend> poll() {
       synchronized (requestListlock) {
         List<NetworkSend> requestsToReturn = requests;
         requests = null;
@@ -252,7 +252,7 @@ class NonBlockingRouterWrapper extends NonBlockingRouter {
     }
 
     @Override
-    public void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
+    protected void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
         List<NetworkReceive> completedReceives) {
       super.onResponse(connected, disconnected, completedSends, completedReceives);
       for (String s : connected) {
