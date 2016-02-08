@@ -542,7 +542,7 @@ public class MessageFormatRecord {
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version    - The version of the blob record
    *
-   *  blobType   - The ordinal of the blob type (data blob / metadata blob)
+   *  blobType   - The type of the blob
    *
    *  size       - The size of the blob content
    *

@@ -45,7 +45,7 @@ public class BlobPropertiesSerDe {
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream)
       throws IOException {
     long version = stream.readShort();
-    if (version == 1) {
+    if (version == Current_Version) {
       long ttl = stream.readLong();
       boolean isPrivate = stream.readByte() == 1 ? true : false;
       long creationTime = stream.readLong();
