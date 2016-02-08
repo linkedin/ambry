@@ -537,12 +537,12 @@ public class MessageFormatRecord {
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |           |            |            |            |
    * | version | blobType  |    size    |  content   |     Crc    |
-   * |(2 bytes)| (8 bytes) |  (8 bytes) |  (n bytes) |  (8 bytes) |
+   * |(2 bytes)| (2 bytes) |  (8 bytes) |  (n bytes) |  (8 bytes) |
    * |         |           |            |            |            |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version    - The version of the blob record
    *
-   *  blobType   - Type of the blob, whether it is a data blob or metadata blob
+   *  blobType   - The ordinal of the blob type (data blob / metadata blob)
    *
    *  size       - The size of the blob content
    *
@@ -553,7 +553,7 @@ public class MessageFormatRecord {
    */
   public static class Blob_Format_V2 {
     public static final int Blob_Size_Field_In_Bytes = 8;
-    public static final int Blob_Type_Field_In_Bytes = 4;
+    public static final int Blob_Type_Field_In_Bytes = 2;
     private static Logger logger = LoggerFactory.getLogger(Blob_Format_V2.class);
 
     public static long getBlobRecordSize(long blobSize) {
@@ -566,15 +566,15 @@ public class MessageFormatRecord {
 
     public static void serializePartialBlobRecord(ByteBuffer outputBuffer, long blobContentSize, BlobType blobType) {
       outputBuffer.putShort(Blob_Version_V2);
-      outputBuffer.putInt(blobType.ordinal());
+      outputBuffer.putShort((short) blobType.ordinal());
       outputBuffer.putLong(blobContentSize);
     }
 
     public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
-      int blobTypeOrdinal = dataStream.readInt();
-      if(blobTypeOrdinal > BlobType.values().length){
+      int blobTypeOrdinal = (int) dataStream.readShort();
+      if (blobTypeOrdinal > BlobType.values().length) {
         logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
@@ -617,24 +617,26 @@ public class MessageFormatRecord {
    *  crc             - The crc of the blob property record
    *
    */
-  public static class Metadata_Content_V1 {
-    public static final int Metadata_Number_Of_Keys = 4;
-    public static final int Metadata_Key_Size_In_Bytes = 4;
-    private static Logger logger = LoggerFactory.getLogger(Metadata_Content_V1.class);
+  public static class Metadata_Content_Format_V1 {
+    public static final int Number_Keys_Field_Size_In_Bytes = 4;
+    public static final int Key_Size_Field_Size_In_Bytes = 4;
+    private static Logger logger = LoggerFactory.getLogger(Metadata_Content_Format_V1.class);
 
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
       return Version_Field_Size_In_Bytes +
-          Metadata_Number_Of_Keys +
-          Metadata_Key_Size_In_Bytes +
-          ((numberOfKeys) * keySize) +
+          Number_Keys_Field_Size_In_Bytes +
+          Key_Size_Field_Size_In_Bytes +
+          (numberOfKeys * keySize) +
           Crc_Size;
     }
 
-    public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, int metadataContentSize, int keySize,
-        List<String> keys) {
+    public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, List<String> keys) {
+      if (!validateKeys(keys)) {
+        throw new IllegalArgumentException("Keys are not of same size");
+      }
       outputBuffer.putShort(Metadata_Content_Version_V1);
       outputBuffer.putInt(keys.size());
-      outputBuffer.putInt(keySize);
+      outputBuffer.putInt(keys.get(0).length());
       for (String key : keys) {
         outputBuffer.put(key.getBytes());
       }
@@ -658,6 +660,16 @@ public class MessageFormatRecord {
         throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return keys;
+    }
+
+    private static boolean validateKeys(List<String> keys) {
+      int keySize = keys.get(0).length();
+      for (String key : keys) {
+        if (key.length() != keySize) {
+          return false;
+        }
+      }
+      return true;
     }
   }
 }

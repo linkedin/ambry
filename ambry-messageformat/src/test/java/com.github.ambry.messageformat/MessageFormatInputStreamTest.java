@@ -91,7 +91,7 @@ public class MessageFormatInputStreamTest {
     CrcInputStream crcstream = new CrcInputStream(messageFormatStream);
     DataInputStream streamData = new DataInputStream(crcstream);
     Assert.assertEquals(streamData.readShort(), 2);
-    Assert.assertEquals(streamData.readInt(), BlobType.DataBlob.ordinal());
+    Assert.assertEquals(streamData.readShort(), (short) BlobType.DataBlob.ordinal());
     Assert.assertEquals(streamData.readLong(), 2000);
     for (int i = 0; i < 2000; i++) {
       Assert.assertEquals((byte) streamData.read(), data[i]);

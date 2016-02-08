@@ -305,7 +305,7 @@ class HardDeleteRecoveryMetadata {
     userMetadataVersion = stream.readShort();
     userMetadataSize = stream.readInt();
     blobRecordVersion = stream.readShort();
-    blobType = stream.readInt();
+    blobType = (int) stream.readShort();
     blobStreamSize = stream.readLong();
     if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) ||
         !MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion) ||
@@ -352,7 +352,7 @@ class HardDeleteRecoveryMetadata {
         MessageFormatRecord.Version_Field_Size_In_Bytes +
         Integer.SIZE / 8 +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
-        Integer.SIZE / 8 +
+        Short.SIZE / 8 +
         Long.SIZE / 8 +
         storeKey.sizeInBytes()];
 
@@ -361,7 +361,7 @@ class HardDeleteRecoveryMetadata {
     bufWrap.putShort(userMetadataVersion);
     bufWrap.putInt(userMetadataSize);
     bufWrap.putShort(blobRecordVersion);
-    bufWrap.putInt(blobType);
+    bufWrap.putShort((short) blobType);
     bufWrap.putLong(blobStreamSize);
     bufWrap.put(storeKey.toBytes());
     return bytes;

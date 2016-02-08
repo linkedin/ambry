@@ -153,7 +153,7 @@ public class ServerHardDeleteTest {
             short userMetadataVersion = stream.readShort();
             int userMetadataSize = stream.readInt();
             short blobRecordVersion = stream.readShort();
-            int blobType = stream.readInt();
+            int blobType = (int)stream.readShort();
             long blobStreamSize = stream.readLong();
             StoreKey key = storeKeyFactory.getStoreKey(stream);
             Assert.assertTrue(storeKeyList.get(i).equals(key));
@@ -303,9 +303,9 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198455);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132315);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132315);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198443);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132307);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132307);
 
     MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -435,9 +435,9 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297941);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231704);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231704);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297923);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231690);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231690);
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);

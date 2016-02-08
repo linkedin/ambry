@@ -146,7 +146,7 @@ public class MessageFormatRecordTest {
       throws IOException, MessageFormatException {
     // Test Metadata Blob V1
     List<String> keys = getKeys(60, 5);
-    ByteBuffer metadataContent = getMetadataContent(60, keys);
+    ByteBuffer metadataContent = getMetadataContent(keys);
     List<String> outKeys = deserializeMetadataContent(metadataContent);
     compareLists(outKeys, keys);
 
@@ -168,8 +168,8 @@ public class MessageFormatRecordTest {
     // Test Blob V2 with actual metadata blob V1
     // construct metadata blob
     List<String> keys = getKeys(60, 5);
-    ByteBuffer metadataContent = getMetadataContent(60, keys);
-    int metadataContentSize = MessageFormatRecord.Metadata_Content_V1.getMetadataContentSize(60, keys.size());
+    ByteBuffer metadataContent = getMetadataContent(keys);
+    int metadataContentSize = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(60, keys.size());
     long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
     metadataContent.rewind();
     ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
@@ -187,9 +187,22 @@ public class MessageFormatRecordTest {
 
     // test corruption cases
     blob.flip();
-    // case 1: corrupt part of blob record (which is not part of metadata content)
-    byte currentRandomByte = blob.get(4);
-    blob.put(4, (byte) (currentRandomByte + 1));
+    // case 1: corrupt blob record version
+    byte currentRandomByte = blob.get(1);
+    blob.put(1, (byte) (currentRandomByte + 1));
+    try {
+      MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
+      Assert.assertEquals(true, false);
+    } catch (MessageFormatException e) {
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+
+    // case 2: corrupt blob type
+    blob.rewind();
+    //reset previously corrupt byte
+    blob.put(1, currentRandomByte);
+    currentRandomByte = blob.get(2);
+    blob.put(2, (byte) (currentRandomByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       Assert.assertEquals(true, false);
@@ -197,10 +210,10 @@ public class MessageFormatRecordTest {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
     }
 
-    //case 2: corrupt part of metadata content
+    //case 3: corrupt part of metadata content
     blob.rewind();
-    //reset previsouly corrupt byte
-    blob.put(4, currentRandomByte);
+    //reset previously corrupt byte
+    blob.put(2, currentRandomByte);
     // corrupt part of metadata content
     currentRandomByte = blob.get(50);
     blob.put(50, (byte) (currentRandomByte + 1));
@@ -248,10 +261,10 @@ public class MessageFormatRecordTest {
     return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(outputBuffer));
   }
 
-  private ByteBuffer getMetadataContent(int keySize, List<String> keys) {
-    int size = MessageFormatRecord.Metadata_Content_V1.getMetadataContentSize(keySize, keys.size());
+  private ByteBuffer getMetadataContent(List<String> keys) {
+    int size = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).length(), keys.size());
     ByteBuffer metadataContent = ByteBuffer.allocate((int) size);
-    MessageFormatRecord.Metadata_Content_V1.serializeMetadataContentRecord(metadataContent, (int) size, keySize, keys);
+    MessageFormatRecord.Metadata_Content_Format_V1.serializeMetadataContentRecord(metadataContent, keys);
     Crc32 crc = new Crc32();
     crc.update(metadataContent.array(), 0, metadataContent.position());
     metadataContent.putLong(crc.getValue());
@@ -267,7 +280,7 @@ public class MessageFormatRecordTest {
     short metdataContentVersion = inputStream.readShort();
     Assert.assertEquals("Metadata Content Version mismatch ", metdataContentVersion,
         MessageFormatRecord.Metadata_Content_Version_V1);
-    return MessageFormatRecord.Metadata_Content_V1.deserializeMetadataContentRecord(crcStream);
+    return MessageFormatRecord.Metadata_Content_Format_V1.deserializeMetadataContentRecord(crcStream);
   }
 
   private List<String> getKeys(int keySize, int numberOfKeys) {
