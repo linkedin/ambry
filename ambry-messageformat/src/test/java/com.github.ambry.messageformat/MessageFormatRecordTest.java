@@ -149,17 +149,7 @@ public class MessageFormatRecordTest {
     ByteBuffer metadataContent = getMetadataContent(keys);
     List<String> outKeys = deserializeMetadataContent(metadataContent);
     compareLists(outKeys, keys);
-
-    // corrupt Metadata content record V1
-    metadataContent.flip();
-    byte currentRandomByte = metadataContent.get(16);
-    metadataContent.put(16, (byte) (currentRandomByte + 1));
-    try {
-      deserializeMetadataContent(metadataContent);
-      Assert.assertEquals(true, false);
-    } catch (MessageFormatException e) {
-      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
-    }
+    // no testing of corruption as we metadata content record doesnt have crc
   }
 
   @Test
@@ -192,7 +182,7 @@ public class MessageFormatRecordTest {
     blob.put(1, (byte) (currentRandomByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
-      Assert.assertEquals(true, false);
+      Assert.fail("Failed to dedect corruption of Blob record version ");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Unknown_Format_Version);
     }
@@ -205,7 +195,7 @@ public class MessageFormatRecordTest {
     blob.put(2, (byte) (currentRandomByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
-      Assert.assertEquals(true, false);
+      Assert.fail("Failed to dedect corruption of blob type");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
     }
@@ -219,7 +209,7 @@ public class MessageFormatRecordTest {
     blob.put(50, (byte) (currentRandomByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
-      Assert.assertEquals(true, false);
+      Assert.fail("Failed to dedect corruption of metadata content");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
     }
@@ -244,7 +234,7 @@ public class MessageFormatRecordTest {
     entireBlob.put(16, (byte) (currentRandomByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob));
-      Assert.assertEquals(true, false);
+      Assert.fail("Failed to dedect corruption of blob record");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
     }
@@ -265,9 +255,6 @@ public class MessageFormatRecordTest {
     int size = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).length(), keys.size());
     ByteBuffer metadataContent = ByteBuffer.allocate((int) size);
     MessageFormatRecord.Metadata_Content_Format_V1.serializeMetadataContentRecord(metadataContent, keys);
-    Crc32 crc = new Crc32();
-    crc.update(metadataContent.array(), 0, metadataContent.position());
-    metadataContent.putLong(crc.getValue());
     metadataContent.flip();
     return metadataContent;
   }
@@ -275,12 +262,11 @@ public class MessageFormatRecordTest {
   private List<String> deserializeMetadataContent(ByteBuffer metadataContent)
       throws MessageFormatException, IOException {
     ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(metadataContent);
-    CrcInputStream crcStream = new CrcInputStream(byteBufferInputStream);
-    DataInputStream inputStream = new DataInputStream(crcStream);
+    DataInputStream inputStream = new DataInputStream(byteBufferInputStream);
     short metdataContentVersion = inputStream.readShort();
     Assert.assertEquals("Metadata Content Version mismatch ", metdataContentVersion,
         MessageFormatRecord.Metadata_Content_Version_V1);
-    return MessageFormatRecord.Metadata_Content_Format_V1.deserializeMetadataContentRecord(crcStream);
+    return MessageFormatRecord.Metadata_Content_Format_V1.deserializeMetadataContentRecord(inputStream);
   }
 
   private List<String> getKeys(int keySize, int numberOfKeys) {

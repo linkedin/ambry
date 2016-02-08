@@ -573,7 +573,7 @@ public class MessageFormatRecord {
     public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
-      int blobTypeOrdinal = (int) dataStream.readShort();
+      short blobTypeOrdinal =  dataStream.readShort();
       if (blobTypeOrdinal > BlobType.values().length) {
         logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
         throw new MessageFormatException("corrupt data while parsing blob content",
@@ -618,21 +618,22 @@ public class MessageFormatRecord {
    *
    */
   public static class Metadata_Content_Format_V1 {
-    public static final int Number_Keys_Field_Size_In_Bytes = 4;
+    public static final int Num_Keys_Field_Size_In_Bytes = 4;
     public static final int Key_Size_Field_Size_In_Bytes = 4;
-    private static Logger logger = LoggerFactory.getLogger(Metadata_Content_Format_V1.class);
 
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
       return Version_Field_Size_In_Bytes +
-          Number_Keys_Field_Size_In_Bytes +
+          Num_Keys_Field_Size_In_Bytes +
           Key_Size_Field_Size_In_Bytes +
-          (numberOfKeys * keySize) +
-          Crc_Size;
+          (numberOfKeys * keySize);
     }
 
     public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, List<String> keys) {
-      if (!validateKeys(keys)) {
-        throw new IllegalArgumentException("Keys are not of same size");
+      int keySize = keys.get(0).length();
+      for (String key : keys) {
+        if (key.length() != keySize) {
+          throw new IllegalArgumentException("Keys are not of same size");
+        }
       }
       outputBuffer.putShort(Metadata_Content_Version_V1);
       outputBuffer.putInt(keys.size());
@@ -642,22 +643,14 @@ public class MessageFormatRecord {
       }
     }
 
-    public static List<String> deserializeMetadataContentRecord(CrcInputStream crcStream)
+    public static List<String> deserializeMetadataContentRecord(DataInputStream stream)
         throws IOException, MessageFormatException {
-      DataInputStream dataStream = new DataInputStream(crcStream);
       List<String> keys = new ArrayList<String>();
-      int numberOfKeys = dataStream.readInt();
-      int keySize = dataStream.readInt();
+      int numberOfKeys = stream.readInt();
+      int keySize = stream.readInt();
       for (int i = 0; i < numberOfKeys; i++) {
-        byte[] key = Utils.readBytesFromStream(dataStream, keySize);
+        byte[] key = Utils.readBytesFromStream(stream, keySize);
         keys.add(new String(key));
-      }
-      long actualCRC = crcStream.getValue();
-      long expectedCRC = dataStream.readLong();
-      if (actualCRC != expectedCRC) {
-        logger.error(
-            "corrupt data while parsing metadata content Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
-        throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return keys;
     }

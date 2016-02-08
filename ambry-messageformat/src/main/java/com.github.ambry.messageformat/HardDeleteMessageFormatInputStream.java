@@ -41,7 +41,7 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
    * @throws IOException
    */
   public HardDeleteMessageFormatInputStream(int userMetadataRelativeOffset, short userMetadataVersion,
-      int userMetadataSize, short blobRecordVersion, int blobType, long blobStreamSize)
+      int userMetadataSize, short blobRecordVersion, BlobType blobType, long blobStreamSize)
       throws MessageFormatException, IOException {
 
     ByteBuffer userMetadata = ByteBuffer.allocate(userMetadataSize);
@@ -77,7 +77,8 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
         blobRecordSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobStreamSize);
         serializedBlobPartialRecord =
             ByteBuffer.allocate((int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
-        MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize, BlobType.values()[blobType]);
+        MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize,
+            blobType);
         serializedBlobPartialRecord.flip();
         break;
       default:

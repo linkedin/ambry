@@ -103,7 +103,7 @@ public class BlobStoreHardDeleteTest {
       HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
           new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
               MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V2,
-              BlobType.DataBlob.ordinal(), BLOB_SIZE, keys[2]);
+              BlobType.DataBlob, BLOB_SIZE, keys[2]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg3d: Delete Record. Not part of readSet.
@@ -115,7 +115,7 @@ public class BlobStoreHardDeleteTest {
       writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
       hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
           MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V2,
-          BlobType.DataBlob.ordinal(), BLOB_SIZE, keys[3]);
+          BlobType.DataBlob, BLOB_SIZE, keys[3]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg5: A message with blob record corrupted that will be part of hard delete, without recoveryInfo.
