@@ -60,6 +60,6 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.max.connections.per.port.plain.text", 5, 1, 20);
     routerMaxConnectionsPerPortSsl =
         verifiableProperties.getIntInRange("router.max.connections.per.port.ssl", 2, 1, 20);
-    routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.chunk.size.bytes", 4 * 1024 * 1024);
+    routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.put.chunk.size.bytes", 4 * 1024 * 1024);
   }
 }

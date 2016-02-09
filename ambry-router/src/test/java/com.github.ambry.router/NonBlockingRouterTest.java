@@ -20,12 +20,23 @@ import org.junit.Test;
 public class NonBlockingRouterTest {
 
   /**
+   * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
+   * the {@link NonBlockingRouter}.
+   * @return the created VerifiableProperties instance.
+   */
+  private Properties getNonBlockingRouterProperties() {
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    return properties;
+  }
+  /**
    * Test Router with a single scaling unit.
    */
   @Test
   public void testRouterBasic()
       throws Exception {
-    Properties props = RouterTestUtils.getCommonRouterProps();
+    Properties props = getNonBlockingRouterProperties();
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();
     Router router =
@@ -60,7 +71,7 @@ public class NonBlockingRouterTest {
   @Test
   public void testMultipleScalingUnit()
       throws Exception {
-    Properties props = RouterTestUtils.getCommonRouterProps();
+    Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.scaling.unit.count", "3");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();

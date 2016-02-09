@@ -14,32 +14,45 @@ import org.junit.Test;
 
 public class RouterFactoryTest {
   /**
+   * (routerFactoryString, routerString) pair class.
+   */
+  class FactoryAndRouter {
+    String factoryStr;
+    String routerStr;
+
+    FactoryAndRouter(String factoryStr, String routerStr) {
+      this.factoryStr = factoryStr;
+      this.routerStr = routerStr;
+    }
+  }
+
+  /**
+   * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
+   * any router.
+   * @return the created VerifiableProperties instance.
+   */
+  private VerifiableProperties getVerifiableProperties() {
+    Properties properties = new Properties();
+    properties.setProperty("coordinator.hostname", "localhost");
+    properties.setProperty("coordinator.datacenter.name", "DC1");
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    return new VerifiableProperties(properties);
+  }
+
+  /**
    * Tests the instantiation of a {@link Router} implementation through its {@link RouterFactory} implementation
    * @throws IOException
    */
   @Test
   public void testRouterFactory()
       throws Exception {
-    Properties properties = RouterTestUtils.getCommonRouterProps();
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-
-    class FactoryAndRouter {
-      String factoryStr;
-      String routerStr;
-
-      FactoryAndRouter(String factoryStr, String routerStr) {
-        this.factoryStr = factoryStr;
-        this.routerStr = routerStr;
-      }
-    }
-
+    VerifiableProperties verifiableProperties = getVerifiableProperties();
     List<FactoryAndRouter> factoryAndRouters = new ArrayList<FactoryAndRouter>();
     factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.NonBlockingRouterFactory",
         "com.github.ambry.router.NonBlockingRouter"));
     factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.CoordinatorBackedRouterFactory",
         "com.github.ambry.router.CoordinatorBackedRouter"));
-    factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.InMemoryRouterFactory",
-        "com.github.ambry.router.InMemoryRouter"));
 
     for (FactoryAndRouter factoryAndRouter : factoryAndRouters) {
       RouterFactory routerFactory = Utils

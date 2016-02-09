@@ -75,6 +75,7 @@ public class ConnectionManager {
    * @param host The host to connect to.
    * @param port The port on the host to connect to.
    * @return connectionId, if there is one available to use, null otherwise.
+   * @throws IOException if an attempt to initiate a connection as a result of this call fails.
    */
   public String checkOutConnection(String host, Port port)
       throws IOException {
@@ -134,7 +135,7 @@ public class ConnectionManager {
      * Attempts to check out a connection to the (host, port) associated with this manager.
      * If no connections are available initalizes one if it can.
      * @return returns a connection id, if there is one; null otherwise.
-     * @throws IOException
+     * @throws IOException if an attempt to initiate a connection as a result of this call fails.
      */
     String checkOutConnection()
         throws IOException {
