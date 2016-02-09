@@ -6,7 +6,7 @@ import com.codahale.metrics.MetricRegistry;
 /**
  * {@link NonBlockingRouter} specific metrics tracking.
  * <p/>
- * Exports metrics that are triggered by the admin to the provided {@link MetricRegistry}
+ * Exports metrics that are triggered by the {@link NonBlockingRouter} to the provided {@link MetricRegistry}
  */
 public class NonBlockingRouterMetrics {
   //@todo add metrics.

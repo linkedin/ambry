@@ -4,7 +4,7 @@ import java.util.Properties;
 
 
 public class RouterTestUtils {
-  public static Properties getProps() {
+  public static Properties getCommonRouterProps() {
     Properties properties = new Properties();
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DC1");

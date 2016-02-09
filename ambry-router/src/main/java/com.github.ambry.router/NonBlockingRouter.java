@@ -47,6 +47,18 @@ class NonBlockingRouter implements Router {
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   private static final AtomicLong operationIdGenerator = new AtomicLong(0);
 
+  /**
+   * Constructs a NonBlockingRouter
+   * @param routerConfig the configs for the router.
+   * @param routerMetrics the metrics for the router.
+   * @param networkConfig  the config for the network.
+   * @param networkMetrics the metrics for the network.
+   * @param sslFactory the sslFactory used to initialize the SSL layer in the network.
+   * @param notificationSystem the notification system to use to notify about blob creations and deletions.
+   * @param clusterMap the cluster map for the cluster.
+   * @param time the time instance.
+   * @throws IOException if the OperationController could not be successfully created.
+   */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, NetworkConfig networkConfig,
       NetworkMetrics networkMetrics, SSLFactory sslFactory, NotificationSystem notificationSystem,
       ClusterMap clusterMap, Time time)
@@ -65,7 +77,11 @@ class NonBlockingRouter implements Router {
     }
   }
 
-  protected OperationController getOperationController() {
+  /**
+   * Returns an {@link OperationController}
+   * @return a randomly picked {@link OperationController} from the list of OperationControllers.
+   */
+  private OperationController getOperationController() {
     return ocList.get(ThreadLocalRandom.current().nextInt(ocList.size()));
   }
 
@@ -265,42 +281,73 @@ class NonBlockingRouter implements Router {
       requestResponseHandlerThread.start();
     }
 
+    /**
+     * Requests for the {@link BlobInfo} asynchronously and invokes the {@link Callback} when the request completes.
+     * @param blobId The ID of the blob for which the {@link BlobInfo} is requested.
+     * @param futureResult The future that would contain the {@link BlobInfo} eventually.
+     * @param callback The {@link Callback} which will be invoked on the completion of the request.
+     */
     void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
       getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     }
 
+    /**
+     * Requests for the blob data asynchronously and invokes the {@link Callback} when the request completes.
+     * @param blobId The ID of the blob for which blob data is requested.
+     * @param futureResult A future that would contain a {@link ReadableStreamChannel} that represents the blob data
+     *                     eventually.
+     * @param callback The callback which will be invoked on the completion of the request.
+     */
     void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
         Callback<ReadableStreamChannel> callback) {
       getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     }
 
+    /**
+     * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
+     * @param blobProperties The properties of the blob.
+     * @param usermetadata Optional user metadata about the blob. This can be null.
+     * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
+     * @param futureResult A future that would contain the BlobId eventually.
+     * @param callback The {@link Callback} which will be invoked on the completion of the request .
+     */
     void putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
       putManager.submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, usermetadata, channel,
           futureResult, callback);
     }
 
+    /**
+     * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
+     * @param blobId The ID of the blob that needs to be deleted.
+     * @param futureResult A future that would contain information about whether the deletion succeeded or not,
+     *                     eventually.
+     * @param callback The {@link Callback} which will be invoked on the completion of a request.
+     * @return
+     */
     void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
       deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
     }
 
+    /**
+     * Shuts down the OperationController and cleans up all the resources associated with it.
+     */
     void shutdown() {
       logger.info("OperationController is shutting down");
-      boolean cleanShutdown = false;
       try {
         if (shutDownLatch.await(SHUTDOWN_WAIT_MS, TimeUnit.MILLISECONDS)) {
-          cleanShutdown = true;
+          logger.error("RequestResponseHandler thread did not shut down gracefully, forcing shut down");
         }
       } catch (InterruptedException e) {
-        logger.trace("Exception while shuttind down");
-      } finally {
-        if (!cleanShutdown) {
-          logger.error("RequestResponseHandler did not shut down gracefully, forcing shut down");
-        }
+        logger.error("Exception while shutting down, forcing shutdown", e);
       }
       selector.close();
     }
 
+    /**
+     * This method is used by the RequestResponseHandler thread to poll for requests to be sent
+     * @return a list of {@link NetworkSend} that contains the requests to be sent out.
+     */
     List<NetworkSend> poll() {
       // these are ids that were successfully put for an operation that eventually failed
       List<String> idsToDelete = putManager.getIdsToDelete();
@@ -322,6 +369,14 @@ class NonBlockingRouter implements Router {
       return requests;
     }
 
+    /**
+     * This method is called by the RequestResponseHandler thread to notify about connections,
+     * disconnections and completion of sends and receives
+     * @param connected the list of connection ids for successfully established connections.
+     * @param disconnected the list of connection ids that were disconnected.
+     * @param completedSends the list of {@link NetworkSend} that were successfully sent out.
+     * @param completedReceives the list of {@link NetworkReceive} that were sucessfully received.
+     */
     void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
         List<NetworkReceive> completedReceives) {
       for (String conn : connected) {
@@ -332,7 +387,7 @@ class NonBlockingRouter implements Router {
         connectionManager.destroyConnection(conn);
       }
 
-      for (NetworkSend send: completedSends) {
+      for (NetworkSend send : completedSends) {
         connectionManager.checkInConnection(send.getConnectionId());
       }
 
@@ -342,6 +397,10 @@ class NonBlockingRouter implements Router {
       }
     }
 
+    /**
+     * Handle the response that was received from a data node based on the response type.
+     * @param response the response received.
+     */
     private void handleResponsePayload(ByteBuffer response) {
       RequestOrResponseType type = RequestOrResponseType.values()[response.getShort()];
       response.rewind();
@@ -361,6 +420,10 @@ class NonBlockingRouter implements Router {
       }
     }
 
+    /**
+     * The RequestResponseHandler thread simply runs in a loop polling the OperationController for any
+     * requests to be sent, and notifies it about network events.
+     */
     @Override
     public void run() {
       try {

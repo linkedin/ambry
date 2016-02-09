@@ -21,6 +21,13 @@ public class ConnectionManager {
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
 
+  /**
+   * Instantiates a ConnectionManager
+   * @param selector The {@link Selector} to be used to make connections.
+   * @param networkConfig The {@link NetworkConfig} containing the config for the Network.
+   * @param maxConnectionsPerPortPlainText the connection pool limit for plain text connections to a (host, port)
+   * @param maxConnectionsPerPortPlainSsl the conneciton pool limit for ssl connections to a (host, port)
+   */
   public ConnectionManager(Selector selector, NetworkConfig networkConfig, int maxConnectionsPerPortPlainText,
       int maxConnectionsPerPortPlainSsl) {
     hostPortToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
@@ -31,6 +38,12 @@ public class ConnectionManager {
     this.maxConnectionsPerPortSsl = maxConnectionsPerPortPlainSsl;
   }
 
+  /**
+   * Construct a host port string from the given host and port.
+   * @param host the host
+   * @param port the port on the host.
+   * @return returns the hostPortString.
+   */
   private static String getHostPortString(String host, int port) {
     return host + ":" + Integer.toString(port);
   }
@@ -80,8 +93,10 @@ public class ConnectionManager {
   }
 
   /**
-   * Removes the given connectionId from the list of available connections.
-   * @param connectionId The connection id to remove from the list of available connections.
+   * Removes the given connectionId from the list of available connections. This connection id could be either a
+   * checked out connection or a connection that was available to be checked out. Attempting to destroy the same
+   * connection more than once, or attempting to destroy an invalid connection will result in unexpected behavior.
+   * @param connectionId the connection id of the connection.
    */
   public void destroyConnection(String connectionId) {
     connectionIdToPoolManager.get(connectionId).destroyConnection(connectionId);
@@ -99,6 +114,11 @@ public class ConnectionManager {
     final ConcurrentLinkedQueue<String> availableConnections;
     final AtomicInteger poolCount = new AtomicInteger(0);
 
+    /**
+     * Instantiate a HostPortPoolManager
+     * @param host the host associated with this manager
+     * @param port the port associated with this manager
+     */
     HostPortPoolManager(String host, Port port) {
       this.host = host;
       this.port = port;
@@ -110,6 +130,12 @@ public class ConnectionManager {
       availableConnections = new ConcurrentLinkedQueue<String>();
     }
 
+    /**
+     * Attempts to check out a connection to the (host, port) associated with this manager.
+     * If no connections are available initalizes one if it can.
+     * @return returns a connection id, if there is one; null otherwise.
+     * @throws IOException
+     */
     String checkOutConnection()
         throws IOException {
       String connectionId = availableConnections.poll();
@@ -125,10 +151,19 @@ public class ConnectionManager {
       return connectionId;
     }
 
+    /**
+     * Check in a previously checked out connection.
+     * @param connectionId the connection id of the connection.
+     */
     void checkInConnection(String connectionId) {
       availableConnections.add(connectionId);
     }
 
+    /** Destroy a connection managed by this manager. This connection id could be either a checked out connection or a
+     * connection that was available to be checked out. Attempting to destroy the same connection more than once will
+     * result in unexpected behavior.
+     * @param connectionId the connection id of the connection.
+     */
     void destroyConnection(String connectionId) {
       availableConnections.remove(connectionId);
       poolCount.decrementAndGet();

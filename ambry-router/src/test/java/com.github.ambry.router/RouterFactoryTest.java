@@ -2,7 +2,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -19,9 +18,10 @@ public class RouterFactoryTest {
    * @throws IOException
    */
   @Test
-  public void getCoordinatorBackedRouterTest()
+  public void testRouterFactory()
       throws Exception {
-    Properties properties = RouterTestUtils.getProps();
+    Properties properties = RouterTestUtils.getCommonRouterProps();
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     class FactoryAndRouter {
       String factoryStr;
@@ -32,7 +32,6 @@ public class RouterFactoryTest {
         this.routerStr = routerStr;
       }
     }
-    ;
 
     List<FactoryAndRouter> factoryAndRouters = new ArrayList<FactoryAndRouter>();
     factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.NonBlockingRouterFactory",
@@ -43,12 +42,9 @@ public class RouterFactoryTest {
         "com.github.ambry.router.InMemoryRouter"));
 
     for (FactoryAndRouter factoryAndRouter : factoryAndRouters) {
-      properties.setProperty("router.factory", factoryAndRouter.factoryStr);
-      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-
-      RouterConfig routerConfig = new RouterConfig(verifiableProperties);
-      RouterFactory routerFactory = Utils.getObj(routerConfig.routerFactory, verifiableProperties, new MockClusterMap(),
-          new LoggingNotificationSystem());
+      RouterFactory routerFactory = Utils
+          .getObj(factoryAndRouter.factoryStr, verifiableProperties, new MockClusterMap(),
+              new LoggingNotificationSystem());
       Router router = routerFactory.getRouter();
       Assert.assertEquals("Did not receive expected Router instance", factoryAndRouter.routerStr,
           router.getClass().getCanonicalName());

@@ -39,6 +39,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @param clusterMap the {@link ClusterMap} to use to determine where operations should go.
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
    * @throws IllegalArgumentException if any of the arguments are null.
+   * @throws Exception if the SSL configs could not be initialized.
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem)

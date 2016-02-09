@@ -49,19 +49,10 @@ public class RouterConfig {
   public final int routerMaxPutChunkSizeBytes;
 
   /**
-   * The factory class to use to create the router.
-   */
-  @Config("router.factory")
-  @Default("com.github.ambry.router.NonBlockingRouterFactory")
-  public final String routerFactory;
-
-  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
-    routerFactory =
-        verifiableProperties.getString("router.factory", "com.github.ambry.router.NonBlockingRouterFactory");
     routerScalingUnitCount = verifiableProperties.getIntInRange("router.scaling.unit.count", 1, 0, 10);
     routerHostname = verifiableProperties.getString("router.hostname");
     routerDatacenterName = verifiableProperties.getString("router.datacenter.name");
