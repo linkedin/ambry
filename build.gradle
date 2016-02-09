@@ -74,6 +74,7 @@ project(':ambry-network') {
                 project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
+        testCompile project(':ambry-utils').sourceSets.test.output
     }
 }
 

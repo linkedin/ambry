@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Metrics for the network layer
  */
-class NetworkMetrics {
+public class NetworkMetrics {
   private final MetricRegistry registry;
 
   // Selector metrics
