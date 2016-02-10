@@ -822,14 +822,14 @@ public class AdminBlobStorageServiceTest {
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param headers the {@link JSONObject} where the headers should be set.
-   * @param contentLength sets the {@link RestUtils.Headers#Blob_Size} header. Required.
+   * @param contentLength sets the {@link RestUtils.Headers#BLOB_SIZE} header. Required.
    * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
    *                  expiry.
-   * @param isPrivate sets the {@link RestUtils.Headers#Private} header. Allowed values: true, false.
-   * @param serviceId sets the {@link RestUtils.Headers#Service_Id} header. Required.
-   * @param contentType sets the {@link RestUtils.Headers#Content_Type} header. Required and has to be a valid MIME
+   * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
+   * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header. Required.
+   * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header. Required and has to be a valid MIME
    *                    type.
-   * @param ownerId sets the {@link RestUtils.Headers#Owner_Id} header. Optional - if not required, send null.
+   * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    * @throws JSONException
@@ -838,13 +838,13 @@ public class AdminBlobStorageServiceTest {
       String serviceId, String contentType, String ownerId)
       throws JSONException {
     if (headers != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
-      headers.put(RestUtils.Headers.Blob_Size, contentLength);
+      headers.put(RestUtils.Headers.BLOB_SIZE, contentLength);
       headers.put(RestUtils.Headers.TTL, ttlInSecs);
-      headers.put(RestUtils.Headers.Private, isPrivate);
-      headers.put(RestUtils.Headers.Service_Id, serviceId);
-      headers.put(RestUtils.Headers.Content_Type, contentType);
+      headers.put(RestUtils.Headers.PRIVATE, isPrivate);
+      headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
+      headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
       if (ownerId != null) {
-        headers.put(RestUtils.Headers.Owner_Id, ownerId);
+        headers.put(RestUtils.Headers.OWNER_ID, ownerId);
       }
     } else {
       throw new IllegalArgumentException("Some required arguments are null. Cannot set ambry headers");
@@ -1053,11 +1053,10 @@ public class AdminBlobStorageServiceTest {
     doPost(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getResponseStatus());
     assertTrue("No Date header", restResponseChannel.getHeader("Date") != null);
-    assertTrue("No " + RestUtils.Headers.Creation_Time,
-        restResponseChannel.getHeader(RestUtils.Headers.Creation_Time) != null);
-    assertEquals("Content-Length is not 0", "0",
-        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY));
-    String blobId = restResponseChannel.getHeader(MockRestResponseChannel.LOCATION_HEADER_KEY);
+    assertTrue("No " + RestUtils.Headers.CREATION_TIME,
+        restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    String blobId = restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
     if (blobId == null) {
       fail("postBlobAndVerify did not return a blob ID");
     }
@@ -1097,26 +1096,26 @@ public class AdminBlobStorageServiceTest {
     doHead(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
-    assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.Blob_Size),
+    assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
         restResponseChannel.getHeader("Content-Length"));
-    assertEquals(RestUtils.Headers.Service_Id + " does not match",
-        expectedHeaders.getString(RestUtils.Headers.Service_Id),
-        restResponseChannel.getHeader(RestUtils.Headers.Service_Id));
-    assertEquals(RestUtils.Headers.Private + " does not match", expectedHeaders.getString(RestUtils.Headers.Private),
-        restResponseChannel.getHeader(RestUtils.Headers.Private));
-    assertEquals(RestUtils.Headers.Content_Type + " does not match",
-        expectedHeaders.getString(RestUtils.Headers.Content_Type),
-        restResponseChannel.getHeader(RestUtils.Headers.Content_Type));
-    assertTrue(RestUtils.Headers.Creation_Time + " header missing",
-        restResponseChannel.getHeader(RestUtils.Headers.Creation_Time) != null);
+    assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
+        expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
+        restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
+    assertEquals(RestUtils.Headers.PRIVATE + " does not match", expectedHeaders.getString(RestUtils.Headers.PRIVATE),
+        restResponseChannel.getHeader(RestUtils.Headers.PRIVATE));
+    assertEquals(RestUtils.Headers.AMBRY_CONTENT_TYPE + " does not match",
+        expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
+        restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
+    assertTrue(RestUtils.Headers.CREATION_TIME + " header missing",
+        restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
     if (expectedHeaders.getLong(RestUtils.Headers.TTL) != Utils.Infinite_Time) {
       assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.getString(RestUtils.Headers.TTL),
           restResponseChannel.getHeader(RestUtils.Headers.TTL));
     }
-    if (expectedHeaders.has(RestUtils.Headers.Owner_Id)) {
-      assertEquals(RestUtils.Headers.Owner_Id + " does not match",
-          expectedHeaders.getString(RestUtils.Headers.Owner_Id),
-          restResponseChannel.getHeader(RestUtils.Headers.Owner_Id));
+    if (expectedHeaders.has(RestUtils.Headers.OWNER_ID)) {
+      assertEquals(RestUtils.Headers.OWNER_ID + " does not match",
+          expectedHeaders.getString(RestUtils.Headers.OWNER_ID),
+          restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
     }
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
   }
@@ -1151,8 +1150,7 @@ public class AdminBlobStorageServiceTest {
     doDelete(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
     assertTrue("No Date header", restResponseChannel.getHeader("Date") != null);
-    assertEquals("Content-Length is not 0", "0",
-        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY));
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
   }
 
   /**
@@ -1163,13 +1161,13 @@ public class AdminBlobStorageServiceTest {
    */
   private void checkCommonGetHeadHeaders(MockRestResponseChannel restResponseChannel, JSONObject expectedHeaders)
       throws JSONException {
-    assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.Content_Type),
+    assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         restResponseChannel.getHeader("Content-Type"));
     assertTrue("No Date header", restResponseChannel.getHeader("Date") != null);
     assertTrue("No Last-Modified header", restResponseChannel.getHeader("Last-Modified") != null);
-    assertEquals(RestUtils.Headers.Blob_Size + " does not match",
-        expectedHeaders.getString(RestUtils.Headers.Blob_Size),
-        restResponseChannel.getHeader(RestUtils.Headers.Blob_Size));
+    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
+        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
   }
 
   // echoTest() helpers

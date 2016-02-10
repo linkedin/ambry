@@ -446,13 +446,13 @@ public class NettyRequestTest {
 
     // xAmbryBlobSize set
     headers = new DefaultHttpHeaders();
-    headers.add(RestUtils.Headers.Blob_Size, xAmbryBlobSize);
+    headers.add(RestUtils.Headers.BLOB_SIZE, xAmbryBlobSize);
     nettyRequest = createNettyRequest(HttpMethod.GET, "/", headers);
     assertEquals("Size not as expected", xAmbryBlobSize, nettyRequest.getSize());
 
     // both set
     headers = new DefaultHttpHeaders();
-    headers.add(RestUtils.Headers.Blob_Size, xAmbryBlobSize);
+    headers.add(RestUtils.Headers.BLOB_SIZE, xAmbryBlobSize);
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, contentLength);
     nettyRequest = createNettyRequest(HttpMethod.GET, "/", headers);
     assertEquals("Size not as expected", xAmbryBlobSize, nettyRequest.getSize());

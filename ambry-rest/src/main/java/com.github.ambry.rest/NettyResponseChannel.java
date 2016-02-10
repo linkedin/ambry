@@ -177,54 +177,6 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setContentType(String type)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.CONTENT_TYPE, type);
-  }
-
-  @Override
-  public void setContentLength(long length)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.CONTENT_LENGTH, length);
-  }
-
-  @Override
-  public void setLocation(String location)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.LOCATION, location);
-  }
-
-  @Override
-  public void setLastModified(Date lastModified)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.LAST_MODIFIED, lastModified);
-  }
-
-  @Override
-  public void setExpires(Date expireTime)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.EXPIRES, expireTime);
-  }
-
-  @Override
-  public void setCacheControl(String cacheControl)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.CACHE_CONTROL, cacheControl);
-  }
-
-  @Override
-  public void setPragma(String pragma)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.PRAGMA, pragma);
-  }
-
-  @Override
-  public void setDate(Date date)
-      throws RestServiceException {
-    setResponseHeader(HttpHeaders.Names.DATE, date);
-  }
-
-  @Override
   public void setHeader(String headerName, Object headerValue)
       throws RestServiceException {
     setResponseHeader(headerName, headerValue);

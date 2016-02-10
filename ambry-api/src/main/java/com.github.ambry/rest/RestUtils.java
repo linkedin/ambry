@@ -21,14 +21,49 @@ public class RestUtils {
    * Ambry specific HTTP headers.
    */
   public static final class Headers {
+    // general headers
+    /**
+     * {@code "Cache-Control"}
+     */
+    public static final String CACHE_CONTROL = "Cache-Control";
+    /**
+     * {@code "Content-Length"}
+     */
+    public static final String CONTENT_LENGTH = "Content-Length";
+    /**
+     * {@code "Content-Type"}
+     */
+    public static final String CONTENT_TYPE = "Content-Type";
+    /**
+     * {@code "Date"}
+     */
+    public static final String DATE = "Date";
+    /**
+     * {@code "Expires"}
+     */
+    public static final String EXPIRES = "Expires";
+    /**
+     * {@code "Last-Modified"}
+     */
+    public static final String LAST_MODIFIED = "Last-Modified";
+    /**
+     * {@code "Location"}
+     */
+    public static final String LOCATION = "Location";
+    /**
+     * {@code "Pragma"}
+     */
+    public static final String PRAGMA = "Pragma";
+
+    // ambry specific headers
     /**
      * mandatory in request; long; size of blob in bytes
      */
-    public final static String Blob_Size = "x-ambry-blob-size";
+    public final static String BLOB_SIZE = "x-ambry-blob-size";
     /**
      * mandatory in request; string; name of service
      */
-    public final static String Service_Id = "x-ambry-service-id";
+    public final static String SERVICE_ID = "x-ambry-service-id";
     /**
      * optional in request; date string; default unset ("infinite ttl")
      */
@@ -36,35 +71,34 @@ public class RestUtils {
     /**
      * optional in request; 'true' or 'false' case insensitive; default 'false'; indicates private content
      */
-    public final static String Private = "x-ambry-private";
+    public final static String PRIVATE = "x-ambry-private";
     /**
      * mandatory in request; string; default unset; content type of blob
      */
-    public final static String Content_Type = "x-ambry-content-type";
+    public final static String AMBRY_CONTENT_TYPE = "x-ambry-content-type";
     /**
      * optional in request; string; default unset; member id.
      * <p/>
      * Expected usage is to set to member id of content owner.
      */
-    public final static String Owner_Id = "x-ambry-owner-id";
+    public final static String OWNER_ID = "x-ambry-owner-id";
     /**
      * not allowed  in request. Allowed in response only; string; time at which blob was created.
      */
-    public final static String Creation_Time = "x-ambry-creation-time";
+    public final static String CREATION_TIME = "x-ambry-creation-time";
     /**
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String UserMetaData_Header_Prefix = "x-ambry-um-";
-    /**
-     * prefix for old style user metadata that will be served as headers
-     */
-    public final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
+
+    // prefix for old style user metadata that will be served as headers
+    protected final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
   }
 
-  public static final int Crc_Size = 8;
-  public static final short UserMetadata_Version_V1 = 1;
+  private static final int Crc_Size = 8;
+  private static final short UserMetadata_Version_V1 = 1;
   // Max size of a value for user metadata as key value pairs
-  public static final int Max_UserMetadata_Value_Size = 1024 * 8;
+  protected static final int Max_UserMetadata_Value_Size = 1024 * 8;
 
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
@@ -82,14 +116,14 @@ public class RestUtils {
     String blobSizeStr = null;
     long blobSize;
     try {
-      blobSizeStr = getHeader(args, Headers.Blob_Size, true);
+      blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
       blobSize = Long.parseLong(blobSizeStr);
       if (blobSize < 0) {
-        throw new RestServiceException(Headers.Blob_Size + "[" + blobSize + "] is less than 0",
+        throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSize + "] is less than 0",
             RestServiceErrorCode.InvalidArgs);
       }
     } catch (NumberFormatException e) {
-      throw new RestServiceException(Headers.Blob_Size + "[" + blobSizeStr + "] could not parsed into a number",
+      throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
           RestServiceErrorCode.InvalidArgs);
     }
 
@@ -109,20 +143,20 @@ public class RestUtils {
     }
 
     boolean isPrivate;
-    String isPrivateStr = getHeader(args, Headers.Private, false);
+    String isPrivateStr = getHeader(args, Headers.PRIVATE, false);
     if (isPrivateStr == null || isPrivateStr.toLowerCase().equals("false")) {
       isPrivate = false;
     } else if (isPrivateStr.toLowerCase().equals("true")) {
       isPrivate = true;
     } else {
       throw new RestServiceException(
-          Headers.Private + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
+          Headers.PRIVATE + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
           RestServiceErrorCode.InvalidArgs);
     }
 
-    String serviceId = getHeader(args, Headers.Service_Id, true);
-    String contentType = getHeader(args, Headers.Content_Type, true);
-    String ownerId = getHeader(args, Headers.Owner_Id, false);
+    String serviceId = getHeader(args, Headers.SERVICE_ID, true);
+    String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
+    String ownerId = getHeader(args, Headers.OWNER_ID, false);
 
     return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl);
   }
