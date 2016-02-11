@@ -92,11 +92,11 @@ class ReplicaThread implements Runnable {
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
-    this.waitEnabled = false;
     this.storeKeyFactory = storeKeyFactory;
     this.validateMessageStream = validateMessageStream;
     this.metricRegistry = metricRegistry;
     this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
+    this.waitEnabled = !replicatingFromRemoteColo;
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
   }

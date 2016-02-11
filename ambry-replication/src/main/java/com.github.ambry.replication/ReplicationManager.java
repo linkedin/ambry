@@ -723,7 +723,7 @@ public final class ReplicationManager {
       this.datacenter = datacenter;
       this.dataNodeToReplicaLists = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
       this.dataNodeToReplicaLists.put(remoteReplicaInfo.getReplicaId().getDataNodeId(),
-          Arrays.asList(remoteReplicaInfo));
+          new ArrayList<RemoteReplicaInfo>(Arrays.asList(remoteReplicaInfo)));
     }
 
     public void addRemoteReplica(RemoteReplicaInfo remoteReplicaInfo) {
