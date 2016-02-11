@@ -60,7 +60,7 @@ public class SocketServer implements NetworkServer {
     this.maxRequestSize = config.socketRequestMaxBytes;
     processors = new ArrayList<Processor>(numProcessorThreads);
     requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
-    metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
+    metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors, acceptors);
     this.acceptors = new ArrayList<Acceptor>();
     this.ports = new HashMap<PortType, Port>();
     this.validatePorts(portList);

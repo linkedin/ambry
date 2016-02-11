@@ -3,42 +3,38 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 
-import com.github.ambry.config.AmbryPolicyConfig;
 import java.util.*;
 
 
 /**
- * An implementation of OperationPolicy. It internally maintains the status of the corresponding operation,
+ * An implementation of OperationTracker. It internally maintains the status of the corresponding operation,
  * and makes decision how to progress the operation.
  *
- * An operation policy is configured through {@code AmbryPolicyConfig}, and depends on the operation type,
+ * An operation tracker is configured through {@code AmbryPolicyConfig}, and depends on the operation type,
  * which can be one of {@code PUT, GET, DELETE}.
  *
  * A typical usage of an operation policy would be:
  *<pre>
  *{@code
  *
- *   AmbryOperationPolicy ambryOperationPolicy = new AmbryOperationPolicy(datacenterName,
- *            partitionId, operationType, ambryPolicyConfig);
+ *   RouterOperationTracker operationTracker = new RouterOperationTracker(datacenterName,
+ *            partitionId, operationType, localOnly, successTarget, localParallelism);
  *   //...
- *   while (operationPolicy.shouldSendMoreRequests()) {
- *     nextReplica = operationPolicy.getNextReplicaIdForSend();
+ *   while (operationTracker.shouldSendMoreRequests()) {
+ *     nextReplica = operationTracker.getNextReplicaIdForSend();
  *     //send request to nextReplica.
- *     operationPolicy.onSend(nextReplica);
+ *     operationTracker.onSend(nextReplica);
  *   }
  *
  *}
  *</pre>
  *
  */
-public class AmbryOperationPolicy implements OperationPolicy {
+public class RouterOperationTracker implements OperationTracker {
   OperationType operationType;
   final boolean localDcOnly;
-  final boolean localBarrier;
   final int successTarget;
-  final int localParallelFactor;
-  int remoteParallelFactorPerDc;
-  int totalRemoteParallelFactor;
+  final int localParallelism;
 
   int numLocalReplica = 0;
   int numLocalUnsent = 0;
@@ -55,11 +51,11 @@ public class AmbryOperationPolicy implements OperationPolicy {
   final LinkedList<ReplicaId> localInflightQueue = new LinkedList<ReplicaId>();
   final LinkedList<ReplicaId> localSucceededQueue = new LinkedList<ReplicaId>();
   final LinkedList<ReplicaId> localFailedQueue = new LinkedList<ReplicaId>();
-  final HashSet<ReplicaId> totalValidReplicaSet = new HashSet<ReplicaId>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteDcUnsentQueue = new HashMap<String, LinkedList<ReplicaId>>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteDcInflightQueue = new HashMap<String, LinkedList<ReplicaId>>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteDcSucceededQueue = new HashMap<String, LinkedList<ReplicaId>>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteDcFailedQueue = new HashMap<String, LinkedList<ReplicaId>>();
+  final HashSet<ReplicaId> totalToSendReplicaSet = new HashSet<ReplicaId>();
+  final HashMap<String, LinkedList<ReplicaId>> remoteUnsentQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
+  final HashMap<String, LinkedList<ReplicaId>> remoteInflightQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
+  final HashMap<String, LinkedList<ReplicaId>> remoteSucceededQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
+  final HashMap<String, LinkedList<ReplicaId>> remoteFailedQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
 
   /**
    * Constructor for {@code AmbryOperationPolicy}.
@@ -67,60 +63,36 @@ public class AmbryOperationPolicy implements OperationPolicy {
    * @param datacenterName The datacenter where the operation is performed.
    * @param partitionId The partition on which the operation is performed.
    * @param operationType The type of operation that helps determine the corresponding policy.
-   * @param ambryPolicyConfig Configuration parameters for the policy.
+   * @param localDcOnly
+   * @param successTarget
+   * @param localParallelism
    */
-  public AmbryOperationPolicy(String datacenterName, PartitionId partitionId, OperationType operationType,
-      AmbryPolicyConfig ambryPolicyConfig) {
+  public RouterOperationTracker(String datacenterName, PartitionId partitionId, OperationType operationType,
+      boolean localDcOnly, int successTarget, int localParallelism) {
     this.operationType = operationType;
-    if (operationType == OperationType.GET) {
-      localDcOnly = ambryPolicyConfig.routerGetPolicyLocalOnly;
-      localBarrier = ambryPolicyConfig.routerGetPolicyLocalBarrier;
-      successTarget = ambryPolicyConfig.routerGetPolicySuccessTarget;
-      localParallelFactor = ambryPolicyConfig.routerGetPolicyLocalParallelFactor;
-      remoteParallelFactorPerDc = ambryPolicyConfig.routerGetPolicyRemoteParallelFactorPerDc;
-      totalRemoteParallelFactor = ambryPolicyConfig.routerGetPolicyTotalRemoteParallelFactor;
-    } else if (operationType == OperationType.PUT) {
-      localDcOnly = ambryPolicyConfig.routerPutPolicyLocalOnly;
-      localBarrier = ambryPolicyConfig.routerPutPolicyLocalBarrier;
-      successTarget = ambryPolicyConfig.routerPutPolicySuccessTarget;
-      localParallelFactor = ambryPolicyConfig.routerPutPolicyLocalParallelFactor;
-      remoteParallelFactorPerDc = ambryPolicyConfig.routerPutPolicyRemoteParallelFactorPerDc;
-      totalRemoteParallelFactor = ambryPolicyConfig.routerPutPolicyTotalRemoteParallelFactor;
-    } else if (operationType == OperationType.DELETE) {
-      localDcOnly = ambryPolicyConfig.routerDeletePolicyLocalOnly;
-      localBarrier = ambryPolicyConfig.routerDeletePolicyLocalBarrier;
-      successTarget = ambryPolicyConfig.routerDeletePolicySuccessTarget;
-      localParallelFactor = ambryPolicyConfig.routerDeletePolicyLocalParallelFactor;
-      remoteParallelFactorPerDc = ambryPolicyConfig.routerDeletePolicyRemoteParallelFactorPerDc;
-      totalRemoteParallelFactor = ambryPolicyConfig.routerDeletePolicyTotalRemoteParallelFactor;
-    } else {
-      throw new IllegalArgumentException("Wrong operation type.");
-    }
-
+    this.localDcOnly = localDcOnly;
+    this.successTarget = successTarget;
+    this.localParallelism = localParallelism;
     this.localDcName = datacenterName;
     this.partitionId = partitionId;
     List<ReplicaId> replicas = partitionId.getReplicaIds();
-    if (localDcOnly) {
-      remoteParallelFactorPerDc = 0;
-      totalRemoteParallelFactor = 0;
-    }
     for (ReplicaId replicaId : replicas) {
       if (!replicaId.isDown()) {
         String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
         if (replicaDcName.equals(localDcName)) {
-          totalValidReplicaSet.add(replicaId);
+          totalToSendReplicaSet.add(replicaId);
           localUnsentQueue.add(replicaId);
           numLocalReplica++;
           numLocalUnsent++;
         } else if (!localDcOnly) {
-          if (!remoteDcUnsentQueue.containsKey(replicaDcName)) {
-            remoteDcUnsentQueue.put(replicaDcName, new LinkedList<ReplicaId>());
-            remoteDcInflightQueue.put(replicaDcName, new LinkedList<ReplicaId>());
-            remoteDcSucceededQueue.put(replicaDcName, new LinkedList<ReplicaId>());
-            remoteDcFailedQueue.put(replicaDcName, new LinkedList<ReplicaId>());
+          if (!remoteUnsentQueuePerDc.containsKey(replicaDcName)) {
+            remoteUnsentQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
+            remoteInflightQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
+            remoteSucceededQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
+            remoteFailedQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
           }
-          totalValidReplicaSet.add(replicaId);
-          remoteDcUnsentQueue.get(replicaDcName).add(replicaId);
+          totalToSendReplicaSet.add(replicaId);
+          remoteUnsentQueuePerDc.get(replicaDcName).add(replicaId);
           numTotalRemoteUnsent++;
         }
       }
@@ -140,11 +112,11 @@ public class AmbryOperationPolicy implements OperationPolicy {
    * @return {@code true} if there is at least one more local replica to send request.
    */
   public boolean canSendMoreLocal() {
-    if (isSucceeded() || isFailed()) {
-      return false;
-    } else if (nextLocalToSend != null) {
+    if (nextLocalToSend != null) {
       return true;
-    } else if (localUnsentQueue.size() > 0 && localInflightQueue.size() < localParallelFactor) {
+    } else if (isSucceeded() || isFailed()) {
+      return false;
+    } else if (localUnsentQueue.size() > 0 && localInflightQueue.size() < localParallelism) {
       nextLocalToSend = localUnsentQueue.poll();
       return true;
     } else {
@@ -166,16 +138,15 @@ public class AmbryOperationPolicy implements OperationPolicy {
    * @return {@code true} if there is at least one more local replica to send request.
    */
   public boolean canSendMoreRemote() {
-    if (isSucceeded() || isFailed() || (localBarrier && (localSucceededQueue.size() + localFailedQueue.size()
-        < numLocalReplica))) {
-      return false;
-    } else if (nextRemoteToSend != null) {
+    if (nextRemoteToSend != null) {
       return true;
+    } else if (localDcOnly || isSucceeded() || isFailed()
+        || localSucceededQueue.size() + localFailedQueue.size() < numLocalReplica) {
+      return false;
     } else {
-      for (Map.Entry<String, LinkedList<ReplicaId>> entry : remoteDcUnsentQueue.entrySet()) {
+      for (Map.Entry<String, LinkedList<ReplicaId>> entry : remoteUnsentQueuePerDc.entrySet()) {
         String remoteDcName = entry.getKey();
-        if (entry.getValue().size() > 0 && remoteDcInflightQueue.get(remoteDcName).size() < remoteParallelFactorPerDc
-            && getTotalRemoteInflight() < totalRemoteParallelFactor) {
+        if (entry.getValue().size() > 0 && remoteInflightQueuePerDc.get(remoteDcName).size() == 0) {
           nextRemoteToSend = entry.getValue().poll();
           return true;
         }
@@ -196,12 +167,12 @@ public class AmbryOperationPolicy implements OperationPolicy {
 
   @Override
   public boolean isFailed() {
-    return totalValidReplicaSet.size() - getTotalFailed() < successTarget;
+    return totalToSendReplicaSet.size() - getTotalFailed() < successTarget;
   }
 
   @Override
   public void onResponse(ReplicaId replicaId, Exception e) {
-    if (!totalValidReplicaSet.contains(replicaId)) {
+    if (!totalToSendReplicaSet.contains(replicaId)) {
       throw new IllegalStateException("Responding replica does not belong to the Partition.");
     }
     String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
@@ -213,10 +184,10 @@ public class AmbryOperationPolicy implements OperationPolicy {
       }
     } else {
       if (e != null) {
-        remoteDcFailedQueue.get(replicaDcName).add(replicaId);
+        remoteFailedQueuePerDc.get(replicaDcName).add(replicaId);
         numTotalRemoteFailed++;
       } else {
-        remoteDcSucceededQueue.get(replicaDcName).add(replicaId);
+        remoteSucceededQueuePerDc.get(replicaDcName).add(replicaId);
         numTotalRemoteSucceeded++;
       }
     }
@@ -234,7 +205,7 @@ public class AmbryOperationPolicy implements OperationPolicy {
       localInflightQueue.add(replicaId);
       numLocalUnsent--;
     } else {
-      remoteDcInflightQueue.get(replicaDcName).add(replicaId);
+      remoteInflightQueuePerDc.get(replicaDcName).add(replicaId);
       numTotalRemoteUnsent--;
     }
     if (replicaId == nextLocalToSend) {

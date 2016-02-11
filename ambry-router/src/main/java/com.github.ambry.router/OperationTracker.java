@@ -12,7 +12,7 @@ import com.github.ambry.clustermap.ReplicaId;
  * its OperationPolicy is informed by calling onSend() or onResponse() method.
  * </p>
  */
-public interface OperationPolicy {
+public interface OperationTracker {
   /**
    * Determines if more requests should be sent.
    *

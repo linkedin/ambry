@@ -25,9 +25,7 @@ public class OperationPolicyTest {
   PartitionId mockPartition;
   String localDcName;
   LinkedList<ReplicaId> inflightReplicas;
-  OperationPolicy operationPolicy;
-  Properties properties;
-  VerifiableProperties verifiableProperties;
+  OperationTracker operationTracker;
 
   @Before
   public void initialize() {
@@ -38,7 +36,6 @@ public class OperationPolicyTest {
     mockPartition = new MockOpPartition(replicaCount, datacenters);
     localDcName = datacenters.get(0).getDatacenterName();
     inflightReplicas = new LinkedList<ReplicaId>();
-    properties = new Properties();
   }
 
   /**
@@ -48,105 +45,90 @@ public class OperationPolicyTest {
    */
 
   /**
-   * 0. localDcOnly(false), localBarrier(true), successTarget(2), localParameterFactor(3),
-   * remoteParameterFactor(1), totalRemoteParallelFactor(2).
+   * 0. localDcOnly(true), successTarget(2), localParameterFactor(3).
+   *
    * <p/>
    * 1. Send 3 parallel requests to local replicas;
    * 2. 3 remote replicas succeeded.
    */
   @Test
   public void putSimpleLocalTest() {
-    verifiableProperties = new VerifiableProperties(properties);
-    AmbryPolicyConfig policyConfig = new AmbryPolicyConfig(verifiableProperties);
-    operationPolicy = new AmbryOperationPolicy(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
-        policyConfig);
+    operationTracker = new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
+        true, 2, 3);
     ReplicaId nextReplica = null;
     //send out requests to local replicas up to the localParallelFactor.
     //3-0-0-0; 9-0-0-0
-    assertFalse(operationPolicy.isComplete());
-    assertFalse(operationPolicy.isSucceeded());
-    while (operationPolicy.shouldSendMoreRequests()) {
-      nextReplica = operationPolicy.getNextReplicaIdForSend();
+    assertFalse(operationTracker.isComplete());
+    assertFalse(operationTracker.isSucceeded());
+    while (operationTracker.shouldSendMoreRequests()) {
+      nextReplica = operationTracker.getNextReplicaIdForSend();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationPolicy, inflightReplicas);
+      sendReplica(nextReplica, operationTracker, inflightReplicas);
     }
     //0-3-0-0; 9-0-0-0
     assertEquals(3, inflightReplicas.size());
-    assertFalse(operationPolicy.isComplete());
-    assertFalse(operationPolicy.isSucceeded());
+    assertFalse(operationTracker.isComplete());
+    assertFalse(operationTracker.isSucceeded());
     for (int i = 0; i < 2; i++) {
-      receiveSucceededResponse(inflightReplicas.poll(), operationPolicy);
+      receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
     }
     //0-1-2-0; 9-0-0-0
-    assertTrue(operationPolicy.isComplete());
-    assertTrue(operationPolicy.isSucceeded());
-    assertFalse(operationPolicy.shouldSendMoreRequests());
-    assertNull(operationPolicy.getNextReplicaIdForSend());
+    assertTrue(operationTracker.isComplete());
+    assertTrue(operationTracker.isSucceeded());
+    assertFalse(operationTracker.shouldSendMoreRequests());
+    assertNull(operationTracker.getNextReplicaIdForSend());
     ReplicaId alienReplica = new MockOpReplica(null, 0, "alien datacenter");
     try {
-      receiveSucceededResponse(alienReplica, operationPolicy);
+      receiveSucceededResponse(alienReplica, operationTracker);
     } catch (IllegalStateException e) {
     }
     try {
-      receiveFailedResponse(alienReplica, operationPolicy);
+      receiveFailedResponse(alienReplica, operationTracker);
     } catch (IllegalStateException e) {
     }
   }
 
   /**
-   * 0. localDcOnly(false), localBarrier(true), successTarget(2), localParameterFactor(3),
-   * remoteParameterFactor(1), totalRemoteParallelFactor(2).
+   * 0. localDcOnly(true), successTarget(2), localParameterFactor(3).
+   *
    * <p/>
    * 1. Send 3 parallel requests to local replicas;
    * 2. 1 local replicas succeeded, 2 failed;
-   * 3. Send 1 request to remote replica;
-   * 4. 1 remote replica succeeded;
+   * 3. Fail the put operation.
    */
   @Test
-  public void putLocalBarrierTest() {
-    verifiableProperties = new VerifiableProperties(properties);
-    AmbryPolicyConfig policyConfig = new AmbryPolicyConfig(verifiableProperties);
-    operationPolicy = new AmbryOperationPolicy(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
-        policyConfig);
+  public void putLocalFailedTest() {
+    operationTracker = new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
+        true, 2, 3);
     ReplicaId nextReplica = null;
     //send out requests to local replicas up to the localParallelFactor.
     //3-0-0-0; 9-0-0-0
-    assertFalse(operationPolicy.isComplete());
-    assertFalse(operationPolicy.isSucceeded());
-    while (operationPolicy.shouldSendMoreRequests()) {
-      nextReplica = operationPolicy.getNextReplicaIdForSend();
+    assertFalse(operationTracker.isComplete());
+    assertFalse(operationTracker.isSucceeded());
+    while (operationTracker.shouldSendMoreRequests()) {
+      nextReplica = operationTracker.getNextReplicaIdForSend();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationPolicy, inflightReplicas);
+      sendReplica(nextReplica, operationTracker, inflightReplicas);
     }
     //0-3-0-0; 9-0-0-0
     for (int i = 0; i < 2; i++) {
-      receiveFailedResponse(inflightReplicas.poll(), operationPolicy);
+      receiveFailedResponse(inflightReplicas.poll(), operationTracker);
     }
     //0-1-0-2; 9-0-0-0
     //cannot send more because not all local replicas responded
-    assertFalse(operationPolicy.shouldSendMoreRequests());
-    receiveSucceededResponse(inflightReplicas.poll(), operationPolicy);
+    assertFalse(operationTracker.shouldSendMoreRequests());
+    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
     //0-0-1-2; 9-0-0-0
-    assertFalse(operationPolicy.isComplete());
-    assertFalse(operationPolicy.isSucceeded());
-    //send to remote replicas
-    while (operationPolicy.shouldSendMoreRequests()) {
-      nextReplica = operationPolicy.getNextReplicaIdForSend();
-      assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationPolicy, inflightReplicas);
-    }
-    //0-0-1-2; 8-1-0-0
-    receiveSucceededResponse(inflightReplicas.poll(), operationPolicy);
-    //0-0-1-2; 8-0-1-0
-    assertTrue(operationPolicy.isComplete());
-    assertTrue(operationPolicy.isSucceeded());
-    assertFalse(operationPolicy.shouldSendMoreRequests());
-    assertNull(operationPolicy.getNextReplicaIdForSend());
+    assertTrue(operationTracker.isFailed());
+    assertFalse(operationTracker.isSucceeded());
+    assertTrue(operationTracker.isComplete());
+    assertFalse(operationTracker.shouldSendMoreRequests());
+    assertNull(operationTracker.getNextReplicaIdForSend());
   }
 
   /**
-   * 0. localDcOnly(false), localBarrier(true), successTarget(2), localParameterFactor(3),
-   * remoteParameterFactor(1), totalRemoteParallelFactor(2).
+   * 0. localDcOnly(false), successTarget(2), localParameterFactor(3).
+
    * <p/>
    * 1. Send 3 parallel requests to local replicas;
    * 2. 1 local replicas succeeded, 2 failed;
@@ -155,38 +137,35 @@ public class OperationPolicyTest {
    */
   @Test
   public void putNoLocalBarrierTest() {
-    properties.setProperty("router.put.policy.local.barrier", "false");
-    verifiableProperties = new VerifiableProperties(properties);
-    AmbryPolicyConfig policyConfig = new AmbryPolicyConfig(verifiableProperties);
-    operationPolicy = new AmbryOperationPolicy(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
-        policyConfig);
+    operationTracker = new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
+        false, 2, 3);
     ReplicaId nextReplica = null;
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    while (operationPolicy.shouldSendMoreRequests()) {
-      nextReplica = operationPolicy.getNextReplicaIdForSend();
-      sendReplica(nextReplica, operationPolicy, inflightReplicas);
+    while (operationTracker.shouldSendMoreRequests()) {
+      nextReplica = operationTracker.getNextReplicaIdForSend();
+      sendReplica(nextReplica, operationTracker, inflightReplicas);
     }
     //0-3-0-0; 8-1-0-0
     //assertEquals(parameterSet.getLocalParallelFactor() + parameterSet.getTotalRemoteParallelFactor(),
     //inflightReplicas.size());
     for (int i = 0; i < 2; i++) {
-      receiveFailedResponse(inflightReplicas.poll(), operationPolicy);
+      receiveFailedResponse(inflightReplicas.poll(), operationTracker);
     }
     //0-1-0-2; 8-1-0-0
     //cannot send to more replicas due to local and total remote parallel factors.
-    assertFalse(operationPolicy.shouldSendMoreRequests());
-    receiveSucceededResponse(inflightReplicas.poll(), operationPolicy);
+    assertFalse(operationTracker.shouldSendMoreRequests());
+    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
     //0-0-1-2; 8-1-0-0
-    assertFalse(operationPolicy.isComplete());
-    assertFalse(operationPolicy.isSucceeded());
+    assertFalse(operationTracker.isComplete());
+    assertFalse(operationTracker.isSucceeded());
     //cannot send to more replicas due to total remote parallel factor.
-    receiveSucceededResponse(inflightReplicas.poll(), operationPolicy);
+    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
     //0-0-1-2; 8-0-1-0
-    assertTrue(operationPolicy.isComplete());
-    assertTrue(operationPolicy.isSucceeded());
-    assertFalse(operationPolicy.shouldSendMoreRequests());
-    assertNull(operationPolicy.getNextReplicaIdForSend());
+    assertTrue(operationTracker.isComplete());
+    assertTrue(operationTracker.isSucceeded());
+    assertFalse(operationTracker.shouldSendMoreRequests());
+    assertNull(operationTracker.getNextReplicaIdForSend());
   }
 
   /**
@@ -199,23 +178,20 @@ public class OperationPolicyTest {
    */
   @Test
   public void putLocalOnlyTest() {
-    properties.setProperty("router.put.policy.local.only", "true");
-    verifiableProperties = new VerifiableProperties(properties);
-    AmbryPolicyConfig policyConfig = new AmbryPolicyConfig(verifiableProperties);
-    operationPolicy = new AmbryOperationPolicy(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
-        policyConfig);
+    operationTracker = new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT,
+        false, 2, 3);
     ReplicaId nextReplica = null;
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    while (operationPolicy.shouldSendMoreRequests()) {
-      nextReplica = operationPolicy.getNextReplicaIdForSend();
-      sendReplica(nextReplica, operationPolicy, inflightReplicas);
+    while (operationTracker.shouldSendMoreRequests()) {
+      nextReplica = operationTracker.getNextReplicaIdForSend();
+      sendReplica(nextReplica, operationTracker, inflightReplicas);
     }
-    receiveFailedResponse(inflightReplicas.poll(), operationPolicy);
-    receiveFailedResponse(inflightReplicas.poll(), operationPolicy);
-    receiveSucceededResponse(inflightReplicas.poll(), operationPolicy);
-    assertFalse(operationPolicy.shouldSendMoreRequests());
-    assertTrue(operationPolicy.isComplete());
+    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
+    assertFalse(operationTracker.shouldSendMoreRequests());
+    assertTrue(operationTracker.isComplete());
   }
 
   /**
@@ -230,45 +206,43 @@ public class OperationPolicyTest {
    */
   @Test
   public void getLocalOnlyTest() {
-    verifiableProperties = new VerifiableProperties(properties);
-    AmbryPolicyConfig policyConfig = new AmbryPolicyConfig(verifiableProperties);
-    operationPolicy = new AmbryOperationPolicy(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.GET,
-        policyConfig);
+    operationTracker = new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.GET,
+        false, 2, 3);
     ReplicaId nextReplica = null;
     //send out requests to local replicas.
     //3-0-0-0; 9-0-0-0
-    while (operationPolicy.shouldSendMoreRequests()) {
-      nextReplica = operationPolicy.getNextReplicaIdForSend();
-      sendReplica(nextReplica, operationPolicy, inflightReplicas);
+    while (operationTracker.shouldSendMoreRequests()) {
+      nextReplica = operationTracker.getNextReplicaIdForSend();
+      sendReplica(nextReplica, operationTracker, inflightReplicas);
     }
     //0-3-0-0; 9-0-0-0
     for (int i = 0; i < 3; i++) {
-      receiveFailedResponse(inflightReplicas.poll(), operationPolicy);
+      receiveFailedResponse(inflightReplicas.poll(), operationTracker);
     }
     //0-0-0-3; 9-0-0-0
-    while (operationPolicy.shouldSendMoreRequests()) {
-      nextReplica = operationPolicy.getNextReplicaIdForSend();
-      sendReplica(nextReplica, operationPolicy, inflightReplicas);
+    while (operationTracker.shouldSendMoreRequests()) {
+      nextReplica = operationTracker.getNextReplicaIdForSend();
+      sendReplica(nextReplica, operationTracker, inflightReplicas);
     }
     //0-0-0-3; 7-2-0-0
-    receiveFailedResponse(inflightReplicas.poll(), operationPolicy);
+    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
     //0-0-0-3; 7-1-0-1
-    assertFalse(operationPolicy.isSucceeded());
-    receiveSucceededResponse(inflightReplicas.poll(), operationPolicy);
+    assertFalse(operationTracker.isSucceeded());
+    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
     //0-0-0-3; 7-0-1-1
-    assertTrue(operationPolicy.isSucceeded());
+    assertTrue(operationTracker.isSucceeded());
   }
 
-  void sendReplica(ReplicaId replica, OperationPolicy operationPolicy, LinkedList<ReplicaId> inflightList) {
+  void sendReplica(ReplicaId replica, OperationTracker operationPolicy, LinkedList<ReplicaId> inflightList) {
     operationPolicy.onSend(replica);
     inflightList.offer(replica);
   }
 
-  void receiveSucceededResponse(ReplicaId replica, OperationPolicy operationPolicy) {
+  void receiveSucceededResponse(ReplicaId replica, OperationTracker operationPolicy) {
     operationPolicy.onResponse(replica, null);
   }
 
-  void receiveFailedResponse(ReplicaId replica, OperationPolicy operationPolicy) {
+  void receiveFailedResponse(ReplicaId replica, OperationTracker operationPolicy) {
     operationPolicy.onResponse(replica, new Exception());
   }
 }
