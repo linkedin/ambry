@@ -7,13 +7,16 @@ import java.util.*;
 
 
 /**
- * An implementation of OperationTracker. It internally maintains the status of the corresponding operation,
- * and makes decision how to progress the operation.
+ * An implementation of {@code OperationTracker} used by non-blocking router. It internally maintains
+ * the status of the corresponding operation, and returns information to progress or terminate the
+ * operation.
  *
- * An operation tracker is configured through {@code AmbryPolicyConfig}, and depends on the operation type,
- * which can be one of {@code PUT, GET, DELETE}.
+ * This class assumes a request will be {@code succeeded, failed, or timed out} (which means failed).
+ * No request will pend forever.
  *
- * A typical usage of an operation policy would be:
+ * This class is not meant to be thread safe. Please apply appropriate mechanisms at the caller.
+ *
+ * A typical usage of an {@code RouterOperationTracker} would be:
  *<pre>
  *{@code
  *
@@ -31,7 +34,7 @@ import java.util.*;
  *
  */
 public class RouterOperationTracker implements OperationTracker {
-  OperationType operationType;
+  final OperationType operationType;
   final boolean localDcOnly;
   final int successTarget;
   final int localParallelism;
@@ -51,21 +54,22 @@ public class RouterOperationTracker implements OperationTracker {
   final LinkedList<ReplicaId> localInflightQueue = new LinkedList<ReplicaId>();
   final LinkedList<ReplicaId> localSucceededQueue = new LinkedList<ReplicaId>();
   final LinkedList<ReplicaId> localFailedQueue = new LinkedList<ReplicaId>();
-  final HashSet<ReplicaId> totalToSendReplicaSet = new HashSet<ReplicaId>();
+  final HashSet<ReplicaId> totalReplicaSet = new HashSet<ReplicaId>();
   final HashMap<String, LinkedList<ReplicaId>> remoteUnsentQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
   final HashMap<String, LinkedList<ReplicaId>> remoteInflightQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
   final HashMap<String, LinkedList<ReplicaId>> remoteSucceededQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
   final HashMap<String, LinkedList<ReplicaId>> remoteFailedQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
 
   /**
-   * Constructor for {@code AmbryOperationPolicy}.
+   * Constructor for an {@code OperationTracker}.
    *
-   * @param datacenterName The datacenter where the operation is performed.
+   * @param datacenterName The datacenter where the router is located.
    * @param partitionId The partition on which the operation is performed.
-   * @param operationType The type of operation that helps determine the corresponding policy.
-   * @param localDcOnly
-   * @param successTarget
-   * @param localParallelism
+   * @param operationType The type of operation, which can be one of {@code PUT, GET, DELETE}.
+   * @param localDcOnly {@code true} if requests only can be sent to local replicas, {@code false}
+   *                                otherwise.
+   * @param successTarget The number of successful responses received to succeed the operation.
+   * @param localParallelism The maximum number of inflight requests sent to local replicas.
    */
   public RouterOperationTracker(String datacenterName, PartitionId partitionId, OperationType operationType,
       boolean localDcOnly, int successTarget, int localParallelism) {
@@ -76,11 +80,12 @@ public class RouterOperationTracker implements OperationTracker {
     this.localDcName = datacenterName;
     this.partitionId = partitionId;
     List<ReplicaId> replicas = partitionId.getReplicaIds();
+
     for (ReplicaId replicaId : replicas) {
       if (!replicaId.isDown()) {
         String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
         if (replicaDcName.equals(localDcName)) {
-          totalToSendReplicaSet.add(replicaId);
+          totalReplicaSet.add(replicaId);
           localUnsentQueue.add(replicaId);
           numLocalReplica++;
           numLocalUnsent++;
@@ -91,7 +96,7 @@ public class RouterOperationTracker implements OperationTracker {
             remoteSucceededQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
             remoteFailedQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
           }
-          totalToSendReplicaSet.add(replicaId);
+          totalReplicaSet.add(replicaId);
           remoteUnsentQueuePerDc.get(replicaDcName).add(replicaId);
           numTotalRemoteUnsent++;
         }
@@ -105,17 +110,16 @@ public class RouterOperationTracker implements OperationTracker {
   }
 
   /**
-   * Determine if there are more local replicas to send request. When a request can be sent to a replica,
-   * the operation can be neither in {@code succeeded} nor {@code failed} status. This decision is subject
-   * to {@code localParameterFactor}.
+   * Determine if requests can be sent to more replicas. A request can be sent to a local replica
+   * only when an operation is NOT completed.
    *
    * @return {@code true} if there is at least one more local replica to send request.
    */
-  public boolean canSendMoreLocal() {
-    if (nextLocalToSend != null) {
-      return true;
-    } else if (isSucceeded() || isFailed()) {
+  private boolean canSendMoreLocal() {
+    if (isComplete()) {
       return false;
+    } else if (nextLocalToSend != null) {
+      return true;
     } else if (localUnsentQueue.size() > 0 && localInflightQueue.size() < localParallelism) {
       nextLocalToSend = localUnsentQueue.poll();
       return true;
@@ -125,22 +129,22 @@ public class RouterOperationTracker implements OperationTracker {
   }
 
   /**
-   * Determine if there are more remote replicas to send request. When a request can be sent to a replica,
-   * the operation can be neither in {@code succeeded} nor {@code failed} status.
-   *
+   * Determine if there are more remote replicas to send request. A request can be sent to a remote replica
+   * only when an operation is NOT completed.
+   * 
+   * <p>
    * If {@code localOnly} is set {@code true}, no request can be sent to remote replicas.
    *
-   * If {@code localBarrier} is enabled, a request can be sent to only when responses from all local replicas
-   * have been rerceived.
-   *
-   * The decision is subject to both {@code remoteParallelFactorPerDc} and {@code totalRemoteParallelFactor}.
+   * <p>
+   * If an operation is {@code GET or DELETE}, a request can be sent to only when responses from all local
+   * replicas have been received.
    *
    * @return {@code true} if there is at least one more local replica to send request.
    */
-  public boolean canSendMoreRemote() {
+  private boolean canSendMoreRemote() {
     if (nextRemoteToSend != null) {
       return true;
-    } else if (localDcOnly || isSucceeded() || isFailed()
+    } else if (localDcOnly || nextLocalToSend!=null || isSucceeded() || isFailed()
         || localSucceededQueue.size() + localFailedQueue.size() < numLocalReplica) {
       return false;
     } else {
@@ -167,22 +171,25 @@ public class RouterOperationTracker implements OperationTracker {
 
   @Override
   public boolean isFailed() {
-    return totalToSendReplicaSet.size() - getTotalFailed() < successTarget;
+    return totalReplicaSet.size() - getTotalFailed() < successTarget;
   }
 
   @Override
   public void onResponse(ReplicaId replicaId, Exception e) {
-    if (!totalToSendReplicaSet.contains(replicaId)) {
+    if (!totalReplicaSet.contains(replicaId)) {
       throw new IllegalStateException("Responding replica does not belong to the Partition.");
     }
     String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
     if (localDcName.equals(replicaDcName)) {
+      localInflightQueue.remove(replicaId);
       if (e != null) {
         localFailedQueue.add(replicaId);
       } else {
         localSucceededQueue.add(replicaId);
       }
     } else {
+      remoteInflightQueuePerDc.get(replicaDcName).remove(replicaId);
+      numTotalRemoteInflight--;
       if (e != null) {
         remoteFailedQueuePerDc.get(replicaDcName).add(replicaId);
         numTotalRemoteFailed++;
@@ -198,7 +205,7 @@ public class RouterOperationTracker implements OperationTracker {
     if (replicaId == null) {
       throw new IllegalStateException("Cannot onsend a null replica.");
     } else if (replicaId != nextLocalToSend && replicaId != nextRemoteToSend) {
-      throw new IllegalStateException("This replica is not selected by policy.");
+      throw new IllegalStateException("This replica is not selected by operation tracker.");
     }
     String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
     if (localDcName.equals(replicaDcName)) {
@@ -207,6 +214,7 @@ public class RouterOperationTracker implements OperationTracker {
     } else {
       remoteInflightQueuePerDc.get(replicaDcName).add(replicaId);
       numTotalRemoteUnsent--;
+      numTotalRemoteInflight++;
     }
     if (replicaId == nextLocalToSend) {
       nextLocalToSend = null;
@@ -230,17 +238,5 @@ public class RouterOperationTracker implements OperationTracker {
 
   private int getTotalFailed() {
     return localFailedQueue.size() + numTotalRemoteFailed;
-  }
-
-  private int getTotalInflight() {
-    return localInflightQueue.size() + numTotalRemoteInflight;
-  }
-
-  private int getTotalRemoteInflight() {
-    return numTotalRemoteInflight;
-  }
-
-  private int getTotalUnsent() {
-    return numLocalUnsent + numTotalRemoteUnsent;
   }
 }
