@@ -442,14 +442,18 @@ class AsyncRequestWorker implements Runnable {
     logger.trace("Discarding requests on account of shutdown");
     RestServiceException e = new RestServiceException("Service shutdown", RestServiceErrorCode.ServiceUnavailable);
     if (requests.size() > 0) {
-      logger.info("There were {} requests in flight during shutdown", requests.size());
       restServerMetrics.residualRequestQueueSize.inc(requests.size());
       AsyncRequestInfo residualRequestInfo = requests.poll();
-      while (residualRequestInfo != null && residualRequestInfo.restRequest != null) {
-        onRequestDequeue(residualRequestInfo);
-        onProcessingFailure(residualRequestInfo.restRequest, residualRequestInfo.restResponseChannel, e);
+      int discardCount = 0;
+      while (residualRequestInfo != null) {
+        if(residualRequestInfo.restRequest != null) {
+          discardCount++;
+          onRequestDequeue(residualRequestInfo);
+          onProcessingFailure(residualRequestInfo.restRequest, residualRequestInfo.restResponseChannel, e);
+        }
         residualRequestInfo = requests.poll();
       }
+      logger.info("There were {} requests in flight during shutdown", discardCount);
     }
   }
 
