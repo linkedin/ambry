@@ -89,8 +89,8 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
    * @throws RestServiceException if there is any error while processing the request.
    */
   @Override
-  public void handleResponse(final RestRequest restRequest, final RestResponseChannel restResponseChannel,
-      final ReadableStreamChannel response, final Exception exception)
+  public void handleResponse(RestRequest restRequest, final RestResponseChannel restResponseChannel,
+      final ReadableStreamChannel response, Exception exception)
       throws RestServiceException {
     if (shouldProceed(restRequest, restResponseChannel)) {
       if (exception != null || response == null) {
@@ -169,7 +169,7 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
         try {
           restRequest.close();
         } catch (IOException e) {
-          // too bad.
+          throw new IllegalStateException(e);
         }
       }
     }
@@ -199,7 +199,7 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
       try {
         response.close();
       } catch (IOException e) {
-        // too bad.
+        throw new IllegalStateException(e);
       }
     }
   }

@@ -55,8 +55,8 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    * need to be done after handling of a response is complete can proceed (e.g. cleanup code + closing of connection if
    * not keepalive).
    * <p/>
-   * If {@code cause} is not null, then it indicates that there was an error while handling the request and
-   * {@code cause} defines the error that occurred. The expectation is that an appropriate error response will be
+   * If {@code exception} is not null, then it indicates that there was an error while handling the request and
+   * {@code exception} defines the error that occurred. The expectation is that an appropriate error response will be
    * constructed, returned to the client if possible and the connection closed (if required).
    * <p/>
    * It is possible that the connection might be closed/severed before this is called. Therefore this function needs to
@@ -65,7 +65,7 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    * A response is considered to be complete either when a complete response has been sent to the client, an exception
    * occurred while handling the request or if the client timed out (or there was any other client side error).
    * <p/>
-   * A response of OK is returned if {@code cause} is null and no response body was constructed (i.e if there were no
+   * A response of OK is returned if {@code exception} is null and no response body was constructed (i.e if there were no
    * {@link #write(ByteBuffer, Callback)} calls).
    * <p/>
    * This is (has to be) called regardless of the request being concluded successfully or unsuccessfully

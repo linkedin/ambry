@@ -349,7 +349,8 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
     String echoedText = getJsonizedResponseBody(channel).getString(EchoHandler.TEXT_KEY);
-    assertEquals("Unexpected Content-Type", "application/json", restResponseChannel.getHeader("Content-Type"));
+    assertEquals("Unexpected Content-Type", "application/json",
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_TYPE_HEADER_KEY));
     assertEquals("Did not get expected response", inputText, echoedText);
   }
 
@@ -390,7 +391,8 @@ public class AdminBlobStorageServiceTest {
       RestRequest restRequest = createGetReplicasForBlobIdRestRequest(blobId.getID());
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
-      assertEquals("Unexpected Content-Type", "application/json", restResponseChannel.getHeader("Content-Type"));
+      assertEquals("Unexpected Content-Type", "application/json",
+          restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_TYPE_HEADER_KEY));
       String returnedReplicasStr =
           getJsonizedResponseBody(channel).getString(GetReplicasForBlobIdHandler.REPLICAS_KEY).replace("\"", "");
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
@@ -1052,7 +1054,7 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doPost(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getResponseStatus());
-    assertTrue("No Date header", restResponseChannel.getHeader("Date") != null);
+    assertTrue("No Date header", restResponseChannel.getHeader(MockRestResponseChannel.DATE_KEY) != null);
     assertTrue("No " + RestUtils.Headers.Creation_Time,
         restResponseChannel.getHeader(RestUtils.Headers.Creation_Time) != null);
     assertEquals("Content-Length is not 0", "0",
@@ -1098,7 +1100,7 @@ public class AdminBlobStorageServiceTest {
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
     assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.Blob_Size),
-        restResponseChannel.getHeader("Content-Length"));
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY));
     assertEquals(RestUtils.Headers.Service_Id + " does not match",
         expectedHeaders.getString(RestUtils.Headers.Service_Id),
         restResponseChannel.getHeader(RestUtils.Headers.Service_Id));
@@ -1150,7 +1152,7 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doDelete(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
-    assertTrue("No Date header", restResponseChannel.getHeader("Date") != null);
+    assertTrue("No Date header", restResponseChannel.getHeader(MockRestResponseChannel.DATE_KEY) != null);
     assertEquals("Content-Length is not 0", "0",
         restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY));
   }
@@ -1164,8 +1166,8 @@ public class AdminBlobStorageServiceTest {
   private void checkCommonGetHeadHeaders(MockRestResponseChannel restResponseChannel, JSONObject expectedHeaders)
       throws JSONException {
     assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.Content_Type),
-        restResponseChannel.getHeader("Content-Type"));
-    assertTrue("No Date header", restResponseChannel.getHeader("Date") != null);
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_TYPE_HEADER_KEY));
+    assertTrue("No Date header", restResponseChannel.getHeader(MockRestResponseChannel.DATE_KEY) != null);
     assertTrue("No Last-Modified header", restResponseChannel.getHeader("Last-Modified") != null);
     assertEquals(RestUtils.Headers.Blob_Size + " does not match",
         expectedHeaders.getString(RestUtils.Headers.Blob_Size),
