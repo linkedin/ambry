@@ -38,18 +38,13 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Netty specific implementation of {@link RestResponseChannel} used  to return their response via Netty. It is
- * supported by an underlying Netty channel whose handle this class has in the form of a {@link ChannelHandlerContext}.
+ * Netty specific implementation of {@link RestResponseChannel} used to return responses via Netty. It is supported by
+ * an underlying Netty channel whose handle this class has in the form of a {@link ChannelHandlerContext}.
  * <p/>
  * Data is sent in the order that threads call {@link #write(ByteBuffer, Callback)}.
  * <p/>
- * Although it is guaranteed that no writes will be accepted through this class once {@link #close()} is called, data
- * might or might not be written to the underlying channel even if this class accepted a write. This is because others
- * may have a handle on the underlying channel and can close it independently or the underlying channel can experience
- * an error.
- * <p/>
  * If a write through this class fails at any time, the underlying channel will be closed immediately and no more writes
- * will be accepted and all scheduled writes will be notified.
+ * will be accepted and all scheduled writes will be notified of the failure.
  */
 class NettyResponseChannel implements RestResponseChannel {
   private final ChannelHandlerContext ctx;
@@ -551,8 +546,6 @@ class NettyResponseChannel implements RestResponseChannel {
      */
     @Override
     public boolean isEndOfInput() {
-      // input has ended when the onResponseComplete() has been called, writeFuture is not done and there are no more
-      // chunks to write.
       return responseComplete.get() && !writeFuture.isDone() && chunksToWriteCount.get() == 0;
     }
 

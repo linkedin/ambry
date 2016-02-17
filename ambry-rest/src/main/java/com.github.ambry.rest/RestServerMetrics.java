@@ -147,6 +147,7 @@ public class RestServerMetrics {
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownTimeInMs"));
     requestResponseHandlerStartTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "StartTimeInMs"));
+    // AsyncRequestWorker
     residualRequestQueueSize =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "ResidualRequestQueueSize"));
     residualResponseSetSize =

@@ -66,7 +66,6 @@ class NettyMetrics {
   public final Counter processorExceptionCaughtCount;
   // NettyResponseChannel
   public final Counter badRequestCount;
-  public final Counter channelWriteAbortCount;
   public final Counter goneCount;
   public final Counter internalServerErrorCount;
   public final Counter notFoundCount;
@@ -147,8 +146,6 @@ class NettyMetrics {
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));
 
     // Other
-    // NettyContent
-    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
     // NettyMessageProcessor
     channelReadIntervalInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));
@@ -156,10 +153,10 @@ class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionCloseCount"));
     processorExceptionCaughtCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtCount"));
+    // NettyRequest
+    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
     // NettyResponseChannel
     badRequestCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount"));
-    channelWriteAbortCount =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteAbortCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "GoneCount"));
     internalServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount"));
