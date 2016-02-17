@@ -446,7 +446,7 @@ class AsyncRequestWorker implements Runnable {
       AsyncRequestInfo residualRequestInfo = requests.poll();
       int discardCount = 0;
       while (residualRequestInfo != null) {
-        if(residualRequestInfo.restRequest != null) {
+        if (residualRequestInfo.restRequest != null) {
           discardCount++;
           onRequestDequeue(residualRequestInfo);
           onProcessingFailure(residualRequestInfo.restRequest, residualRequestInfo.restResponseChannel, e);
