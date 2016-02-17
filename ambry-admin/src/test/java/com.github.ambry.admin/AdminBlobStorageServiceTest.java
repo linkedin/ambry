@@ -199,25 +199,25 @@ public class AdminBlobStorageServiceTest {
 
     adminBlobStorageService.handleGet(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getCause().getClass());
+    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
 
     responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     adminBlobStorageService.handlePost(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getCause().getClass());
+    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
 
     responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     adminBlobStorageService.handleDelete(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getCause().getClass());
+    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
 
     responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     adminBlobStorageService.handleHead(restRequest, restResponseChannel);
     // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getCause().getClass());
+    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
   }
 
   /**
@@ -240,7 +240,7 @@ public class AdminBlobStorageServiceTest {
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       adminBlobStorageService
           .submitResponse(restRequest, restResponseChannel, null, new RuntimeException(exceptionMsg));
-      assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
+      assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
       // there is no exception and exception thrown when the response is submitted.
       restRequest = createRestRequest(RestMethod.GET, "/", null, null);
@@ -249,7 +249,7 @@ public class AdminBlobStorageServiceTest {
       ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
       assertTrue("Response channel is not open", response.isOpen());
       adminBlobStorageService.submitResponse(restRequest, restResponseChannel, response, null);
-      assertNotNull("There is no cause of failure", restResponseChannel.getCause());
+      assertNotNull("There is no cause of failure", restResponseChannel.getException());
       // resources should have been cleaned up.
       assertFalse("Response channel is not cleaned up", response.isOpen());
     } finally {
@@ -350,7 +350,7 @@ public class AdminBlobStorageServiceTest {
     ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
     String echoedText = getJsonizedResponseBody(channel).getString(EchoHandler.TEXT_KEY);
     assertEquals("Unexpected Content-Type", "application/json",
-        restResponseChannel.getHeader("Content-Type", MockRestResponseChannel.DataStatus.Flushed));
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_TYPE_HEADER_KEY));
     assertEquals("Did not get expected response", inputText, echoedText);
   }
 
@@ -392,7 +392,7 @@ public class AdminBlobStorageServiceTest {
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
       assertEquals("Unexpected Content-Type", "application/json",
-          restResponseChannel.getHeader("Content-Type", MockRestResponseChannel.DataStatus.Flushed));
+          restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_TYPE_HEADER_KEY));
       String returnedReplicasStr =
           getJsonizedResponseBody(channel).getString(GetReplicasForBlobIdHandler.REPLICAS_KEY).replace("\"", "");
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
@@ -534,14 +534,14 @@ public class AdminBlobStorageServiceTest {
     restResponseChannel = new MockRestResponseChannel();
     callback = new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, router, 0);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
     // there is no exception and the exception thrown in the callback is the primary exception.
     restResponseChannel = new MockRestResponseChannel();
     callback = new HeadForGetCallback(adminBlobStorageService, restRequest, restResponseChannel, router, 0);
     BlobInfo blobInfo = new BlobInfo(null, null);
     callback.onCompletion(blobInfo, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getCause());
+    assertNotNull("There is no cause of failure", restResponseChannel.getException());
   }
 
   /**
@@ -600,7 +600,7 @@ public class AdminBlobStorageServiceTest {
     restResponseChannel = new MockRestResponseChannel();
     callback = new GetCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
     // there is no exception and exception thrown in the callback.
     restResponseChannel = new MockRestResponseChannel();
@@ -608,7 +608,7 @@ public class AdminBlobStorageServiceTest {
     ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
     assertTrue("Response channel is not open", response.isOpen());
     callback.onCompletion(response, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getCause());
+    assertNotNull("There is no cause of failure", restResponseChannel.getException());
   }
 
   /**
@@ -709,13 +709,13 @@ public class AdminBlobStorageServiceTest {
     restResponseChannel = new MockRestResponseChannel();
     callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
     // there is no exception and exception thrown in the callback.
     restResponseChannel = new MockRestResponseChannel();
     callback = new DeleteCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getCause());
+    assertNotNull("There is no cause of failure", restResponseChannel.getException());
   }
 
   /**
@@ -773,14 +773,14 @@ public class AdminBlobStorageServiceTest {
     restResponseChannel = new MockRestResponseChannel();
     callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getCause().getMessage());
+    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
     // there is no exception and exception thrown in the callback.
     restResponseChannel = new MockRestResponseChannel();
     callback = new HeadCallback(adminBlobStorageService, restRequest, restResponseChannel);
     BlobInfo blobInfo = new BlobInfo(new BlobProperties(0, "test-serviceId"), new byte[0]);
     callback.onCompletion(blobInfo, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getCause());
+    assertNotNull("There is no cause of failure", restResponseChannel.getException());
   }
 
   // helpers
@@ -1053,17 +1053,13 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doPost(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Created,
-        restResponseChannel.getResponseStatus(MockRestResponseChannel.DataStatus.Flushed));
-    assertTrue("No Date header",
-        restResponseChannel.getHeader("Date", MockRestResponseChannel.DataStatus.Flushed) != null);
+    assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getResponseStatus());
+    assertTrue("No Date header", restResponseChannel.getHeader(MockRestResponseChannel.DATE_KEY) != null);
     assertTrue("No " + RestUtils.Headers.Creation_Time,
-        restResponseChannel.getHeader(RestUtils.Headers.Creation_Time, MockRestResponseChannel.DataStatus.Flushed)
-            != null);
-    assertEquals("Content-Length is not 0", "0", restResponseChannel
-        .getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY, MockRestResponseChannel.DataStatus.Flushed));
-    String blobId = restResponseChannel
-        .getHeader(MockRestResponseChannel.LOCATION_HEADER_KEY, MockRestResponseChannel.DataStatus.Flushed);
+        restResponseChannel.getHeader(RestUtils.Headers.Creation_Time) != null);
+    assertEquals("Content-Length is not 0", "0",
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY));
+    String blobId = restResponseChannel.getHeader(MockRestResponseChannel.LOCATION_HEADER_KEY);
     if (blobId == null) {
       fail("postBlobAndVerify did not return a blob ID");
     }
@@ -1082,8 +1078,7 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel response = doGet(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok,
-        restResponseChannel.getResponseStatus(MockRestResponseChannel.DataStatus.Flushed));
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
     ByteBuffer channelBuffer = ByteBuffer.allocate((int) response.getSize());
     WritableByteChannel channel = new ByteBufferChannel(channelBuffer);
@@ -1102,30 +1097,28 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doHead(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok,
-        restResponseChannel.getResponseStatus(MockRestResponseChannel.DataStatus.Flushed));
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
     assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.Blob_Size),
-        restResponseChannel.getHeader("Content-Length", MockRestResponseChannel.DataStatus.Flushed));
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY));
     assertEquals(RestUtils.Headers.Service_Id + " does not match",
         expectedHeaders.getString(RestUtils.Headers.Service_Id),
-        restResponseChannel.getHeader(RestUtils.Headers.Service_Id, MockRestResponseChannel.DataStatus.Flushed));
+        restResponseChannel.getHeader(RestUtils.Headers.Service_Id));
     assertEquals(RestUtils.Headers.Private + " does not match", expectedHeaders.getString(RestUtils.Headers.Private),
-        restResponseChannel.getHeader(RestUtils.Headers.Private, MockRestResponseChannel.DataStatus.Flushed));
+        restResponseChannel.getHeader(RestUtils.Headers.Private));
     assertEquals(RestUtils.Headers.Content_Type + " does not match",
         expectedHeaders.getString(RestUtils.Headers.Content_Type),
-        restResponseChannel.getHeader(RestUtils.Headers.Content_Type, MockRestResponseChannel.DataStatus.Flushed));
+        restResponseChannel.getHeader(RestUtils.Headers.Content_Type));
     assertTrue(RestUtils.Headers.Creation_Time + " header missing",
-        restResponseChannel.getHeader(RestUtils.Headers.Creation_Time, MockRestResponseChannel.DataStatus.Flushed)
-            != null);
+        restResponseChannel.getHeader(RestUtils.Headers.Creation_Time) != null);
     if (expectedHeaders.getLong(RestUtils.Headers.TTL) != Utils.Infinite_Time) {
       assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.getString(RestUtils.Headers.TTL),
-          restResponseChannel.getHeader(RestUtils.Headers.TTL, MockRestResponseChannel.DataStatus.Flushed));
+          restResponseChannel.getHeader(RestUtils.Headers.TTL));
     }
     if (expectedHeaders.has(RestUtils.Headers.Owner_Id)) {
       assertEquals(RestUtils.Headers.Owner_Id + " does not match",
           expectedHeaders.getString(RestUtils.Headers.Owner_Id),
-          restResponseChannel.getHeader(RestUtils.Headers.Owner_Id, MockRestResponseChannel.DataStatus.Flushed));
+          restResponseChannel.getHeader(RestUtils.Headers.Owner_Id));
     }
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
   }
@@ -1142,7 +1135,7 @@ public class AdminBlobStorageServiceTest {
     while (itr.hasNext()) {
       String key = (String) itr.next();
       if (key.startsWith(RestUtils.Headers.UserMetaData_Header_Prefix)) {
-        String outValue = restResponseChannel.getHeader(key, MockRestResponseChannel.DataStatus.Flushed);
+        String outValue = restResponseChannel.getHeader(key);
         assertEquals("Value for " + key + "does not match in user metadata", expectedHeaders.getString(key), outValue);
       }
     }
@@ -1158,12 +1151,10 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doDelete(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Accepted,
-        restResponseChannel.getResponseStatus(MockRestResponseChannel.DataStatus.Flushed));
-    assertTrue("No Date header",
-        restResponseChannel.getHeader("Date", MockRestResponseChannel.DataStatus.Flushed) != null);
-    assertEquals("Content-Length is not 0", "0", restResponseChannel
-        .getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY, MockRestResponseChannel.DataStatus.Flushed));
+    assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
+    assertTrue("No Date header", restResponseChannel.getHeader(MockRestResponseChannel.DATE_KEY) != null);
+    assertEquals("Content-Length is not 0", "0",
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_LENGTH_HEADER_KEY));
   }
 
   /**
@@ -1175,14 +1166,12 @@ public class AdminBlobStorageServiceTest {
   private void checkCommonGetHeadHeaders(MockRestResponseChannel restResponseChannel, JSONObject expectedHeaders)
       throws JSONException {
     assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.Content_Type),
-        restResponseChannel.getHeader("Content-Type", MockRestResponseChannel.DataStatus.Flushed));
-    assertTrue("No Date header",
-        restResponseChannel.getHeader("Date", MockRestResponseChannel.DataStatus.Flushed) != null);
-    assertTrue("No Last-Modified header",
-        restResponseChannel.getHeader("Last-Modified", MockRestResponseChannel.DataStatus.Flushed) != null);
+        restResponseChannel.getHeader(MockRestResponseChannel.CONTENT_TYPE_HEADER_KEY));
+    assertTrue("No Date header", restResponseChannel.getHeader(MockRestResponseChannel.DATE_KEY) != null);
+    assertTrue("No Last-Modified header", restResponseChannel.getHeader("Last-Modified") != null);
     assertEquals(RestUtils.Headers.Blob_Size + " does not match",
         expectedHeaders.getString(RestUtils.Headers.Blob_Size),
-        restResponseChannel.getHeader(RestUtils.Headers.Blob_Size, MockRestResponseChannel.DataStatus.Flushed));
+        restResponseChannel.getHeader(RestUtils.Headers.Blob_Size));
   }
 
   // echoTest() helpers

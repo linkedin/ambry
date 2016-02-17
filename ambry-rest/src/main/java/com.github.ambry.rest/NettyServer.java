@@ -11,6 +11,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -136,6 +137,8 @@ class NettyServerDeployer implements Runnable {
               .addLast("codec", new HttpServerCodec())
                   // for detecting connections that have been idle too long - probably because of an error.
               .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
+                  // for safe writing of chunks for responses
+              .addLast("chunker", new ChunkedWriteHandler())
                   // custom processing class that interfaces with a BlobStorageService.
               .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
         }

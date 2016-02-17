@@ -59,8 +59,6 @@ public enum ResponseStatus {
       case UnsupportedOperation:
         return ResponseStatus.BadRequest;
       case InternalServerError:
-      case ChannelWriteError:
-      case IllegalResponseMetadataStateTransition:
       case InternalObjectCreationError:
       case RequestChannelClosed:
       case RequestResponseQueuingFailure:

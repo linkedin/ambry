@@ -23,11 +23,12 @@ public interface AsyncWritableChannel extends Channel {
    * Every single write is guaranteed to be acknowledged as either succeeded or failed even if the channel is closed.
    * Further, writes will be acknowledged in the same order that they were received.
    * <p/>
-   * {@code src} can be reused ony after the {@code callback} is invoked (or after {@code future.get()} returns).
+   * {@code src} can be reused only after the {@code callback} is invoked (or after {@code future.get()} returns).
    * <p/>
    * @param src the data that needs to be written to the channel.
    * @param callback the {@link Callback} that will be invoked once the write succeeds/fails. This can be null.
-   * @return a {@link Future} that will eventually contain the result of the write operation.
+   * @return a {@link Future} that will eventually contain the result of the write operation (the number of bytes
+   *         written).
    */
   public Future<Long> write(ByteBuffer src, Callback<Long> callback);
 }

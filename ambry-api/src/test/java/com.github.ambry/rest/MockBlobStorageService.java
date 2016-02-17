@@ -14,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -32,6 +33,8 @@ public class MockBlobStorageService implements BlobStorageService {
 
   private VerifiableProperties verifiableProperties;
   private volatile boolean serviceRunning = false;
+  private volatile boolean blocking = false;
+  private volatile CountDownLatch blockLatch = new CountDownLatch(0);
 
   /**
    * Changes the {@link VerifiableProperties} instance with this instance so that the behaviour can be changed on the
@@ -107,13 +110,45 @@ public class MockBlobStorageService implements BlobStorageService {
   }
 
   /**
+   * All operations block until {@link #releaseAllOperations()} is called.
+   * @throws IllegalStateException each call to this function must (eventually) be followed by a call to
+   *                               {@link #releaseAllOperations()}. If this function is invoked more than once before an
+   *                               accompanying {@link #releaseAllOperations()} is called, it is illegal state.
+   */
+  public void blockAllOperations() {
+    if (blocking) {
+      throw new IllegalStateException("Already in blocking state");
+    } else {
+      blocking = true;
+      blockLatch = new CountDownLatch(1);
+    }
+  }
+
+  /**
+   * Releases all blocked operations.
+   */
+  public void releaseAllOperations() {
+    blockLatch.countDown();
+    blocking = false;
+  }
+
+  /**
    * Handles argument pre-checks and examines the URL to see if any custom operations need to be performed (which might
    * involve throwing exceptions).
+   * <p/>
+   * Also blocks if required.
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} that can be used to set headers.
    * @return {@code true} if the pre-checks decided it is OK to continue. Otherwise {@code false}.
    */
   private boolean shouldProceed(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    if (blocking) {
+      try {
+        blockLatch.await();
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(e);
+      }
+    }
     boolean shouldProceed = canHonorRequest(restRequest, restResponseChannel);
     if (shouldProceed) {
       String uri = restRequest.getUri();
