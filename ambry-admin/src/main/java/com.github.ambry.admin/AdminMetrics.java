@@ -163,12 +163,15 @@ class AdminMetrics {
 
     // Errors
     // AdminBlobStorageService
-    callbackProcessingError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "CallbackProcessingError"));
-    operationError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "OperationError"));
+    callbackProcessingError =
+        metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "CallbackProcessingError"));
+    operationError = metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "OperationError"));
     missingOperationHandlerError =
-        metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "MissingOperationHandlerError"));
-    responseSubmissionError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "ResponseSubmissionError"));
-    resourceReleaseError = metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "ResourceReleaseError"));
+        metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "MissingOperationHandlerError"));
+    responseSubmissionError =
+        metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "ResponseSubmissionError"));
+    resourceReleaseError =
+        metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "ResourceReleaseError"));
     // EchoHandler
     echoGetMissingParameterError =
         metricRegistry.counter(MetricRegistry.name(EchoHandler.class, "MissingParameterError"));

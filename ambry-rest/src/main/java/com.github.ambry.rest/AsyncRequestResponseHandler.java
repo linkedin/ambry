@@ -2,6 +2,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -36,7 +37,6 @@ import org.slf4j.LoggerFactory;
 public class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
   private final RestServerMetrics restServerMetrics;
 
-  private final List<Thread> requestWorkerThreads = new ArrayList<Thread>();
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<AsyncRequestWorker>();
   private final AtomicInteger currIndex = new AtomicInteger(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -58,24 +58,18 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
 
   /**
    * Does startup tasks for the AsyncRequestResponseHandler. When the function returns, startup is FULLY complete.
-   * @throws IllegalStateException if a {@link BlobStorageService} has not been set before starting.
    */
   @Override
   public void start() {
     long startupBeginTime = System.currentTimeMillis();
     try {
       if (!isRunning()) {
-        if (requestWorkersCount > 0 && blobStorageService == null) {
-          throw new IllegalStateException("BlobStorageService has not been set");
-        }
         logger.info("Starting AsyncRequestResponseHandler with {} request workers", requestWorkersCount);
         for (int i = 0; i < requestWorkersCount; i++) {
           long workerStartupBeginTime = System.currentTimeMillis();
           AsyncRequestWorker asyncRequestWorker = new AsyncRequestWorker(restServerMetrics, blobStorageService);
           asyncRequestWorkers.add(asyncRequestWorker);
-          Thread workerThread = new Thread(asyncRequestWorker);
-          requestWorkerThreads.add(workerThread);
-          workerThread.start();
+          Utils.newThread("RequestWorker-" + i, asyncRequestWorker, false).start();
           long workerStartupTime = System.currentTimeMillis() - workerStartupBeginTime;
           restServerMetrics.requestWorkerStartTimeInMs.update(workerStartupTime);
           logger.info("AsyncRequestWorker startup took {} ms", workerStartupTime);
@@ -169,7 +163,7 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
   public void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
       ReadableStreamChannel response, Exception exception)
       throws RestServiceException {
-    if (isRunning() && asyncResponseHandler != null && asyncResponseHandler.isRunning()) {
+    if (isRunning()) {
       asyncResponseHandler.submitResponse(restRequest, restResponseChannel, response, exception);
     } else {
       restServerMetrics.requestResponseHandlerUnavailableError.inc();
@@ -180,34 +174,25 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
   }
 
   /**
-   * Sets the number of request handling units.
-   * @param count the required number of request handling units.
-   * @throws IllegalArgumentException if {@code count} < 0.
+   * Sets the number of request handling units and the {@link BlobStorageService} that will be used in
+   * {@link AsyncRequestWorker} instances..
+   * @param workerCount the required number of request handling units.
+   * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
+   * @throws IllegalArgumentException if {@code workerCount} < 0 or if {@code workerCount} > 0 but
+   *                                  {@code blobStorageService} is null.
    * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
    */
-  protected void setRequestWorkersCount(int count) {
+  protected void setupRequestHandling(int workerCount, BlobStorageService blobStorageService) {
     if (isRunning()) {
       throw new IllegalStateException("Cannot modify scaling unit count after the service has started");
-    } else if (count < 0) {
-      throw new IllegalArgumentException("Request worker count has to be >= 0");
-    }
-    requestWorkersCount = count;
-    logger.trace("Request handling units count set to {}", requestWorkersCount);
-  }
-
-  /**
-   * Sets the {@link BlobStorageService} that will be used in {@link AsyncRequestWorker} instances.
-   * @param blobStorageService the {@link BlobStorageService} instance to be used to process requests.
-   * @throws IllegalArgumentException if {@code blobStorageService} is null.
-   * @throws IllegalStateException if {@link #start()} has already been called before a call to this function.
-   */
-  protected void setBlobStorageService(BlobStorageService blobStorageService) {
-    if (isRunning()) {
-      throw new IllegalStateException("Cannot set BlobStorageService after the service has started");
-    } else if (blobStorageService == null) {
+    } else if (workerCount < 0) {
+      throw new IllegalArgumentException("Request worker workerCount has to be >= 0");
+    } else if (workerCount > 0 && blobStorageService == null) {
       throw new IllegalArgumentException("BlobStorageService cannot be null");
     }
+    requestWorkersCount = workerCount;
     this.blobStorageService = blobStorageService;
+    logger.trace("Request handling units count set to {}", requestWorkersCount);
   }
 
   /**
@@ -249,8 +234,8 @@ public class AsyncRequestResponseHandler implements RestRequestHandler, RestResp
    */
   protected int getWorkersAlive() {
     int count = 0;
-    for (int i = 0; i < requestWorkerThreads.size(); i++) {
-      if (asyncRequestWorkers.get(i).isRunning() && requestWorkerThreads.get(i).isAlive()) {
+    for (int i = 0; i < asyncRequestWorkers.size(); i++) {
+      if (asyncRequestWorkers.get(i).isRunning()) {
         count++;
       }
     }
@@ -302,27 +287,31 @@ class AsyncRequestWorker implements Runnable {
   public void run() {
     logger.trace("AsyncRequestWorker started");
     AsyncRequestInfo requestInfo = null;
-    while (isRunning()) {
-      try {
-        requestInfo = requests.take();
-        if (requestInfo.restRequest != null) {
-          processRequest(requestInfo);
-          logger.trace("Request {} was processed successfully", requestInfo.restRequest.getUri());
-        } else {
-          break;
-        }
-      } catch (Exception e) {
-        restServerMetrics.requestProcessingError.inc();
-        if (requestInfo != null) {
-          onProcessingFailure(requestInfo.restRequest, requestInfo.restResponseChannel, e);
-        } else {
-          logger.error("Unexpected exception while processing requests", e);
+    try {
+      while (isRunning()) {
+        try {
+          requestInfo = requests.take();
+          if (requestInfo.restRequest != null) {
+            processRequest(requestInfo);
+            logger.trace("Request {} was processed successfully", requestInfo.restRequest.getUri());
+          } else {
+            break;
+          }
+        } catch (Exception e) {
+          restServerMetrics.requestProcessingError.inc();
+          if (requestInfo != null) {
+            onProcessingFailure(requestInfo.restRequest, requestInfo.restResponseChannel, e);
+          } else {
+            logger.error("Unexpected exception while processing requests", e);
+          }
         }
       }
+    } finally {
+      running.set(false);
+      discardRequests();
+      logger.trace("AsyncRequestWorker stopped");
+      shutdownLatch.countDown();
     }
-    discardRequests();
-    logger.trace("AsyncRequestWorker stopped");
-    shutdownLatch.countDown();
   }
 
   /**
@@ -389,7 +378,7 @@ class AsyncRequestWorker implements Runnable {
 
   /**
    * Information on whether this instance is accepting requests and responses. This will return {@code false} as soon as
-   * {@link #shutdown(long, TimeUnit)} ()} is called whether or not the instance has actually stopped working.
+   * {@link #shutdown(long, TimeUnit)} is called whether or not the instance has actually stopped working.
    * @return {@code true} if in a state to receive requests/responses. {@code false} otherwise.
    */
   protected boolean isRunning() {
@@ -452,15 +441,19 @@ class AsyncRequestWorker implements Runnable {
   private void discardRequests() {
     logger.trace("Discarding requests on account of shutdown");
     RestServiceException e = new RestServiceException("Service shutdown", RestServiceErrorCode.ServiceUnavailable);
-    if (requests.size() > 0) {
-      logger.info("There were {} requests in flight during shutdown", requests.size());
-      restServerMetrics.residualRequestQueueSize.inc(requests.size());
-      AsyncRequestInfo residualRequestInfo = requests.poll();
-      while (residualRequestInfo != null && residualRequestInfo.restRequest != null) {
+    AsyncRequestInfo residualRequestInfo = requests.poll();
+    int discardCount = 0;
+    while (residualRequestInfo != null) {
+      if (residualRequestInfo.restRequest != null) {
+        discardCount++;
         onRequestDequeue(residualRequestInfo);
         onProcessingFailure(residualRequestInfo.restRequest, residualRequestInfo.restResponseChannel, e);
-        residualRequestInfo = requests.poll();
       }
+      residualRequestInfo = requests.poll();
+    }
+    if(discardCount > 0) {
+      restServerMetrics.residualRequestQueueSize.inc(discardCount);
+      logger.info("There were {} requests in flight during shutdown", discardCount);
     }
   }
 
@@ -546,7 +539,6 @@ class AsyncResponseHandler implements Closeable {
   private final ConcurrentHashMap<RestRequest, ResponseWriteCallback> responses =
       new ConcurrentHashMap<RestRequest, ResponseWriteCallback>();
   private final AtomicInteger inFlightResponsesCount = new AtomicInteger(0);
-  private final AtomicBoolean running = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -561,7 +553,6 @@ class AsyncResponseHandler implements Closeable {
   @Override
   public void close() {
     long closeStartTime = System.currentTimeMillis();
-    running.set(false);
     discardResponses();
     logger.trace("Closed AsyncResponseHandler");
     restServerMetrics.responseHandlerCloseTimeInMs.update(System.currentTimeMillis() - closeStartTime);
@@ -606,15 +597,6 @@ class AsyncResponseHandler implements Closeable {
       restServerMetrics.responsePreProcessingTimeInMs.update(preProcessingTime);
       restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingTime(preProcessingTime);
     }
-  }
-
-  /**
-   * Information on whether this instance is accepting responses. This will return {@code false} as soon as
-   * {@link #close()} is called whether or not the instance has actually stopped working.
-   * @return {@code true} if in a state to receive responses. {@code false} otherwise.
-   */
-  protected boolean isRunning() {
-    return running.get();
   }
 
   /**

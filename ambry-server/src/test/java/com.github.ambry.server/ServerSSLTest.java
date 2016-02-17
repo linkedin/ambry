@@ -43,9 +43,10 @@ public class ServerSSLTest {
     clientSSLConfig1 = TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1");
     clientSSLConfig2 = TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client2");
     clientSSLConfig3 = TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.CLIENT, trustStoreFile, "client3");
-    serverSSLProps = TestSSLUtils.createSSLProperties("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
-    coordinatorProps =
-        TestSSLUtils.createSSLProperties("", SSLFactory.Mode.CLIENT, trustStoreFile, "coordinator-client");
+    serverSSLProps = new Properties();
+    TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    coordinatorProps = new Properties();
+    TestSSLUtils.addSSLProperties(coordinatorProps, "", SSLFactory.Mode.CLIENT, trustStoreFile, "coordinator-client");
     notificationSystem = new MockNotificationSystem(9);
     sslCluster =
         new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false, SystemTime.getInstance());
@@ -121,7 +122,7 @@ public class ServerSSLTest {
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws Exception {
     ServerTestUtil
-        .endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3",
-    PortType.SSL, sslCluster, notificationSystem, coordinatorProps);
+        .endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL, sslCluster,
+            notificationSystem, coordinatorProps);
   }
 }

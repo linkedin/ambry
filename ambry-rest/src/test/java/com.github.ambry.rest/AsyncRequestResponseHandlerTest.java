@@ -139,24 +139,6 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
-   * This tests for exceptions thrown when a {@link AsyncRequestResponseHandler} is started without setting a
-   * {@link BlobStorageService}.
-   * @throws Exception
-   */
-  @Test
-  public void useWithoutSettingBlobStorageServiceTest()
-      throws Exception {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
-    AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
-    requestResponseHandler.setRequestWorkersCount(1);
-    try {
-      requestResponseHandler.start();
-    } catch (IllegalStateException e) {
-      // expected. Nothing to do.
-    }
-  }
-
-  /**
    * Tests the behavior of {@link AsyncRequestResponseHandler} when request worker count is not set or is zero.
    * @throws Exception
    */
@@ -165,7 +147,6 @@ public class AsyncRequestResponseHandlerTest {
       throws Exception {
     RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
     AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
-    requestResponseHandler.setBlobStorageService(blobStorageService);
     noRequestHandlersTest(requestResponseHandler);
 
     requestResponseHandler = getAsyncRequestResponseHandler(0);
@@ -179,7 +160,7 @@ public class AsyncRequestResponseHandlerTest {
 
     // set request workers < 0
     try {
-      requestResponseHandler.setRequestWorkersCount(-1);
+      requestResponseHandler.setupRequestHandling(-1, blobStorageService);
       fail("Setting request workers < 0 should have thrown exception");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -187,7 +168,7 @@ public class AsyncRequestResponseHandlerTest {
 
     // set null BlobStorageService
     try {
-      requestResponseHandler.setBlobStorageService(null);
+      requestResponseHandler.setupRequestHandling(1, null);
       fail("Setting BlobStorageService to null should have thrown exception");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -195,24 +176,15 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
-   * Tests behavior of {@link AsyncRequestResponseHandler#setRequestWorkersCount(int)} and
-   * {@link AsyncRequestResponseHandler#setBlobStorageService(BlobStorageService)} after the
+   * Tests behavior of {@link AsyncRequestResponseHandler#setupRequestHandling(int, BlobStorageService)} after the
    * {@link AsyncRequestResponseHandler} has been started.
    */
   @Test
-  public void setFunctionsAfterStartTest() {
+  public void setupRequestHandlingStartTest() {
     // set request workers.
     try {
-      asyncRequestResponseHandler.setRequestWorkersCount(5);
+      asyncRequestResponseHandler.setupRequestHandling(5, blobStorageService);
       fail("Setting request workers after start should have thrown exception");
-    } catch (IllegalStateException e) {
-      // expected. nothing to do.
-    }
-
-    // set BlobStorageService
-    try {
-      asyncRequestResponseHandler.setBlobStorageService(blobStorageService);
-      fail("Setting BlobStorageService after start should have thrown exception");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
     }
@@ -449,7 +421,7 @@ public class AsyncRequestResponseHandlerTest {
   public void multipleRequestsInQueueTest()
       throws Exception {
     final int EXPECTED_QUEUE_SIZE = 5;
-    blobStorageService.blockUntilRelease();
+    blobStorageService.blockAllOperations();
     // the first request that each worker processes will block.
     for (int i = 0; i < EXPECTED_QUEUE_SIZE + asyncRequestResponseHandler.getWorkersAlive(); i++) {
       MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
@@ -459,7 +431,7 @@ public class AsyncRequestResponseHandlerTest {
     }
     assertEquals("Request queue size unexpected", EXPECTED_QUEUE_SIZE,
         asyncRequestResponseHandler.getRequestQueueSize());
-    blobStorageService.release();
+    blobStorageService.releaseAllOperations();
   }
 
   // helpers
@@ -637,8 +609,7 @@ public class AsyncRequestResponseHandlerTest {
       if (blobStorageService == null) {
         blobStorageService = new MockBlobStorageService(verifiableProperties, handler, router);
       }
-      handler.setRequestWorkersCount(requestWorkers);
-      handler.setBlobStorageService(blobStorageService);
+      handler.setupRequestHandling(requestWorkers, blobStorageService);
     }
     return handler;
   }

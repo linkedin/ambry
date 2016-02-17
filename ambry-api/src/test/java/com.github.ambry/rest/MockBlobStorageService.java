@@ -110,12 +110,12 @@ public class MockBlobStorageService implements BlobStorageService {
   }
 
   /**
-   * All operations block until {@link #release()} is called.
+   * All operations block until {@link #releaseAllOperations()} is called.
    * @throws IllegalStateException each call to this function must (eventually) be followed by a call to
-   *                               {@link #release()}. If this function is invoked more than once before an accompanying
-   *                               {@link #release()} is called, it is illegal state.
+   *                               {@link #releaseAllOperations()}. If this function is invoked more than once before an
+   *                               accompanying {@link #releaseAllOperations()} is called, it is illegal state.
    */
-  public void blockUntilRelease() {
+  public void blockAllOperations() {
     if (blocking) {
       throw new IllegalStateException("Already in blocking state");
     } else {
@@ -127,7 +127,7 @@ public class MockBlobStorageService implements BlobStorageService {
   /**
    * Releases all blocked operations.
    */
-  public void release() {
+  public void releaseAllOperations() {
     blockLatch.countDown();
     blocking = false;
   }
@@ -146,7 +146,7 @@ public class MockBlobStorageService implements BlobStorageService {
       try {
         blockLatch.await();
       } catch (InterruptedException e) {
-        // too bad.
+        throw new IllegalStateException(e);
       }
     }
     boolean shouldProceed = canHonorRequest(restRequest, restResponseChannel);

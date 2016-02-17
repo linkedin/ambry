@@ -29,8 +29,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Date;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -38,19 +38,13 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Netty specific implementation of {@link RestResponseChannel} used  to return their response via Netty. It is
- * supported by an underlying Netty channel whose handle this class has in the form of a {@link ChannelHandlerContext}.
+ * Netty specific implementation of {@link RestResponseChannel} used to return responses via Netty. It is supported by
+ * an underlying Netty channel whose handle this class has in the form of a {@link ChannelHandlerContext}.
  * <p/>
- * The implementation is thread safe and data is sent in the order that threads call
- * {@link #write(ByteBuffer, Callback)}. Any semantic ordering that is required must be enforced by the callers.
- * <p/>
- * Although it is guaranteed that no writes will be accepted through this class once {@link #close()} is called, data
- * might or might not be written to the underlying channel even if this class accepted a write. This is because others
- * may have a handle on the underlying channel and can close it independently or the underlying channel can experience
- * an error.
+ * Data is sent in the order that threads call {@link #write(ByteBuffer, Callback)}.
  * <p/>
  * If a write through this class fails at any time, the underlying channel will be closed immediately and no more writes
- * will be accepted and all scheduled writes will be notified.
+ * will be accepted and all scheduled writes will be notified of the failure.
  */
 class NettyResponseChannel implements RestResponseChannel {
   private final ChannelHandlerContext ctx;
@@ -69,8 +63,9 @@ class NettyResponseChannel implements RestResponseChannel {
   private final ResponseMetadataWriteListener responseMetadataWriteListener = new ResponseMetadataWriteListener();
   private final CleanupCallback cleanupCallback = new CleanupCallback();
   private final AtomicLong totalBytesWritten = new AtomicLong(0);
-  private final Queue<Chunk> chunksToWrite = new LinkedBlockingQueue<Chunk>();
-  private final Queue<Chunk> chunksAwaitingCallback = new LinkedBlockingQueue<Chunk>();
+  private final Queue<Chunk> chunksToWrite = new ConcurrentLinkedQueue<Chunk>();
+  private final Queue<Chunk> chunksAwaitingCallback = new ConcurrentLinkedQueue<Chunk>();
+  private final AtomicLong chunksToWriteCount = new AtomicLong(0);
 
   private NettyRequest request = null;
 
@@ -94,6 +89,7 @@ class NettyResponseChannel implements RestResponseChannel {
       maybeWriteResponseMetadata(responseMetadata, responseMetadataWriteListener);
     }
     Chunk chunk = new Chunk(src, callback);
+    chunksToWriteCount.incrementAndGet();
     chunksToWrite.add(chunk);
     if (!isOpen()) {
       // the isOpen() check is not before addition to the queue because chunks need to be acknowledged in the order
@@ -407,8 +403,7 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       onResponseComplete(exception);
 
-      logger.trace("Cleaning up {} remaining chunks on write failure",
-          chunksToWrite.size() + chunksAwaitingCallback.size());
+      logger.trace("Cleaning up remaining chunks on write failure");
       Chunk chunk = chunksAwaitingCallback.poll();
       while (chunk != null) {
         chunk.resolveChunk(exception);
@@ -416,6 +411,7 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       chunk = chunksToWrite.poll();
       while (chunk != null) {
+        chunksToWriteCount.decrementAndGet();
         chunk.resolveChunk(exception);
         chunk = chunksToWrite.poll();
       }
@@ -502,7 +498,7 @@ class NettyResponseChannel implements RestResponseChannel {
      */
     @Override
     public boolean isEndOfInput() {
-      return responseComplete.get() && chunksToWrite.size() <= 0;
+      return responseComplete.get() && !writeFuture.isDone() && chunksToWriteCount.get() == 0;
     }
 
     @Override
@@ -523,6 +519,7 @@ class NettyResponseChannel implements RestResponseChannel {
       HttpContent content = null;
       Chunk chunk = chunksToWrite.poll();
       if (chunk != null) {
+        chunksToWriteCount.decrementAndGet();
         ByteBuf buf = Unpooled.wrappedBuffer(chunk.buffer);
         chunk.writeCompleteThreshold = totalBytesWritten.addAndGet(chunk.bytesToBeWritten);
         chunksAwaitingCallback.add(chunk);
