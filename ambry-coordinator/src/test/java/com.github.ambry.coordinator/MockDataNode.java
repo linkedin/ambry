@@ -44,8 +44,7 @@ public class MockDataNode {
 
     @Override
     public BlobOutput getBlobOutput() {
-      return new BlobOutput(super.getBlobOutput().getSize(),
-          new ByteArrayInputStream(materializedBlobOutput.array()));
+      return new BlobOutput(super.getBlobOutput().getSize(), new ByteArrayInputStream(materializedBlobOutput.array()));
     }
   }
 

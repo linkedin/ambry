@@ -27,5 +27,4 @@ public class BlobOutput {
   public InputStream getStream() {
     return stream;
   }
-
 }

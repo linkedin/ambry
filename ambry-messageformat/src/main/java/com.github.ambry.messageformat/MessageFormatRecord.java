@@ -584,7 +584,6 @@ public class MessageFormatRecord {
       BlobType blobContentType = BlobType.values()[blobTypeOrdinal];
       long dataSize = dataStream.readLong();
       if (dataSize > Integer.MAX_VALUE) {
-        //TODO : IF corrupt? Why throw IOException
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
       ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int) dataSize);
