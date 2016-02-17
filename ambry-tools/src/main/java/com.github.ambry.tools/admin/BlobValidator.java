@@ -539,7 +539,7 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
         byte[] blobFromAmbry = new byte[(int) blobOutput.getSize()];
         int blobSizeToRead = (int) blobOutput.getSize();
         int blobSizeRead = 0;

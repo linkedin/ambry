@@ -148,7 +148,7 @@ class Verifier implements Runnable {
                 throw new IllegalStateException();
               } else {
                 try {
-                  BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+                  BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
                   byte[] blobout = new byte[(int) blobOutput.getSize()];
                   int readsize = 0;
                   while (readsize < blobOutput.getSize()) {

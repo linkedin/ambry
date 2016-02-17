@@ -1,5 +1,7 @@
 package com.github.ambry.messageformat;
 
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
@@ -124,21 +126,21 @@ public class MessageFormatRecord {
     }
   }
 
-  public static BlobOutput deserializeBlob(InputStream stream)
+  public static BlobOutputInfo deserializeBlob(InputStream stream)
       throws IOException, MessageFormatException {
-    return deserializeAndGetBlobWithVersion(stream).getBlobOutput();
+    return deserializeAndGetBlobWithVersion(stream).getBlobOutputInfo();
   }
 
-  static DeserializedBlob deserializeAndGetBlobWithVersion(InputStream stream)
+  static DeserializedBlobInfo deserializeAndGetBlobWithVersion(InputStream stream)
       throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
       case Blob_Version_V1:
-        return new DeserializedBlob(Blob_Version_V1, Blob_Format_V1.deserializeBlobRecord(crcStream));
+        return new DeserializedBlobInfo(Blob_Version_V1, Blob_Format_V1.deserializeBlobRecord(crcStream));
       case Blob_Version_V2:
-        return new DeserializedBlob(Blob_Version_V2, Blob_Format_V2.deserializeBlobRecord(crcStream));
+        return new DeserializedBlobInfo(Blob_Version_V2, Blob_Format_V2.deserializeBlobRecord(crcStream));
       default:
         throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.Unknown_Format_Version);
     }
@@ -514,7 +516,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobSize);
     }
 
-    public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream)
+    public static BlobOutputInfo deserializeBlobRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long dataSize = dataStream.readLong();
@@ -529,7 +531,7 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobOutput(dataSize, BlobType.DataBlob, output);
+      return new BlobOutputInfo(BlobType.DataBlob, new BlobOutput(dataSize, output));
     }
   }
 
@@ -570,10 +572,10 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobContentSize);
     }
 
-    public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream)
+    public static BlobOutputInfo deserializeBlobRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
-      short blobTypeOrdinal =  dataStream.readShort();
+      short blobTypeOrdinal = dataStream.readShort();
       if (blobTypeOrdinal > BlobType.values().length) {
         logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
         throw new MessageFormatException("corrupt data while parsing blob content",
@@ -593,17 +595,17 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobOutput(dataSize, blobContentType, output);
+      return new BlobOutputInfo(blobContentType, new BlobOutput(dataSize, output));
     }
   }
 
   /**
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   * |         |               |               |           |            |         |            |
-   * | version |   no of keys  |    key size   |    key1   |     key2   |  .....  |   Crc      |
-   * |(2 bytes)|    (4 bytes)  |   ( 4 bytes)  | (key size |  (key size |  .....  |  (8 bytes) |
-   * |         |               |               |   bytes)  |    bytes)  |         |            |
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * |         |               |              |            |         |
+   * | version |   no of keys  |      key1    |     key2   |  .....  |
+   * |(2 bytes)|    (4 bytes)  |   (key size  |  (key size |  .....  |
+   * |         |               |      bytes)  |    bytes)  |         |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version         - The version of the blob property record
    *
    *  no of keys      - total number of keys
@@ -614,55 +616,40 @@ public class MessageFormatRecord {
    *
    *  key2            - second key to be part of metadata blob
    *
-   *  crc             - The crc of the blob property record
-   *
    */
   public static class Metadata_Content_Format_V1 {
-    public static final int Num_Keys_Field_Size_In_Bytes = 4;
     public static final int Key_Size_Field_Size_In_Bytes = 4;
 
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
       return Version_Field_Size_In_Bytes +
-          Num_Keys_Field_Size_In_Bytes +
           Key_Size_Field_Size_In_Bytes +
           (numberOfKeys * keySize);
     }
 
-    public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, List<String> keys) {
-      int keySize = keys.get(0).length();
-      for (String key : keys) {
-        if (key.length() != keySize) {
+    public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, List<StoreKey> keys) {
+      int keySize = keys.get(0).sizeInBytes();
+      for (StoreKey storeKey : keys) {
+        if (storeKey.sizeInBytes() != keySize) {
           throw new IllegalArgumentException("Keys are not of same size");
         }
       }
       outputBuffer.putShort(Metadata_Content_Version_V1);
       outputBuffer.putInt(keys.size());
-      outputBuffer.putInt(keys.get(0).length());
-      for (String key : keys) {
-        outputBuffer.put(key.getBytes());
+      for (StoreKey storeKey : keys) {
+        outputBuffer.put(storeKey.toBytes());
       }
     }
 
-    public static List<String> deserializeMetadataContentRecord(DataInputStream stream)
+    public static List<StoreKey> deserializeMetadataContentRecord(DataInputStream stream,
+        StoreKeyFactory storeKeyFactory)
         throws IOException, MessageFormatException {
-      List<String> keys = new ArrayList<String>();
+      List<StoreKey> keys = new ArrayList<StoreKey>();
       int numberOfKeys = stream.readInt();
-      int keySize = stream.readInt();
       for (int i = 0; i < numberOfKeys; i++) {
-        byte[] key = Utils.readBytesFromStream(stream, keySize);
-        keys.add(new String(key));
+        StoreKey storeKey = storeKeyFactory.getStoreKey(stream);
+        keys.add(storeKey);
       }
       return keys;
-    }
-
-    private static boolean validateKeys(List<String> keys) {
-      int keySize = keys.get(0).length();
-      for (String key : keys) {
-        if (key.length() != keySize) {
-          return false;
-        }
-      }
-      return true;
     }
   }
 }
@@ -718,5 +705,23 @@ class DeserializedBlob {
 
   public BlobOutput getBlobOutput() {
     return blobOutput;
+  }
+}
+
+class DeserializedBlobInfo {
+  private short version;
+  private BlobOutputInfo blobOutputInfo;
+
+  public DeserializedBlobInfo(short version, BlobOutputInfo blobOutputInfo) {
+    this.version = version;
+    this.blobOutputInfo = blobOutputInfo;
+  }
+
+  public short getVersion() {
+    return version;
+  }
+
+  BlobOutputInfo getBlobOutputInfo() {
+    return blobOutputInfo;
   }
 }

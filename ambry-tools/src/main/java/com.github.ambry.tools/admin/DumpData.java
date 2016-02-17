@@ -573,7 +573,7 @@ public class DumpData {
                 " serviceId " + props.getServiceId();
             ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
             usermetadata = " Metadata - size " + metadata.capacity();
-            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
+            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
             blobOutput = "Blob - size " + output.getSize();
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
@@ -744,7 +744,7 @@ public class DumpData {
               " serviceId " + props.getServiceId();
           ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
           usermetadata = " Metadata - size " + metadata.capacity();
-          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
+          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
           blobOutput = "Blob - size " + output.getSize();
         } else {
           boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);

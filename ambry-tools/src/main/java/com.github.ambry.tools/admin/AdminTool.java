@@ -326,7 +326,7 @@ public class AdminTool {
           return null;
         }
       } else {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
         return blobOutput;
       }
     } catch (MessageFormatException mfe) {

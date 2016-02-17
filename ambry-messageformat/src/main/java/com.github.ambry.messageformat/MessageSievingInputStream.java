@@ -181,7 +181,7 @@ public class MessageSievingInputStream extends InputStream {
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
           props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
           metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
-          output = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
+          output = MessageFormatRecord.deserializeBlob(byteArrayInputStream).getBlobOutput();
         } else {
           throw new IllegalStateException("Message cannot be a deleted record ");
         }

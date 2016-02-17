@@ -417,7 +417,7 @@ class HardDeleteVerifier {
               try {
                 props = MessageFormatRecord.deserializeBlobProperties(streamlog);
                 metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-                output = MessageFormatRecord.deserializeBlob(streamlog);
+                output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
               } catch (MessageFormatException e) {
                 if (!isDeleted) {
                   corruptNonDeleted++;
@@ -681,7 +681,7 @@ class HardDeleteVerifier {
 
     try {
       usermetadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-      blobOutput = MessageFormatRecord.deserializeBlob(streamlog);
+      blobOutput = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
     } catch (MessageFormatException e) {
       caughtException = true;
     } catch (IOException e) {
@@ -690,7 +690,7 @@ class HardDeleteVerifier {
 
     try {
       oldUsermetadata = MessageFormatRecord.deserializeUserMetadata(oldStreamlog);
-      oldBlobOutput = MessageFormatRecord.deserializeBlob(oldStreamlog);
+      oldBlobOutput = MessageFormatRecord.deserializeBlob(oldStreamlog).getBlobOutput();
     } catch (MessageFormatException e) {
       caughtExceptionInOld = true;
     } catch (IOException e) {

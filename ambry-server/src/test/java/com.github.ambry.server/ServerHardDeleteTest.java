@@ -303,9 +303,9 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198443);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132307);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132307);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299);
 
     MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
 
@@ -350,7 +350,7 @@ public class ServerHardDeleteTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 6; i++) {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
         Assert.assertEquals(blobOutput.getSize(), properties.get(i).getBlobSize());
         byte[] dataOutput = new byte[(int) blobOutput.getSize()];
         blobOutput.getStream().read(dataOutput);
@@ -435,9 +435,9 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297923);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231690);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231690);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676);
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);
@@ -475,7 +475,7 @@ public class ServerHardDeleteTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 9; i++) {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
         Assert.assertEquals(blobOutput.getSize(), properties.get(i).getBlobSize());
         byte[] dataOutput = new byte[(int) blobOutput.getSize()];
         blobOutput.getStream().read(dataOutput);

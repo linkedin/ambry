@@ -211,7 +211,7 @@ public class ServerReadPerformance {
             channel.send(getRequest);
             InputStream receiveStream = channel.receive().getInputStream();
             GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
-            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream()).getBlobOutput();
             long sizeRead = 0;
             byte[] outputBuffer = new byte[(int) output.getSize()];
             ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));

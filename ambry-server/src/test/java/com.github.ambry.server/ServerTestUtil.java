@@ -394,7 +394,7 @@ public final class ServerTestUtil {
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           //System.out.println("response from get " + resp.getError());
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
             byte[] blobout = new byte[(int) blobOutput.getSize()];
             int readsize = 0;
             while (readsize < blobOutput.getSize()) {
@@ -561,7 +561,7 @@ public final class ServerTestUtil {
           blobsChecked.add(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
             byte[] blobout = new byte[(int) blobOutput.getSize()];
             int readsize = 0;
             while (readsize < blobOutput.getSize()) {
@@ -670,7 +670,7 @@ public final class ServerTestUtil {
           blobsChecked.remove(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
             byte[] blobout = new byte[(int) blobOutput.getSize()];
             int readsize = 0;
             while (readsize < blobOutput.getSize()) {
@@ -882,7 +882,7 @@ public final class ServerTestUtil {
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       //System.out.println("response from get " + resp3.getError());
       try {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
+        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp3.getInputStream()).getBlobOutput();
         byte[] blobout = new byte[(int) blobOutput.getSize()];
         int readsize = 0;
         while (readsize < blobOutput.getSize()) {
@@ -1168,7 +1168,7 @@ public final class ServerTestUtil {
     InputStream stream = channel.receive().getInputStream();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
     Assert.assertEquals(resp.getError(), ServerErrorCode.No_Error);
-    BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+    BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
     byte[] blobout = new byte[(int) blobOutput.getSize()];
     int readsize = 0;
     while (readsize < blobOutput.getSize()) {

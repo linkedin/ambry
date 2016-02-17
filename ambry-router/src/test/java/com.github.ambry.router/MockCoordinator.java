@@ -72,7 +72,7 @@ class MockCoordinator implements Coordinator {
         DataNodeId dataNodeId = replicaId.getDataNodeId();
         MockDataNode dataNode = cluster.getMockDataNode(dataNodeId.getHostname(), dataNodeId.getPort());
         BlobOutput blobOutput =
-            new BlobOutput(blobProperties.getBlobSize(), BlobType.DataBlob, materializedBlobStream.duplicate());
+            new BlobOutput(blobProperties.getBlobSize(), materializedBlobStream.duplicate());
         Blob blob = new Blob(blobProperties, userMetadata, blobOutput);
         error = dataNode.put(blobId, blob);
         if (!ServerErrorCode.No_Error.equals(error)) {
@@ -298,7 +298,7 @@ class MockDataNode {
 
     @Override
     public BlobOutput getBlobOutput() {
-      return new BlobOutput(super.getBlobOutput().getSize(), super.getBlobOutput().getBlobType(),
+      return new BlobOutput(super.getBlobOutput().getSize(),
           new ByteArrayInputStream(materializedBlobOutput.array()));
     }
   }

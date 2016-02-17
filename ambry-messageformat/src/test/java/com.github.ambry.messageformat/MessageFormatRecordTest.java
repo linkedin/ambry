@@ -1,8 +1,9 @@
 package com.github.ambry.messageformat;
 
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
-import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -15,6 +16,7 @@ import org.junit.Test;
 
 
 public class MessageFormatRecordTest {
+
   @Test
   public void deserializeTest() {
     try {
@@ -110,7 +112,7 @@ public class MessageFormatRecordTest {
       crc.update(sData.array(), 0, sData.position());
       sData.putLong(crc.getValue());
       sData.flip();
-      BlobOutput outputData = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData));
+      BlobOutput outputData = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData)).getBlobOutput();
       Assert.assertEquals(outputData.getSize(), 2000);
       byte[] verify = new byte[2000];
       outputData.getStream().read(verify);
@@ -145,9 +147,9 @@ public class MessageFormatRecordTest {
   public void testMetadataContentRecordV1()
       throws IOException, MessageFormatException {
     // Test Metadata Blob V1
-    List<String> keys = getKeys(60, 5);
+    List<StoreKey> keys = getKeys(60, 5);
     ByteBuffer metadataContent = getMetadataContent(keys);
-    List<String> outKeys = deserializeMetadataContent(metadataContent);
+    List<StoreKey> outKeys = deserializeMetadataContent(metadataContent, new MockIdFactory());
     compareLists(outKeys, keys);
     // no testing of corruption as we metadata content record doesnt have crc
   }
@@ -157,9 +159,9 @@ public class MessageFormatRecordTest {
       throws IOException, MessageFormatException {
     // Test Blob V2 with actual metadata blob V1
     // construct metadata blob
-    List<String> keys = getKeys(60, 5);
+    List<StoreKey> keys = getKeys(60, 5);
     ByteBuffer metadataContent = getMetadataContent(keys);
-    int metadataContentSize = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(60, keys.size());
+    int metadataContentSize = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
     metadataContent.rewind();
     ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
@@ -172,7 +174,7 @@ public class MessageFormatRecordTest {
 
     // deserialize and check for metadata contents
     metadataContent.flip();
-    List<String> outputList = deserializeMetadataContent(metadataContent);
+    List<StoreKey> outputList = deserializeMetadataContent(metadataContent, new MockIdFactory());
     compareLists(outputList, keys);
 
     // test corruption cases
@@ -248,38 +250,39 @@ public class MessageFormatRecordTest {
     crc.update(outputBuffer.array(), 0, outputBuffer.position());
     outputBuffer.putLong(crc.getValue());
     outputBuffer.flip();
-    return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(outputBuffer));
+    return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(outputBuffer)).getBlobOutput();
   }
 
-  private ByteBuffer getMetadataContent(List<String> keys) {
-    int size = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).length(), keys.size());
+  private ByteBuffer getMetadataContent(List<StoreKey> keys) {
+    int size = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     ByteBuffer metadataContent = ByteBuffer.allocate((int) size);
     MessageFormatRecord.Metadata_Content_Format_V1.serializeMetadataContentRecord(metadataContent, keys);
     metadataContent.flip();
     return metadataContent;
   }
 
-  private List<String> deserializeMetadataContent(ByteBuffer metadataContent)
+  private List<StoreKey> deserializeMetadataContent(ByteBuffer metadataContent, StoreKeyFactory storeKeyFactory)
       throws MessageFormatException, IOException {
     ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(metadataContent);
     DataInputStream inputStream = new DataInputStream(byteBufferInputStream);
     short metdataContentVersion = inputStream.readShort();
     Assert.assertEquals("Metadata Content Version mismatch ", metdataContentVersion,
         MessageFormatRecord.Metadata_Content_Version_V1);
-    return MessageFormatRecord.Metadata_Content_Format_V1.deserializeMetadataContentRecord(inputStream);
+    return MessageFormatRecord.Metadata_Content_Format_V1.deserializeMetadataContentRecord(inputStream, storeKeyFactory);
   }
 
-  private List<String> getKeys(int keySize, int numberOfKeys) {
-    List<String> keys = new ArrayList<String>();
+  private List<StoreKey> getKeys(int keySize, int numberOfKeys) {
+    List<StoreKey> keys = new ArrayList<StoreKey>();
     for (int i = 0; i < numberOfKeys; i++) {
-      keys.add(UtilsTest.getRandomString(keySize));
+      MockId mockId = new MockId(UtilsTest.getRandomString(keySize));
+      keys.add(mockId);
     }
     return keys;
   }
 
-  private void compareLists(List<String> list1, List<String> list2) {
-    String[] list1Array = list1.toArray(new String[list1.size()]);
-    String[] list2Array = list2.toArray(new String[list2.size()]);
+  private void compareLists(List<StoreKey> list1, List<StoreKey> list2) {
+    StoreKey[] list1Array = list1.toArray(new StoreKey[list1.size()]);
+    StoreKey[] list2Array = list2.toArray(new StoreKey[list2.size()]);
     Assert.assertArrayEquals("List didn't match ", list1Array, list2Array);
   }
 }

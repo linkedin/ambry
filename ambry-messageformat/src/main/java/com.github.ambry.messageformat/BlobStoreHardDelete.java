@@ -186,7 +186,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
             BlobType blobType;
             long blobStreamSize;
             DeserializedUserMetadata userMetadataInfo;
-            DeserializedBlob blobRecordInfo;
+            DeserializedBlobInfo blobRecordInfo;
 
             if (hardDeleteRecoveryMetadata == null) {
               userMetadataInfo =
@@ -198,9 +198,9 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               blobRecordInfo = getBlobRecordInfo(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
                   headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
                       .getBlobPropertiesRecordRelativeOffset()));
-              blobStreamSize = blobRecordInfo.getBlobOutput().getSize();
+              blobStreamSize = blobRecordInfo.getBlobOutputInfo().getBlobOutput().getSize();
               blobRecordVersion = blobRecordInfo.getVersion();
-              blobType = blobRecordInfo.getBlobOutput().getBlobType();
+              blobType = blobRecordInfo.getBlobOutputInfo().getBlobType();
               hardDeleteRecoveryMetadata =
                   new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize,
                       blobRecordVersion, blobType, blobStreamSize, storeKey);
@@ -257,7 +257,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     return MessageFormatRecord.deserializeAndGetUserMetadataWithVersion(new ByteBufferInputStream(userMetaData));
   }
 
-  private DeserializedBlob getBlobRecordInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
+  private DeserializedBlobInfo getBlobRecordInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
       long blobRecordSize)
       throws MessageFormatException, IOException {
 
