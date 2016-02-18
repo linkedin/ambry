@@ -10,6 +10,6 @@ import com.github.ambry.rest.RestServerMain;
 public class TestAdminRestServerMain {
 
   public static void main(String[] args) {
-    RestServerMain.main(args);
+    AdminRestServerMain.main(args);
   }
 }
