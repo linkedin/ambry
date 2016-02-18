@@ -30,7 +30,7 @@ class NettyConfig {
    * Port on which to run netty server.
    */
   @Config("netty.server.port")
-  @Default("16503")
+  @Default("1174")
   public final int nettyServerPort;
 
   /**
@@ -58,7 +58,7 @@ class NettyConfig {
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
-    nettyServerPort = verifiableProperties.getInt("netty.server.port", 16503);
+    nettyServerPort = verifiableProperties.getInt("netty.server.port", 1174);
     nettyServerSoBacklog = verifiableProperties.getInt("netty.server.sobacklog", 100);
     nettyServerStartupWaitSeconds = verifiableProperties.getLong("netty.server.startup.wait.seconds", 30);
     nettyServerWorkerThreadCount = verifiableProperties.getInt("netty.server.worker.thread.count", 1);
