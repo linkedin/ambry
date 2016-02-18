@@ -17,10 +17,10 @@ class FrontendConfig {
    * Cache validity in seconds for non-private blobs for GET.
    */
   @Config("frontend.cache.validity.seconds")
-  @Default("31536000")
+  @Default("365*24*60*60")
   public final long frontendCacheValiditySeconds;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
-    frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 31536000);
+    frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
   }
 }

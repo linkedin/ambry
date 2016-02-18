@@ -20,9 +20,7 @@ class FrontendMetrics {
   // HEAD
   public final RestRequestMetrics headBlobMetrics;
   // GET
-  public final RestRequestMetrics echoMetrics;
   public final RestRequestMetrics getBlobMetrics;
-  public final RestRequestMetrics getReplicasForBlobIdMetrics;
   // POST
   public final RestRequestMetrics postBlobMetrics;
 
@@ -33,9 +31,7 @@ class FrontendMetrics {
   // HEAD
   public final Meter headBlobRate;
   // GET
-  public final Meter echoRate;
   public final Meter getBlobRate;
-  public final Meter getReplicasForBlobIdRate;
   // POST
   public final Meter postBlobRate;
 
@@ -84,10 +80,7 @@ class FrontendMetrics {
     // HEAD
     headBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "HeadBlob", metricRegistry);
     // GET
-    echoMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Echo", metricRegistry);
     getBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlob", metricRegistry);
-    getReplicasForBlobIdMetrics =
-        new RestRequestMetrics(AmbryBlobStorageService.class, "GetReplicasForBlobId", metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
 
@@ -98,10 +91,7 @@ class FrontendMetrics {
     // HEAD
     headBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "HeadBlobRate"));
     // GET
-    echoRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "EchoRate"));
     getBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "GetBlobRate"));
-    getReplicasForBlobIdRate =
-        metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "GetReplicasForBlobIdRate"));
     // POST
     postBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "PostBlobRate"));
 
