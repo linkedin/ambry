@@ -141,7 +141,7 @@ public class MockRestRequest implements RestRequest {
   }
 
   /**
-   * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#Blob_Size}. If there is
+   * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#BLOB_SIZE}. If there is
    * no such header, returns length in the "Content-Length" header. If there is no such header, returns 0.
    * <p/>
    * This function does not individually count the bytes in the content (it is not possible) so the bytes received may
@@ -151,8 +151,8 @@ public class MockRestRequest implements RestRequest {
   @Override
   public long getSize() {
     long contentLength;
-    if (args.get(RestUtils.Headers.Blob_Size) != null) {
-      contentLength = Long.parseLong(args.get(RestUtils.Headers.Blob_Size).get(0));
+    if (args.get(RestUtils.Headers.BLOB_SIZE) != null) {
+      contentLength = Long.parseLong(args.get(RestUtils.Headers.BLOB_SIZE).get(0));
     } else {
       contentLength =
           args.get(CONTENT_LENGTH_HEADER_KEY) != null ? Long.parseLong(args.get(CONTENT_LENGTH_HEADER_KEY).get(0)) : 0;

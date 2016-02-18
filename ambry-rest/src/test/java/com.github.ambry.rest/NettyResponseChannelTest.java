@@ -584,7 +584,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     if (request == null) {
       request = new NettyRequest(httpRequest, nettyMetrics);
       restResponseChannel.setRequest(request);
-      restResponseChannel.setContentType("text/plain; charset=UTF-8");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
       TestingUri uri = TestingUri.getTestingURI(request.getUri());
       switch (uri) {
         case CopyHeaders:
@@ -602,7 +602,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           break;
         case ModifyResponseMetadataAfterWrite:
           restResponseChannel.write(ByteBuffer.wrap(new byte[0]), null);
-          restResponseChannel.setContentType("text/plain; charset=UTF-8");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
           break;
         case MultipleClose:
           restResponseChannel.onResponseComplete(null);
@@ -706,15 +706,22 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void copyHeaders(HttpRequest httpRequest)
       throws ParseException, RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Accepted);
-    restResponseChannel.setContentType(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_TYPE));
     restResponseChannel
-        .setContentLength(Long.parseLong(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_LENGTH)));
-    restResponseChannel.setLocation(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.LOCATION));
-    restResponseChannel.setLastModified(HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.LAST_MODIFIED));
-    restResponseChannel.setExpires(HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.EXPIRES));
-    restResponseChannel.setCacheControl(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CACHE_CONTROL));
-    restResponseChannel.setPragma(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.PRAGMA));
-    restResponseChannel.setDate(HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.DATE));
+        .setHeader(RestUtils.Headers.CONTENT_TYPE, HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_TYPE));
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
+        Long.parseLong(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_LENGTH)));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.LOCATION, HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.LOCATION));
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+        HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.LAST_MODIFIED));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.EXPIRES, HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.EXPIRES));
+    restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
+        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CACHE_CONTROL));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.PRAGMA, HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.PRAGMA));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.DATE, HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.DATE));
     restResponseChannel.setHeader(CUSTOM_HEADER_NAME, HttpHeaders.getHeader(httpRequest, CUSTOM_HEADER_NAME));
   }
 

@@ -4,7 +4,6 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Date;
 import java.util.concurrent.Future;
 
 
@@ -76,86 +75,12 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    */
   public void onResponseComplete(Exception exception);
 
-  // Header helper functions.
-  //
-  // We will add more as we discover uses for them.
-  // -> Haven't added one for http version because that is going to be 1.1 for now.
-  //
-  // For the exception case, we directly convert the exception error code to a response code.
-  //
-  // May need to add later - keep alive
-  // If we discover other use cases, can add here.
-
   /**
    * Sets the response status.
    * @param status the response status.
    * @throws RestServiceException if there is an error setting the header.
    */
   public void setStatus(ResponseStatus status)
-      throws RestServiceException;
-
-  /**
-   * Sets the Content-Type of the response. Expected to be MIME types.
-   * @param type the type of the content in the response.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setContentType(String type)
-      throws RestServiceException;
-
-  /**
-   * Sets Content-Length of the response.
-   * @param length the length of content.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setContentLength(long length)
-      throws RestServiceException;
-
-  /**
-   * Sets Location of a created resource.
-   * @param location the location of the resource.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setLocation(String location)
-      throws RestServiceException;
-
-  /**
-   * Sets Last-Modified in the response.
-   * @param lastModified the time of last modification of the resource.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setLastModified(Date lastModified)
-      throws RestServiceException;
-
-  /**
-   * Sets Expires in the response.
-   * @param expireTime the expiry time of the resource.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setExpires(Date expireTime)
-      throws RestServiceException;
-
-  /**
-   * Sets Cache-Control in the response.
-   * @param cacheControl the Cache-Control value.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setCacheControl(String cacheControl)
-      throws RestServiceException;
-
-  /**
-   * Sets Pragma in the response.
-   * @param pragma the Pragma value.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setPragma(String pragma)
-      throws RestServiceException;
-
-  /**
-   * Sets the Date in the response headers.
-   * @param date the date to set in the header.
-   * @throws RestServiceException if there is an error setting the header.
-   */
-  public void setDate(Date date)
       throws RestServiceException;
 
   /**

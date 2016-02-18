@@ -9,6 +9,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -50,7 +51,7 @@ class GetReplicasForBlobIdHandler {
     ReadableStreamChannel channel = null;
     try {
       String replicaStr = getReplicasForBlobId(restRequest, clusterMap, adminMetrics).toString();
-      restResponseChannel.setContentType("application/json");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;

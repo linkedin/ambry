@@ -283,7 +283,7 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
   @Override
   public void onCompletion(BlobInfo result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setResponseHeaders(result);
         String blobId = MockBlobStorageService.getBlobId(restRequest);
@@ -309,10 +309,10 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
   private void setResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setContentType(blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
       if (blobProperties.getContentType().equals("text/html")) {
         restResponseChannel.setHeader("Content-Disposition", "attachment");
       }
@@ -395,7 +395,7 @@ class MockPostCallback implements Callback<String> {
   @Override
   public void onCompletion(String result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setResponseHeaders(result);
       } else if (exception != null && exception instanceof RouterException) {
@@ -417,9 +417,9 @@ class MockPostCallback implements Callback<String> {
   private void setResponseHeaders(String location)
       throws RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Created);
-    restResponseChannel.setLocation(location);
-    restResponseChannel.setContentLength(0);
-    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.LOCATION, location);
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
   }
 }
 
@@ -452,10 +452,10 @@ class MockDeleteCallback implements Callback<Void> {
   @Override
   public void onCompletion(Void result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null) {
         restResponseChannel.setStatus(ResponseStatus.Accepted);
-        restResponseChannel.setContentLength(0);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
       } else if (exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
@@ -499,7 +499,7 @@ class MockHeadCallback implements Callback<BlobInfo> {
   @Override
   public void onCompletion(BlobInfo result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setResponseHeaders(result);
       } else if (exception != null && exception instanceof RouterException) {
@@ -521,23 +521,23 @@ class MockHeadCallback implements Callback<BlobInfo> {
   private void setResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setContentLength(blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
 
     // Blob props
-    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
-    restResponseChannel.setHeader(RestUtils.Headers.Service_Id, blobProperties.getServiceId());
-    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.Private, blobProperties.isPrivate());
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.SERVICE_ID, blobProperties.getServiceId());
+    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, blobProperties.isPrivate());
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
       restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
     }
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.Content_Type, blobProperties.getContentType());
-      restResponseChannel.setContentType(blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
     if (blobProperties.getOwnerId() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
+      restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
     }
     byte[] userMetadataArray = blobInfo.getUserMetadata();
     Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);

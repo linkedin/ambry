@@ -155,7 +155,7 @@ class NettyRequest implements RestRequest {
   }
 
   /**
-   * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#Blob_Size}. If there is
+   * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#BLOB_SIZE}. If there is
    * no such header, returns length in the "Content-Length" header. If there is no such header, tries to infer content
    * size. If that cannot be done, returns 0.
    * <p/>
@@ -166,8 +166,8 @@ class NettyRequest implements RestRequest {
   @Override
   public long getSize() {
     long contentLength;
-    if (HttpHeaders.getHeader(request, RestUtils.Headers.Blob_Size, null) != null) {
-      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.Blob_Size));
+    if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
+      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
     } else {
       contentLength = HttpHeaders.getContentLength(request, 0);
     }

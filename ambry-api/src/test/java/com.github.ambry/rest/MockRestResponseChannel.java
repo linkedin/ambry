@@ -6,7 +6,6 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -80,16 +79,6 @@ public class MockRestResponseChannel implements RestResponseChannel {
   public static final String RESPONSE_STATUS_KEY = "responseStatus";
   public static final String RESPONSE_HEADERS_KEY = "responseHeaders";
 
-  // headers
-  public static final String CONTENT_TYPE_HEADER_KEY = "Content-Type";
-  public static final String CONTENT_LENGTH_HEADER_KEY = "Content-Length";
-  public static final String LOCATION_HEADER_KEY = "Location";
-  public static final String LAST_MODIFIED_KEY = "Last-Modified";
-  public static final String EXPIRES_KEY = "Expires";
-  public static final String CACHE_CONTROL_KEY = "Cache-Control";
-  public static final String PRAGMA_KEY = "Pragma";
-  public static final String DATE_KEY = "Date";
-
   private final RestRequest restRequest;
   private AtomicBoolean channelOpen = new AtomicBoolean(true);
   private AtomicBoolean requestComplete = new AtomicBoolean(false);
@@ -144,7 +133,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
         if (!responseMetadataFinalized.get() && exception != null) {
           // clear headers
           responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
-          setContentType("text/plain; charset=UTF-8");
+          setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
           ResponseStatus status = ResponseStatus.InternalServerError;
           if (exception instanceof RestServiceException) {
             status = ResponseStatus.getResponseStatus(((RestServiceException) exception).getErrorCode());
@@ -178,54 +167,6 @@ public class MockRestResponseChannel implements RestResponseChannel {
     } else {
       throw new IllegalStateException("Cannot change response metadata after it has been finalized");
     }
-  }
-
-  @Override
-  public synchronized void setContentType(String type)
-      throws RestServiceException {
-    setHeader(CONTENT_TYPE_HEADER_KEY, type, Event.SetContentType);
-  }
-
-  @Override
-  public synchronized void setContentLength(long length)
-      throws RestServiceException {
-    setHeader(CONTENT_LENGTH_HEADER_KEY, length, Event.SetContentLength);
-  }
-
-  @Override
-  public synchronized void setLocation(String location)
-      throws RestServiceException {
-    setHeader(LOCATION_HEADER_KEY, location, Event.SetLocation);
-  }
-
-  @Override
-  public synchronized void setLastModified(Date lastModified)
-      throws RestServiceException {
-    setHeader(LAST_MODIFIED_KEY, lastModified, Event.SetLastModified);
-  }
-
-  @Override
-  public synchronized void setExpires(Date expireTime)
-      throws RestServiceException {
-    setHeader(EXPIRES_KEY, expireTime, Event.SetExpires);
-  }
-
-  @Override
-  public synchronized void setCacheControl(String cacheControl)
-      throws RestServiceException {
-    setHeader(CACHE_CONTROL_KEY, cacheControl, Event.SetCacheControl);
-  }
-
-  @Override
-  public synchronized void setPragma(String pragma)
-      throws RestServiceException {
-    setHeader(PRAGMA_KEY, pragma, Event.SetPragma);
-  }
-
-  @Override
-  public synchronized void setDate(Date date)
-      throws RestServiceException {
-    setHeader(DATE_KEY, date, Event.SetDate);
   }
 
   @Override
