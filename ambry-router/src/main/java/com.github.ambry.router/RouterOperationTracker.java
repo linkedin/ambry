@@ -7,7 +7,7 @@ import java.util.*;
 
 
 /**
- * An implementation of {@code OperationTracker} used by non-blocking router. It internally maintains
+ * An implementation of {@link OperationTracker} used by non-blocking router. It internally maintains
  * the status of the corresponding operation, and returns information to progress or terminate the
  * operation.
  *
@@ -16,49 +16,44 @@ import java.util.*;
  *
  * This class is not meant to be thread safe. Please apply appropriate mechanisms at the caller.
  *
- * A typical usage of an {@code RouterOperationTracker} would be:
+ * A typical usage of an {@link RouterOperationTracker} would be:
  *<pre>
  *{@code
  *
  *   RouterOperationTracker operationTracker = new RouterOperationTracker(datacenterName,
  *            partitionId, operationType, localOnly, successTarget, localParallelism);
  *   //...
- *   while (operationTracker.shouldSendMoreRequests()) {
- *     nextReplica = operationTracker.getNextReplicaIdForSend();
- *     //send request to nextReplica.
- *     operationTracker.onSend(nextReplica);
- *   }
- *
+ *       ReplicaId nextReplica = operationTracker.getNextReplica();
+ *       while (nextReplica != null) {
+ *         //send a request to the replica.
+ *         nextReplica = operationTracker.getNextReplica();
+ *       }
  *}
  *</pre>
  *
  */
 public class RouterOperationTracker implements OperationTracker {
-  final OperationType operationType;
-  final boolean localDcOnly;
-  final int successTarget;
-  final int localParallelism;
+  final private OperationType operationType;
+  final private boolean localDcOnly;
+  final private int successTarget;
+  final private int localParallelism;
 
-  int numLocalReplica = 0;
-  int numLocalUnsent = 0;
-  int numTotalRemoteUnsent = 0;
-  int numTotalRemoteInflight = 0;
-  int numTotalRemoteSucceeded = 0;
-  int numTotalRemoteFailed = 0;
-  final String localDcName;
-  final PartitionId partitionId;
-  ReplicaId nextLocalToSend = null;
-  ReplicaId nextRemoteToSend = null;
+  private int numLocalReplica = 0;
+  private int numTotalRemoteSucceeded = 0;
+  private int numTotalRemoteFailed = 0;
+  private final String localDcName;
+  private final PartitionId partitionId;
+  private ReplicaId nextLocalToSend = null;
+  private ReplicaId nextRemoteToSend = null;
 
-  final LinkedList<ReplicaId> localUnsentQueue = new LinkedList<ReplicaId>();
-  final LinkedList<ReplicaId> localInflightQueue = new LinkedList<ReplicaId>();
-  final LinkedList<ReplicaId> localSucceededQueue = new LinkedList<ReplicaId>();
-  final LinkedList<ReplicaId> localFailedQueue = new LinkedList<ReplicaId>();
-  final HashSet<ReplicaId> totalReplicaSet = new HashSet<ReplicaId>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteUnsentQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteInflightQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteSucceededQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
-  final HashMap<String, LinkedList<ReplicaId>> remoteFailedQueuePerDc = new HashMap<String, LinkedList<ReplicaId>>();
+  private final LinkedList<ReplicaId> localUnsentQueue = new LinkedList<ReplicaId>();
+  private int numLocalInflight = 0;
+  private int numLocalSucceeded = 0;
+  private int numLocalFailed = 0;
+  private final HashSet<ReplicaId> totalReplicaSet = new HashSet<ReplicaId>();
+  private final HashMap<String, LinkedList<ReplicaId>> remoteUnsentQueuePerDc =
+      new HashMap<String, LinkedList<ReplicaId>>();
+  private final HashMap<String, Integer> remoteInflightQueuePerDc = new HashMap<String, Integer>();
 
   /**
    * Constructor for an {@code OperationTracker}.
@@ -87,25 +82,20 @@ public class RouterOperationTracker implements OperationTracker {
         if (replicaDcName.equals(localDcName)) {
           totalReplicaSet.add(replicaId);
           localUnsentQueue.add(replicaId);
-          numLocalReplica++;
-          numLocalUnsent++;
         } else if (!localDcOnly) {
           if (!remoteUnsentQueuePerDc.containsKey(replicaDcName)) {
             remoteUnsentQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
-            remoteInflightQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
-            remoteSucceededQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
-            remoteFailedQueuePerDc.put(replicaDcName, new LinkedList<ReplicaId>());
+            remoteInflightQueuePerDc.put(replicaDcName, 0);
           }
           totalReplicaSet.add(replicaId);
           remoteUnsentQueuePerDc.get(replicaDcName).add(replicaId);
-          numTotalRemoteUnsent++;
         }
       }
     }
+    numLocalReplica = localUnsentQueue.size();
   }
 
-  @Override
-  public boolean shouldSendMoreRequests() {
+  private boolean shouldSendMoreRequests() {
     return canSendMoreLocal() || canSendMoreRemote();
   }
 
@@ -116,11 +106,11 @@ public class RouterOperationTracker implements OperationTracker {
    * @return {@code true} if there is at least one more local replica to send request.
    */
   private boolean canSendMoreLocal() {
-    if (isComplete()) {
-      return false;
-    } else if (nextLocalToSend != null) {
+    if (nextLocalToSend != null) {
       return true;
-    } else if (localUnsentQueue.size() > 0 && localInflightQueue.size() < localParallelism) {
+    } else if (hasSucceeded() || hasFailed()) {
+      return false;
+    } else if (localUnsentQueue.size() > 0 && numLocalInflight < localParallelism) {
       nextLocalToSend = localUnsentQueue.poll();
       return true;
     } else {
@@ -131,11 +121,11 @@ public class RouterOperationTracker implements OperationTracker {
   /**
    * Determine if there are more remote replicas to send request. A request can be sent to a remote replica
    * only when an operation is NOT completed.
-   * 
-   * <p>
+   *
+   * <p/>
    * If {@code localOnly} is set {@code true}, no request can be sent to remote replicas.
    *
-   * <p>
+   * <p/>
    * If an operation is {@code GET or DELETE}, a request can be sent to only when responses from all local
    * replicas have been received.
    *
@@ -144,13 +134,13 @@ public class RouterOperationTracker implements OperationTracker {
   private boolean canSendMoreRemote() {
     if (nextRemoteToSend != null) {
       return true;
-    } else if (localDcOnly || nextLocalToSend!=null || isSucceeded() || isFailed()
-        || localSucceededQueue.size() + localFailedQueue.size() < numLocalReplica) {
+    } else if (localDcOnly || nextLocalToSend != null || hasSucceeded() || hasFailed()
+        || numLocalSucceeded + numLocalFailed < numLocalReplica) {
       return false;
     } else {
       for (Map.Entry<String, LinkedList<ReplicaId>> entry : remoteUnsentQueuePerDc.entrySet()) {
         String remoteDcName = entry.getKey();
-        if (entry.getValue().size() > 0 && remoteInflightQueuePerDc.get(remoteDcName).size() == 0) {
+        if (entry.getValue().size() > 0 && remoteInflightQueuePerDc.get(remoteDcName) == 0) {
           nextRemoteToSend = entry.getValue().poll();
           return true;
         }
@@ -160,17 +150,12 @@ public class RouterOperationTracker implements OperationTracker {
   }
 
   @Override
-  public boolean isSucceeded() {
+  public boolean hasSucceeded() {
     return getTotalSucceeded() >= successTarget;
   }
 
   @Override
-  public boolean isComplete() {
-    return isSucceeded() || isFailed();
-  }
-
-  @Override
-  public boolean isFailed() {
+  public boolean hasFailed() {
     return totalReplicaSet.size() - getTotalFailed() < successTarget;
   }
 
@@ -181,62 +166,46 @@ public class RouterOperationTracker implements OperationTracker {
     }
     String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
     if (localDcName.equals(replicaDcName)) {
-      localInflightQueue.remove(replicaId);
+      numLocalInflight--;
       if (e != null) {
-        localFailedQueue.add(replicaId);
+        numLocalFailed++;
       } else {
-        localSucceededQueue.add(replicaId);
+        numLocalSucceeded++;
       }
     } else {
-      remoteInflightQueuePerDc.get(replicaDcName).remove(replicaId);
-      numTotalRemoteInflight--;
+      remoteInflightQueuePerDc.put(replicaDcName, remoteInflightQueuePerDc.get(replicaDcName) - 1);
       if (e != null) {
-        remoteFailedQueuePerDc.get(replicaDcName).add(replicaId);
         numTotalRemoteFailed++;
       } else {
-        remoteSucceededQueuePerDc.get(replicaDcName).add(replicaId);
         numTotalRemoteSucceeded++;
       }
     }
   }
 
   @Override
-  public void onSend(ReplicaId replicaId) {
-    if (replicaId == null) {
-      throw new IllegalStateException("Cannot onsend a null replica.");
-    } else if (replicaId != nextLocalToSend && replicaId != nextRemoteToSend) {
-      throw new IllegalStateException("This replica is not selected by operation tracker.");
+  public ReplicaId getNextReplica() {
+    if (!shouldSendMoreRequests()) {
+      return null;
     }
-    String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
-    if (localDcName.equals(replicaDcName)) {
-      localInflightQueue.add(replicaId);
-      numLocalUnsent--;
-    } else {
-      remoteInflightQueuePerDc.get(replicaDcName).add(replicaId);
-      numTotalRemoteUnsent--;
-      numTotalRemoteInflight++;
-    }
-    if (replicaId == nextLocalToSend) {
+    ReplicaId nextToReturn = null;
+    if (nextLocalToSend != null) {
+      nextToReturn = nextLocalToSend;
+      numLocalInflight++;
       nextLocalToSend = null;
     } else {
+      nextToReturn = nextRemoteToSend;
+      String remoteDc = nextRemoteToSend.getDataNodeId().getDatacenterName();
+      remoteInflightQueuePerDc.put(remoteDc, remoteInflightQueuePerDc.get(remoteDc) + 1);
       nextRemoteToSend = null;
     }
-  }
-
-  @Override
-  public ReplicaId getNextReplicaIdForSend() {
-    if (nextLocalToSend != null) {
-      return nextLocalToSend;
-    } else {
-      return nextRemoteToSend;
-    }
+    return nextToReturn;
   }
 
   private int getTotalSucceeded() {
-    return localSucceededQueue.size() + numTotalRemoteSucceeded;
+    return numLocalSucceeded + numTotalRemoteSucceeded;
   }
 
   private int getTotalFailed() {
-    return localFailedQueue.size() + numTotalRemoteFailed;
+    return numLocalFailed + numTotalRemoteFailed;
   }
 }

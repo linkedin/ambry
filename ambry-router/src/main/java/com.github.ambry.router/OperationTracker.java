@@ -8,46 +8,29 @@ import com.github.ambry.clustermap.ReplicaId;
  * will then send requests to multiple replicas. An operation succeeded if a pre-set number of
  * replicas return successful responses, or failed if this number cannot be met.
  *
- * An {@code OperationTracker} tracks and determines the status of an operation (e.g., <i>completed,
- * succeeded, failed, if more replicas to send requests to succeed the operation</i>), and
- * decides the next replica to contact if more replicas are allowed. An OperationTracker
+ * An {@link OperationTracker} tracks and determines the status of an operation (e.g.,
+ * succeeded or failed), and decides the next replica to send request. An {@link OperationTracker}
  * one-to-one tracks an operation.
  *
  * <p>
- * When an operation is progressing by sending requests to more replicas, or by receiving
- * responses from replicas, its operation tracker needs to be informed by calling {@code
- * onSend()} or {@code onResponse()}.
+ * When an operation is progressing by receiving responses from replicas, its operation tracker
+ * needs to be informed by calling {@code onResponse()}.
  * </p>
  */
 public interface OperationTracker {
-  /**
-   * Determines if requests can be sent to more replicas.
-   *
-   * @return {@code true} if one or more additional requests can be sent out.
-   */
-  boolean shouldSendMoreRequests();
-
   /**
    * Determines if an operation has succeeded.
    *
    * @return {@code true} if the operation has successfully completed.
    */
-  boolean isSucceeded();
+  boolean hasSucceeded();
 
   /**
    * Determines if an operation has failed.
    *
    * @return {@code true} if the operation has failed.
    */
-  boolean isFailed();
-
-  /**
-   * Check if an operation has completed or not. An operation has completed when its status
-   * is deterministic (either in successful or failed status).
-   *
-   * @return {@code true} if the operation has completed.
-   */
-  boolean isComplete();
+  boolean hasFailed();
 
   /**
    * Accounts for response from, or exception for a replica. Operation must invoke this method
@@ -59,16 +42,10 @@ public interface OperationTracker {
   void onResponse(ReplicaId replicaId, Exception e);
 
   /**
-   * Called when a request is sent to a replica.
-   * @param replicaId the replica that the request is sent to.
-   */
-  void onSend(ReplicaId replicaId);
-
-  /**
-   * Determines the next replica to send a request. A non-null replicaId is returned only when
-   * {@code shouldSendMoreRequests()} returns {@code true}, otherwise {@code false}.
+   * Determines the next replica to send a request.
    *
-   * @return ReplicaId of next replica to send to, {@code null} if requests cannot be sent.
+   * @return ReplicaId of next replica to send to, {@code null} if no replica can be selected to send
+   * request at the time this method is called.
    */
-  ReplicaId getNextReplicaIdForSend();
+  ReplicaId getNextReplica();
 }
