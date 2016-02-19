@@ -3,6 +3,7 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.*;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import java.util.Iterator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -22,7 +23,7 @@ public class OperationTrackerTest {
   PartitionId mockPartition;
   String localDcName;
   LinkedList<ReplicaId> inflightReplicas;
-  OperationTracker operationTracker;
+  OperationTracker ot;
 
   /**
    * Initialize 4 DCs, each DC has 3 replicas.
@@ -39,292 +40,355 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Inline comment format: number of {@code local unsent-inflight-succeeded-failed};
-   * {@code total remote unsent-inflight-succeeded-failed}.
-   * E.g., 3-0-0-0; 9-0-0-0.
-   */
-
-  /**
-   * operationType=PUT, localDcOnly=true, successTarget=2, localParallelism=3.
-   *
-   * Test when alien replicas are passed to an operation tracker.
-   */
-  @Test
-  public void exceptionTest() {
-    operationTracker =
-        new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT, true, 2,
-            3);
-    ReplicaId alienReplica = new MockOpReplica(null, 0, "alien datacenter");
-    try {
-      receiveSucceededResponse(alienReplica, operationTracker);
-    } catch (IllegalStateException e) {
-    }
-    try {
-      receiveFailedResponse(alienReplica, operationTracker);
-      fail();
-    } catch (IllegalStateException e) {
-    }
-  }
-
-  /**
-   * operationType=PUT, localDcOnly=true, successTarget=2, localParallelism=3.
+   * localDcOnly=true, successTarget=2, localParallelism=3.
    *
    * <p/>
-   * 1. Send 3 parallel requests to local replicas;
+   * 1. Get 3 local replicas to send request (and send requests);
    * 2. 2 replicas succeeds.
-   * 3. PUT operation succeeds.
+   * 3. Operation succeeds.
    * 4. 1 remote fails.
-   * 5. PUT operation remains succeed.
+   * 5. Operation remains succeed.
    */
   @Test
   public void putLocalSucceedTest() {
-    operationTracker =
-        new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT, true, 2,
-            3);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 2, 3);
     //send out requests to local replicas up to the localParallelFactor.
     //3-0-0-0; 9-0-0-0
-    assertFalse(operationTracker.hasSucceeded());
-    ReplicaId nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    assertFalse(ot.hasSucceeded());
+    Iterator<ReplicaId> itr = ot.getIterator();
+    ReplicaId nextReplica = null;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
     //0-3-0-0; 9-0-0-0
     assertEquals(3, inflightReplicas.size());
-    assertFalse(operationTracker.hasSucceeded());
+    assertFalse(ot.hasSucceeded());
     for (int i = 0; i < 2; i++) {
-      receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
+      receiveSucceededResponse(inflightReplicas.poll(), ot);
     }
     //0-1-2-0; 9-0-0-0
-    assertTrue(operationTracker.hasSucceeded());
-    assertNull(operationTracker.getNextReplica());
-    assertNull(operationTracker.getNextReplica());
+    assertTrue(ot.hasSucceeded());
+    assertFalse(itr.hasNext());
 
-    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
     //0-0-2-1; 9-0-0-0
-    assertTrue(operationTracker.hasSucceeded());
-    assertNull(operationTracker.getNextReplica());
-    assertNull(operationTracker.getNextReplica());
+    assertTrue(ot.hasSucceeded());
+    assertFalse(itr.hasNext());
   }
 
   /**
-   * operationType=PUT, localDcOnly=true, successTarget=2, localParallelism=3.
+   * localDcOnly=true, successTarget=2, localParallelism=3.
    *
    * <p/>
-   * 1. Send 3 parallel requests to local replicas.
+   * 1. Get 3 local replicas to send request (and send requests);
    * 2. 1 local replicas succeeded, 2 failed.
-   * 3. Put operation fails.
+   * 3. Operation fails.
    */
   @Test
   public void putLocalFailTest() {
-    operationTracker =
-        new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT, true, 2,
-            3);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 2, 3);
     //send out requests to local replicas up to the localParallelFactor.
     //3-0-0-0; 9-0-0-0
-    assertFalse(operationTracker.hasSucceeded());
-    ReplicaId nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    assertFalse(ot.hasSucceeded());
+    Iterator<ReplicaId> itr = ot.getIterator();
+    ReplicaId nextReplica = null;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
     //0-3-0-0; 9-0-0-0
     for (int i = 0; i < 2; i++) {
-      receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+      receiveFailedResponse(inflightReplicas.poll(), ot);
     }
     //0-1-0-2; 9-0-0-0
     //cannot send more because not all local replicas responded
-    assertNull(operationTracker.getNextReplica());
-    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
+    assertNull(itr.next());
+    receiveSucceededResponse(inflightReplicas.poll(), ot);
     //0-0-1-2; 9-0-0-0
-    assertTrue(operationTracker.hasFailed());
-    assertFalse(operationTracker.hasSucceeded());
-    assertNull(operationTracker.getNextReplica());
-    assertNull(operationTracker.getNextReplica());
+    assertTrue(ot.isDone());
+    assertFalse(ot.hasSucceeded());
+    assertNull(itr.next());
   }
 
   /**
-   * operationType=GET, localDcOnly=false, successTarget=1, localParallelism=2.
+   * localDcOnly=false, successTarget=1, localParallelism=2.
 
    * <p/>
-   * 1. Send 2 parallel requests to local replicas;
+   * 1. Get 2 local replicas to send request (and send requests);
    * 2. 1 fails， 1 pending.
-   * 3. Send 1 more request.
+   * 3. Get 1 more local replicas to send request (and send requests);
    * 4. 1 succeeds.
-   * 5. GET operation succeeds.
+   * 5. Operation succeeds.
    */
   @Test
   public void getLocalSucceedTest() {
-    operationTracker =
-        new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.GET, false, 1,
-            2);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    ReplicaId nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    Iterator<ReplicaId> itr = ot.getIterator();
+    ReplicaId nextReplica = null;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
     //1-2-0-0; 9-0-0-0
 
-    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
     //1-1-0-1; 9-0-0-0
-    assertFalse(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
+    assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
 
-    nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    itr = ot.getIterator();
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
     //0-2-0-1; 9-0-0-0
 
-    assertFalse(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
+    assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
 
-    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
+    receiveSucceededResponse(inflightReplicas.poll(), ot);
     //0-1-1-1; 9-0-0-0
 
-    assertTrue(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
+    assertTrue(ot.hasSucceeded());
+    assertTrue(ot.isDone());
   }
 
   /**
-   * operationType=GET, localDcOnly=false, successTarget=1, localParallelism=2.
+   * localDcOnly=false, successTarget=1, localParallelism=2.
 
    * <p/>
-   * 1. Send 2 parallel requests to local replicas.
+   * 1. Get 2 local replicas to send request (and send requests);
    * 2. 1 local replica fails, 1 pending.
-   * 3. Send 1 request to local replica.
+   * 3. Get 1 more local replicas to send request (and send requests);
    * 4. 2 local replica fails.
-   * 5. Send 1 request to each remote DC
+   * 5. Get 1 remote replica from each Dc to send request (and send requests);
    * 6. All fails.
-   * 7. Send 1 request to each remote DC
+   * 7. Get 1 remote replica from each DC to send request (and send requests);
    * 8. 1 fails, 2 pending.
-   * 9. Send 1 request to remote DC.
+   * 9. Get 1 remote replica from each DC to send request (and send requests);
    * 10. 2 fails.
    * 11. 1 succeeds.
-   * 12. GET operation succeeds.
+   * 12. Operation succeeds.
    */
   @Test
   public void getRemoteReplicaTest() {
-    operationTracker =
-        new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.PUT, false, 1,
-            2);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    ReplicaId nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    Iterator<ReplicaId> itr = ot.getIterator();
+    ReplicaId nextReplica = null;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
     //1-2-0-0; 9-0-0-0
 
-    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
     //1-1-0-1; 9-0-0-0
 
-    assertFalse(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
-    nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
+    itr = ot.getIterator();
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
     //0-2-0-1; 9-0-0-0
 
-    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
-    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
     //0-0-0-3; 9-0-0-0
-    assertFalse(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
-
-    nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    assertFalse(ot.hasSucceeded());
+    itr = ot.getIterator();
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
-    //0-0-0-3; 6-3-0-0
-    assertFalse(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
-    for (int i = 0; i < 3; i++) {
-      receiveFailedResponse(inflightReplicas.poll(), operationTracker);
+    //0-0-0-3; 7-2-0-0
+    assertFalse(ot.hasSucceeded());
+    for (int i = 0; i < 2; i++) {
+      receiveFailedResponse(inflightReplicas.poll(), ot);
     }
-    //0-0-0-3; 6-0-0-3
-
-    nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    //0-0-0-3; 7-0-0-2
+    itr = ot.getIterator();
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
-    //0-0-0-3; 3-3-0-3
-    assertFalse(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
-    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
-    //0-0-0-3; 3-2-0-4
-
-    nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    //0-0-0-3; 5-2-0-2
+    assertFalse(ot.hasSucceeded());
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    assertFalse(ot.isDone());
+    //0-0-0-3; 5-1-0-3
+    itr = ot.getIterator();
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
-    //0-0-0-3; 2-3-0-4
-    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
-    assertTrue(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
+    //0-0-0-3; 4-1-0-3
+    receiveSucceededResponse(inflightReplicas.poll(), ot);
+    assertTrue(ot.hasSucceeded());
+    assertTrue(ot.isDone());
   }
 
   /**
-   * operationType=DELETE, localDcOnly=false, successTarget=2, localParallelism=3.
+   * localDcOnly=false, successTarget=2, localParallelism=3.
    *
    * <p/>
-   * 1. Send 3 parallel requests to local replicas;
+   * 1. Get 3 local replicas to send request (and send requests);
    * 2. 1 succeeded.
    * 3. 1 failed.
    * 4. 1 succeeded.
-   * 3. DELETE operation fails.
+   * 3. DELETE operation succeeded.
    */
   @Test
   public void deleteTest() {
-    operationTracker =
-        new RouterOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, OperationType.DELETE, false,
-            2, 3);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 2, 3);
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    ReplicaId nextReplica = operationTracker.getNextReplica();
-    while (nextReplica != null) {
+    Iterator<ReplicaId> itr = ot.getIterator();
+    ReplicaId nextReplica = null;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
       assertNotNull(nextReplica);
-      sendReplica(nextReplica, operationTracker, inflightReplicas);
-      nextReplica = operationTracker.getNextReplica();
+      sendReplica(nextReplica);
+      itr.remove();
     }
     //0-3-0-0; 9-0-0-0
-    receiveFailedResponse(inflightReplicas.poll(), operationTracker);
-    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
-    receiveSucceededResponse(inflightReplicas.poll(), operationTracker);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    receiveSucceededResponse(inflightReplicas.poll(), ot);
+    receiveSucceededResponse(inflightReplicas.poll(), ot);
     //0-0-2-1; 9-0-0-0
 
-    assertTrue(operationTracker.hasSucceeded());
-    assertFalse(operationTracker.hasFailed());
+    assertTrue(ot.hasSucceeded());
+    assertTrue(ot.isDone());
   }
 
-  void sendReplica(ReplicaId replica, OperationTracker operationPolicy, LinkedList<ReplicaId> inflightList) {
-    inflightList.offer(replica);
+  /**
+   * localDcOnly=false, successTarget=1, localParallelism=2.
+   *
+   * <p/>
+   * 1. Get 2 local replicas to send request;
+   * 2. 1 failed to send.
+   * 3. get 1 more local replica to send request;
+   * 4. 1 succeeded.
+   * 3.
+   */
+  @Test
+  public void failedSendTest() {
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
+    //send out requests to local AND remote replicas.
+    //3-0-0-0; 9-0-0-0
+    Iterator<ReplicaId> itr = ot.getIterator();
+    ReplicaId nextReplica = null;
+    int counter = 0;
+    while (itr.hasNext()) {
+      counter++;
+      nextReplica = itr.next();
+      assertNotNull(nextReplica);
+      if (counter == 2) {
+        //fail send
+      } else {
+        sendReplica(nextReplica);
+        itr.remove();
+      }
+    }
+    assertEquals(2, inflightReplicas.size());
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    itr = ot.getIterator();
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
+      assertNotNull(nextReplica);
+      sendReplica(nextReplica);
+      itr.remove();
+    }
+    receiveSucceededResponse(inflightReplicas.poll(), ot);
+    assertTrue(ot.hasSucceeded());
   }
 
-  void receiveSucceededResponse(ReplicaId replica, OperationTracker operationPolicy) {
-    operationPolicy.onResponse(replica, null);
+  @Test
+  public void sequenceTest() {
+    int replicaCount = 4;
+    datacenters = new ArrayList<DataNodeId>(Arrays.asList(new MockOpDataNode[]{new MockOpDataNode(0, "local-0")}));
+    mockPartition = new MockOpPartition(replicaCount, datacenters);
+    localDcName = datacenters.get(0).getDatacenterName();
+    inflightReplicas = new LinkedList<ReplicaId>();
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
+    Iterator<ReplicaId> itr = ot.getIterator();
+    ReplicaId nextReplica = null;
+    ArrayList<Integer> sequence = new ArrayList<Integer>();
+    int oddEvenFlag = 0;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
+      assertNotNull(nextReplica);
+      if (oddEvenFlag % 2 == 0) {
+        sendReplica(nextReplica);
+        sequence.add(((MockOpReplica) nextReplica).index);
+        itr.remove();
+      }
+      oddEvenFlag++;
+    }
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    itr = ot.getIterator();
+    oddEvenFlag = 0;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
+      assertNotNull(nextReplica);
+      if (oddEvenFlag % 2 == 0) {
+        sendReplica(nextReplica);
+        sequence.add(((MockOpReplica) nextReplica).index);
+        itr.remove();
+      }
+      oddEvenFlag++;
+    }
+    receiveFailedResponse(inflightReplicas.poll(), ot);
+    itr = ot.getIterator();
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
+      assertNotNull(nextReplica);
+      sendReplica(nextReplica);
+      sequence.add(((MockOpReplica) nextReplica).index);
+      itr.remove();
+    }
+    receiveSucceededResponse(inflightReplicas.poll(), ot);
+    assertTrue(ot.hasSucceeded());
+    assertEquals(4, sequence.size());
+    assertTrue(ot.isDone());
   }
 
-  void receiveFailedResponse(ReplicaId replica, OperationTracker operationTracker) {
-    operationTracker.onResponse(replica, new Exception());
+  private void sendReplica(ReplicaId replica) {
+    this.inflightReplicas.offer(replica);
+  }
+
+  private void receiveSucceededResponse(ReplicaId replica, OperationTracker ot) {
+    ot.onResponse(replica, null);
+  }
+
+  private void receiveFailedResponse(ReplicaId replica, OperationTracker ot) {
+    ot.onResponse(replica, new Exception());
   }
 }
 
