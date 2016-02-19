@@ -188,6 +188,8 @@ public class CoordinatorBackedRouterTest {
   private VerifiableProperties getVProps(Properties properties) {
     properties.setProperty("coordinator.hostname", "localhost");
     properties.setProperty("coordinator.datacenter.name", "DC1");
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
     properties
         .setProperty("coordinator.connection.pool.factory", "com.github.ambry.coordinator.MockConnectionPoolFactory");
     return new VerifiableProperties(properties);
@@ -198,8 +200,7 @@ public class CoordinatorBackedRouterTest {
       future.get();
       fail("Callback had an exception but future.get() did not throw exception");
     } catch (Exception e) {
-      assertEquals("Callback and future exceptions do not match", routerOperationCallback.getException(),
-          e.getCause().getCause());
+      assertEquals("Callback and future exceptions do not match", routerOperationCallback.getException(), e.getCause());
     }
   }
 

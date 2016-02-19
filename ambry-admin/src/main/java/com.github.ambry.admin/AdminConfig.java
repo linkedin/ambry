@@ -17,10 +17,10 @@ class AdminConfig {
    * Cache validity in seconds for non-private blobs for GET.
    */
   @Config("admin.cache.validity.seconds")
-  @Default("31536000")
+  @Default("365*24*60*60")
   public final long adminCacheValiditySeconds;
 
   public AdminConfig(VerifiableProperties verifiableProperties) {
-    adminCacheValiditySeconds = verifiableProperties.getLong("admin.cache.validity.seconds", 31536000);
+    adminCacheValiditySeconds = verifiableProperties.getLong("admin.cache.validity.seconds", 365 * 24 * 60 * 60);
   }
 }

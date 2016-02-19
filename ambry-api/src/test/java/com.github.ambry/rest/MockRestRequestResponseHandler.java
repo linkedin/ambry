@@ -1,8 +1,10 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -87,23 +89,26 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
    * @throws RestServiceException if there is any error while processing the request.
    */
   @Override
-  public void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      ReadableStreamChannel response, Exception exception)
+  public void handleResponse(RestRequest restRequest, final RestResponseChannel restResponseChannel,
+      final ReadableStreamChannel response, Exception exception)
       throws RestServiceException {
     if (shouldProceed(restRequest, restResponseChannel)) {
-      try {
-        if (exception == null && response != null) {
-          // BEWARE: test code with assumptions of non blocking behaviour in this class may run into an infinite loop.
-          while (response.read(restResponseChannel) != -1) {
-            ;
+      if (exception != null || response == null) {
+        onResponseComplete(restResponseChannel, response, exception);
+      } else {
+        response.readInto(restResponseChannel, new Callback<Long>() {
+          private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+
+          @Override
+          public void onCompletion(Long result, Exception exception) {
+            if (callbackInvoked.compareAndSet(false, true)) {
+              if (exception == null && (result == null || result != response.getSize())) {
+                exception = new IllegalStateException("Response write incomplete");
+              }
+              onResponseComplete(restResponseChannel, response, exception);
+            }
           }
-        }
-        restResponseChannel.onResponseComplete(exception);
-        if (response != null) {
-          response.close();
-        }
-      } catch (IOException e) {
-        throw new RestServiceException(e, RestServiceErrorCode.InternalServerError);
+        });
       }
     }
   }
@@ -164,11 +169,39 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
         try {
           restRequest.close();
         } catch (IOException e) {
-          // too bad.
+          throw new IllegalStateException(e);
         }
       }
     }
     return failureProperties == null;
+  }
+
+  /**
+   * Completes the response.
+   * @param restResponseChannel the {@link RestResponseChannel} to be used to send the response.
+   * @param response a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
+   * @param exception if the response could not be constructed, the reason for the failure.
+   */
+  private void onResponseComplete(RestResponseChannel restResponseChannel, ReadableStreamChannel response,
+      Exception exception) {
+    try {
+      restResponseChannel.onResponseComplete(exception);
+    } finally {
+      releaseResources(response);
+    }
+  }
+
+  /**
+   * Cleans up resources.
+   */
+  private void releaseResources(ReadableStreamChannel response) {
+    if (response != null) {
+      try {
+        response.close();
+      } catch (IOException e) {
+        throw new IllegalStateException(e);
+      }
+    }
   }
 }
 

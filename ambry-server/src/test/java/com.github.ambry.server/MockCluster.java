@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import junit.framework.Assert;
 
 import static org.junit.Assert.assertTrue;
 
@@ -200,7 +202,8 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+  public synchronized void onBlobReplicaDeleted(String sourceHost, int port, String blobId,
+      BlobReplicaSourceType sourceType) {
     Tracker tracker = objectTracker.get(blobId);
     tracker.totalReplicasDeleted.countDown();
   }
@@ -214,7 +217,10 @@ class MockNotificationSystem implements NotificationSystem {
   public void awaitBlobCreations(String blobId) {
     try {
       Tracker tracker = objectTracker.get(blobId);
-      tracker.totalReplicasCreated.await();
+      if (!tracker.totalReplicasCreated.await(2, TimeUnit.SECONDS)) {
+        Assert.fail(
+            "Failed awaiting for " + blobId + " creations, current count " + tracker.totalReplicasCreated.getCount());
+      }
     } catch (InterruptedException e) {
       // ignore
     }
@@ -223,7 +229,10 @@ class MockNotificationSystem implements NotificationSystem {
   public void awaitBlobDeletions(String blobId) {
     try {
       Tracker tracker = objectTracker.get(blobId);
-      tracker.totalReplicasDeleted.await();
+      if (!tracker.totalReplicasDeleted.await(2, TimeUnit.SECONDS)) {
+        Assert.fail(
+            "Failed awaiting for " + blobId + " deletions, current count " + tracker.totalReplicasDeleted.getCount());
+      }
     } catch (InterruptedException e) {
       // ignore
     }

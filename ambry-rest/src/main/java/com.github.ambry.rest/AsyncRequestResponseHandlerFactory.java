@@ -32,10 +32,8 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
       throw new IllegalArgumentException("RestServerMetrics instance provided is null");
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Response handler scaling unit count has to be > 0. Is " + handlerCount);
-    } else {
-      AsyncRequestResponseHandler responseHandler = getInstance(restServerMetrics);
-      responseHandler.setResponseWorkersCount(handlerCount);
     }
+    buildInstance(restServerMetrics);
     logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestResponseHandler");
   }
 
@@ -54,9 +52,8 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
     } else if (handlerCount <= 0) {
       throw new IllegalArgumentException("Request handler scaling unit count has to be > 0. Is " + handlerCount);
     } else {
-      AsyncRequestResponseHandler requestHandler = getInstance(restServerMetrics);
-      requestHandler.setRequestWorkersCount(handlerCount);
-      requestHandler.setBlobStorageService(blobStorageService);
+      buildInstance(restServerMetrics);
+      instance.setupRequestHandling(handlerCount, blobStorageService);
     }
     logger.trace("Instantiated AsyncRequestResponseHandlerFactory as RestRequestHandler");
   }
@@ -83,9 +80,8 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
    * Returns the singleton {@link AsyncRequestResponseHandler} instance being maintained. Creates it if it hasn't been
    * created already.
    * @param restServerMetrics the {@link RestServerMetrics} instance that should be used for metrics.
-   * @return an instance of {@link AsyncRequestResponseHandler}.
    */
-  private static AsyncRequestResponseHandler getInstance(RestServerMetrics restServerMetrics) {
+  private static void buildInstance(RestServerMetrics restServerMetrics) {
     lock.lock();
     try {
       if (instance == null) {
@@ -100,6 +96,5 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
     } finally {
       lock.unlock();
     }
-    return instance;
   }
 }

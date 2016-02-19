@@ -3,17 +3,15 @@ package com.github.ambry.router;
 import java.io.IOException;
 import java.nio.channels.Channel;
 import java.nio.channels.WritableByteChannel;
+import java.util.concurrent.Future;
 
 
 /**
- * A channel that represents a stream of bytes that can be read into different types of destinations. The read pointer
- * inside the channel is incremented regardless of the destination being written to and therefore the data read on any
- * read operation is exclusive.
+ * A channel that represents a stream of bytes that can be read into different types of destinations asynchronously.
  * <p/>
- * Only one read operation upon a ReadableStreamChannel may be in progress at any given time.  If one thread initiates a
- * read operation upon a channel then any other thread that attempts to initiate another read operation will block until
- * the first operation is complete.  Whether or not other kinds of I/O operations may proceed concurrently with a read
- * operation depends upon the type of the channel.
+ * In most implementations, the channel likely can be used for only one read operation after which it cannot be reused.
+ * If more than one thread invokes read operations at the same time, only one of them may succeed and the other read
+ * operations may be rejected.
  */
 public interface ReadableStreamChannel extends Channel {
 
@@ -24,6 +22,22 @@ public interface ReadableStreamChannel extends Channel {
   public long getSize();
 
   /**
+   * Reads all the data inside this channel into the given {@code asyncWritableChannel} asynchronously. The
+   * {@code callback} will be invoked once the read is complete. The {@code callback} and the future returned will
+   * contain the bytes read (that should be equal to the size of the channel if there were no exceptions) on success
+   * or failure. If the read failed, they will also contain the exception that caused the failure.
+   * <p/>
+   * It is guaranteed that a read will be acknowledged as either a success or failure.
+   * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
+   * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
+   *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
+   * @return the {@link Future} that will eventually contain the result of the operation.
+   */
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback);
+
+  /**
+   * This function is deprecated and will be removed in the future. The following documentation might not be up to date.
+   * <p/>
    * Reads a sequence of bytes into the {@link WritableByteChannel} provided.
    * <p/>
    * This operation might read all the bytes in the channel or might not read any bytes at all. Its behavior depends
@@ -40,6 +54,7 @@ public interface ReadableStreamChannel extends Channel {
    *          stream).
    * @throws IOException if write to the {@link WritableByteChannel} failed or if any other I/O error occurred.
    */
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException;
 }

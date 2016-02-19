@@ -1,12 +1,9 @@
 package com.github.ambry.router;
 
-import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -15,31 +12,36 @@ import org.slf4j.LoggerFactory;
  *  This class is not thread-safe and will result in undefined behaviour if accesses to the stream are not synchronized.
  */
 class ReadableStreamChannelInputStream extends InputStream {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final ByteBufferChannel singleByteBufferChannel = new ByteBufferChannel(ByteBuffer.allocate(1));
+  private final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
+  private final CloseWriteChannelCallback callback = new CloseWriteChannelCallback(asyncWritableChannel);
   private final ReadableStreamChannel readableStreamChannel;
-  private volatile long totalBytesRead = 0;
 
+  private ByteBuffer currentChunk = null;
+  private volatile long bytesAvailable;
+
+  /**
+   * Create a ReadableStreamChannelInputStream with the given {@link ReadableStreamChannel}.
+   * @param readableStreamChannel the {@link ReadableStreamChannel} that needs to be converted into an
+   * {@link InputStream}.
+   */
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
     this.readableStreamChannel = readableStreamChannel;
+    bytesAvailable = readableStreamChannel.getSize();
+    readableStreamChannel.readInto(asyncWritableChannel, callback);
   }
 
   @Override
   public int available() {
-    return readableStreamChannel.getSize() - totalBytesRead < Integer.MAX_VALUE ? (int) (readableStreamChannel.getSize()
-        - totalBytesRead) : Integer.MAX_VALUE;
+    return bytesAvailable < Integer.MAX_VALUE ? (int) bytesAvailable : Integer.MAX_VALUE;
   }
 
   @Override
   public int read()
       throws IOException {
-    ByteBuffer buffer = singleByteBufferChannel.getBuffer();
-    buffer.clear();
     int data = -1;
-    if (read(singleByteBufferChannel) != -1) {
-      buffer.flip();
-      data = buffer.get() & 0xFF;
-      totalBytesRead++;
+    if (loadData()) {
+      data = currentChunk.get() & 0xFF;
+      bytesAvailable--;
     }
     return data;
   }
@@ -55,49 +57,85 @@ class ReadableStreamChannelInputStream extends InputStream {
       return 0;
     }
 
-    ByteBufferChannel byteBufferChannel = new ByteBufferChannel(ByteBuffer.wrap(b, off, len));
-    int bytesRead = read(byteBufferChannel);
-    if (bytesRead > 0) {
-      totalBytesRead += bytesRead;
+    int startOff = off;
+    while (len > 0 && loadData()) {
+      int toRead = Math.min(len, currentChunk.remaining());
+      currentChunk.get(b, off, toRead);
+      len -= toRead;
+      off += toRead;
+      bytesAvailable -= toRead;
+    }
+
+    int bytesRead = off - startOff;
+    if (bytesRead <= 0) {
+      bytesRead = -1;
     }
     return bytesRead;
   }
 
-  /**
-   * Uses the provided {@link WritableByteChannel} to read from the {@code readableStreamChannel} and returns the number
-   * of bytes actually read.
-   * <p/>
-   * This method blocks until at least one byte is available, end of stream is reached or if  there is either an
-   * {@link IOException} while reading from the {@code readableStreamChannel} or there is an
-   * {@link InterruptedException} during the sleep awaiting data.
-   * @param channel the {@link WritableByteChannel} to use.
-   * @return the number of bytes read from the {@code readableStreamChannel}. -1 if end of stream is reached.
-   * @throws IOException if there is an exception while reading from the {@code readableStreamChannel} or if there is an
-   *          {@link InterruptedException} during the sleep awaiting data.
-   */
-  private int read(WritableByteChannel channel)
+  @Override
+  public void close()
       throws IOException {
-    int SINGLE_WAIT_TIME = 10;
-    int WARN_INTERVAL = 50;
-    int totalWaitTime = 0;
-    int bytesRead;
-    while (true) {
-      bytesRead = readableStreamChannel.read(channel);
-      if (bytesRead == 0) {
-        try {
-          Thread.sleep(SINGLE_WAIT_TIME);
-          totalWaitTime += SINGLE_WAIT_TIME;
-          if (totalWaitTime % WARN_INTERVAL == 0) {
-            logger.warn("ReadableStreamChannelInputStream has been waiting for " + totalWaitTime + "ms for data");
-          }
-        } catch (InterruptedException e) {
-          throw new IOException("Wait for data interrupted", e);
-        }
-      } else {
-        break;
+    readableStreamChannel.close();
+    asyncWritableChannel.close();
+  }
+
+  /**
+   * Loads more data for reading. Blocks until data is either available or no more data is expected.
+   * @return {@code true} if data is available for reading. {@link false} otherwise.
+   * @throws IllegalStateException if the wait for the next chunk is interrupted.
+   * @throws IOException if there is any problem with I/O.
+   */
+  private boolean loadData()
+      throws IOException {
+    if (currentChunk == null || !currentChunk.hasRemaining()) {
+      if (currentChunk != null) {
+        asyncWritableChannel.resolveChunk(currentChunk, null);
+      }
+      try {
+        currentChunk = asyncWritableChannel.getNextChunk();
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(e);
       }
     }
-    return bytesRead;
+    if (currentChunk == null) {
+      if (callback.exception != null) {
+        if (callback.exception instanceof IOException) {
+          throw (IOException) callback.exception;
+        } else {
+          throw new IllegalStateException(callback.exception);
+        }
+      } else if (bytesAvailable != 0) {
+        throw new IllegalStateException("All the bytes available could not be read");
+      }
+    }
+    return currentChunk != null;
+  }
+
+  /**
+   * Callback for {@link ByteBufferAsyncWritableChannel} that closes the channel on
+   * {@link #onCompletion(Long, Exception)}.
+   */
+  private static class CloseWriteChannelCallback implements Callback<Long> {
+    /**
+     * Stores any exception that occurred.
+     */
+    public Exception exception = null;
+    private final ByteBufferAsyncWritableChannel channel;
+
+    /**
+     * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
+     * @param channel the {@link ByteBufferAsyncWritableChannel} that needs to be closed.
+     */
+    public CloseWriteChannelCallback(ByteBufferAsyncWritableChannel channel) {
+      this.channel = channel;
+    }
+
+    @Override
+    public void onCompletion(Long result, Exception exception) {
+      this.exception = exception;
+      channel.close();
+    }
   }
 }
 

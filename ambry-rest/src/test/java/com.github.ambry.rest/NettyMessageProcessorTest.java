@@ -15,6 +15,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Properties;
@@ -140,7 +141,7 @@ public class NettyMessageProcessorTest {
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
     NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(new Properties()));
     NettyMessageProcessor processor = new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler);
-    return new EmbeddedChannel(processor);
+    return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 
   /**

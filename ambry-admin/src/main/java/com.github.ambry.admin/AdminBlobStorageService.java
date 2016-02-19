@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -315,7 +316,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD before GET of {}", blobId);
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         logger.trace("Setting response headers for {}", blobId);
         setResponseHeaders(result);
@@ -350,22 +351,23 @@ class HeadForGetCallback implements Callback<BlobInfo> {
   private void setResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setContentType(blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
       // Ensure browsers do not execute html with embedded exploits.
       if (blobProperties.getContentType().equals("text/html")) {
         restResponseChannel.setHeader("Content-Disposition", "attachment");
       }
     }
     if (blobProperties.isPrivate()) {
-      restResponseChannel.setExpires(new Date(0));
-      restResponseChannel.setCacheControl("private, no-cache, no-store, proxy-revalidate");
-      restResponseChannel.setPragma("no-cache");
+      restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, new Date(0));
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "private, no-cache, no-store, proxy-revalidate");
+      restResponseChannel.setHeader(RestUtils.Headers.PRAGMA, "no-cache");
     } else {
-      restResponseChannel.setExpires(new Date(System.currentTimeMillis() + cacheValidityInSecs * Time.MsPerSec));
-      restResponseChannel.setCacheControl("max-age=" + cacheValidityInSecs);
+      restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
+          new Date(System.currentTimeMillis() + cacheValidityInSecs * Time.MsPerSec));
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + cacheValidityInSecs);
     }
   }
 }
@@ -477,7 +479,7 @@ class PostCallback implements Callback<String> {
       restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
       logger.trace("Callback received for POST");
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         logger.trace("Successful POST of {}", result);
         setResponseHeaders(result);
@@ -510,9 +512,9 @@ class PostCallback implements Callback<String> {
   private void setResponseHeaders(String location)
       throws RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Created);
-    restResponseChannel.setLocation(location);
-    restResponseChannel.setContentLength(0);
-    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.LOCATION, location);
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
   }
 }
 
@@ -556,11 +558,11 @@ class DeleteCallback implements Callback<Void> {
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for DELETE of {}", blobId);
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null) {
         logger.trace("Successful DELETE of {}", blobId);
         restResponseChannel.setStatus(ResponseStatus.Accepted);
-        restResponseChannel.setContentLength(0);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
       }
     } catch (Exception e) {
       adminBlobStorageService.adminMetrics.callbackProcessingError.inc();
@@ -622,7 +624,7 @@ class HeadCallback implements Callback<BlobInfo> {
 
       String blobId = AdminBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD of {}", blobId);
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         logger.trace("Successful HEAD of {}", blobId);
         setResponseHeaders(result);
@@ -656,24 +658,28 @@ class HeadCallback implements Callback<BlobInfo> {
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setStatus(ResponseStatus.Ok);
-    restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setContentLength(blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
 
     // Blob props
-    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
-    restResponseChannel.setHeader(RestUtils.Headers.Service_Id, blobProperties.getServiceId());
-    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.Private, blobProperties.isPrivate());
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.SERVICE_ID, blobProperties.getServiceId());
+    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, blobProperties.isPrivate());
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
       restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
     }
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.Content_Type, blobProperties.getContentType());
-      restResponseChannel.setContentType(blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
     if (blobProperties.getOwnerId() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
+      restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
     }
-    // TODO: send user metadata also as header after discussion with team.
+    byte[] userMetadataArray = blobInfo.getUserMetadata();
+    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
+    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
+      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
+    }
   }
 }

@@ -15,32 +15,36 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RestServerMetrics {
   private final MetricRegistry metricRegistry;
-  private final AtomicInteger asyncHandlerWorkerIndex = new AtomicInteger(0);
+  private final AtomicInteger asyncRequestWorkerIndex = new AtomicInteger(0);
 
   // Rates
-  // AsyncHandlerWorker
+  // AsyncRequestWorker
   public final Meter requestArrivalRate;
   public final Meter requestDequeuingRate;
   public final Meter requestQueuingRate;
+  // AsyncResponseHandler
   public final Meter responseArrivalRate;
   public final Meter responseCompletionRate;
-  public final Meter responseQueuingRate;
 
   // Latencies
-  // AsyncHandlerWorker
+  // AsyncRequestWorker
   public final Histogram requestPreProcessingTimeInMs;
+  // AsyncResponseHandler
+  public final Histogram responseCallbackProcessingTimeInMs;
+  public final Histogram responseCallbackWaitTimeInMs;
   public final Histogram responsePreProcessingTimeInMs;
+  // AsyncRequestResponseHandler
+  public final Histogram requestWorkerSelectionTimeInMs;
 
   // Errors
-  // AsyncHandlerWorker
+  // AsyncRequestWorker
   public final Counter requestProcessingError;
   public final Counter requestQueueAddError;
+  public final Counter unknownRestMethodError;
+  // AsyncResponseHandler
   public final Counter resourceReleaseError;
   public final Counter responseAlreadyInFlightError;
   public final Counter responseCompleteTasksError;
-  public final Counter responseProcessingError;
-  public final Counter unexpectedError;
-  public final Counter unknownRestMethodError;
   // AsyncRequestResponseHandler
   public final Counter requestResponseHandlerShutdownError;
   public final Counter requestResponseHandlerUnavailableError;
@@ -48,11 +52,12 @@ public class RestServerMetrics {
   public final Counter restServerInstantiationError;
 
   // Others
-  // AsyncaHandlerWorker
+  // AsyncResponseHandler
   public final Counter responseExceptionCount;
+  public final Histogram responseHandlerCloseTimeInMs;
   // AsyncRequestResponseHandler
-  public final Histogram workerShutdownTimeInMs;
-  public final Histogram workerStartTimeInMs;
+  public final Histogram requestWorkerShutdownTimeInMs;
+  public final Histogram requestWorkerStartTimeInMs;
   public final Histogram requestResponseHandlerShutdownTimeInMs;
   public final Histogram requestResponseHandlerStartTimeInMs;
   public final Counter residualRequestQueueSize;
@@ -80,39 +85,45 @@ public class RestServerMetrics {
     this.metricRegistry = metricRegistry;
 
     // Rates
-    // AsyncHandlerWorker
-    requestArrivalRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestArrivalRate"));
-    requestDequeuingRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestDequeuingRate"));
-    requestQueuingRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestQueuingRate"));
-    responseArrivalRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseArrivalRate"));
+    // AsyncRequestWorker
+    requestArrivalRate = metricRegistry.meter(MetricRegistry.name(AsyncRequestWorker.class, "RequestArrivalRate"));
+    requestDequeuingRate = metricRegistry.meter(MetricRegistry.name(AsyncRequestWorker.class, "RequestDequeuingRate"));
+    requestQueuingRate = metricRegistry.meter(MetricRegistry.name(AsyncRequestWorker.class, "RequestQueuingRate"));
+    // AsyncResponseHandler
+    responseArrivalRate = metricRegistry.meter(MetricRegistry.name(AsyncResponseHandler.class, "ResponseArrivalRate"));
     responseCompletionRate =
-        metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseCompletionRate"));
-    responseQueuingRate = metricRegistry.meter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseQueuingRate"));
+        metricRegistry.meter(MetricRegistry.name(AsyncResponseHandler.class, "ResponseCompletionRate"));
 
     // Latencies
-    // AsyncHandlerWorker
+    // AsyncRequestWorker
     requestPreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AsyncHandlerWorker.class, "RequestPreProcessingTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(AsyncRequestWorker.class, "RequestPreProcessingTimeInMs"));
+    // AsyncResponseHandler
+    responseCallbackProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "ResponseCallbackProcessingTimeInMs"));
+    responseCallbackWaitTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "ResponseCallbackWaitTimeInMs"));
     responsePreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AsyncHandlerWorker.class, "ResponsePreProcessingTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "ResponsePreProcessingTimeInMs"));
+    // AsyncRequestResponseHandler
+    requestWorkerSelectionTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerSelectionTimeInMs"));
 
     // Errors
-    // AsyncHandlerWorker
+    // AsyncRequestWorker
     requestProcessingError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestProcessingError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "RequestProcessingError"));
     requestQueueAddError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "RequestQueueAddError"));
-    resourceReleaseError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResourceReleaseError"));
-    responseAlreadyInFlightError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseAlreadyInFlightError"));
-    responseCompleteTasksError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseCompleteTasksError"));
-    responseProcessingError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseProcessingError"));
-    unexpectedError = metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnexpectedError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "RequestQueueAddError"));
     unknownRestMethodError =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "UnknownRestMethodError"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "UnknownRestMethodError"));
+    // AsyncResponseHandler
+    resourceReleaseError =
+        metricRegistry.counter(MetricRegistry.name(AsyncResponseHandler.class, "ResourceReleaseError"));
+    responseAlreadyInFlightError =
+        metricRegistry.counter(MetricRegistry.name(AsyncResponseHandler.class, "ResponseAlreadyInFlightError"));
+    responseCompleteTasksError =
+        metricRegistry.counter(MetricRegistry.name(AsyncResponseHandler.class, "ResponseCompleteTasksError"));
     // AsyncRequestResponseHandler
     requestResponseHandlerShutdownError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownError"));
@@ -122,22 +133,25 @@ public class RestServerMetrics {
     restServerInstantiationError = metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
 
     // Others
-    // AsyncHandlerWorker
+    // AsyncResponseHandler
     responseExceptionCount =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResponseExceptionCount"));
+        metricRegistry.counter(MetricRegistry.name(AsyncResponseHandler.class, "ResponseExceptionCount"));
+    responseHandlerCloseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "CloseTimeInMs"));
     // AsyncRequestResponseHandler
-    workerShutdownTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "WorkerShutdownTimeInMs"));
-    workerStartTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "WorkerStartTimeInMs"));
+    requestWorkerShutdownTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerShutdownTimeInMs"));
+    requestWorkerStartTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerStartTimeInMs"));
     requestResponseHandlerShutdownTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "ShutdownTimeInMs"));
     requestResponseHandlerStartTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "StartTimeInMs"));
+    // AsyncRequestWorker
     residualRequestQueueSize =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResidualRequestQueueSize"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "ResidualRequestQueueSize"));
     residualResponseSetSize =
-        metricRegistry.counter(MetricRegistry.name(AsyncHandlerWorker.class, "ResidualResponseSetSize"));
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "ResidualResponseSetSize"));
     // RestServer
     blobStorageServiceShutdownTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(RestServer.class, "BlobStorageServiceShutdownTimeInMs"));
@@ -165,25 +179,18 @@ public class RestServerMetrics {
   }
 
   /**
-   * Registers the {@code asyncHandlerWorker} so that its metrics (request/response queue sizes) can be tracked.
-   * @param asyncHandlerWorker the {@link AsyncHandlerWorker} whose metrics need to be tracked.
+   * Registers the {@code asyncRequestWorker} so that its metrics (request queue size) can be tracked.
+   * @param asyncRequestWorker the {@link AsyncRequestWorker} whose metrics need to be tracked.
    */
-  public void registerAsyncHandlerWorker(final AsyncHandlerWorker asyncHandlerWorker) {
-    int pos = asyncHandlerWorkerIndex.getAndIncrement();
+  public void registerRequestWorker(final AsyncRequestWorker asyncRequestWorker) {
+    int pos = asyncRequestWorkerIndex.getAndIncrement();
     Gauge<Integer> gauge = new Gauge<Integer>() {
       @Override
       public Integer getValue() {
-        return asyncHandlerWorker.getRequestQueueSize();
+        return asyncRequestWorker.getRequestQueueSize();
       }
     };
-    metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-RequestQueueSize"), gauge);
-    gauge = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return asyncHandlerWorker.getResponseSetSize();
-      }
-    };
-    metricRegistry.register(MetricRegistry.name(AsyncHandlerWorker.class, pos + "-ResponseSetSize"), gauge);
+    metricRegistry.register(MetricRegistry.name(AsyncRequestWorker.class, pos + "-RequestQueueSize"), gauge);
   }
 
   /**

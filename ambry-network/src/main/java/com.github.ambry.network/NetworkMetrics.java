@@ -17,19 +17,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class NetworkMetrics {
   private final MetricRegistry registry;
 
-  // SocketRequestResponseChannel metrics
-  private final List<Gauge<Integer>> responseQueueSize;
-  private final Gauge<Integer> requestQueueSize;
-
-  // SocketServer metrics
-  public final Counter sendInFlight;
-  public final Counter acceptConnectionErrorCount;
-  public final Counter acceptorShutDownErrorCount;
-  public final Counter processorShutDownErrorCount;
-  public final Counter processNewResponseErrorCount;
-  public Gauge<Integer> numberOfProcessorThreads;
-
   // Selector metrics
+  public final Counter sendInFlight;
   public final Counter selectorConnectionClosed;
   public final Counter selectorConnectionCreated;
   public final Counter selectorSelectRate;
@@ -76,30 +65,9 @@ public class NetworkMetrics {
   // the count of renegotiation after initial handshake done
   public final Counter sslRenegotiationCount;
 
-  public NetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
-      final List<Processor> processorThreads) {
+  public NetworkMetrics(MetricRegistry registry) {
     this.registry = registry;
-    requestQueueSize = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return channel.getRequestQueueSize();
-      }
-    };
-    registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, "RequestQueueSize"), requestQueueSize);
-    responseQueueSize = new ArrayList<Gauge<Integer>>(channel.getNumberOfProcessors());
-
-    for (int i = 0; i < channel.getNumberOfProcessors(); i++) {
-      final int index = i;
-      responseQueueSize.add(i, new Gauge<Integer>() {
-        @Override
-        public Integer getValue() {
-          return channel.getResponseQueueSize(index);
-        }
-      });
-      registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + "-ResponseQueueSize"),
-          responseQueueSize.get(i));
-    }
-    sendInFlight = registry.counter(MetricRegistry.name(SocketServer.class, "SendInFlight"));
+    sendInFlight = registry.counter(MetricRegistry.name(Selector.class, "SendInFlight"));
     selectorConnectionClosed = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionClosed"));
     selectorConnectionCreated = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionCreated"));
     selectorSelectRate = registry.counter(MetricRegistry.name(Selector.class, "SelectorSelectRate"));
@@ -137,34 +105,7 @@ public class NetworkMetrics {
     sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
     sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
-
-    numberOfProcessorThreads = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return getLiveThreads(processorThreads);
-      }
-    };
-    registry.register(MetricRegistry.name(SocketServer.class, "NumberOfProcessorThreads"), numberOfProcessorThreads);
-
-    acceptConnectionErrorCount =
-        registry.counter(MetricRegistry.name(SocketServer.class, "AcceptConnectionErrorCount"));
-    acceptorShutDownErrorCount =
-        registry.counter(MetricRegistry.name(SocketServer.class, "AcceptorShutDownErrorCount"));
-    processorShutDownErrorCount =
-        registry.counter(MetricRegistry.name(SocketServer.class, "ProcessorShutDownErrorCount"));
-    processNewResponseErrorCount =
-        registry.counter(MetricRegistry.name(SocketServer.class, "ProcessNewResponseErrorCount"));
     selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
-  }
-
-  private int getLiveThreads(List<Processor> replicaThreads) {
-    int count = 0;
-    for (Processor thread : replicaThreads) {
-      if (thread.isRunning()) {
-        count++;
-      }
-    }
-    return count;
   }
 
   public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections) {
@@ -219,5 +160,69 @@ public class NetworkMetrics {
       bytesReceivedCount =
           registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-BytesReceivedCount"));
     }
+  }
+}
+
+class ServerNetworkMetrics extends NetworkMetrics {
+  // SocketRequestResponseChannel metrics
+  private final List<Gauge<Integer>> responseQueueSize;
+  private final Gauge<Integer> requestQueueSize;
+
+  // SocketServer metrics
+  public final Counter acceptConnectionErrorCount;
+  public final Counter acceptorShutDownErrorCount;
+  public final Counter processorShutDownErrorCount;
+  public final Counter processNewResponseErrorCount;
+  public Gauge<Integer> numberOfProcessorThreads;
+
+  public ServerNetworkMetrics(final SocketRequestResponseChannel channel, MetricRegistry registry,
+      final List<Processor> processorThreads) {
+    super(registry);
+    requestQueueSize = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return channel.getRequestQueueSize();
+      }
+    };
+    registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, "RequestQueueSize"), requestQueueSize);
+    responseQueueSize = new ArrayList<Gauge<Integer>>(channel.getNumberOfProcessors());
+
+    for (int i = 0; i < channel.getNumberOfProcessors(); i++) {
+      final int index = i;
+      responseQueueSize.add(i, new Gauge<Integer>() {
+        @Override
+        public Integer getValue() {
+          return channel.getResponseQueueSize(index);
+        }
+      });
+      registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, i + "-ResponseQueueSize"),
+          responseQueueSize.get(i));
+    }
+    numberOfProcessorThreads = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return getLiveThreads(processorThreads);
+      }
+    };
+    registry.register(MetricRegistry.name(SocketServer.class, "NumberOfProcessorThreads"), numberOfProcessorThreads);
+
+    acceptConnectionErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "AcceptConnectionErrorCount"));
+    acceptorShutDownErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "AcceptorShutDownErrorCount"));
+    processorShutDownErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "ProcessorShutDownErrorCount"));
+    processNewResponseErrorCount =
+        registry.counter(MetricRegistry.name(SocketServer.class, "ProcessNewResponseErrorCount"));
+  }
+
+  private int getLiveThreads(List<Processor> replicaThreads) {
+    int count = 0;
+    for (Processor thread : replicaThreads) {
+      if (thread.isRunning()) {
+        count++;
+      }
+    }
+    return count;
   }
 }

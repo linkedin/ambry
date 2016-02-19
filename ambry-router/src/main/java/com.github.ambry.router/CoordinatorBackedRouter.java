@@ -216,11 +216,7 @@ public class CoordinatorBackedRouter implements Router {
       Exception exception) {
     long postProcessingStartTime = System.currentTimeMillis();
     try {
-      RuntimeException runtimeException = null;
-      if (exception != null) {
-        runtimeException = new RuntimeException(exception);
-      }
-      futureResult.done(operationResult, runtimeException);
+      futureResult.done(operationResult, exception);
       if (callback != null) {
         callback.onCompletion(operationResult, exception);
       }

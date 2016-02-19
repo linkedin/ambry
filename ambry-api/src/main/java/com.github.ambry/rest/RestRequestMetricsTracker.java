@@ -129,7 +129,7 @@ public class RestRequestMetricsTracker {
      * @param delta the time in ms a request has spent waiting to be processed at the scaling layer.
      * @return the total time in ms this request has spent waiting to be processed at the scaling layer at this moment.
      */
-    public long addToProcessingWaitTime(long delta) {
+    public long addToRequestProcessingWaitTime(long delta) {
       addToTotalCpuTime(delta);
       return requestProcessingWaitTimeInMs.addAndGet(delta);
     }

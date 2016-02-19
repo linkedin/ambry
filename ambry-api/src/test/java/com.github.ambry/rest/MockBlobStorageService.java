@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -31,6 +33,8 @@ public class MockBlobStorageService implements BlobStorageService {
 
   private VerifiableProperties verifiableProperties;
   private volatile boolean serviceRunning = false;
+  private volatile boolean blocking = false;
+  private volatile CountDownLatch blockLatch = new CountDownLatch(0);
 
   /**
    * Changes the {@link VerifiableProperties} instance with this instance so that the behaviour can be changed on the
@@ -106,13 +110,45 @@ public class MockBlobStorageService implements BlobStorageService {
   }
 
   /**
+   * All operations block until {@link #releaseAllOperations()} is called.
+   * @throws IllegalStateException each call to this function must (eventually) be followed by a call to
+   *                               {@link #releaseAllOperations()}. If this function is invoked more than once before an
+   *                               accompanying {@link #releaseAllOperations()} is called, it is illegal state.
+   */
+  public void blockAllOperations() {
+    if (blocking) {
+      throw new IllegalStateException("Already in blocking state");
+    } else {
+      blocking = true;
+      blockLatch = new CountDownLatch(1);
+    }
+  }
+
+  /**
+   * Releases all blocked operations.
+   */
+  public void releaseAllOperations() {
+    blockLatch.countDown();
+    blocking = false;
+  }
+
+  /**
    * Handles argument pre-checks and examines the URL to see if any custom operations need to be performed (which might
    * involve throwing exceptions).
+   * <p/>
+   * Also blocks if required.
    * @param restRequest the {@link RestRequest} that needs to be handled.
    * @param restResponseChannel the {@link RestResponseChannel} that can be used to set headers.
    * @return {@code true} if the pre-checks decided it is OK to continue. Otherwise {@code false}.
    */
   private boolean shouldProceed(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    if (blocking) {
+      try {
+        blockLatch.await();
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(e);
+      }
+    }
     boolean shouldProceed = canHonorRequest(restRequest, restResponseChannel);
     if (shouldProceed) {
       String uri = restRequest.getUri();
@@ -247,7 +283,7 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
   @Override
   public void onCompletion(BlobInfo result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setResponseHeaders(result);
         String blobId = MockBlobStorageService.getBlobId(restRequest);
@@ -273,10 +309,10 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
   private void setResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setContentType(blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
       if (blobProperties.getContentType().equals("text/html")) {
         restResponseChannel.setHeader("Content-Disposition", "attachment");
       }
@@ -359,7 +395,7 @@ class MockPostCallback implements Callback<String> {
   @Override
   public void onCompletion(String result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setResponseHeaders(result);
       } else if (exception != null && exception instanceof RouterException) {
@@ -381,9 +417,9 @@ class MockPostCallback implements Callback<String> {
   private void setResponseHeaders(String location)
       throws RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Created);
-    restResponseChannel.setLocation(location);
-    restResponseChannel.setContentLength(0);
-    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.LOCATION, location);
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
   }
 }
 
@@ -416,10 +452,10 @@ class MockDeleteCallback implements Callback<Void> {
   @Override
   public void onCompletion(Void result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null) {
         restResponseChannel.setStatus(ResponseStatus.Accepted);
-        restResponseChannel.setContentLength(0);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
       } else if (exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
@@ -463,7 +499,7 @@ class MockHeadCallback implements Callback<BlobInfo> {
   @Override
   public void onCompletion(BlobInfo result, Exception exception) {
     try {
-      restResponseChannel.setDate(new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setResponseHeaders(result);
       } else if (exception != null && exception instanceof RouterException) {
@@ -485,24 +521,28 @@ class MockHeadCallback implements Callback<BlobInfo> {
   private void setResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setLastModified(new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setContentLength(blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
 
     // Blob props
-    restResponseChannel.setHeader(RestUtils.Headers.Blob_Size, blobProperties.getBlobSize());
-    restResponseChannel.setHeader(RestUtils.Headers.Service_Id, blobProperties.getServiceId());
-    restResponseChannel.setHeader(RestUtils.Headers.Creation_Time, new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.Private, blobProperties.isPrivate());
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.SERVICE_ID, blobProperties.getServiceId());
+    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, blobProperties.isPrivate());
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
       restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
     }
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.Content_Type, blobProperties.getContentType());
-      restResponseChannel.setContentType(blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
     if (blobProperties.getOwnerId() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.Owner_Id, blobProperties.getOwnerId());
+      restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
     }
-    // TODO: send user metadata also as header after discussion with team.
+    byte[] userMetadataArray = blobInfo.getUserMetadata();
+    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
+    for (String key : userMetadata.keySet()) {
+      restResponseChannel.setHeader(key, userMetadata.get(key));
+    }
   }
 }

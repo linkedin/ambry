@@ -8,8 +8,8 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -67,20 +67,6 @@ public class ReadableStreamChannelInputStreamTest {
   }
 
   @Test
-  public void nonBlockingToBlockingTest()
-      throws IOException {
-    byte[] in = new byte[1024];
-    new Random().nextBytes(in);
-    ReadableStreamChannel channel = new HaltingReadableStreamChannel(ByteBuffer.wrap(in), 5);
-    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
-    byte[] out = new byte[in.length];
-    // The HaltingReadableStreamChannel returns 0 bytes read 5 times but that should not change anything for us.
-    assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));
-    assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
-    assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
-  }
-
-  @Test
   public void availableTest()
       throws IOException {
     byte[] in = new byte[1024];
@@ -99,6 +85,38 @@ public class ReadableStreamChannelInputStreamTest {
       totalBytesRead += bytesRead;
     }
     assertEquals("Available should be 0", 0, dstInputStream.available());
+  }
+
+  /**
+   * Tests for the case when reads are incomplete either because exceptions were thrown or the read simply did not
+   * complete.
+   * @throws IOException
+   */
+  @Test
+  public void incompleteReadsTest()
+      throws IOException {
+    // Exception during read
+    String exceptionMsg = "@@randomMsg@@";
+    Exception exceptionToThrow = new Exception(exceptionMsg);
+    ReadableStreamChannel channel = new IncompleteReadReadableStreamChannel(exceptionToThrow);
+    InputStream inputStream = new ReadableStreamChannelInputStream(channel);
+    try {
+      inputStream.read();
+    } catch (Exception e) {
+      while (e.getCause() != null) {
+        e = (Exception) e.getCause();
+      }
+      assertEquals("Exception messages do not match", exceptionMsg, e.getMessage());
+    }
+
+    // incomplete read
+    channel = new IncompleteReadReadableStreamChannel(null);
+    inputStream = new ReadableStreamChannelInputStream(channel);
+    try {
+      inputStream.read();
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
   }
 
   // helpers
@@ -141,37 +159,54 @@ public class ReadableStreamChannelInputStreamTest {
 }
 
 /**
- * Class that returns 0 bytes on read a fixed number of times.
+ * {@link ReadableStreamChannel} implementation that either has an {@link Exception} on
+ * {@link #readInto(AsyncWritableChannel, Callback)} or executes an incomplete read.
  */
-class HaltingReadableStreamChannel implements ReadableStreamChannel {
+class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final AtomicInteger haltTimes;
-  private final ByteBuffer data;
+  private final Exception exceptionToThrow;
 
-  public HaltingReadableStreamChannel(ByteBuffer data, int haltTimes) {
-    this.data = data;
-    this.haltTimes = new AtomicInteger(haltTimes);
+  /**
+   * Create an instance of {@link IncompleteReadReadableStreamChannel} with an {@code exceptionToThrow}.
+   * @param exceptionToThrow if desired, provide an exception that will thrown on read. Can be null.
+   */
+  public IncompleteReadReadableStreamChannel(Exception exceptionToThrow) {
+    this.exceptionToThrow = exceptionToThrow;
   }
 
   @Override
   public long getSize() {
-    return data.limit();
+    return 1;
   }
 
+  /**
+   * Either throws the exception provided or returns immediately saying no bytes were read.
+   * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
+   * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
+   *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
+   * @return
+   */
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    Exception exception = null;
+    if (!channelOpen.get()) {
+      exception = new ClosedChannelException();
+    } else {
+      exception = exceptionToThrow;
+    }
+    FutureResult<Long> futureResult = new FutureResult<Long>();
+    futureResult.done(0L, exception);
+    if (callback != null) {
+      callback.onCompletion(0L, exception);
+    }
+    return futureResult;
+  }
+
+  @Deprecated
   @Override
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten;
-    if (!channelOpen.get()) {
-      throw new ClosedChannelException();
-    } else if (haltTimes.getAndDecrement() > 0) {
-      bytesWritten = 0;
-    } else if (!data.hasRemaining()) {
-      bytesWritten = -1;
-    } else {
-      bytesWritten = channel.write(data);
-    }
-    return bytesWritten;
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

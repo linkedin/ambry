@@ -149,8 +149,8 @@ public class TestSSLUtils {
     saveKeyStore(ks, filename, password);
   }
 
-  public static Properties createSSLProperties(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
-      String certAlias)
+  public static void addSSLProperties(Properties props, String sslEnabledDatacenters, SSLFactory.Mode mode,
+      File trustStoreFile, String certAlias)
       throws IOException, GeneralSecurityException {
     Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
     File keyStoreFile;
@@ -174,7 +174,6 @@ public class TestSSLUtils {
 
     createTrustStore(trustStoreFile.getPath(), TRUSTSTORE_PASSWORD, certs);
 
-    Properties props = new Properties();
     props.put("ssl.context.protocol", SSL_CONTEXT_PROTOCOL);
     props.put("ssl.context.provider", SSL_CONTEXT_PROVIDER);
     props.put("ssl.enabled.protocols", SSL_ENABLED_PROTOCOLS);
@@ -191,7 +190,6 @@ public class TestSSLUtils {
     props.put("ssl.truststore.password", TRUSTSTORE_PASSWORD);
     props.put("ssl.cipher.suites", SSL_CIPHER_SUITES);
     props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
-    return props;
   }
 
   /**
@@ -208,7 +206,8 @@ public class TestSSLUtils {
   public static SSLConfig createSSLConfig(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
       String certAlias)
       throws IOException, GeneralSecurityException {
-    Properties props = createSSLProperties(sslEnabledDatacenters, mode, trustStoreFile, certAlias);
+    Properties props = new Properties();
+    addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias);
     SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(props));
     return sslConfig;
   }

@@ -2,15 +2,10 @@ package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.SystemTime;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import org.junit.After;
@@ -28,7 +23,6 @@ import static org.junit.Assert.assertTrue;
 public class SelectorTest {
 
   private static final int BUFFER_SIZE = 4 * 1024;
-  private SocketRequestResponseChannel socketRequestResponseChannel;
   private EchoServer server;
   private Selector selector;
 
@@ -37,11 +31,9 @@ public class SelectorTest {
       throws Exception {
     this.server = new EchoServer(18283);
     this.server.start();
-    socketRequestResponseChannel = new SocketRequestResponseChannel(1, 10);
-    List<Processor> processorThreads = new ArrayList<Processor>();
     this.selector =
-        new Selector(new NetworkMetrics(socketRequestResponseChannel, new MetricRegistry(), processorThreads),
-            SystemTime.getInstance(), null);
+        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(),
+            null);
   }
 
   @After
@@ -244,7 +236,7 @@ public class SelectorTest {
     return new NetworkSend(connectionId, new BoundedByteBufferSend(buf), null, SystemTime.getInstance());
   }
 
- static String asString(NetworkReceive receive) {
+  static String asString(NetworkReceive receive) {
     return new String(receive.getReceivedBytes().getPayload().array());
   }
 

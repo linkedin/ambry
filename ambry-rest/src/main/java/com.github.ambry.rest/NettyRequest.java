@@ -1,7 +1,8 @@
 package com.github.ambry.rest;
 
-import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -15,11 +16,14 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.WritableByteChannel;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,11 +42,13 @@ class NettyRequest implements RestRequest {
   private final Map<String, List<String>> args;
 
   private final ReentrantLock contentLock = new ReentrantLock();
-  private final List<NettyContent> requestContents = new LinkedList<NettyContent>();
+  private final Queue<HttpContent> requestContents = new LinkedBlockingQueue<HttpContent>();
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final AtomicBoolean streamEnded = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
+
+  private volatile AsyncWritableChannel writeChannel = null;
+  private volatile ReadIntoCallbackWrapper callbackWrapper = null;
 
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
@@ -121,14 +127,15 @@ class NettyRequest implements RestRequest {
       try {
         logger.trace("Closing NettyRequest {} with {} content chunks unread", getUri(), requestContents.size());
         // For non-POST we usually have one content chunk unread - this the LastHttpContent chunk. This is OK.
-        Iterator<NettyContent> nettyContentIterator = requestContents.iterator();
-        while (nettyContentIterator.hasNext()) {
-          nettyContentIterator.next().release();
-          nettyContentIterator.remove();
+        while (requestContents.peek() != null) {
+          ReferenceCountUtil.release(requestContents.poll());
         }
       } finally {
         contentLock.unlock();
         restRequestMetricsTracker.recordMetrics();
+        if (callbackWrapper != null) {
+          callbackWrapper.invokeCallback(new ClosedChannelException());
+        }
       }
     }
   }
@@ -148,7 +155,7 @@ class NettyRequest implements RestRequest {
   }
 
   /**
-   * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#Blob_Size}. If there is
+   * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#BLOB_SIZE}. If there is
    * no such header, returns length in the "Content-Length" header. If there is no such header, tries to infer content
    * size. If that cannot be done, returns 0.
    * <p/>
@@ -159,8 +166,8 @@ class NettyRequest implements RestRequest {
   @Override
   public long getSize() {
     long contentLength;
-    if (HttpHeaders.getHeader(request, RestUtils.Headers.Blob_Size, null) != null) {
-      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.Blob_Size));
+    if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
+      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
     } else {
       contentLength = HttpHeaders.getContentLength(request, 0);
     }
@@ -168,65 +175,32 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
+  @Deprecated
   public int read(WritableByteChannel channel)
       throws IOException {
-    int bytesWritten;
-    if (!channelOpen.get()) {
-      throw new ClosedChannelException();
-    } else if (streamEnded.get()) {
-      bytesWritten = -1;
-    } else {
-      bytesWritten = 0;
-      contentLock.lock();
-      try {
-        // We read from the NettyContent at the head of the list until :-
-        // 1. The writable channel can hold no more data or there is no more data immediately available - while loop
-        //      ends.
-        // 2. The NettyContent runs out of content - remove it from the head of the list and start reading from new head
-        //      if it is available.
-        // Content may be added at any time and it is not necessary that the list have any elements at the time of
-        // reading. Read returns -1 only when the a NettyContent with isLast() true is read. If stream has not ended and
-        // there is no content in the list, we return 0.
-        // Cases to consider:
-        // 1. Writable channel can consume no content (nothing to do. Should return 0).
-        // 2. Writable channel can consume data limited to one NettyContent (might rollover).
-        //      a. There is content available in the NettyContent at the head of the list (don't rollover).
-        //      b. Request content stream ended when we tried to read from the NettyContent at the head of the list (end
-        //          of stream).
-        //      b. There is no content available right now in the NettyContent at the head of the list but it has not
-        //          finished its content (don't rollover).
-        //      c. There is no content available in the NettyContent at the head of the list because it just finished
-        //          its content (rollover).
-        //            i. More NettyContent available in the list (continue read).
-        //            ii. No more NettyContent in the list currently (cannot continue read).
-        // 3. Writable channel can consume data across NettyContents (will rollover).
-        //      a. More NettyContent is available in the list (continue read).
-        //      b. Request content stream has not ended but more NettyContent is not available in the list (cannot
-        //          continue read).
-        //      c. Request content stream has ended (end of stream).
-        int currentBytesWritten = requestContents.size() > 0 ? requestContents.get(0).read(channel) : 0;
-        while (currentBytesWritten != 0) {
-          if (currentBytesWritten == -1) {
-            NettyContent nettyContent = requestContents.remove(0);
-            nettyContent.release();
-            if (nettyContent.isLast()) {
-              logger.trace("Content stream has ended in NettyRequest {}", getUri());
-              streamEnded.set(true);
-            }
-          } else {
-            bytesWritten += currentBytesWritten;
-          }
+    throw new IllegalStateException("Not implemented");
+  }
 
-          currentBytesWritten = 0;
-          if (!streamEnded.get() && requestContents.size() > 0) {
-            currentBytesWritten = requestContents.get(0).read(channel);
-          }
-        }
-      } finally {
-        contentLock.unlock();
+  @Override
+  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    ReadIntoCallbackWrapper tempWrapper = new ReadIntoCallbackWrapper(callback);
+    contentLock.lock();
+    try {
+      if (!channelOpen.get()) {
+        tempWrapper.invokeCallback(new ClosedChannelException());
+      } else if (writeChannel != null) {
+        throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }
+      while (requestContents.peek() != null) {
+        writeContent(asyncWritableChannel, tempWrapper, requestContents.peek());
+        ReferenceCountUtil.release(requestContents.poll());
+      }
+      callbackWrapper = tempWrapper;
+      writeChannel = asyncWritableChannel;
+    } finally {
+      contentLock.unlock();
     }
-    return bytesWritten;
+    return tempWrapper.futureResult;
   }
 
   /**
@@ -241,98 +215,150 @@ class NettyRequest implements RestRequest {
     if (!getRestMethod().equals(RestMethod.POST) && (!(httpContent instanceof LastHttpContent)
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
+    } else if (!isOpen()) {
+      throw new ClosedChannelException();
     } else {
-      NettyContent nettyContent = new NettyContent(httpContent, nettyMetrics);
       contentLock.lock();
       try {
         if (!isOpen()) {
           throw new ClosedChannelException();
+        } else if (writeChannel != null) {
+          writeContent(writeChannel, callbackWrapper, httpContent);
+        } else {
+          ReferenceCountUtil.retain(httpContent);
+          requestContents.add(httpContent);
         }
-        requestContents.add(nettyContent);
-        nettyContent.retain();
       } finally {
         contentLock.unlock();
+      }
+    }
+  }
+
+  /**
+   * Writes the data in the provided {@code httpContent} to the given {@code writeChannel}.
+   * @param writeChannel the {@link AsyncWritableChannel} to write the data of {@code httpContent} to.
+   * @param callbackWrapper the {@link ReadIntoCallbackWrapper} for the read operation.
+   * @param httpContent the piece of {@link HttpContent} that needs to be written to the {@code writeChannel}.
+   */
+  private void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
+      HttpContent httpContent) {
+    boolean retained = false;
+    ByteBuffer contentBuffer;
+    Callback<Long> writeCallback;
+    // LastHttpContent in the end marker in netty http world.
+    boolean isLast = httpContent instanceof LastHttpContent;
+    if (httpContent.content().nioBufferCount() > 0) {
+      // not a copy.
+      ReferenceCountUtil.retain(httpContent);
+      retained = true;
+      contentBuffer = httpContent.content().nioBuffer();
+      writeCallback = new ContentWriteCallback(httpContent, isLast, callbackWrapper);
+    } else {
+      // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
+      // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
+      nettyMetrics.contentCopyCount.inc();
+      logger.warn("HttpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
+      contentBuffer = ByteBuffer.allocate(httpContent.content().capacity());
+      httpContent.content().readBytes(contentBuffer);
+      // no need to retain httpContent since we have a copy.
+      writeCallback = new ContentWriteCallback(null, isLast, callbackWrapper);
+    }
+    boolean asyncWriteCalled = false;
+    try {
+      writeChannel.write(contentBuffer, writeCallback);
+      asyncWriteCalled = true;
+    } finally {
+      if (retained && !asyncWriteCalled) {
+        ReferenceCountUtil.release(httpContent);
       }
     }
   }
 }
 
 /**
- * Just a wrapper over {@link HttpContent} that helps convert the data inside into a form that can be used to write into
- * a {@link WritableByteChannel}.
+ * Callback for each write into the given {@link AsyncWritableChannel}.
  */
-class NettyContent {
-
-  private final HttpContent content;
-  private final ReadableStreamChannel contentChannel;
+class ContentWriteCallback implements Callback<Long> {
+  private final HttpContent httpContent;
   private final boolean isLast;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final ReadIntoCallbackWrapper callbackWrapper;
 
   /**
-   * Wraps the {@code httpContent} so that is easier to read.
-   * @param httpContent the {@link HttpContent} that needs to be wrapped.
-   * @param nettyMetrics the {@link NettyMetrics} instance to use.
-   * @throws IllegalArgumentException if {@code httpContent} is null.
+   * Creates a new instance of ContentWriteCallback.
+   * @param httpContent the {@link HttpContent} whose bytes were just written. Should be null if the data from the
+   *                    original {@link HttpContent} was copied and not "retained".
+   * @param isLast if this is the last piece of {@link HttpContent} for this request.
+   * @param callbackWrapper the {@link ReadIntoCallbackWrapper} that will receive updates of bytes read and one that
+   *                        should be invoked in {@link #onCompletion(Long, Exception)} if {@code isLast} is
+   *                        {@code true} or exception passed is not null.
    */
-  public NettyContent(HttpContent httpContent, NettyMetrics nettyMetrics) {
-    if (httpContent == null) {
-      throw new IllegalArgumentException("Received null HttpContent");
-    } else if (httpContent.content().nioBufferCount() > 0) {
-      // not a copy.
-      contentChannel = new ByteBufferReadableStreamChannel(httpContent.content().nioBuffer());
-      this.content = httpContent;
-    } else {
-      // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
-      // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
-      nettyMetrics.contentCopyCount.inc();
-      logger.warn("HttpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
-      ByteBuffer contentBuffer = ByteBuffer.allocate(httpContent.content().capacity());
-      httpContent.content().readBytes(contentBuffer);
-      contentChannel = new ByteBufferReadableStreamChannel(contentBuffer);
-      // no need to retain httpContent since we have a copy.
-      this.content = null;
+  public ContentWriteCallback(HttpContent httpContent, boolean isLast, ReadIntoCallbackWrapper callbackWrapper) {
+    this.httpContent = httpContent;
+    this.isLast = isLast;
+    this.callbackWrapper = callbackWrapper;
+  }
+
+  /**
+   * Decreases reference counts of content if required, updates the number of bytes read and invokes
+   * {@link ReadIntoCallbackWrapper#invokeCallback(Exception)} if {@code exception} is not {@code null} or if this is
+   * the last piece of content in the request.
+   * @param result The result of the request. This would be non null when the request executed successfully
+   * @param exception The exception that was reported on execution of the request
+   */
+  @Override
+  public void onCompletion(Long result, Exception exception) {
+    if (httpContent != null) {
+      ReferenceCountUtil.release(httpContent);
     }
-    // LastHttpContent in the end marker in netty http world.
-    isLast = httpContent instanceof LastHttpContent;
-  }
-
-  /**
-   * Used to check if this is the last chunk of a particular request.
-   * @return whether this is the last chunk.
-   */
-  public boolean isLast() {
-    return isLast;
-  }
-
-  /**
-   * Writes the underlying content into the provided {@code channel}. Returns number of bytes written. If end of stream
-   * has been reached, returns -1.
-   * @param channel the {@link WritableByteChannel} to write data into.
-   * @return the number of bytes written. Can be 0. Returns -1 if there is no more data to read.
-   * @throws IOException if there was an I/O error while writing to the channel.
-   */
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    return contentChannel.read(channel);
-  }
-
-  /**
-   * If required, increase the reference count of the underlying {@link HttpContent} so that the it is not lost to
-   * recycling before processing is complete.
-   */
-  public void retain() {
-    if (content != null) {
-      ReferenceCountUtil.retain(content);
+    callbackWrapper.updateBytesRead(result);
+    if (exception != null || isLast) {
+      callbackWrapper.invokeCallback(exception);
     }
   }
+}
+
+/**
+ * Wrapper for callbacks provided to {@link NettyRequest#readInto(AsyncWritableChannel, Callback)}.
+ */
+class ReadIntoCallbackWrapper {
+  /**
+   * The {@link Future} where the result of {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} will
+   * eventually be updated.
+   */
+  public final FutureResult<Long> futureResult = new FutureResult<Long>();
+
+  private final Callback<Long> callback;
+  private final AtomicLong totalBytesRead = new AtomicLong(0);
+  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
   /**
-   * If required,, decrease the reference count of the underlying {@link HttpContent} so that it can be recycled, clean
-   * up any resources and do work that needs to be done at the end of the lifecycle.
+   * Creates an instance of ReadIntoCallbackWrapper with the given {@code callback}.
+   * @param callback the {@link Callback} to invoke on operation completion.
    */
-  public void release() {
-    if (content != null) {
-      ReferenceCountUtil.release(content);
+  public ReadIntoCallbackWrapper(Callback<Long> callback) {
+    this.callback = callback;
+  }
+
+  /**
+   * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
+   * @param delta the number of bytes read in the current invocation.
+   * @return the total number of bytes read until now.
+   */
+  public long updateBytesRead(long delta) {
+    return totalBytesRead.addAndGet(delta);
+  }
+
+  /**
+   * Invokes the callback and updates the future once this is called. This function ensures that the callback is invoked
+   * just once.
+   * @param exception the {@link Exception}, if any, to pass to the callback.
+   */
+  public void invokeCallback(Exception exception) {
+    if (callbackInvoked.compareAndSet(false, true)) {
+      futureResult.done(totalBytesRead.get(), exception);
+      if (callback != null) {
+        callback.onCompletion(totalBytesRead.get(), exception);
+      }
     }
   }
 }

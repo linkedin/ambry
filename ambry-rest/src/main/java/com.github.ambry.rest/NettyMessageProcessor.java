@@ -132,7 +132,11 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
       } else {
         logger.error("Error on channel {}", ctx.channel(), cause);
       }
-      onRequestAborted(cause);
+      if (cause instanceof Exception) {
+        onRequestAborted((Exception) cause);
+      } else {
+        ctx.fireExceptionCaught(cause);
+      }
     } catch (Exception e) {
       String uri = (request != null) ? request.getUri() : null;
       nettyMetrics.exceptionCaughtTasksError.inc();
@@ -294,14 +298,14 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
 
   /**
    * Performs tasks that need to be performed when the request is aborted.
-   * @param cause the reason the request was aborted.
+   * @param exception the reason the request was aborted.
    */
-  private void onRequestAborted(Throwable cause) {
+  private void onRequestAborted(Exception exception) {
     if (responseChannel != null) {
       if (request != null) {
         logger.trace("Request {} is aborted", request.getUri());
       }
-      responseChannel.onResponseComplete(cause);
+      responseChannel.onResponseComplete(exception);
     } else {
       // we specifically do not send an error response to the client directly (through ctx) at this point because of
       // the state transitions that we expect. If the client has sent *anything* at all to us after the completion of

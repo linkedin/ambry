@@ -3,10 +3,8 @@ package com.github.ambry.router;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -69,7 +67,6 @@ public class InMemoryRouter implements Router {
       try {
         if (deletedBlobs.contains(blobId)) {
           exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
-          ;
         } else if (!blobs.containsKey(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         } else {
@@ -97,7 +94,7 @@ public class InMemoryRouter implements Router {
     ReadableStreamChannel operationResult = null;
     Exception exception = null;
     if (blobId == null || blobId.length() != BLOB_ID_SIZE) {
-      completeOperation(futureResult, callback, operationResult,
+      completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
     } else {
       try {
@@ -215,11 +212,7 @@ public class InMemoryRouter implements Router {
    */
   protected static void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
       Exception exception) {
-    RuntimeException runtimeException = null;
-    if (exception != null) {
-      runtimeException = new RuntimeException(exception);
-    }
-    futureResult.done(operationResult, runtimeException);
+    futureResult.done(operationResult, exception);
     if (callback != null) {
       callback.onCompletion(operationResult, exception);
     }
@@ -267,14 +260,28 @@ class InMemoryBlobPoster implements Runnable {
    * Reads blob data and returns the content as a {@link ByteBuffer}.
    * @param postContent the blob data.
    * @return the blob data in a {@link ByteBuffer}.
-   * @throws IOException
+   * @throws InterruptedException
    */
   private ByteBuffer readBlob(ReadableStreamChannel postContent)
-      throws IOException {
+      throws InterruptedException {
     ByteBuffer blobData = ByteBuffer.allocate((int) postContent.getSize());
-    WritableByteChannel channel = new ByteBufferChannel(blobData);
-    while (blobData.hasRemaining() && (postContent.read(channel) != -1)) {
-      ;
+    ByteBufferAWC channel = new ByteBufferAWC();
+    postContent.readInto(channel, new CloseWriteChannelCallback(channel));
+    ByteBuffer chunk = channel.getNextChunk();
+    IllegalStateException exception = null;
+    while (chunk != null) {
+      if (chunk.remaining() > blobData.remaining()) {
+        exception = new IllegalStateException("Data size advertized does not match actual size of data");
+      } else {
+        blobData.put(chunk);
+      }
+      channel.resolveChunk(chunk, exception);
+      if (exception != null) {
+        channel.close();
+        throw exception;
+      } else {
+        chunk = channel.getNextChunk();
+      }
     }
     blobData.flip();
     return blobData;
@@ -346,5 +353,25 @@ class InMemoryBlob {
 
   public ByteBuffer getBlob() {
     return ByteBuffer.wrap(blob.array());
+  }
+}
+
+/**
+ * Callback for {@link ByteBufferAWC} that closes the channel on {@link #onCompletion(Long, Exception)}.
+ */
+class CloseWriteChannelCallback implements Callback<Long> {
+  private final ByteBufferAWC channel;
+
+  /**
+   * Creates a callback to close {@code channel} on {@link #onCompletion(Long, Exception)}.
+   * @param channel the {@link ByteBufferAWC} that needs to be closed.
+   */
+  public CloseWriteChannelCallback(ByteBufferAWC channel) {
+    this.channel = channel;
+  }
+
+  @Override
+  public void onCompletion(Long result, Exception exception) {
+    channel.close();
   }
 }

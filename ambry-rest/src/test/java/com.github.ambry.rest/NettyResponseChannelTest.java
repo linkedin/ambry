@@ -1,13 +1,13 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.router.Callback;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultHttpContent;
@@ -22,17 +22,23 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
 import java.util.Date;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 
@@ -46,7 +52,7 @@ import static org.junit.Assert.fail;
 public class NettyResponseChannelTest {
   /**
    * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
-   * {@link NettyResponseChannel#write(ByteBuffer)} and then call {@link NettyResponseChannel#flush()}
+   * {@link NettyResponseChannel#write(ByteBuffer, Callback)} and then completes the response.
    * <p/>
    * For a description of what different URIs do, check {@link TestingUri}. For the actual functionality, check
    * {@link MockNettyMessageProcessor}).
@@ -57,8 +63,7 @@ public class NettyResponseChannelTest {
       throws IOException {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(createRequest(HttpMethod.POST, "/"));
     channel.writeInbound(createContent(content, false));
     channel.writeInbound(createContent(lastContent, true));
@@ -76,29 +81,13 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Tests that the right exceptions are thrown on bad input to the various functions of {@link NettyResponseChannel}.
-   */
-  @Test
-  public void reactionToBadInputTest() {
-    try {
-      MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-      EmbeddedChannel channel = new EmbeddedChannel(processor);
-      channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.WriteWithDirectBuffer.toString()));
-      fail("Test should have failed as NettyResponseChannel#write() was supplied with a non-array backed ByteBuffer");
-    } catch (IllegalArgumentException e) {
-      // expected. nothing to do.
-    }
-  }
-
-  /**
    * Checks the case where no body needs to be returned but just a
-   * {@link RestResponseChannel#onResponseComplete(Throwable)} is called on the server. This should return just
+   * {@link RestResponseChannel#onResponseComplete(Exception)} is called on the server. This should return just
    * response metadata.
    */
   @Test
   public void noResponseBodyTest() {
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString()));
     // There should be a response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
@@ -108,7 +97,7 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Checks behaviour of {@link RestResponseChannel#onResponseComplete(Throwable)} with valid
+   * Checks behaviour of {@link RestResponseChannel#onResponseComplete(Exception)} with valid
    * {@link RestServiceException}s and a {@link RuntimeException}.
    */
   @Test
@@ -121,7 +110,7 @@ public class NettyResponseChannelTest {
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
 
     // Throws RuntimeException. There should be a INTERNAL_SERVER_ERROR HTTP response.
-    doOnResponseCompleteWithExceptionTest(TestingUri.OnResponseCompleteWithRuntimeException,
+    doOnResponseCompleteWithExceptionTest(TestingUri.OnResponseCompleteWithNonRestException,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
   }
 
@@ -133,11 +122,10 @@ public class NettyResponseChannelTest {
   public void badStateTransitionsTest()
       throws Exception {
     // write after close.
-    doBadStateTransitionTest(TestingUri.WriteAfterClose, ClosedChannelException.class, null);
+    doBadStateTransitionTest(TestingUri.WriteAfterClose, ClosedChannelException.class);
 
     // modify response data after it has been written to the channel
-    doBadStateTransitionTest(TestingUri.ModifyResponseMetadataAfterWrite, RestServiceException.class,
-        RestServiceErrorCode.IllegalResponseMetadataStateTransition);
+    doBadStateTransitionTest(TestingUri.ModifyResponseMetadataAfterWrite, IllegalStateException.class);
   }
 
   /**
@@ -160,35 +148,31 @@ public class NettyResponseChannelTest {
     onResponseCompleteUnderWriteFailureTest(TestingUri.ImmediateResponseComplete);
     onResponseCompleteUnderWriteFailureTest(TestingUri.OnResponseCompleteWithBadRequest);
 
+    // writing to channel with a outbound handler that generates an Exception
     try {
       String content = "@@randomContent@@@";
       MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-      ChannelOutboundHandler badOutboundHandler = new BadOutboundHandler();
+      ChannelOutboundHandler badOutboundHandler = new ExceptionOutboundHandler();
       EmbeddedChannel channel = new EmbeddedChannel(badOutboundHandler, processor);
       channel.writeInbound(createRequest(HttpMethod.GET, "/"));
       // channel gets closed because of write failure
       channel.writeInbound(createContent(content, true));
-      fail("Channel should have been closed due to write failure but no ClosedChannelException was thrown");
+      fail("Callback for write would have thrown an Exception");
     } catch (Exception e) {
-      // if the IDE tells you ClosedChannelException will not be thrown, don't believe it.
-      if (!(e instanceof ClosedChannelException)) {
-        throw e;
-      }
+      assertEquals("Exception not as expected", ExceptionOutboundHandler.EXCEPTION_MESSAGE, e.getMessage());
     }
-  }
 
-  /**
-   * Tests the {@link ChannelWriteResultListener}. Currently tests for reactions to bad input, bad state transitions and
-   * write failures.
-   * @throws RestServiceException
-   */
-  @Test
-  public void channelWriteResultListenerTest()
-      throws RestServiceException {
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
-    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.ChannelWriteListenerTest.toString()));
-    assertFalse("Channel not closed on the server", channel.isActive());
+    // writing to channel with a outbound handler that generates an Error
+    EmbeddedChannel channel = new EmbeddedChannel(new ErrorOutboundHandler(), new MockNettyMessageProcessor());
+    try {
+      channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.WriteFailureWithThrowable.toString()));
+    } catch (Error e) {
+      assertEquals("Unexpected error", ErrorOutboundHandler.ERROR_MESSAGE, e.getMessage());
+    }
+
+    channel = createEmbeddedChannel();
+    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidway.toString()));
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
   }
 
   /**
@@ -203,8 +187,7 @@ public class NettyResponseChannelTest {
       throws IOException {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.FillWriteBuffer.toString()));
     channel.writeInbound(createContent(content, false));
     channel.writeInbound(createContent(lastContent, true));
@@ -236,8 +219,7 @@ public class NettyResponseChannelTest {
   public void headersPresenceTest()
       throws ParseException {
     HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.CopyHeaders.toString());
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
@@ -253,8 +235,7 @@ public class NettyResponseChannelTest {
   @Test
   public void nullHeadersSetTest() {
     HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetNullHeader.toString());
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
@@ -267,8 +248,7 @@ public class NettyResponseChannelTest {
   @Test
   public void setRequestTest() {
     HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetRequestTest.toString());
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
@@ -304,6 +284,17 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Creates a new {@link EmbeddedChannel} with a {@link ChunkedWriteHandler} and {@link MockNettyMessageProcessor} in
+   * the pipeline.
+   * @return the created {@link EmbeddedChannel}.
+   */
+  private EmbeddedChannel createEmbeddedChannel() {
+    ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    return new EmbeddedChannel(chunkedWriteHandler, processor);
+  }
+
+  /**
    * Converts the content in {@link HttpContent} to a human readable string.
    * @param httpContent the content that needs to be converted to a human readable string.
    * @return {@code httpContent} as a human readable string.
@@ -325,8 +316,7 @@ public class NettyResponseChannelTest {
    * @param expectedResponseStatus the response status that is expected.
    */
   private void doOnResponseCompleteWithExceptionTest(TestingUri uri, HttpResponseStatus expectedResponseStatus) {
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
@@ -343,23 +333,16 @@ public class NettyResponseChannelTest {
    * {@link RestServiceErrorCode}.
    * @param uri the uri to hit.
    * @param exceptionClass the class of the exception expected.
-   * @param expectedCode if {@code exceptionClass} is {@link RestServiceException}, the expected
-   *                      {@link RestServiceErrorCode}.
    * @throws Exception
    */
-  private void doBadStateTransitionTest(TestingUri uri, Class exceptionClass, RestServiceErrorCode expectedCode)
+  private void doBadStateTransitionTest(TestingUri uri, Class exceptionClass)
       throws Exception {
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     try {
       channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
       fail("This test was expecting the handler in the channel to throw an exception");
     } catch (Exception e) {
-      if (exceptionClass.isInstance(e)) {
-        if (exceptionClass.equals(RestServiceException.class)) {
-          assertEquals("Unexpected RestServiceErrorCode", expectedCode, ((RestServiceException) e).getErrorCode());
-        }
-      } else {
+      if (!exceptionClass.isInstance(e)) {
         throw e;
       }
     }
@@ -373,8 +356,7 @@ public class NettyResponseChannelTest {
    * @param uri the uri to be hit.
    */
   private void doIdempotentOperationsTest(TestingUri uri) {
-    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    EmbeddedChannel channel = new EmbeddedChannel(processor);
+    EmbeddedChannel channel = createEmbeddedChannel();
     // no exceptions.
     channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
     HttpResponse response = (HttpResponse) channel.readOutbound();
@@ -382,16 +364,17 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Checks that no exceptions are thrown by {@link RestResponseChannel#onResponseComplete(Throwable)} when
+   * Checks that no exceptions are thrown by {@link RestResponseChannel#onResponseComplete(Exception)} when
    * there are write failures.
    * @param uri the uri to hit.
    */
   private void onResponseCompleteUnderWriteFailureTest(TestingUri uri) {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    BadOutboundHandler badOutboundHandler = new BadOutboundHandler();
-    EmbeddedChannel channel = new EmbeddedChannel(badOutboundHandler, processor);
+    ExceptionOutboundHandler exceptionOutboundHandler = new ExceptionOutboundHandler();
+    EmbeddedChannel channel = new EmbeddedChannel(exceptionOutboundHandler, processor);
     // no exception because onResponseComplete() swallows it.
     channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
+    assertFalse("Channel is not closed at the remote end", channel.isActive());
   }
 
   // headersPresenceTest() helpers
@@ -459,15 +442,11 @@ public class NettyResponseChannelTest {
  */
 enum TestingUri {
   /**
-   * Tests behavior of {@link ChannelWriteResultListener}.
-   */
-  ChannelWriteListenerTest,
-  /**
    * When this request is received, headers from the request are copied into the response channel.
    */
   CopyHeaders,
   /**
-   * When this request is received, {@link RestResponseChannel#onResponseComplete(Throwable)} is called
+   * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with null {@code cause}.
    */
   ImmediateResponseComplete,
@@ -479,8 +458,8 @@ enum TestingUri {
   FillWriteBuffer,
   /**
    * When this request is received, some data is initially written to the channel via
-   * {@link NettyResponseChannel#write(ByteBuffer)}. An attempt to modify response headers (metadata) is made after
-   * this.
+   * {@link NettyResponseChannel#write(ByteBuffer, Callback)} . An attempt to modify response headers (metadata) is made
+   * after this.
    */
   ModifyResponseMetadataAfterWrite,
   /**
@@ -488,27 +467,31 @@ enum TestingUri {
    */
   MultipleClose,
   /**
-   * When this request is received, {@link RestResponseChannel#onResponseComplete(Throwable)} is called
+   * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * multiple times.
    */
   MultipleOnResponseComplete,
   /**
-   * When this request is received, {@link RestResponseChannel#onResponseComplete(Throwable)} is called
+   * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
    * error code is {@link RestServiceErrorCode#BadRequest}.
    */
   OnResponseCompleteWithBadRequest,
   /**
-   * When this request is received, {@link RestResponseChannel#onResponseComplete(Throwable)} is called
+   * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with a {@link RestServiceException} as {@code cause}. The exception message is the URI string and the
    * error code is {@link RestServiceErrorCode#InternalServerError}.
    */
   OnResponseCompleteWithInternalServerError,
   /**
-   * When this request is received, {@link RestResponseChannel#onResponseComplete(Throwable)} is called
+   * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
    */
-  OnResponseCompleteWithRuntimeException,
+  OnResponseCompleteWithNonRestException,
+  /**
+   * Response sending fails midway through a write.
+   */
+  ResponseFailureMidway,
   /**
    * When this request is received, {@link NettyResponseChannel#setHeader(String, Object)} is attempted with null
    * arguments. If these calls don't fail, we report an error.
@@ -523,10 +506,9 @@ enum TestingUri {
    */
   WriteAfterClose,
   /**
-   * When this request is received, a direct {@link ByteBuffer} is used as {@code src} for
-   * {@link NettyResponseChannel#write(ByteBuffer)}. {@link NettyResponseChannel} only works with non-direct buffers.
+   * Fail a write with a {@link Throwable} to test reactions.
    */
-  WriteWithDirectBuffer,
+  WriteFailureWithThrowable,
   /**
    * Catch all TestingUri.
    */
@@ -576,7 +558,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
-      throws IOException, ParseException, RestServiceException {
+      throws Exception {
     if (obj != null && obj instanceof HttpRequest) {
       if (obj.getDecoderResult().isSuccess()) {
         handleRequest((HttpRequest) obj);
@@ -595,21 +577,16 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    * Handles a {@link HttpRequest}. If content is awaited, handles some state maintenance. Else handles the request
    * according to a predefined flow based on the uri.
    * @param httpRequest the {@link HttpRequest} that needs to be handled.
-   * @throws IOException
-   * @throws ParseException
-   * @throws RestServiceException
+   * @throws Exception
    */
   private void handleRequest(HttpRequest httpRequest)
-      throws IOException, ParseException, RestServiceException {
+      throws Exception {
     if (request == null) {
       request = new NettyRequest(httpRequest, nettyMetrics);
       restResponseChannel.setRequest(request);
-      restResponseChannel.setContentType("text/plain; charset=UTF-8");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
       TestingUri uri = TestingUri.getTestingURI(request.getUri());
       switch (uri) {
-        case ChannelWriteListenerTest:
-          channelWriteResultListenerTest();
-          break;
         case CopyHeaders:
           copyHeaders(httpRequest);
           restResponseChannel.onResponseComplete(null);
@@ -624,8 +601,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
           ctx.channel().config().setWriteBufferHighWaterMark(2);
           break;
         case ModifyResponseMetadataAfterWrite:
-          restResponseChannel.write(ByteBuffer.wrap(new byte[0]));
-          restResponseChannel.setContentType("text/plain; charset=UTF-8");
+          restResponseChannel.write(ByteBuffer.wrap(new byte[0]), null);
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
           break;
         case MultipleClose:
           restResponseChannel.onResponseComplete(null);
@@ -650,10 +627,18 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
                   RestServiceErrorCode.InternalServerError));
           assertFalse("Request channel is not closed", request.isOpen());
           break;
-        case OnResponseCompleteWithRuntimeException:
+        case OnResponseCompleteWithNonRestException:
           restResponseChannel
-              .onResponseComplete(new RuntimeException(TestingUri.OnResponseCompleteWithRuntimeException.toString()));
+              .onResponseComplete(new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
           assertFalse("Request channel is not closed", request.isOpen());
+          break;
+        case ResponseFailureMidway:
+          ChannelWriteCallback callback = new ChannelWriteCallback();
+          callback.compareWithFuture(
+              restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
+          assertNull("There shouldn't have been any exceptions on the first write", callback.exception);
+          restResponseChannel.onResponseComplete(new Exception());
+          // this should close the channel and the test will check for that.
           break;
         case SetNullHeader:
           setNullHeaders();
@@ -664,10 +649,17 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         case WriteAfterClose:
           restResponseChannel.close();
           assertFalse("Request channel is not closed", request.isOpen());
-          restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()));
+          callback = new ChannelWriteCallback();
+          callback.compareWithFuture(
+              restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
+          if (callback.exception != null) {
+            throw callback.exception;
+          }
           break;
-        case WriteWithDirectBuffer:
-          restResponseChannel.write(ByteBuffer.allocateDirect(1));
+        case WriteFailureWithThrowable:
+          callback = new ChannelWriteCallback();
+          callback.compareWithFuture(
+              restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
           break;
       }
     } else {
@@ -678,16 +670,22 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   /**
    * Handles a {@link HttpContent}. Checks state and echoes back the content.
    * @param httpContent the {@link HttpContent} that needs to be handled.
-   * @throws RestServiceException
+   * @throws Exception
    */
   private void handleContent(HttpContent httpContent)
-      throws RestServiceException, IOException {
+      throws Exception {
     if (request != null) {
       boolean isLast = httpContent instanceof LastHttpContent;
       ByteBuffer content = ByteBuffer.wrap(httpContent.content().array());
       int bytesWritten = 0;
       while (content.hasRemaining()) {
-        bytesWritten += restResponseChannel.write(content);
+        ChannelWriteCallback callback = new ChannelWriteCallback();
+        callback.compareWithFuture(restResponseChannel.write(content, callback));
+        if (callback.exception == null) {
+          bytesWritten += callback.result;
+        } else {
+          throw callback.exception;
+        }
       }
       assertEquals("Bytes written not equal to content size", httpContent.content().array().length, bytesWritten);
       if (isLast) {
@@ -700,35 +698,6 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   }
 
   /**
-   * Tests the {@link ChannelWriteResultListener}. Currently tests for reactions to bad input, bad state transitions and
-   * write failures.
-   * @throws RestServiceException
-   */
-  private void channelWriteResultListenerTest()
-      throws RestServiceException {
-    DefaultChannelPromise future = new DefaultChannelPromise(ctx.channel());
-    ChannelWriteResultListener listener = new ChannelWriteResultListener(null, nettyMetrics, restResponseChannel);
-    // operationComplete() should not throw exceptions even though NettyRequest is null.
-    future.setSuccess();
-    listener.operationComplete(future);
-    assertTrue("Request channel not open", request.isOpen());
-
-    listener = new ChannelWriteResultListener(request, nettyMetrics, restResponseChannel);
-    // successful operationComplete() and NettyRequest present.
-    future = new DefaultChannelPromise(ctx.channel());
-    future.setSuccess();
-    listener.operationComplete(future);
-    assertTrue("Request channel not open", request.isOpen());
-
-    // mark future as failed and verify that channel is closed.
-    future = new DefaultChannelPromise(ctx.channel());
-    future.setFailure(new Exception("placeHolderException"));
-    listener.operationComplete(future);
-    assertFalse("Channel is still open after failed write", ctx.channel().isOpen());
-    assertFalse("Request channel not closed", request.isOpen());
-  }
-
-  /**
    * Copies headers from request to response.
    * @param httpRequest the {@link HttpRequest} to copy headers from.
    * @throws ParseException
@@ -737,15 +706,22 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void copyHeaders(HttpRequest httpRequest)
       throws ParseException, RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Accepted);
-    restResponseChannel.setContentType(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_TYPE));
     restResponseChannel
-        .setContentLength(Long.parseLong(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_LENGTH)));
-    restResponseChannel.setLocation(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.LOCATION));
-    restResponseChannel.setLastModified(HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.LAST_MODIFIED));
-    restResponseChannel.setExpires(HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.EXPIRES));
-    restResponseChannel.setCacheControl(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CACHE_CONTROL));
-    restResponseChannel.setPragma(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.PRAGMA));
-    restResponseChannel.setDate(HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.DATE));
+        .setHeader(RestUtils.Headers.CONTENT_TYPE, HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_TYPE));
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
+        Long.parseLong(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_LENGTH)));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.LOCATION, HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.LOCATION));
+    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+        HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.LAST_MODIFIED));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.EXPIRES, HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.EXPIRES));
+    restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
+        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CACHE_CONTROL));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.PRAGMA, HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.PRAGMA));
+    restResponseChannel
+        .setHeader(RestUtils.Headers.DATE, HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.DATE));
     restResponseChannel.setHeader(CUSTOM_HEADER_NAME, HttpHeaders.getHeader(httpRequest, CUSTOM_HEADER_NAME));
   }
 
@@ -826,12 +802,71 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
 /**
  * A {@link ChannelOutboundHandler} that throws exceptions on write.
  */
-class BadOutboundHandler extends ChannelOutboundHandlerAdapter {
+class ExceptionOutboundHandler extends ChannelOutboundHandlerAdapter {
   protected static String EXCEPTION_MESSAGE = "@@randomExceptionMessage@@";
 
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
     throw new Exception(EXCEPTION_MESSAGE);
+  }
+}
+
+/**
+ * A {@link ChannelOutboundHandler} that throws errors on write.
+ */
+class ErrorOutboundHandler extends ChannelOutboundHandlerAdapter {
+  protected static String ERROR_MESSAGE = "@@randomErrorMessage@@";
+
+  @Override
+  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+    throw new Error(ERROR_MESSAGE);
+  }
+}
+
+/**
+ * Class that can be used to receive callbacks from {@link NettyResponseChannel}.
+ * <p/>
+ * On callback, stores the result and exception to be retrieved for later use.
+ */
+class ChannelWriteCallback implements Callback<Long> {
+  /**
+   * Contains the result of the operation for which this was set as callback.
+   * If there was no result or if this was called before callback is received, it will be null
+   */
+  public Long result = null;
+  /**
+   * Stores any exception thrown by the operation for which this was set as callback.
+   * If there was no exception or if this was called before callback is received, it will be null.
+   */
+  public Exception exception = null;
+  private CountDownLatch callbackReceived = new CountDownLatch(1);
+
+  @Override
+  public void onCompletion(Long result, Exception exception) {
+    this.result = result;
+    this.exception = exception;
+    callbackReceived.countDown();
+  }
+
+  /**
+   * Compares the data obtained from the callback with the data obtained from {@code future}.
+   * @param future the {@link Future} that represents the result of the same operation that this callback is meant for.
+   * @throws InterruptedException
+   * @throws TimeoutException
+   */
+  public void compareWithFuture(Future<Long> future)
+      throws InterruptedException, TimeoutException {
+    Long futureOutput;
+    try {
+      futureOutput = future.get(1, TimeUnit.MILLISECONDS);
+      assertEquals("Future and callback results don't match", futureOutput, result);
+    } catch (ExecutionException e) {
+      if (!callbackReceived.await(1, TimeUnit.MILLISECONDS)) {
+        throw new IllegalStateException("Callback has not been invoked even though future.get() has returned");
+      } else {
+        assertEquals("Future and callback exceptions don't match", e.getCause().getMessage(), exception.getMessage());
+      }
+    }
   }
 }

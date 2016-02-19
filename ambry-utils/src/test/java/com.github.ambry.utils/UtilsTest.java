@@ -4,10 +4,13 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
 import org.junit.Test;
 import java.util.Random;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 
@@ -150,6 +153,122 @@ public class UtilsTest {
   }
 
   @Test
+  public void testSerializeNullableString() {
+    String randomString = getRandomString(10);
+    ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeNullableString(outputBuffer, randomString);
+    outputBuffer.flip();
+    int length = outputBuffer.getInt();
+    assertEquals("Input and output string lengths don't match ", randomString.getBytes().length, length);
+    byte[] output = new byte[length];
+    outputBuffer.get(output);
+    assertFalse("Output buffer shouldn't have any remaining, but has " + outputBuffer.remaining() + " bytes",
+        outputBuffer.hasRemaining());
+    String outputString = new String(output);
+    assertEquals("Input and output strings don't match", randomString, outputString);
+
+    randomString = null;
+    outputBuffer = ByteBuffer.allocate(4);
+    Utils.serializeNullableString(outputBuffer, randomString);
+    outputBuffer.flip();
+    length = outputBuffer.getInt();
+    assertEquals("Input and output string lengths don't match", 0, length);
+    output = new byte[length];
+    outputBuffer.get(output);
+    assertFalse("Output buffer shouldn't have any remaining, but has " + outputBuffer.remaining() + " bytes",
+        outputBuffer.hasRemaining());
+    outputString = new String(output);
+    assertEquals("Output string \"" + outputString + "\" expected to be empty", outputString, "");
+  }
+
+  @Test
+  public void testSerializeString() {
+    String randomString = getRandomString(10);
+    ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+    outputBuffer.flip();
+    int length = outputBuffer.getInt();
+    assertEquals("Input and output string lengths don't match", randomString.getBytes().length, length);
+    byte[] output = new byte[length];
+    outputBuffer.get(output);
+    assertFalse("Output buffer shouldn't have any remaining, but has " + outputBuffer.remaining() + " bytes",
+        outputBuffer.hasRemaining());
+    String outputString = new String(output);
+    assertEquals("Input and output strings don't match", randomString, outputString);
+
+    randomString = getRandomString(10) + "Ò";
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+    outputBuffer.flip();
+    length = outputBuffer.getInt();
+    assertEquals("Input and output string lengths don't match ", (randomString.getBytes().length - 1), length);
+    output = new byte[length];
+    outputBuffer.get(output);
+    assertFalse("Output buffer shouldn't have any remaining, but has " + outputBuffer.remaining() + " bytes",
+        outputBuffer.hasRemaining());
+    outputString = new String(output);
+    randomString = randomString.substring(0, randomString.length() - 1) + "?";
+    assertEquals("Input and output strings don't match", randomString, outputString);
+
+    randomString = "";
+    outputBuffer = ByteBuffer.allocate(4);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+    outputBuffer.flip();
+    length = outputBuffer.getInt();
+    assertEquals("Input and output string lengths don't match", 0, length);
+    output = new byte[length];
+    outputBuffer.get(output);
+    assertFalse("Output buffer shouldn't have any remaining, but has " + outputBuffer.remaining() + " bytes",
+        outputBuffer.hasRemaining());
+    outputString = new String(output);
+    assertEquals("Output string \"" + outputString + "\" expected to be empty", outputString, "");
+
+    randomString = getRandomString(10);
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length - 1);
+    try {
+      Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+      Assert.fail("Serialization should have failed due to insufficient space");
+    } catch (RuntimeException e) {
+    }
+  }
+
+  @Test
+  public void testDeserializeString() {
+    String randomString = getRandomString(10);
+    ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+    outputBuffer.flip();
+    String outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
+    assertEquals("Input and output strings don't match", randomString, outputString);
+
+    randomString = getRandomString(10) + "Ò";
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+    outputBuffer.flip();
+    outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
+    randomString = randomString.substring(0, randomString.length() - 1) + "?";
+    assertEquals("Input and output strings don't match", randomString, outputString);
+
+    randomString = "";
+    outputBuffer = ByteBuffer.allocate(4);
+    Utils.serializeString(outputBuffer, randomString, StandardCharsets.US_ASCII);
+    outputBuffer.flip();
+    outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
+    assertEquals("Output string \"" + outputString + "\" expected to be empty", outputString, "");
+
+    randomString = getRandomString(10);
+    outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);
+    outputBuffer.putInt(12);
+    outputBuffer.put(randomString.getBytes());
+    outputBuffer.flip();
+    try {
+      outputString = Utils.deserializeString(outputBuffer, StandardCharsets.US_ASCII);
+      Assert.fail("Deserialization should have failed " + randomString);
+    } catch (RuntimeException e) {
+    }
+  }
+
+  @Test
   public void testGetObj() {
     try {
       MockClassForTesting mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting");
@@ -164,7 +283,8 @@ public class UtilsTest {
       mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object());
       Assert.assertNotNull(mockObj);
       Assert.assertTrue(mockObj.threeArgConstructorInvoked);
-      mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object(), new Object());
+      mockObj = Utils
+          .getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object(), new Object());
       Assert.assertNotNull(mockObj);
       Assert.assertTrue(mockObj.fourArgConstructorInvoked);
     } catch (Exception e) {
@@ -175,7 +295,7 @@ public class UtilsTest {
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   static Random random = new Random();
 
-  private String getRandomString(int length) {
+  public static String getRandomString(int length) {
     StringBuilder sb = new StringBuilder(length);
     for (int i = 0; i < length; i++) {
       sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
