@@ -6,7 +6,6 @@ import com.github.ambry.router.FutureResult;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -211,36 +210,6 @@ class ReadIntoCallback implements Callback<Long> {
     } else {
       this.exception = new IllegalStateException("Callback invoked more than once");
     }
-  }
-}
-
-/**
- * A {@link WritableByteChannel} that throws an {@link IOException} with a customizable message (provided at
- * construction time) on a call to {@link #write(ByteBuffer)}.
- */
-class BadWritableChannel implements WritableByteChannel {
-  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final IOException exceptionToThrow;
-
-  public BadWritableChannel(IOException exceptionToThrow) {
-    this.exceptionToThrow = exceptionToThrow;
-  }
-
-  @Override
-  public int write(ByteBuffer src)
-      throws IOException {
-    throw exceptionToThrow;
-  }
-
-  @Override
-  public boolean isOpen() {
-    return channelOpen.get();
-  }
-
-  @Override
-  public void close()
-      throws IOException {
-    channelOpen.set(false);
   }
 }
 

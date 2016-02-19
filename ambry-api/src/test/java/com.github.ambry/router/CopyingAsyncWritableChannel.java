@@ -48,7 +48,7 @@ public class CopyingAsyncWritableChannel implements AsyncWritableChannel {
         srcData = src.array();
         start = src.arrayOffset();
       } else {
-        srcData = new byte[src.remaining()];
+        srcData = new byte[length];
         src.get(srcData);
       }
       try {
