@@ -531,7 +531,7 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobOutputInfo(BlobType.DataBlob, new BlobOutput(dataSize, output));
+      return new BlobOutputInfo(BlobType.DataBlob, dataSize, output);
     }
   }
 
@@ -594,7 +594,7 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobOutputInfo(blobContentType, new BlobOutput(dataSize, output));
+      return new BlobOutputInfo(blobContentType, dataSize, output);
     }
   }
 
