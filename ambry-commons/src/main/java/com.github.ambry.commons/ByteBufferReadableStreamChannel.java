@@ -7,10 +7,8 @@ import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
@@ -19,7 +17,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean channelEmptied = new AtomicBoolean(false);
-  private final ReentrantLock bufferReadLock = new ReentrantLock();
   private final ByteBuffer buffer;
 
   /**
@@ -33,27 +30,6 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   @Override
   public long getSize() {
     return buffer.capacity();
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    // NOTE: This function is deprecated and will be removed soon. Therefore no changes have been made here.
-    int bytesWritten = -1;
-    if (!channelOpen.get()) {
-      throw new ClosedChannelException();
-    } else {
-      bufferReadLock.lock();
-      try {
-        if (buffer.hasRemaining()) {
-          bytesWritten = channel.write(buffer);
-        }
-      } finally {
-        bufferReadLock.unlock();
-      }
-    }
-    return bytesWritten;
   }
 
   @Override

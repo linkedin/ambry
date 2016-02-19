@@ -21,12 +21,12 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
-import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -34,7 +34,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -900,8 +899,7 @@ public class AmbryBlobStorageServiceTest {
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
         restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
-    assertEquals("Content-Length is not 0", "0",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     String blobId = restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
     if (blobId == null) {
       fail("postBlobAndVerify did not return a blob ID");
@@ -923,10 +921,9 @@ public class AmbryBlobStorageServiceTest {
     ReadableStreamChannel response = doGet(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
-    ByteBuffer channelBuffer = ByteBuffer.allocate((int) response.getSize());
-    WritableByteChannel channel = new ByteBufferChannel(channelBuffer);
-    response.read(channel);
-    assertArrayEquals("GET content does not match original content", expectedContent.array(), channelBuffer.array());
+    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel((int) response.getSize());
+    response.readInto(channel, null).get();
+    assertArrayEquals("GET content does not match original content", expectedContent.array(), channel.getData());
   }
 
   /**
@@ -996,8 +993,7 @@ public class AmbryBlobStorageServiceTest {
     doDelete(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
-    assertEquals("Content-Length is not 0", "0",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
   }
 
   /**
@@ -1137,13 +1133,6 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IOException("Not implemented");
-  }
-
-  @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     throw new IllegalStateException("Not implemented");
   }
@@ -1157,13 +1146,6 @@ class BadRSC implements ReadableStreamChannel {
   @Override
   public long getSize() {
     return -1;
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IOException("Not implemented");
   }
 
   @Override

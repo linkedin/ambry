@@ -451,7 +451,7 @@ class AsyncRequestWorker implements Runnable {
       }
       residualRequestInfo = requests.poll();
     }
-    if(discardCount > 0) {
+    if (discardCount > 0) {
       restServerMetrics.residualRequestQueueSize.inc(discardCount);
       logger.info("There were {} requests in flight during shutdown", discardCount);
     }

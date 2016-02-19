@@ -10,7 +10,6 @@ import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -159,13 +158,6 @@ public class MockRestRequest implements RestRequest {
     }
     onEventComplete(Event.GetSize);
     return contentLength;
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
   }
 
   @Override

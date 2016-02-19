@@ -15,7 +15,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -796,13 +795,6 @@ class HaltingRSC implements ReadableStreamChannel {
   }
 
   @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
   public Future<Long> readInto(final AsyncWritableChannel asyncWritableChannel, final Callback<Long> callback) {
     if (!isOpen()) {
       throw new IllegalStateException("Channel is not open");
@@ -889,13 +881,6 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
     return futureResult;
   }
 
-  @Deprecated
-  @Override
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
-  }
-
   @Override
   public boolean isOpen() {
     return channelOpen.get();
@@ -953,13 +938,6 @@ class BadRestRequest implements RestRequest {
   @Override
   public long getSize() {
     throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IOException("Not implemented");
   }
 
   @Override
