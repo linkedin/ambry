@@ -55,7 +55,7 @@ public class OperationTrackerTest {
     //send out requests to local replicas up to the localParallelFactor.
     //3-0-0-0; 9-0-0-0
     assertFalse(ot.hasSucceeded());
-    Iterator<ReplicaId> itr = ot.getIterator();
+    Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica = null;
     while (itr.hasNext()) {
       nextReplica = itr.next();
@@ -93,7 +93,7 @@ public class OperationTrackerTest {
     //send out requests to local replicas up to the localParallelFactor.
     //3-0-0-0; 9-0-0-0
     assertFalse(ot.hasSucceeded());
-    Iterator<ReplicaId> itr = ot.getIterator();
+    Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica = null;
     while (itr.hasNext()) {
       nextReplica = itr.next();
@@ -107,12 +107,12 @@ public class OperationTrackerTest {
     }
     //0-1-0-2; 9-0-0-0
     //cannot send more because not all local replicas responded
-    assertNull(itr.next());
+    assertFalse(itr.hasNext());
     receiveSucceededResponse(inflightReplicas.poll(), ot);
     //0-0-1-2; 9-0-0-0
     assertTrue(ot.isDone());
     assertFalse(ot.hasSucceeded());
-    assertNull(itr.next());
+    assertFalse(itr.hasNext());
   }
 
   /**
@@ -130,7 +130,7 @@ public class OperationTrackerTest {
     ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    Iterator<ReplicaId> itr = ot.getIterator();
+    Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica = null;
     while (itr.hasNext()) {
       nextReplica = itr.next();
@@ -145,7 +145,7 @@ public class OperationTrackerTest {
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
 
-    itr = ot.getIterator();
+    itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();
       assertNotNull(nextReplica);
@@ -186,7 +186,7 @@ public class OperationTrackerTest {
     ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    Iterator<ReplicaId> itr = ot.getIterator();
+    Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica = null;
     while (itr.hasNext()) {
       nextReplica = itr.next();
@@ -201,7 +201,7 @@ public class OperationTrackerTest {
 
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
-    itr = ot.getIterator();
+    itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();
       assertNotNull(nextReplica);
@@ -214,7 +214,7 @@ public class OperationTrackerTest {
     receiveFailedResponse(inflightReplicas.poll(), ot);
     //0-0-0-3; 9-0-0-0
     assertFalse(ot.hasSucceeded());
-    itr = ot.getIterator();
+    itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();
       assertNotNull(nextReplica);
@@ -227,7 +227,7 @@ public class OperationTrackerTest {
       receiveFailedResponse(inflightReplicas.poll(), ot);
     }
     //0-0-0-3; 7-0-0-2
-    itr = ot.getIterator();
+    itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();
       assertNotNull(nextReplica);
@@ -239,7 +239,7 @@ public class OperationTrackerTest {
     receiveFailedResponse(inflightReplicas.poll(), ot);
     assertFalse(ot.isDone());
     //0-0-0-3; 5-1-0-3
-    itr = ot.getIterator();
+    itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();
       assertNotNull(nextReplica);
@@ -267,7 +267,7 @@ public class OperationTrackerTest {
     ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 2, 3);
     //send out requests to local AND remote replicas.
     //3-0-0-0; 9-0-0-0
-    Iterator<ReplicaId> itr = ot.getIterator();
+    Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica = null;
     while (itr.hasNext()) {
       nextReplica = itr.next();
@@ -287,47 +287,19 @@ public class OperationTrackerTest {
 
   /**
    * localDcOnly=false, successTarget=1, localParallelism=2.
+   * Only 4 local replicas
    *
-   * <p/>
-   * 1. Get 2 local replicas to send request;
-   * 2. 1 failed to send.
-   * 3. get 1 more local replica to send request;
-   * 4. 1 succeeded.
-   * 3.
+   * 1. Get 1st local replica to send request (and sent);
+   * 2. Get 2nd local replica to send request (and failed to send);
+   * 3. Get 3rd local replica to send request (and sent);
+   * 4. Receive 2 failed responses from the 1st and 3rd replicas;
+   * 5. Get again 2nd local replica to send request (and sent);
+   * 6. Get 4th local replica to send request (and failed to send);
+   * 7. Receive 1 failed responses from the 2nd replicas;
+   * 8. Get again 4th local replica to send request (and sent);
+   * 9. Receive 1 successful response from the 4th replica;
+   * 10. Operation succeeds.
    */
-  @Test
-  public void failedSendTest() {
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
-    //send out requests to local AND remote replicas.
-    //3-0-0-0; 9-0-0-0
-    Iterator<ReplicaId> itr = ot.getIterator();
-    ReplicaId nextReplica = null;
-    int counter = 0;
-    while (itr.hasNext()) {
-      counter++;
-      nextReplica = itr.next();
-      assertNotNull(nextReplica);
-      if (counter == 2) {
-        //fail send
-      } else {
-        sendReplica(nextReplica);
-        itr.remove();
-      }
-    }
-    assertEquals(2, inflightReplicas.size());
-    receiveFailedResponse(inflightReplicas.poll(), ot);
-    receiveFailedResponse(inflightReplicas.poll(), ot);
-    itr = ot.getIterator();
-    while (itr.hasNext()) {
-      nextReplica = itr.next();
-      assertNotNull(nextReplica);
-      sendReplica(nextReplica);
-      itr.remove();
-    }
-    receiveSucceededResponse(inflightReplicas.poll(), ot);
-    assertTrue(ot.hasSucceeded());
-  }
-
   @Test
   public void sequenceTest() {
     int replicaCount = 4;
@@ -336,7 +308,7 @@ public class OperationTrackerTest {
     localDcName = datacenters.get(0).getDatacenterName();
     inflightReplicas = new LinkedList<ReplicaId>();
     ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
-    Iterator<ReplicaId> itr = ot.getIterator();
+    Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica = null;
     ArrayList<Integer> sequence = new ArrayList<Integer>();
     int oddEvenFlag = 0;
@@ -352,7 +324,7 @@ public class OperationTrackerTest {
     }
     receiveFailedResponse(inflightReplicas.poll(), ot);
     receiveFailedResponse(inflightReplicas.poll(), ot);
-    itr = ot.getIterator();
+    itr = ot.getReplicaIterator();
     oddEvenFlag = 0;
     while (itr.hasNext()) {
       nextReplica = itr.next();
@@ -365,7 +337,7 @@ public class OperationTrackerTest {
       oddEvenFlag++;
     }
     receiveFailedResponse(inflightReplicas.poll(), ot);
-    itr = ot.getIterator();
+    itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();
       assertNotNull(nextReplica);

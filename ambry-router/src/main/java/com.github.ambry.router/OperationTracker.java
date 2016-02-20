@@ -9,16 +9,16 @@ import java.util.Iterator;
  * will then send requests to multiple replicas. An operation succeeded if a pre-set number of
  * successful responses are received from the replicas, or failed if this number cannot be met.
  *
- * An {@link OperationTracker} tracks and determines the status of an operation (e.g.,
- * succeeded or done), and decides the next replica to send a request. An {@link OperationTracker}
- * one-to-one tracks an operation.
+ * An OperationTracker tracks and determines the status of an operation (e.g., succeeded or done),
+ * and decides the next replica to send a request. An {@link OperationTracker} one-to-one tracks
+ * an operation.
  *
  * <p>
  * When an operation is progressing by receiving responses from replicas, its operation tracker
  * needs to be informed by calling {@code onResponse()}.
  * </p>
  */
-public interface OperationTracker extends Iterator<ReplicaId> {
+public interface OperationTracker {
   /**
    * Determines if an operation has succeeded.
    *
@@ -43,9 +43,9 @@ public interface OperationTracker extends Iterator<ReplicaId> {
   void onResponse(ReplicaId replicaId, Exception e);
 
   /**
-   * Provide an iterator for the underlying replica collection.
+   * Provide an iterator to the replicas to which requests may be sent.
    *
    * @return An iterator that iterates all possible and valid replicas
    */
-  Iterator<ReplicaId> getIterator();
+  Iterator<ReplicaId> getReplicaIterator();
 }

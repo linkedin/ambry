@@ -2,8 +2,11 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-
-import java.util.*;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 
 /**
@@ -26,11 +29,11 @@ import java.util.*;
  *   RouterOperationTracker operationTracker = new RouterOperationTracker(datacenterName,
  *            partitionId, localOnly, successTarget, parallelism);
  *   //...
- *       Iterator<ReplicaId> itr = operationTracker.getIterator();
+ *       Iterator<ReplicaId> itr = operationTracker.getReplicaIterator();
  *       while (itr.hasNext()) {
  *         ReplicaId nextReplica = itr.next();
- *         //send a request to the replica.
- *         if(send is successful) {
+ *         //determine request can be sent to the replica, i.e., connection available.
+ *         if(true) {
  *           itr.remove();
  *         }
  *       }
@@ -49,9 +52,9 @@ public class SimpleOperationTracker implements OperationTracker {
   private int numFailed = 0;
   private final String localDcName;
   private final PartitionId partitionId;
-  private Iterator<ReplicaId> iterator;
+  private Iterator<ReplicaId> replicaIterator;
   private final LinkedList<ReplicaId> unsentReplicas = new LinkedList<ReplicaId>();
-
+  private final OpTrackerIterator otIterator;
 
   /**
    * Constructor for an {@code OperationTracker}.
@@ -83,22 +86,7 @@ public class SimpleOperationTracker implements OperationTracker {
       }
     }
     numTotalReplica = unsentReplicas.size();
-    iterator = unsentReplicas.iterator();
-  }
-
-  @Override
-  public boolean hasNext() {
-    if (hasSucceeded() || hasFailed() || numInflight == parallelism) {
-      return false;
-    } else {
-      return iterator.hasNext();
-    }
-  }
-
-  @Override
-  public void remove() {
-    iterator.remove();
-    numInflight++;
+    this.otIterator = new OpTrackerIterator();
   }
 
   @Override
@@ -122,18 +110,35 @@ public class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
-  public ReplicaId next() {
-    if (!hasNext()) {
-      return null;
-    } else {
-      return iterator.next();
-    }
+  public Iterator<ReplicaId> getReplicaIterator() {
+    replicaIterator = unsentReplicas.iterator();
+    return otIterator;
   }
 
-  @Override
-  public Iterator<ReplicaId> getIterator() {
-    iterator = unsentReplicas.iterator();
-    return this;
+  private class OpTrackerIterator implements Iterator<ReplicaId> {
+    @Override
+    public boolean hasNext() {
+      if (numInflight == parallelism) {
+        return false;
+      } else {
+        return replicaIterator.hasNext();
+      }
+    }
+
+    @Override
+    public void remove() {
+      replicaIterator.remove();
+      numInflight++;
+    }
+
+    @Override
+    public ReplicaId next() {
+      if (!hasNext()) {
+        throw new NoSuchElementException();
+      } else {
+        return replicaIterator.next();
+      }
+    }
   }
 
   private boolean hasFailed() {
