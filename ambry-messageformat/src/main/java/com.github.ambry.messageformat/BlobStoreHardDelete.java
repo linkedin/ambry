@@ -183,10 +183,10 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
             short userMetadataVersion;
             int userMetadataSize;
             short blobRecordVersion;
-            BlobType blobType;
+            BlobType blobType = BlobType.DataBlob;
             long blobStreamSize;
             DeserializedUserMetadata userMetadataInfo;
-            DeserializedBlobInfo blobRecordInfo;
+            DeserializedBlob blobRecordInfo;
 
             if (hardDeleteRecoveryMetadata == null) {
               userMetadataInfo =
@@ -200,7 +200,9 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
                       .getBlobPropertiesRecordRelativeOffset()));
               blobStreamSize = blobRecordInfo.getBlobOutputInfo().getSize();
               blobRecordVersion = blobRecordInfo.getVersion();
-              blobType = blobRecordInfo.getBlobOutputInfo().getBlobType();
+              if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+                blobType = blobRecordInfo.getBlobOutputInfo().getBlobType();
+              }
               hardDeleteRecoveryMetadata =
                   new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize,
                       blobRecordVersion, blobType, blobStreamSize, storeKey);
@@ -257,7 +259,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     return MessageFormatRecord.deserializeAndGetUserMetadataWithVersion(new ByteBufferInputStream(userMetaData));
   }
 
-  private DeserializedBlobInfo getBlobRecordInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
+  private DeserializedBlob getBlobRecordInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
       long blobRecordSize)
       throws MessageFormatException, IOException {
 
@@ -305,7 +307,11 @@ class HardDeleteRecoveryMetadata {
     userMetadataVersion = stream.readShort();
     userMetadataSize = stream.readInt();
     blobRecordVersion = stream.readShort();
-    blobType = BlobType.values()[stream.readShort()];
+    if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+      blobType = BlobType.values()[stream.readShort()];
+    } else {
+      blobType = BlobType.DataBlob;
+    }
     blobStreamSize = stream.readLong();
     if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) ||
         !MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion) ||
@@ -352,7 +358,7 @@ class HardDeleteRecoveryMetadata {
         MessageFormatRecord.Version_Field_Size_In_Bytes +
         Integer.SIZE / 8 +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
-        Short.SIZE / 8 +
+        (blobRecordVersion == MessageFormatRecord.Blob_Version_V2 ? (Short.SIZE / 8) : 0) +
         Long.SIZE / 8 +
         storeKey.sizeInBytes()];
 
@@ -361,7 +367,9 @@ class HardDeleteRecoveryMetadata {
     bufWrap.putShort(userMetadataVersion);
     bufWrap.putInt(userMetadataSize);
     bufWrap.putShort(blobRecordVersion);
-    bufWrap.putShort((short) blobType.ordinal());
+    if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+      bufWrap.putShort((short) blobType.ordinal());
+    }
     bufWrap.putLong(blobStreamSize);
     bufWrap.put(storeKey.toBytes());
     return bytes;
