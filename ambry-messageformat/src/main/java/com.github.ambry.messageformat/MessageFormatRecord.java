@@ -602,14 +602,12 @@ public class MessageFormatRecord {
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |               |              |            |         |
    * | version |   no of keys  |      key1    |     key2   |  .....  |
-   * |(2 bytes)|    (4 bytes)  |   (key size  |  (key size |  .....  |
-   * |         |               |      bytes)  |    bytes)  |         |
+   * |(2 bytes)|    (4 bytes)  |              |            |  .....  |
+   * |         |               |              |            |         |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version         - The version of the blob property record
    *
    *  no of keys      - total number of keys
-   *
-   *  key size        - size of each key
    *
    *  key1            - first key to be part of metadata blob
    *
@@ -617,24 +615,22 @@ public class MessageFormatRecord {
    *
    */
   public static class Metadata_Content_Format_V1 {
-    public static final int Key_Size_Field_Size_In_Bytes = 4;
+    public static final int Key_Count_Field_Size_In_Bytes = 4;
 
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
       return Version_Field_Size_In_Bytes +
-          Key_Size_Field_Size_In_Bytes +
+          Key_Count_Field_Size_In_Bytes +
           (numberOfKeys * keySize);
     }
 
     public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, List<StoreKey> keys) {
       int keySize = keys.get(0).sizeInBytes();
+      outputBuffer.putShort(Metadata_Content_Version_V1);
+      outputBuffer.putInt(keys.size());
       for (StoreKey storeKey : keys) {
         if (storeKey.sizeInBytes() != keySize) {
           throw new IllegalArgumentException("Keys are not of same size");
         }
-      }
-      outputBuffer.putShort(Metadata_Content_Version_V1);
-      outputBuffer.putInt(keys.size());
-      for (StoreKey storeKey : keys) {
         outputBuffer.put(storeKey.toBytes());
       }
     }

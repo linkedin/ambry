@@ -153,7 +153,7 @@ public class ServerHardDeleteTest {
             short userMetadataVersion = stream.readShort();
             int userMetadataSize = stream.readInt();
             short blobRecordVersion = stream.readShort();
-            int blobType = (int)stream.readShort();
+            short blobType = stream.readShort();
             long blobStreamSize = stream.readLong();
             StoreKey key = storeKeyFactory.getStoreKey(stream);
             Assert.assertTrue(storeKeyList.get(i).equals(key));

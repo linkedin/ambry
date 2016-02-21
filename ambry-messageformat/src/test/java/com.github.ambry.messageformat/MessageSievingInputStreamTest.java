@@ -347,6 +347,7 @@ public class MessageSievingInputStreamTest {
     CrcInputStream crcstream = new CrcInputStream(validMessageDetectionInputStream);
     DataInputStream streamData = new DataInputStream(crcstream);
     Assert.assertEquals(streamData.readShort(), 1);
+    // TODO: uncomment when PutMessageFormatInputStream uses Blob Format V2
     // Assert.assertEquals(streamData.readShort(), (short) BlobType.DataBlob.ordinal());
     Assert.assertEquals(streamData.readLong(), data.length);
     for (int i = 0; i < data.length; i++) {
