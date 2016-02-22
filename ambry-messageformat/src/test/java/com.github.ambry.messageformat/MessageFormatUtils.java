@@ -6,6 +6,12 @@ import java.util.Random;
 
 
 public class MessageFormatUtils {
+
+  /**
+   * Creates a test data for metadata blob content, followed by creating the actual blob record V2
+   * @param blobSize size of the metadata content
+   * @return entire blob content as a {@link ByteBuffer}
+   */
   public static ByteBuffer getBlobContentForMetadataBlob(int blobSize) {
     ByteBuffer blobContent = ByteBuffer.allocate(blobSize);
     new Random().nextBytes(blobContent.array());
