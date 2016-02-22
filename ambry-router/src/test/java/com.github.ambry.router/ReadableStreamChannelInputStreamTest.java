@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.Future;
@@ -200,13 +199,6 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
       callback.onCompletion(0L, exception);
     }
     return futureResult;
-  }
-
-  @Deprecated
-  @Override
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
   }
 
   @Override

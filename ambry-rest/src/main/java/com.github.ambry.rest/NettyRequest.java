@@ -13,7 +13,6 @@ import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -172,13 +171,6 @@ class NettyRequest implements RestRequest {
       contentLength = HttpHeaders.getContentLength(request, 0);
     }
     return contentLength;
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
   }
 
   @Override

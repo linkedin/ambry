@@ -3,11 +3,9 @@ package com.github.ambry.commons;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
-import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -32,36 +30,7 @@ public class ByteBufferReadableStreamChannelTest {
   @Test
   public void commonCaseTest()
       throws Exception {
-    readToWBCTest();
     readToAWCTest();
-  }
-
-  /**
-   * Tests that the right exceptions are thrown when read operations fail.
-   * @throws IOException
-   */
-  @Test
-  public void readFailureTest()
-      throws IOException {
-    String errMsg = "@@ExpectedExceptionMessage@@";
-    byte[] in = fillRandomBytes(new byte[1]);
-    ByteBufferReadableStreamChannel byteBufferReadableStreamChannel =
-        new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-
-    try {
-      byteBufferReadableStreamChannel.read(new BadWritableChannel(new IOException(errMsg)));
-      fail("Should have failed because BadWritableChannel would have thrown exception");
-    } catch (IOException e) {
-      assertEquals("Exception message does not match expected", errMsg, e.getMessage());
-    }
-
-    byteBufferReadableStreamChannel.close();
-    try {
-      byteBufferReadableStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(1)));
-      fail("Should have failed because ByteBufferReadableStreamChannel should have thrown ClosedChannelException");
-    } catch (ClosedChannelException e) {
-      // expected. nothing to do.
-    }
   }
 
   /**
@@ -123,12 +92,6 @@ public class ByteBufferReadableStreamChannelTest {
   public void readAndWriteCornerCasesTest()
       throws Exception {
     // 0 sized blob.
-    ByteBufferReadableStreamChannel byteBufferReadableStreamChannel =
-        new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-    assertTrue("ByteBufferReadableStreamChannel is not open", byteBufferReadableStreamChannel.isOpen());
-    assertEquals("There should have been no bytes to read", -1,
-        byteBufferReadableStreamChannel.read(new ByteBufferChannel(ByteBuffer.allocate(0))));
-
     ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
     assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
     assertEquals("Size returned by ByteBufferReadableStreamChannel is not 0", 0, readableStreamChannel.getSize());
@@ -197,26 +160,6 @@ public class ByteBufferReadableStreamChannelTest {
   // commonCaseTest() helpers
 
   /**
-   * Tests reading into a {@link WritableByteChannel}.
-   * @throws IOException
-   */
-  private void readToWBCTest()
-      throws IOException {
-    byte[] in = fillRandomBytes(new byte[1024]);
-    ByteBufferReadableStreamChannel byteBufferReadableStreamChannel =
-        new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-    assertTrue("ByteBufferReadableStreamChannel is not open", byteBufferReadableStreamChannel.isOpen());
-    assertEquals("Size returned by ByteBufferReadableStreamChannel did not match source array size", in.length,
-        byteBufferReadableStreamChannel.getSize());
-    ByteBufferChannel channel =
-        new ByteBufferChannel(ByteBuffer.allocate((int) byteBufferReadableStreamChannel.getSize()));
-    // should be able to read all the data in one read
-    int bytesWritten = byteBufferReadableStreamChannel.read(channel);
-    assertEquals("Data size written did not match source byte array size", in.length, bytesWritten);
-    assertArrayEquals("Source bytes and bytes in channel did not match", in, channel.getBuffer().array());
-  }
-
-  /**
    * Tests reading into a {@link AsyncWritableChannel}.
    * @throws Exception
    */
@@ -267,36 +210,6 @@ class ReadIntoCallback implements Callback<Long> {
     } else {
       this.exception = new IllegalStateException("Callback invoked more than once");
     }
-  }
-}
-
-/**
- * A {@link WritableByteChannel} that throws an {@link IOException} with a customizable message (provided at
- * construction time) on a call to {@link #write(ByteBuffer)}.
- */
-class BadWritableChannel implements WritableByteChannel {
-  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
-  private final IOException exceptionToThrow;
-
-  public BadWritableChannel(IOException exceptionToThrow) {
-    this.exceptionToThrow = exceptionToThrow;
-  }
-
-  @Override
-  public int write(ByteBuffer src)
-      throws IOException {
-    throw exceptionToThrow;
-  }
-
-  @Override
-  public boolean isOpen() {
-    return channelOpen.get();
-  }
-
-  @Override
-  public void close()
-      throws IOException {
-    channelOpen.set(false);
   }
 }
 
