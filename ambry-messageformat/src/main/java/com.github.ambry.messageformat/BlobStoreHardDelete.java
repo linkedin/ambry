@@ -210,7 +210,9 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               logger.trace("Skipping crc check for user metadata and blob stream fields for key {}", storeKey);
               userMetadataVersion = hardDeleteRecoveryMetadata.getUserMetadataVersion();
               blobRecordVersion = hardDeleteRecoveryMetadata.getBlobRecordVersion();
-              blobType = hardDeleteRecoveryMetadata.getBlobType();
+              if(blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+                blobType = hardDeleteRecoveryMetadata.getBlobType();
+              }
               userMetadataSize = hardDeleteRecoveryMetadata.getUserMetadataSize();
               blobStreamSize = hardDeleteRecoveryMetadata.getBlobStreamSize();
             }

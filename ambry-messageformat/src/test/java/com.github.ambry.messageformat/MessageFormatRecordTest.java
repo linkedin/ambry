@@ -150,8 +150,8 @@ public class MessageFormatRecordTest {
     List<StoreKey> keys = getKeys(60, 5);
     ByteBuffer metadataContent = getMetadataContent(keys);
     List<StoreKey> outKeys = deserializeMetadataContent(metadataContent, new MockIdFactory());
-    compareLists(outKeys, keys);
-    // no testing of corruption as we metadata content record doesnt have crc
+    Assert.assertEquals("List of keys dont match", keys, outKeys);
+    // no testing of corruption as we metadata content record doesn't have crc
   }
 
   @Test
@@ -161,7 +161,8 @@ public class MessageFormatRecordTest {
     // construct metadata blob
     List<StoreKey> keys = getKeys(60, 5);
     ByteBuffer metadataContent = getMetadataContent(keys);
-    int metadataContentSize = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
+    int metadataContentSize =
+        MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
     metadataContent.rewind();
     ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
@@ -170,12 +171,12 @@ public class MessageFormatRecordTest {
     Assert.assertEquals(outputData.getSize(), metadataContentSize);
     byte[] verify = new byte[metadataContentSize];
     outputData.getStream().read(verify);
-    Assert.assertArrayEquals("Metadata content mismatch",metadataContent.array(), verify);
+    Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
 
     // deserialize and check for metadata contents
     metadataContent.flip();
     List<StoreKey> outputList = deserializeMetadataContent(metadataContent, new MockIdFactory());
-    compareLists(outputList, keys);
+    Assert.assertEquals("List of keys dont match", keys, outputList);
 
     // test corruption cases
     blob.rewind();
@@ -186,7 +187,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       Assert.fail("Failed to detect corruption of Blob record version ");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch",MessageFormatErrorCodes.Unknown_Format_Version, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Unknown_Format_Version, e.getErrorCode());
     }
 
     // case 2: corrupt blob type
@@ -199,7 +200,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       Assert.fail("Failed to detect corruption of blob type");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch",MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
     }
 
     //case 3: corrupt part of metadata content
@@ -213,7 +214,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
       Assert.fail("Failed to detect corruption of metadata content");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch",MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
     }
   }
 
@@ -238,7 +239,7 @@ public class MessageFormatRecordTest {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob));
       Assert.fail("Failed to detect corruption of blob record");
     } catch (MessageFormatException e) {
-      Assert.assertEquals("Error code mismatch",MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
+      Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
     }
   }
 
@@ -254,7 +255,8 @@ public class MessageFormatRecordTest {
   }
 
   private ByteBuffer getMetadataContent(List<StoreKey> keys) {
-    int size = MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
+    int size =
+        MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     ByteBuffer metadataContent = ByteBuffer.allocate(size);
     MessageFormatRecord.Metadata_Content_Format_V1.serializeMetadataContentRecord(metadataContent, keys);
     metadataContent.flip();
@@ -266,9 +268,10 @@ public class MessageFormatRecordTest {
     ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(metadataContent);
     DataInputStream inputStream = new DataInputStream(byteBufferInputStream);
     short metdataContentVersion = inputStream.readShort();
-    Assert.assertEquals("Metadata Content Version mismatch ",
-        MessageFormatRecord.Metadata_Content_Version_V1, metdataContentVersion);
-    return MessageFormatRecord.Metadata_Content_Format_V1.deserializeMetadataContentRecord(inputStream, storeKeyFactory);
+    Assert.assertEquals("Metadata Content Version mismatch ", MessageFormatRecord.Metadata_Content_Version_V1,
+        metdataContentVersion);
+    return MessageFormatRecord.Metadata_Content_Format_V1
+        .deserializeMetadataContentRecord(inputStream, storeKeyFactory);
   }
 
   private List<StoreKey> getKeys(int keySize, int numberOfKeys) {
@@ -278,11 +281,5 @@ public class MessageFormatRecordTest {
       keys.add(mockId);
     }
     return keys;
-  }
-
-  private void compareLists(List<StoreKey> list1, List<StoreKey> list2) {
-    StoreKey[] list1Array = list1.toArray(new StoreKey[list1.size()]);
-    StoreKey[] list2Array = list2.toArray(new StoreKey[list2.size()]);
-    Assert.assertArrayEquals("List didn't match ", list1Array, list2Array);
   }
 }

@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
@@ -22,11 +21,6 @@ import org.junit.Test;
 
 
 public class BlobStoreHardDeleteTest {
-
-  enum OpType {
-    PUT,
-    DELETE
-  }
 
   public class ReadImp implements Read {
 
@@ -37,7 +31,7 @@ public class BlobStoreHardDeleteTest {
         {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5")};
     long expectedExpirationTimeMs = 0;
 
-    public ArrayList<Long> initialize(short blobVersion)
+    public ArrayList<Long> initialize(short[] blobVersion, BlobType[] blobType)
         throws MessageFormatException, IOException {
       // write 3 new blob messages, and delete update messages. write the last
       // message that is partial
@@ -48,54 +42,72 @@ public class BlobStoreHardDeleteTest {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(blob);
 
+      int[] blobSizeMetadataContent = new int[blobVersion.length];
+      for (int i = 0; i < blobVersion.length; i++) {
+        if (blobVersion[i] == MessageFormatRecord.Blob_Version_V2 && blobType[i] == BlobType.MetadataBlob) {
+          blobSizeMetadataContent[i] = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(BLOB_SIZE);
+        } else {
+          blobSizeMetadataContent[i] = BLOB_SIZE;
+        }
+      }
       BlobProperties blobProperties = new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
-      List<MessageFormatInputStream> putMessagesList1 =
-          getPutMessages(Arrays.copyOfRange(keys, 0, 3), blobProperties, usermetadata, blob, BLOB_SIZE, blobVersion);
+
+      MessageFormatInputStream msg0 =
+          getPutMessage(keys[0], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersion[0], blobType[0]);
+
+      MessageFormatInputStream msg1 =
+          getPutMessage(keys[1], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersion[1], blobType[1]);
+
+      MessageFormatInputStream msg2 =
+          getPutMessage(keys[2], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersion[2], blobType[2]);
 
       DeleteMessageFormatInputStream msg3d = new DeleteMessageFormatInputStream(keys[1]);
 
-      List<MessageFormatInputStream> putMessagesList2 =
-          getPutMessages(Arrays.copyOfRange(keys, 3, 5), blobProperties, usermetadata, blob, BLOB_SIZE, blobVersion);
+      MessageFormatInputStream msg4 =
+          getPutMessage(keys[3], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersion[3], blobType[3]);
 
-      buffer = ByteBuffer.allocate((int) (putMessagesList1.get(0).getSize() +
-          putMessagesList1.get(1).getSize() +
-          putMessagesList1.get(2).getSize() +
+      MessageFormatInputStream msg5 =
+          getPutMessage(keys[4], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersion[4], blobType[4]);
+
+      buffer = ByteBuffer.allocate((int) (msg0.getSize() +
+          msg1.getSize() +
+          msg2.getSize() +
           msg3d.getSize() +
-          putMessagesList2.get(0).getSize() +
-          putMessagesList2.get(1).getSize()));
+          msg4.getSize() +
+          msg5.getSize()));
 
       ArrayList<Long> msgOffsets = new ArrayList<Long>();
       Long offset = 0L;
       msgOffsets.add(offset);
-      offset += putMessagesList1.get(0).getSize();
+      offset += msg0.getSize();
       msgOffsets.add(offset);
-      offset += putMessagesList1.get(1).getSize();
+      offset += msg1.getSize();
       msgOffsets.add(offset);
-      offset += putMessagesList1.get(2).getSize();
+      offset += msg2.getSize();
       msgOffsets.add(offset);
       offset += msg3d.getSize();
       msgOffsets.add(offset);
-      offset += putMessagesList2.get(0).getSize();
+      offset += msg4.getSize();
       msgOffsets.add(offset);
-      offset += putMessagesList2.get(1).getSize();
+      offset += msg5.getSize();
       msgOffsets.add(offset);
 
       // msg0: A good message that will not be part of hard deletes.
-      writeToBuffer(putMessagesList1.get(0), (int) putMessagesList1.get(0).getSize());
+      writeToBuffer(msg0, (int) msg0.getSize());
 
       // msg1: A good message that will be part of hard deletes, but not part of recovery.
-      readSet.addMessage(buffer.position(), keys[1], (int) putMessagesList1.get(1).getSize());
-      writeToBuffer(putMessagesList1.get(1), (int) putMessagesList1.get(1).getSize());
+      readSet.addMessage(buffer.position(), keys[1], (int) msg1.getSize());
+      writeToBuffer(msg1, (int) msg1.getSize());
 
       // msg2: A good message that will be part of hard delete, with recoveryInfo.
-      readSet.addMessage(buffer.position(), keys[2], (int) putMessagesList1.get(2).getSize());
-      writeToBuffer(putMessagesList1.get(2), (int) putMessagesList1.get(2).getSize());
+      readSet.addMessage(buffer.position(), keys[2], (int) msg2.getSize());
+      writeToBuffer(msg2, (int) msg2.getSize());
       HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
           new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
               MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V2,
-              BlobType.DataBlob, BLOB_SIZE, keys[2]);
+              BlobType.DataBlob, blobSizeMetadataContent[2], keys[2]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg3d: Delete Record. Not part of readSet.
@@ -103,36 +115,38 @@ public class BlobStoreHardDeleteTest {
 
       // msg4: A message with blob record corrupted that will be part of hard delete, with recoveryInfo.
       // This should succeed.
-      readSet.addMessage(buffer.position(), keys[3], (int) putMessagesList2.get(0).getSize());
-      writeToBufferAndCorruptBlobRecord(putMessagesList2.get(0), (int) putMessagesList2.get(0).getSize());
+      readSet.addMessage(buffer.position(), keys[3], (int) msg4.getSize());
+      writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
       hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
           MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, MessageFormatRecord.Blob_Version_V2,
-          BlobType.DataBlob, BLOB_SIZE, keys[3]);
+          BlobType.DataBlob, blobSizeMetadataContent[3], keys[3]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg5: A message with blob record corrupted that will be part of hard delete, without recoveryInfo.
       // This should fail.
-      readSet.addMessage(buffer.position(), keys[4], (int) putMessagesList2.get(1).getSize());
-      writeToBufferAndCorruptBlobRecord(putMessagesList2.get(1), (int) putMessagesList2.get(1).getSize());
+      readSet.addMessage(buffer.position(), keys[4], (int) msg5.getSize());
+      writeToBufferAndCorruptBlobRecord(msg5, (int) msg5.getSize());
       buffer.position(0);
       return msgOffsets;
     }
 
-    private List<MessageFormatInputStream> getPutMessages(StoreKey keys[], BlobProperties blobProperties,
-        byte[] usermetadata, byte[] blob, int blobSize, short blobVersion)
+    private MessageFormatInputStream getPutMessage(StoreKey key, BlobProperties blobProperties, byte[] usermetadata,
+        byte[] blob, int blobSize, short blobVersion, BlobType blobType)
         throws MessageFormatException {
 
-      List<MessageFormatInputStream> putMessages = new ArrayList<MessageFormatInputStream>();
-      for (int i = 0; i < keys.length; i++) {
-        if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
-          putMessages.add(new PutMessageFormatInputStream(keys[i], blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, BlobType.DataBlob));
+      if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
+        return new PutMessageFormatInputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
+      } else {
+        if (blobType == BlobType.DataBlob) {
+          return new PutMessageFormatBlobV2InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
         } else {
-          putMessages.add(new PutMessageFormatBlobV2InputStream(keys[i], blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, BlobType.DataBlob));
+          return new PutMessageFormatBlobV2InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
+              new ByteBufferInputStream(MessageFormatUtils.getBlobContentForMetadataBlob(blobSize)), blobSize,
+              BlobType.MetadataBlob);
         }
       }
-      return putMessages;
     }
 
     private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite)
@@ -227,23 +241,89 @@ public class BlobStoreHardDeleteTest {
   @Test
   public void blobStoreHardDeleteTestBlobV1()
       throws MessageFormatException, IOException {
-    blobStoreHardDeleteTestUtil(MessageFormatRecord.Blob_Version_V1);
+    short[] blobVersions = new short[5];
+    BlobType[] blobTypes = new BlobType[5];
+    for (int i = 0; i < 5; i++) {
+      blobVersions[i] = MessageFormatRecord.Blob_Version_V1;
+      blobTypes[i] = BlobType.DataBlob;
+    }
+    blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
   }
 
   @Test
-  public void blobStoreHardDeleteTestBlobV2()
+  public void blobStoreHardDeleteTestBlobV2Simple()
       throws MessageFormatException, IOException {
-    blobStoreHardDeleteTestUtil(MessageFormatRecord.Blob_Version_V2);
+
+    short[] blobVersions = new short[5];
+    BlobType[] blobTypes = new BlobType[5];
+    for (int i = 0; i < 5; i++) {
+      blobVersions[i] = MessageFormatRecord.Blob_Version_V2;
+      blobTypes[i] = BlobType.DataBlob;
+    }
+    // all blobs V2 with Data blob
+    blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+    blobVersions = new short[5];
+    blobTypes = new BlobType[5];
+    for (int i = 0; i < 5; i++) {
+      blobVersions[i] = MessageFormatRecord.Blob_Version_V2;
+      blobTypes[i] = BlobType.MetadataBlob;
+    }
+    // all blobs V2 with Metadata blob
+    blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
   }
 
-  private void blobStoreHardDeleteTestUtil(short blobVersion)
+  @Test
+  public void blobStoreHardDeleteTestBlobV2Mixed()
+      throws MessageFormatException, IOException {
+
+    short[] blobVersions = new short[5];
+    BlobType[] blobTypes = new BlobType[5];
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V1;
+    blobTypes[0] = BlobType.DataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.MetadataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.MetadataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.MetadataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.DataBlob;
+
+    blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+
+    blobVersions = new short[5];
+    blobTypes = new BlobType[5];
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V1;
+    blobTypes[0] = BlobType.DataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.DataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.MetadataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.DataBlob;
+
+    blobVersions[0] = MessageFormatRecord.Blob_Version_V2;
+    blobTypes[0] = BlobType.MetadataBlob;
+
+    blobStoreHardDeleteTestUtil(blobVersions, blobTypes);
+  }
+
+  private void blobStoreHardDeleteTestUtil(short[] blobVersion, BlobType[] blobTypes)
       throws MessageFormatException, IOException {
     MessageStoreHardDelete hardDelete = new BlobStoreHardDelete();
 
     StoreKeyFactory keyFactory = new MockIdFactory();
     // create log and write to it
     ReadImp readImp = new ReadImp();
-    ArrayList<Long> msgOffsets = readImp.initialize(blobVersion);
+    ArrayList<Long> msgOffsets = readImp.initialize(blobVersion, blobTypes);
 
     // read a put record.
     MessageInfo info = hardDelete.getMessageInfo(readImp, msgOffsets.get(0), keyFactory);

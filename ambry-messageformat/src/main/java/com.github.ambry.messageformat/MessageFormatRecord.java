@@ -600,10 +600,10 @@ public class MessageFormatRecord {
 
   /**
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   * |         |               |              |            |         |
-   * | version |   no of keys  |      key1    |     key2   |  .....  |
-   * |(2 bytes)|    (4 bytes)  |              |            |  .....  |
-   * |         |               |              |            |         |
+   * |         |               |            |            |          |
+   * | version |   no of keys  |    key1    |     key2   |  ......  |
+   * |(2 bytes)|    (4 bytes)  |            |            |  ......  |
+   * |         |               |            |            |          |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version         - The version of the blob property record
    *
