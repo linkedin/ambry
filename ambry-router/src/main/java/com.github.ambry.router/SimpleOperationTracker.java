@@ -10,88 +10,83 @@ import java.util.NoSuchElementException;
 
 
 /**
- * A implementation of {@link OperationTracker} used by non-blocking router. It internally maintains
- * the status of the corresponding operation, and returns information to progress or terminate the
- * operation.
+ * A implementation of {@link OperationTracker}. It internally maintains the status of a
+ * corresponding operation, and returns information that decides if the operation should
+ * continue or terminate.
  *
  * This implementation simplifies such that it unifies parallelism. That is, a single parallelism
- * parameter controls the maximum number of allowed inflight requests to both local and remote
+ * parameter controls the maximum number of total allowed inflight requests to both local and remote
  * replicas. This simplification is valid for PUT operation, yet a maturized implementation will take
  * a more sophisiticate control of parallelism in the future.
  *
- * This class assumes a request will be {@code succeeded, failed, or timed out} (which means failed).
- * No request will pend forever.
+ * This class assumes a request will be {@code succeeded, failed, or timedout} (which means failed).
+ * So a deterministic response will be received in a definite time, and no request will pend forever.
+ * When a request is timed out, it is considered as failed.
  *
  * A typical usage of an {@link SimpleOperationTracker} would be:
  *<pre>
  *{@code
  *
- *   RouterOperationTracker operationTracker = new RouterOperationTracker(datacenterName,
- *            partitionId, localOnly, successTarget, parallelism);
+ *   SimpleOperationTracker operationTracker = new SimpleOperationTracker(datacenterName,
+ *            partitionId, crossColoEnabled, successTarget, parallelism);
  *   //...
- *       Iterator<ReplicaId> itr = operationTracker.getReplicaIterator();
- *       while (itr.hasNext()) {
- *         ReplicaId nextReplica = itr.next();
- *         //determine request can be sent to the replica, i.e., connection available.
- *         if(true) {
- *           itr.remove();
- *         }
- *       }
+ *   Iterator<ReplicaId> itr = operationTracker.getReplicaIterator();
+ *   while (itr.hasNext()) {
+ *     ReplicaId nextReplica = itr.next();
+ *     //determine request can be sent to the replica, i.e., connection available.
+ *     if(true) {
+ *       itr.remove();
+ *     }
+ *   }
  *}
  *</pre>
  *
  */
-public class SimpleOperationTracker implements OperationTracker {
-  final private boolean localDcOnly;
-  final private int successTarget;
-  final private int parallelism;
+class SimpleOperationTracker implements OperationTracker {
+  private final int successTarget;
+  private final int parallelism;
 
-  private int numTotalReplica = 0;
-  private int numInflight = 0;
-  private int numSucceeded = 0;
-  private int numFailed = 0;
-  private final String localDcName;
-  private final PartitionId partitionId;
+  private int totalReplicaCount = 0;
+  private int inflightCount = 0;
+  private int succeededCount = 0;
+  private int failedCount = 0;
   private Iterator<ReplicaId> replicaIterator;
-  private final LinkedList<ReplicaId> unsentReplicas = new LinkedList<ReplicaId>();
+  private final LinkedList<ReplicaId> replicaPool = new LinkedList<ReplicaId>();
   private final OpTrackerIterator otIterator;
 
   /**
-   * Constructor for an {@code OperationTracker}.
+   * Constructor for an {@code SimpleOperationTracker}.
    *
    * @param datacenterName The datacenter where the router is located.
-   * @param pId The partition on which the operation is performed.
-   * @param localDcOnly {@code true} if requests only can be sent to local replicas, {@code false}
+   * @param partitionId The partition on which the operation is performed.
+   * @param crossColoEnabled {@code true} if requests only can be sent to local replicas, {@code false}
    *                                otherwise.
    * @param successTarget The number of successful responses received to succeed the operation.
    * @param parallelism The maximum number of inflight requests sent to all replicas.
    */
-  public SimpleOperationTracker(String datacenterName, PartitionId pId, boolean localDcOnly, int successTarget,
+  SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
       int parallelism) {
-    this.localDcOnly = localDcOnly;
     this.successTarget = successTarget;
     this.parallelism = parallelism;
-    this.localDcName = datacenterName;
-    this.partitionId = pId;
     List<ReplicaId> replicas = partitionId.getReplicaIds();
     Collections.shuffle(replicas);
     for (ReplicaId replicaId : replicas) {
       if (!replicaId.isDown()) {
         String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
-        if (replicaDcName.equals(localDcName)) {
-          unsentReplicas.add(0, replicaId);
-        } else if (!localDcOnly) {
-          unsentReplicas.add(replicaId);
+        if (replicaDcName.equals(datacenterName)) {
+          replicaPool.add(0, replicaId);
+        } else if (!crossColoEnabled) {
+          replicaPool.add(replicaId);
         }
       }
     }
-    numTotalReplica = unsentReplicas.size();
+    totalReplicaCount = replicaPool.size();
     this.otIterator = new OpTrackerIterator();
   }
 
   @Override
   public boolean hasSucceeded() {
-    return numSucceeded >= successTarget;
+    return succeededCount >= successTarget;
   }
 
   @Override
@@ -101,47 +96,42 @@ public class SimpleOperationTracker implements OperationTracker {
 
   @Override
   public void onResponse(ReplicaId replicaId, Exception e) {
-    numInflight--;
+    inflightCount--;
     if (e != null) {
-      numFailed++;
+      failedCount++;
     } else {
-      numSucceeded++;
+      succeededCount++;
     }
   }
 
   @Override
   public Iterator<ReplicaId> getReplicaIterator() {
-    replicaIterator = unsentReplicas.iterator();
+    replicaIterator = replicaPool.iterator();
     return otIterator;
   }
 
   private class OpTrackerIterator implements Iterator<ReplicaId> {
     @Override
     public boolean hasNext() {
-      if (numInflight == parallelism) {
-        return false;
-      } else {
-        return replicaIterator.hasNext();
-      }
+      return !isDone() && inflightCount < parallelism && replicaIterator.hasNext();
     }
 
     @Override
     public void remove() {
       replicaIterator.remove();
-      numInflight++;
+      inflightCount++;
     }
 
     @Override
     public ReplicaId next() {
       if (!hasNext()) {
         throw new NoSuchElementException();
-      } else {
-        return replicaIterator.next();
       }
+      return replicaIterator.next();
     }
   }
 
   private boolean hasFailed() {
-    return numTotalReplica - numFailed < successTarget;
+    return totalReplicaCount - failedCount < successTarget;
   }
 }
