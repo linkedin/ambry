@@ -7,6 +7,9 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 
+/**
+ * PutMessageFormatInputStream which used Blob Format Version 2 instead of V1
+ */
 public class PutMessageFormatBlobV2InputStream extends MessageFormatInputStream {
 
   public PutMessageFormatBlobV2InputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
