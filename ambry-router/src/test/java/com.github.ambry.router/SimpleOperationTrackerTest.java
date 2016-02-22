@@ -33,7 +33,7 @@ import static org.junit.Assert.assertTrue;
  *
  */
 public class SimpleOperationTrackerTest {
-  ArrayList<MockDataNodeId> datacenters;
+  ArrayList<MockDataNodeId> datanodes;
   PartitionId mockPartition;
   String localDcName;
   LinkedList<ReplicaId> inflightReplicas;
@@ -47,12 +47,12 @@ public class SimpleOperationTrackerTest {
     ArrayList<Port> portList = new ArrayList<Port>();
     portList.add(new Port(6666, PortType.PLAINTEXT));
     List<String> mountPaths = Arrays.asList("mockMountPath");
-    datacenters = new ArrayList<MockDataNodeId>(Arrays.asList(
+    datanodes = new ArrayList<MockDataNodeId>(Arrays.asList(
         new MockDataNodeId[]{new MockDataNodeId(portList, mountPaths, "local-0"), new MockDataNodeId(portList,
             mountPaths, "local-1"), new MockDataNodeId(portList, mountPaths, "local-2"), new MockDataNodeId(portList,
             mountPaths, "local-3")}));
-    mockPartition = generateMockPartition(replicaCount, datacenters);
-    localDcName = datacenters.get(0).getDatacenterName();
+    mockPartition = generateMockPartition(replicaCount, datanodes);
+    localDcName = datanodes.get(0).getDatacenterName();
     inflightReplicas = new LinkedList<ReplicaId>();
   }
 
@@ -69,7 +69,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localSucceedTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 2, 3);
+    ot = new SimpleOperationTracker(datanodes.get(0).getDatacenterName(), mockPartition, false, 2, 3);
     // 3-0-0-0; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
@@ -88,12 +88,12 @@ public class SimpleOperationTrackerTest {
     }
     // 0-1-2-0; 9-0-0-0
     assertTrue(ot.hasSucceeded());
-    assertFalse(itr.hasNext());
+    assertTrue(ot.isDone());
 
     ot.onResponse(inflightReplicas.poll(), new Exception());
     // 0-0-2-1; 9-0-0-0
     assertTrue(ot.hasSucceeded());
-    assertFalse(itr.hasNext());
+    assertTrue(ot.isDone());
   }
 
   /**
@@ -107,7 +107,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localFailTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 2, 3);
+    ot = new SimpleOperationTracker(datanodes.get(0).getDatacenterName(), mockPartition, false, 2, 3);
     // 3-0-0-0; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
@@ -122,14 +122,14 @@ public class SimpleOperationTrackerTest {
     for (int i = 0; i < 2; i++) {
       ot.onResponse(inflightReplicas.poll(), new Exception());
     }
+    assertFalse(ot.hasSucceeded());
+    assertTrue(ot.isDone());
     // 0-1-0-2; 9-0-0-0
     //cannot send more request
-    assertFalse(itr.hasNext());
     ot.onResponse(inflightReplicas.poll(), null);
     // 0-0-1-2; 9-0-0-0
-    assertTrue(ot.isDone());
     assertFalse(ot.hasSucceeded());
-    assertFalse(itr.hasNext());
+    assertTrue(ot.isDone());
   }
 
   /**
@@ -145,7 +145,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localSucceedWithDifferentParameterTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 1, 2);
+    ot = new SimpleOperationTracker(datanodes.get(0).getDatacenterName(), mockPartition, true, 1, 2);
     // 3-0-0-0; 9-0-0-0
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
@@ -201,7 +201,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void remoteReplicaTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 1, 2);
+    ot = new SimpleOperationTracker(datanodes.get(0).getDatacenterName(), mockPartition, true, 1, 2);
     // 3-0-0-0; 9-0-0-0
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
@@ -231,6 +231,7 @@ public class SimpleOperationTrackerTest {
     ot.onResponse(inflightReplicas.poll(), new Exception());
     // 0-0-0-3; 9-0-0-0
     assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
     itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();
@@ -240,6 +241,7 @@ public class SimpleOperationTrackerTest {
     }
     // 0-0-0-3; 7-2-0-0
     assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
     for (int i = 0; i < 2; i++) {
       ot.onResponse(inflightReplicas.poll(), new Exception());
     }
@@ -253,6 +255,7 @@ public class SimpleOperationTrackerTest {
     }
     // 0-0-0-3; 5-2-0-2
     assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
     ot.onResponse(inflightReplicas.poll(), new Exception());
     assertFalse(ot.isDone());
     // 0-0-0-3; 5-1-0-3
@@ -282,7 +285,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void fullSuccessTargetTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 12, 3);
+    ot = new SimpleOperationTracker(datanodes.get(0).getDatacenterName(), mockPartition, true, 12, 3);
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
     while (!ot.hasSucceeded()) {
@@ -323,12 +326,12 @@ public class SimpleOperationTrackerTest {
     ArrayList<Port> portList = new ArrayList<Port>();
     portList.add(new Port(6666, PortType.PLAINTEXT));
     List<String> mountPaths = Arrays.asList("mockMountPath");
-    datacenters = new ArrayList<MockDataNodeId>();
-    datacenters.add(new MockDataNodeId(portList, mountPaths, "local-0"));
-    mockPartition = generateMockPartition(replicaCount, datacenters);
-    localDcName = datacenters.get(0).getDatacenterName();
+    datanodes = new ArrayList<MockDataNodeId>();
+    datanodes.add(new MockDataNodeId(portList, mountPaths, "local-0"));
+    mockPartition = generateMockPartition(replicaCount, datanodes);
+    localDcName = datanodes.get(0).getDatacenterName();
     inflightReplicas = new LinkedList<ReplicaId>();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 1, 2);
+    ot = new SimpleOperationTracker(datanodes.get(0).getDatacenterName(), mockPartition, true, 1, 2);
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
     int oddEvenFlag = 0;
@@ -343,6 +346,8 @@ public class SimpleOperationTrackerTest {
     }
     ot.onResponse(inflightReplicas.poll(), new Exception());
     ot.onResponse(inflightReplicas.poll(), new Exception());
+    assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
     itr = ot.getReplicaIterator();
     oddEvenFlag = 0;
     while (itr.hasNext()) {
@@ -355,6 +360,8 @@ public class SimpleOperationTrackerTest {
       oddEvenFlag++;
     }
     ot.onResponse(inflightReplicas.poll(), new Exception());
+    assertFalse(ot.hasSucceeded());
+    assertFalse(ot.isDone());
     itr = ot.getReplicaIterator();
     while (itr.hasNext()) {
       nextReplica = itr.next();

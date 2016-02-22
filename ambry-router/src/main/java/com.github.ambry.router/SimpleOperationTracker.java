@@ -23,7 +23,7 @@ import java.util.NoSuchElementException;
  * So a deterministic response will be received in a definite time, and no request will pend forever.
  * When a request is timed out, it is considered as failed.
  *
- * A typical usage of an {@link SimpleOperationTracker} would be:
+ * A typical usage of an {@code SimpleOperationTracker} would be:
  *<pre>
  *{@code
  *
@@ -59,7 +59,7 @@ class SimpleOperationTracker implements OperationTracker {
    *
    * @param datacenterName The datacenter where the router is located.
    * @param partitionId The partition on which the operation is performed.
-   * @param crossColoEnabled {@code true} if requests only can be sent to local replicas, {@code false}
+   * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
    *                                otherwise.
    * @param successTarget The number of successful responses received to succeed the operation.
    * @param parallelism The maximum number of inflight requests sent to all replicas.
@@ -132,6 +132,6 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   private boolean hasFailed() {
-    return totalReplicaCount - failedCount < successTarget;
+    return (totalReplicaCount - failedCount < successTarget);
   }
 }
