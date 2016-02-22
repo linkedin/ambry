@@ -164,7 +164,6 @@ public class MessageFormatRecordTest {
     int metadataContentSize =
         MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
-    metadataContent.rewind();
     ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
     BlobOutput outputData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
 
@@ -174,7 +173,7 @@ public class MessageFormatRecordTest {
     Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
 
     // deserialize and check for metadata contents
-    metadataContent.flip();
+    metadataContent.rewind();
     List<StoreKey> outputList = deserializeMetadataContent(metadataContent, new MockIdFactory());
     Assert.assertEquals("List of keys dont match", keys, outputList);
 
@@ -218,6 +217,16 @@ public class MessageFormatRecordTest {
     }
   }
 
+  /**
+   * Tests Blob Record Version 2
+   * Creates test data and creates a blob record version 2 for the specified blob type with the test data
+   * Verifies that the stream from blob output is same as the passed in data
+   * Corrupts data and verifies that de-serialization fails
+   * @param blobSize
+   * @param blobType
+   * @throws IOException
+   * @throws MessageFormatException
+   */
   private void testBlobRecordV2(int blobSize, BlobType blobType)
       throws IOException, MessageFormatException {
 
@@ -233,8 +242,8 @@ public class MessageFormatRecordTest {
 
     // corrupt blob record V2
     entireBlob.flip();
-    byte currentRandomByte = entireBlob.get(16);
-    entireBlob.put(16, (byte) (currentRandomByte + 1));
+    byte currentRandomByte = entireBlob.get(blobSize/2);
+    entireBlob.put(blobSize/2, (byte) (currentRandomByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob));
       Assert.fail("Failed to detect corruption of blob record");
@@ -243,6 +252,17 @@ public class MessageFormatRecordTest {
     }
   }
 
+  /**
+   * Serializes the blob content using BlobRecord Verison 2 with the passsed in params
+   * De-serialized the blob returns the {@link BlobOutput} for the same
+   * @param blobSize
+   * @param blobType
+   * @param blobContent
+   * @param outputBuffer
+   * @return
+   * @throws IOException
+   * @throws MessageFormatException
+   */
   private BlobOutput getBlobRecordV2(int blobSize, BlobType blobType, ByteBuffer blobContent, ByteBuffer outputBuffer)
       throws IOException, MessageFormatException {
     MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(outputBuffer, blobSize, blobType);
