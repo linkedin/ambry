@@ -57,19 +57,19 @@ public class SimpleOperationTrackerTest {
   }
 
   /**
-   * crossColoEnabled = true, successTarget = 2, parallelism = 3.
+   * crossColoEnabled = false, successTarget = 2, parallelism = 3.
    *
    * <p/>
    * 1. Get 3 local replicas to send request (and send requests);
    * 2. 2 replicas succeeds.
    * 3. Operation succeeds.
    * 4. 1 remote fails.
-   * 5. Operation remains succeed.
+   * 5. Operation remains succeeded.
    */
   @Test
   public void localSucceedTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 2, 3);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 2, 3);
     // 3-0-0-0; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
@@ -97,7 +97,7 @@ public class SimpleOperationTrackerTest {
   }
 
   /**
-   * crossColoEnabled = true, successTarget = 2, parallelism = 3.
+   * crossColoEnabled = false, successTarget = 2, parallelism = 3.
    *
    * <p/>
    * 1. Get 3 local replicas to send request (and send requests);
@@ -107,7 +107,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localFailTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 2, 3);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 2, 3);
     // 3-0-0-0; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
@@ -133,7 +133,7 @@ public class SimpleOperationTrackerTest {
   }
 
   /**
-   * crossColoEnabled = false, successTarget = 1, parallelism = 2.
+   * crossColoEnabled = true, successTarget = 1, parallelism = 2.
 
    * <p/>
    * 1. Get 2 local replicas to send request (and send requests);
@@ -145,7 +145,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localSucceedWithDifferentParameterTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 1, 2);
     // 3-0-0-0; 9-0-0-0
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
@@ -182,7 +182,7 @@ public class SimpleOperationTrackerTest {
   }
 
   /**
-   * crossColoEnabled = false, successTarget = 1, parallelism = 2.
+   * crossColoEnabled = true, successTarget = 1, parallelism = 2.
 
    * <p/>
    * 1. Get 2 local replicas to send request (and send requests);
@@ -201,7 +201,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void remoteReplicaTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 1, 2);
     // 3-0-0-0; 9-0-0-0
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
@@ -270,7 +270,7 @@ public class SimpleOperationTrackerTest {
   }
 
   /**
-   * crossColoEnabled = false, successTarget = 12, parallelism = 3.
+   * crossColoEnabled = true, successTarget = 12, parallelism = 3.
    *
    * This test may be meaningful for DELETE operation.
    *
@@ -282,7 +282,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void fullSuccessTargetTest() {
     initialize();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 12, 3);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 12, 3);
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
     while (!ot.hasSucceeded()) {
@@ -303,7 +303,7 @@ public class SimpleOperationTrackerTest {
   }
 
   /**
-   * crossColoEnabled = false, successTarget = 1, parallelism = 2.
+   * crossColoEnabled = true, successTarget = 1, parallelism = 2.
    * Only 4 local replicas
    *
    * 1. Get 1st local replica to send request (and sent);
@@ -328,7 +328,7 @@ public class SimpleOperationTrackerTest {
     mockPartition = generateMockPartition(replicaCount, datacenters);
     localDcName = datacenters.get(0).getDatacenterName();
     inflightReplicas = new LinkedList<ReplicaId>();
-    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, false, 1, 2);
+    ot = new SimpleOperationTracker(datacenters.get(0).getDatacenterName(), mockPartition, true, 1, 2);
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
     int oddEvenFlag = 0;

@@ -75,7 +75,7 @@ class SimpleOperationTracker implements OperationTracker {
         String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
         if (replicaDcName.equals(datacenterName)) {
           replicaPool.add(0, replicaId);
-        } else if (!crossColoEnabled) {
+        } else if (crossColoEnabled) {
           replicaPool.add(replicaId);
         }
       }
@@ -113,7 +113,7 @@ class SimpleOperationTracker implements OperationTracker {
   private class OpTrackerIterator implements Iterator<ReplicaId> {
     @Override
     public boolean hasNext() {
-      return !isDone() && inflightCount < parallelism && replicaIterator.hasNext();
+      return inflightCount < parallelism && replicaIterator.hasNext();
     }
 
     @Override
