@@ -9,9 +9,8 @@ import java.util.Iterator;
  * will then send requests to multiple replicas. An operation succeeds if a pre-set number of
  * successful responses are received from the replicas, or fails if this number cannot be met.
  *
- * An {@code OperationTracker} tracks and determines the status of an operation (succeeded or
- * done), and decides the next replica to send a request. An {@code OperationTracker} one-to-one
- * tracks an operation.
+ * An {@code OperationTracker} tracks and determines the status of an operation, and decides the
+ * next replica to send a request.
  *
  * When an operation is progressing by receiving responses from replicas, its {@code OperationTracker}
  * needs to be informed by calling {@link #onResponse(ReplicaId, Exception)}.

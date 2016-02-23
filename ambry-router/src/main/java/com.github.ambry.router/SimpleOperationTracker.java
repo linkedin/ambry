@@ -45,14 +45,14 @@ import java.util.NoSuchElementException;
 class SimpleOperationTracker implements OperationTracker {
   private final int successTarget;
   private final int parallelism;
+  private final LinkedList<ReplicaId> replicaPool = new LinkedList<ReplicaId>();
+  private final OpTrackerIterator otIterator;
 
   private int totalReplicaCount = 0;
   private int inflightCount = 0;
   private int succeededCount = 0;
   private int failedCount = 0;
   private Iterator<ReplicaId> replicaIterator;
-  private final LinkedList<ReplicaId> replicaPool = new LinkedList<ReplicaId>();
-  private final OpTrackerIterator otIterator;
 
   /**
    * Constructor for an {@code SimpleOperationTracker}.
@@ -61,8 +61,8 @@ class SimpleOperationTracker implements OperationTracker {
    * @param partitionId The partition on which the operation is performed.
    * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
    *                                otherwise.
-   * @param successTarget The number of successful responses received to succeed the operation.
-   * @param parallelism The maximum number of inflight requests sent to all replicas.
+   * @param successTarget The number of successful responses required to succeed the operation.
+   * @param parallelism The maximum number of inflight requests at any point of time.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
       int parallelism) {
@@ -132,6 +132,6 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   private boolean hasFailed() {
-    return (totalReplicaCount - failedCount < successTarget);
+    return (totalReplicaCount - failedCount ) < successTarget;
   }
 }
