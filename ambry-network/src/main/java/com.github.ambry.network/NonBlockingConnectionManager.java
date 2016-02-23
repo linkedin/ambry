@@ -1,41 +1,47 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
- * The ConnectionManager keeps track of current connections to datanodes, and provides methods
+ * A {@link ConnectionManager} implementation that keeps track of current connections to datanodes, and provides methods
  * to checkout and checkin connections.
+ *
+ * This class is not thread safe.
  */
 
-public class ConnectionManager {
+public class NonBlockingConnectionManager implements ConnectionManager {
   private final ConcurrentHashMap<String, HostPortPoolManager> hostPortToPoolManager;
   private final ConcurrentHashMap<String, HostPortPoolManager> connectionIdToPoolManager;
   private final Selector selector;
   private final NetworkConfig networkConfig;
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
+  private final Time time;
 
   /**
    * Instantiates a ConnectionManager
-   * @param selector The {@link Selector} to be used to make connections.
+   * @param selector the selector to use
    * @param networkConfig The {@link NetworkConfig} containing the config for the Network.
    * @param maxConnectionsPerPortPlainText the connection pool limit for plain text connections to a (host, port)
-   * @param maxConnectionsPerPortPlainSsl the conneciton pool limit for ssl connections to a (host, port)
+   * @param maxConnectionsPerPortPlainSsl the connection pool limit for ssl connections to a (host, port)
    */
-  public ConnectionManager(Selector selector, NetworkConfig networkConfig, int maxConnectionsPerPortPlainText,
-      int maxConnectionsPerPortPlainSsl) {
+  public NonBlockingConnectionManager(Selector selector, NetworkConfig networkConfig,
+      int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl, Time time) {
     hostPortToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
     connectionIdToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
     this.selector = selector;
     this.networkConfig = networkConfig;
     this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
     this.maxConnectionsPerPortSsl = maxConnectionsPerPortPlainSsl;
+    this.time = time;
   }
 
   /**
@@ -70,6 +76,17 @@ public class ConnectionManager {
   }
 
   /**
+   * Removes the given connectionId from the list of available connections. This connection id could be either a
+   * checked out connection or a connection that was available to be checked out. This gets called when the selector
+   * notifies that the connection is closed.
+   * @param connectionId the connection id of the connection.
+   */
+  private void removeConnection(String connectionId) {
+    connectionIdToPoolManager.get(connectionId).removeConnection(connectionId);
+    connectionIdToPoolManager.remove(connectionId);
+  }
+
+  /**
    * Attempts to check out a connection to the host:port provided, or returns null if none available. In the
    * latter case, initiates a connection to the host:port unless max connections to it has been reached.
    * @param host The host to connect to.
@@ -77,6 +94,7 @@ public class ConnectionManager {
    * @return connectionId, if there is one available to use, null otherwise.
    * @throws IOException if an attempt to initiate a connection as a result of this call fails.
    */
+  @Override
   public String checkOutConnection(String host, Port port)
       throws IOException {
     // if any available, give that
@@ -89,19 +107,73 @@ public class ConnectionManager {
    * Check in a previously checked out connection.
    * @param connectionId the id of the previously checked out connection.
    */
+  @Override
   public void checkInConnection(String connectionId) {
     connectionIdToPoolManager.get(connectionId).checkInConnection(connectionId);
   }
 
   /**
-   * Removes the given connectionId from the list of available connections. This connection id could be either a
-   * checked out connection or a connection that was available to be checked out. Attempting to destroy the same
-   * connection more than once, or attempting to destroy an invalid connection will result in unexpected behavior.
-   * @param connectionId the connection id of the connection.
+   * Destroy the connection associated with the given connectionId.
+   * @param connectionId connection to destroy.
    */
+  @Override
   public void destroyConnection(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).destroyConnection(connectionId);
-    connectionIdToPoolManager.remove(connectionId);
+    selector.close(connectionId);
+  }
+
+  /**
+   * Use the {@link Selector} to initiate sending of the given network requests and listen on network events.
+   * Updates state automatically for any connections and disconnections.
+   * @param timeoutMs the timeout for poll in milliseconds.
+   * @param sends the list of Network requests to send.
+   * @return A {@link ConnectionManagerPollResponse} containing the result/status of prior requests,
+   * @throws IOException if the selector encounters an error during poll.
+   */
+  @Override
+  public ConnectionManagerPollResponse sendAndPoll(long timeoutMs, List<NetworkSend> sends)
+      throws IOException {
+    selector.poll(timeoutMs, sends);
+    List<String> connected = selector.connected();
+    for (String connId : connected) {
+      checkInConnection(connId);
+    }
+    List<String> disconnected = selector.disconnected();
+    for (String connId : disconnected) {
+      removeConnection(connId);
+    }
+    return new ConnectionManagerPollResponse(connected, disconnected, selector.completedSends(),
+        selector.completedReceives());
+  }
+
+  /**
+   * Return the total number of connections that are initiated and/or established but not destroyed.
+   * @return the total number of initiated and/or established connections.
+   */
+  @Override
+  public int getTotalConnectionsCount() {
+    return connectionIdToPoolManager.size();
+  }
+
+  /**
+   * Return the total established and available connections across all hostPortPoolManagers.
+   * @return total established and available connections.
+   */
+  @Override
+  public int getAvailableConnectionsCount() {
+    int count = 0;
+    for (HostPortPoolManager hostPortPoolManager : hostPortToPoolManager.values()) {
+      count += hostPortPoolManager.getAvailableConnectionsCount();
+    }
+    return count;
+  }
+
+  /**
+   * Close the ConnectionManager.
+   * Any subsequent {@link #checkOutConnection(String, Port)} will result in the selector throwing.
+   */
+  @Override
+  public void close() {
+    selector.close();
   }
 
   /**
@@ -109,11 +181,12 @@ public class ConnectionManager {
    * creates one for every (host, port) pair it knows of.
    */
   private class HostPortPoolManager {
-    final String host;
-    final Port port;
-    final int maxConnectionsToHostPort;
-    final ConcurrentLinkedQueue<String> availableConnections;
-    final AtomicInteger poolCount = new AtomicInteger(0);
+    private final String host;
+    private final Port port;
+    private final int maxConnectionsToHostPort;
+    private final ConcurrentLinkedQueue<String> availableConnections;
+    private final AtomicInteger poolCount = new AtomicInteger(0);
+    private final AtomicInteger availableCount = new AtomicInteger(0);
 
     /**
      * Instantiate a HostPortPoolManager
@@ -148,6 +221,8 @@ public class ConnectionManager {
         } else {
           poolCount.decrementAndGet();
         }
+      } else {
+        availableCount.decrementAndGet();
       }
       return connectionId;
     }
@@ -158,16 +233,27 @@ public class ConnectionManager {
      */
     void checkInConnection(String connectionId) {
       availableConnections.add(connectionId);
+      availableCount.incrementAndGet();
     }
 
-    /** Destroy a connection managed by this manager. This connection id could be either a checked out connection or a
-     * connection that was available to be checked out. Attempting to destroy the same connection more than once will
-     * result in unexpected behavior.
+    /**
+     * Remove a connection managed by this manager. This connection id could be either a checked out connection or a
+     * connection that was previously available to be checked out.
      * @param connectionId the connection id of the connection.
      */
-    void destroyConnection(String connectionId) {
-      availableConnections.remove(connectionId);
+    void removeConnection(String connectionId) {
+      if (availableConnections.remove(connectionId)) {
+        availableCount.decrementAndGet();
+      }
       poolCount.decrementAndGet();
+    }
+
+    /**
+     * Return the number of available connections to this hostPort
+     * @return number of available connections
+     */
+    int getAvailableConnectionsCount() {
+      return availableCount.get();
     }
   }
 }

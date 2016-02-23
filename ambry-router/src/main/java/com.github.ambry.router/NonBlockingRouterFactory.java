@@ -27,7 +27,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   protected final ClusterMap clusterMap;
   protected final NetworkConfig networkConfig;
   protected final NetworkMetrics networkMetrics;
-  protected final SSLFactory sslFactory;
+  protected final SSLConfig sslConfig;
   protected final NotificationSystem notificationSystem;
   protected final Time time;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
@@ -52,8 +52,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
       this.notificationSystem = notificationSystem;
       networkConfig = new NetworkConfig(verifiableProperties);
       networkMetrics = new NetworkMetrics(registry);
-      SSLConfig sslConfig = new SSLConfig(verifiableProperties);
-      sslFactory = sslConfig.sslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
+      sslConfig = new SSLConfig(verifiableProperties);
       this.time = SystemTime.getInstance();
     } else {
       throw new IllegalArgumentException("Null argument passed in");
@@ -65,7 +64,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter()
       throws InstantiationException {
     try {
-      return new NonBlockingRouter(routerConfig, routerMetrics, networkConfig, networkMetrics, sslFactory,
+      return new NonBlockingRouter(routerConfig, routerMetrics, networkConfig, networkMetrics, sslConfig,
           notificationSystem, clusterMap, time);
     } catch (Exception e) {
       throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());

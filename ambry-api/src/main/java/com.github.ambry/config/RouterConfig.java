@@ -28,6 +28,13 @@ public class RouterConfig {
   public final String routerDatacenterName;
 
   /**
+   * The factory class the Router uses to create a connection manager.
+   */
+  @Config("router.connection.manager.factory")
+  @Default("com.github.ambry.network.NonBlockingConnectionManagerFactory")
+  public final String routerConnectionManagerFactory;
+
+  /**
    * The max connections allowed per (datanode, port) for plain text
    */
   @Config("router.max.connections.per.port.plain.text")
@@ -56,6 +63,8 @@ public class RouterConfig {
     routerScalingUnitCount = verifiableProperties.getIntInRange("router.scaling.unit.count", 1, 0, 10);
     routerHostname = verifiableProperties.getString("router.hostname");
     routerDatacenterName = verifiableProperties.getString("router.datacenter.name");
+    routerConnectionManagerFactory = verifiableProperties
+        .getString("router.connection.manager.factory", "com.github.ambry.network.NonBlockingConnectionManagerFactory");
     routerMaxConnectionsPerPortPlainText =
         verifiableProperties.getIntInRange("router.max.connections.per.port.plain.text", 5, 1, 20);
     routerMaxConnectionsPerPortSsl =
