@@ -40,8 +40,9 @@ public class NonBlockingConnectionManagerTest {
   }
 
   /**
-   * Tests the {@link NonBlockingConnectionManager}. Checks out and checks in connections and ensures that the pool
-   * limit is honored.
+   * Tests the {@link NonBlockingConnectionManager}. Constructs one using a {@link MockSelector}. Checks out and
+   * checks in connections and ensures that the pool limit is honored. Also tests sending, receiving,
+   * destroying and closing the connection manager.
    * @throws IOException
    */
   @Test
@@ -56,13 +57,13 @@ public class NonBlockingConnectionManagerTest {
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     NetworkConfig networkConfig = new NetworkConfig(verifiableProperties);
     Time time = new MockTime();
-    MockSelector mockSelector = new MockSelector(new NetworkMetrics(new MetricRegistry()), time);
+    MockSelector mockSelector = new MockSelector();
     ConnectionManager connectionManager =
         new NonBlockingConnectionManager(mockSelector, networkConfig, routerConfig.routerMaxConnectionsPerPortPlainText,
             routerConfig.routerMaxConnectionsPerPortSsl, time);
 
-    //When no connections were ever made to a host:port, connectionManager should return null, but
-    //initiate connections.
+    // When no connections were ever made to a host:port, connectionManager should return null, but
+    // initiate connections.
     Port port1 = new Port(100, PortType.PLAINTEXT);
     for (int i = 0; i < 4; i++) {
       Assert.assertNull(connectionManager.checkOutConnection("host1", port1));
@@ -88,8 +89,8 @@ public class NonBlockingConnectionManagerTest {
     Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
     Assert.assertEquals(4, connectionManager.getAvailableConnectionsCount());
 
-    //Check this connection id back in. This should be returned in a future
-    //checkout.
+    // Check this connection id back in. This should be returned in a future
+    // checkout.
     connectionManager.checkInConnection(conn);
     Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
     Assert.assertEquals(5, connectionManager.getAvailableConnectionsCount());
@@ -107,13 +108,13 @@ public class NonBlockingConnectionManagerTest {
     // Make sure that one of the checked out connection is the same as the previously checked in connection.
     Assert.assertTrue(connIds.contains(checkedInConn));
 
-    //Now that the pool has been exhausted, checkOutConnection should return null.
+    // Now that the pool has been exhausted, checkOutConnection should return null.
     Assert.assertNull(connectionManager.checkOutConnection("host2", port2));
     //And it should not have initiated a new connection.
     Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
     Assert.assertEquals(3, connectionManager.getAvailableConnectionsCount());
 
-    //test invalid connectionId
+    // test invalid connectionId
     try {
       connectionManager.checkInConnection("invalid");
       Assert.assertFalse(true);
@@ -124,7 +125,7 @@ public class NonBlockingConnectionManagerTest {
     // but should not affect the counts or the pool limit;
     connectionManager.destroyConnection("invalid");
 
-    //test send and receive
+    // test send and receive
     String conn11 = connectionManager.checkOutConnection("host1", port1);
     Assert.assertNotNull(conn11);
     String conn12 = connectionManager.checkOutConnection("host1", port1);
@@ -143,15 +144,15 @@ public class NonBlockingConnectionManagerTest {
     Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
     Assert.assertEquals(3, connectionManager.getAvailableConnectionsCount());
 
-    //test destroy
+    // test destroy
     conn11 = connectionManager.checkOutConnection("host1", port1);
     Assert.assertNotNull(conn11);
     conn12 = connectionManager.checkOutConnection("host1", port1);
     Assert.assertNotNull(conn12);
-    //Remove a checked out connection.
+    // Remove a checked out connection.
     connectionManager.destroyConnection(conn12);
     connectionManager.checkInConnection(conn11);
-    //Remove a checked in connection.
+    // Remove a checked in connection.
     connectionManager.destroyConnection(conn11);
 
     do {
@@ -172,7 +173,7 @@ public class NonBlockingConnectionManagerTest {
   }
 
   /**
-   * Overrides the connect() method, so it does not make actual connections, just tracks the calls.
+   * A class that mocks the {@link Selector}
    */
   class MockSelector extends Selector {
     int index;
@@ -182,9 +183,13 @@ public class NonBlockingConnectionManagerTest {
     private List<NetworkSend> sends;
     private List<NetworkReceive> receives;
 
-    public MockSelector(NetworkMetrics metrics, Time time)
+    /**
+     * Create a MockSelector
+     * @throws IOException
+     */
+    public MockSelector()
         throws IOException {
-      super(metrics, time, null);
+      super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null);
     }
 
     /**
@@ -205,6 +210,12 @@ public class NonBlockingConnectionManagerTest {
       return hostPortString;
     }
 
+    /**
+     * Mocks sending and poll. Creates a response for every send to be returned after the next poll.
+     * @param timeoutMs Ignored.
+     * @param sends The list of new sends to begin
+     *
+     */
     @Override
     public void poll(long timeoutMs, List<NetworkSend> sends) {
       this.sends = sends;
@@ -215,6 +226,11 @@ public class NonBlockingConnectionManagerTest {
       }
     }
 
+    /**
+     * Returns a list of connection ids created between the last two poll() calls (or since the instantiation
+     * if only one poll() was done).
+     * @return a list of connection ids.
+     */
     @Override
     public List<String> connected() {
       List<String> toReturn = connected;
@@ -222,6 +238,10 @@ public class NonBlockingConnectionManagerTest {
       return toReturn;
     }
 
+    /**
+     * Returns a list of connection ids destroyed between the last two poll() calls.
+     * @return a list of connection ids.
+     */
     @Override
     public List<String> disconnected() {
       List<String> toReturn = disconnected;
@@ -229,6 +249,10 @@ public class NonBlockingConnectionManagerTest {
       return toReturn;
     }
 
+    /**
+     * Returns a list of {@link NetworkSend} sent as part of the last poll.
+     * @return a lit of {@link NetworkSend} initiated previously.
+     */
     @Override
     public List<NetworkSend> completedSends() {
       List<NetworkSend> toReturn = sends;
@@ -236,6 +260,10 @@ public class NonBlockingConnectionManagerTest {
       return toReturn;
     }
 
+    /**
+     * Returns a list of {@link NetworkReceive} constructed in the last poll to simulate a response for every send.
+     * @return a list of {@line NetworkReceive} for every initiated send.
+     */
     @Override
     public List<NetworkReceive> completedReceives() {
       List<NetworkReceive> toReturn = receives;
@@ -243,6 +271,10 @@ public class NonBlockingConnectionManagerTest {
       return toReturn;
     }
 
+    /**
+     * Close the given connection.
+     * @param conn connection id to close.
+     */
     @Override
     public void close(String conn) {
       if (connectionIds.contains(conn)) {
@@ -250,22 +282,36 @@ public class NonBlockingConnectionManagerTest {
       }
     }
 
+    /**
+     * Close the selector.
+     */
     @Override
     public void close() {
 
     }
   }
 
+  /**
+   * A dummy implementation of the {@link Send} interface.
+   */
   class MockSend implements Send {
     private ByteBuffer buf;
-    private int index;
     private int size;
 
+    /**
+     * Construct a MockSend
+     */
     public MockSend() {
       buf = ByteBuffer.allocate(16);
       size = 16;
     }
 
+    /**
+     * Write the contents of the buffer to the channel.
+     * @param channel The channel into which data needs to be written to
+     * @return the number of bytes written.
+     * @throws IOException if the write encounters an exception.
+     */
     @Override
     public long writeTo(WritableByteChannel channel)
         throws IOException {
@@ -273,25 +319,44 @@ public class NonBlockingConnectionManagerTest {
       return written;
     }
 
+    /**
+     * Returns if all data has been written out.
+     * @return true if all data has been written out, false otherwise.
+     */
     @Override
     public boolean isSendComplete() {
       return buf.remaining() == 0;
     }
 
+    /**
+     * The size of the payload in the Send.
+     * @return the size of the payload.
+     */
     @Override
     public long sizeInBytes() {
       return size;
     }
   }
 
+  /**
+   * Mocks {@link NetworkReceive} by extending it.
+   */
   class MockReceive extends NetworkReceive {
     String connectionId;
 
+    /**
+     * Construct a MockReceive on the given connection id.
+     * @param connectionId the connection id on which the receive is mocked.
+     */
     public MockReceive(String connectionId) {
       super(connectionId, new BoundedByteBufferReceive(), new MockTime());
       this.connectionId = connectionId;
     }
 
+    /**
+     * Return the connection id associated with the MockReceive.
+     * @return the connection id of the MockReceive.
+     */
     @Override
     public String getConnectionId() {
       return connectionId;

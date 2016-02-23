@@ -267,6 +267,10 @@ class NonBlockingRouter implements Router {
     private final ConnectionManager connectionManager;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
+    // this set is used to keep track of the disconnections after the ConnectionManager is polled. This will be used by
+    // the operation managers indirectly when they go over the requests they initiated to fail a request immediately
+    // if the associated connection has closed (rather than timing out). This set will be cleared every time after the
+    // operation managers are polled (and before the connection manager is polled).
     private final HashSet<String> disconnectedIdsSet = new HashSet<String>();
     // @todo: these numbers need to be determined.
     private static final int POLL_TIMEOUT_MS = 30;
@@ -376,7 +380,8 @@ class NonBlockingRouter implements Router {
     }
 
     /**
-     * This method is called by the RequestResponseHandler thread to notify about any complete network receives.
+     * This method is called by the RequestResponseHandler thread with the responses from the {@link
+     * ConnectionManager} poll.
      * @param pollResponse the {@link ConnectionManagerPollResponse} received after the {@link ConnectionManager} was
      *                     polled.
      */

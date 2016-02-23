@@ -7,7 +7,6 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkMetrics;
-import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -60,6 +59,11 @@ public class NonBlockingRouterFactory implements RouterFactory {
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 
+  /**
+   * Construct and return a {@link NonBlockingRouter}
+   * @return a {@link NonBlockingRouter}
+   * @throws InstantiationException
+   */
   @Override
   public Router getRouter()
       throws InstantiationException {
