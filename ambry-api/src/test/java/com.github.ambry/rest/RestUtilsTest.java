@@ -105,15 +105,12 @@ public class RestUtilsTest {
     setAmbryHeaders(headers, contentLength, ttl, isPrivate, serviceId, null, ownerId);
     headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, JSONObject.NULL);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
-    // too many values for all headers.
+    // too many values for some headers.
     headers = new JSONObject();
     setAmbryHeaders(headers, contentLength, ttl, isPrivate, serviceId, contentType, ownerId);
     tooManyValuesTest(headers, RestUtils.Headers.BLOB_SIZE);
     tooManyValuesTest(headers, RestUtils.Headers.TTL);
     tooManyValuesTest(headers, RestUtils.Headers.PRIVATE);
-    tooManyValuesTest(headers, RestUtils.Headers.SERVICE_ID);
-    tooManyValuesTest(headers, RestUtils.Headers.AMBRY_CONTENT_TYPE);
-    tooManyValuesTest(headers, RestUtils.Headers.OWNER_ID);
 
     // no failures.
     // ttl missing. Should be infinite time by default.

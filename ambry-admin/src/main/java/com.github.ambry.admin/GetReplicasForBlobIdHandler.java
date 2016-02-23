@@ -74,9 +74,9 @@ class GetReplicasForBlobIdHandler {
   private static JSONObject getReplicasForBlobId(RestRequest restRequest, ClusterMap clusterMap,
       AdminMetrics adminMetrics)
       throws RestServiceException {
-    Map<String, List<String>> parameters = restRequest.getArgs();
+    Map<String, Object> parameters = restRequest.getArgs();
     if (parameters != null && parameters.containsKey(BLOB_ID_KEY)) {
-      String blobIdStr = parameters.get(BLOB_ID_KEY).get(0);
+      String blobIdStr = parameters.get(BLOB_ID_KEY).toString();
       logger.trace("BlobId for request {} is {}", restRequest.getUri(), blobIdStr);
       try {
         PartitionId partitionId = new BlobId(blobIdStr, clusterMap).getPartition();

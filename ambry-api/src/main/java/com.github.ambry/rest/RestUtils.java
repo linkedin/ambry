@@ -6,7 +6,6 @@ import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,7 +110,7 @@ public class RestUtils {
    */
   public static BlobProperties buildBlobProperties(RestRequest restRequest)
       throws RestServiceException {
-    Map<String, List<String>> args = restRequest.getArgs();
+    Map<String, Object> args = restRequest.getArgs();
 
     String blobSizeStr = null;
     long blobSize;
@@ -197,10 +196,10 @@ public class RestUtils {
    */
   public static byte[] buildUsermetadata(RestRequest restRequest)
       throws RestServiceException {
-    Map<String, List<String>> args = restRequest.getArgs();
+    Map<String, Object> args = restRequest.getArgs();
     Map<String, String> userMetadataMap = new HashMap<String, String>();
     int sizeToAllocate = 0;
-    for (Map.Entry<String, List<String>> entry : args.entrySet()) {
+    for (Map.Entry<String, Object> entry : args.entrySet()) {
       String key = entry.getKey();
       if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
         // key size
@@ -299,7 +298,7 @@ public class RestUtils {
   /**
    * Returns a default representation of user metadata that is not in the expected format
    * @param userMetadata byte[] which contains the user metadata in old style
-   * @return Map<String, String> user metadata in the form of Map<String, String>
+   * @return user metadata in the form of Map<String, String>
    */
   private static Map<String, String> getOldStyleUserMetadataAsHashMap(byte[] userMetadata) {
     int totalSize = userMetadata.length;
@@ -328,19 +327,14 @@ public class RestUtils {
    *                                    {@code args} or if there is more than one value for {@code header} in
    *                                    {@code args}.
    */
-  private static String getHeader(Map<String, List<String>> args, String header, boolean required)
+  private static String getHeader(Map<String, Object> args, String header, boolean required)
       throws RestServiceException {
     String value = null;
     if (args.containsKey(header)) {
-      List<String> values = args.get(header);
-      if (values.size() == 1) {
-        value = values.get(0);
-        if (value == null && required) {
-          throw new RestServiceException("Request has null value for header: " + header,
-              RestServiceErrorCode.InvalidArgs);
-        }
-      } else {
-        throw new RestServiceException("Request has too many values for header: " + header,
+      Object valueObj = args.get(header);
+      value = valueObj != null ? valueObj.toString() : null;
+      if (value == null && required) {
+        throw new RestServiceException("Request has null value for header: " + header,
             RestServiceErrorCode.InvalidArgs);
       }
     } else if (required) {
