@@ -183,7 +183,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
             short userMetadataVersion;
             int userMetadataSize;
             short blobRecordVersion;
-            BlobType blobType = BlobType.DataBlob;
+            BlobType blobType;
             long blobStreamSize;
             DeserializedUserMetadata userMetadataInfo;
             DeserializedBlob blobRecordInfo;
@@ -202,6 +202,8 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               blobRecordVersion = blobRecordInfo.getVersion();
               if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
                 blobType = blobRecordInfo.getBlobOutputInfo().getBlobType();
+              } else {
+                blobType = BlobType.DataBlob;
               }
               hardDeleteRecoveryMetadata =
                   new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize,
@@ -210,8 +212,10 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               logger.trace("Skipping crc check for user metadata and blob stream fields for key {}", storeKey);
               userMetadataVersion = hardDeleteRecoveryMetadata.getUserMetadataVersion();
               blobRecordVersion = hardDeleteRecoveryMetadata.getBlobRecordVersion();
-              if(blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+              if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
                 blobType = hardDeleteRecoveryMetadata.getBlobType();
+              } else {
+                blobType = BlobType.DataBlob;
               }
               userMetadataSize = hardDeleteRecoveryMetadata.getUserMetadataSize();
               blobStreamSize = hardDeleteRecoveryMetadata.getBlobStreamSize();

@@ -41,8 +41,6 @@ public class MessageFormatInputStreamTest {
       ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
       data = byteBufferBlob.array();
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
-    } else {
-      Assert.fail("Illegal blob version " + blobVersion + " and type " + blobType);
     }
 
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));

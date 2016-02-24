@@ -8,7 +8,8 @@ import java.nio.ByteBuffer;
 
 
 /**
- * PutMessageFormatInputStream which used Blob Format Version 2 instead of V1
+ * PutMessageFormatInputStream which uses Blob Format Version 2 instead of V1
+ * // TODO: Once we switch from Blob format V1 to V2 in actual Put Flow, this class has to switch from V2 to V1
  */
 public class PutMessageFormatBlobV2InputStream extends MessageFormatInputStream {
 

@@ -20,14 +20,14 @@ import org.junit.Test;
 public class MessageSievingInputStreamTest {
 
   @Test
-  public void validMessageDetectionInputStreamTestForValidBlobs()
+  public void testValidBlobsAgainstCorruption()
       throws IOException, MessageFormatException {
-    validMessageDetectionInputStreamTestForValidBlobs(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
-    validMessageDetectionInputStreamTestForValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
-    validMessageDetectionInputStreamTestForValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
+    testValidBlobs(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
+    testValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
+    testValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
   }
 
-  public void validMessageDetectionInputStreamTestForValidBlobs(short blobVersion, BlobType blobType)
+  public void testValidBlobs(short blobVersion, BlobType blobType)
       throws IOException, MessageFormatException {
 
     // MessageSievingInputStream contains put records for 3 valid blobs
@@ -51,8 +51,6 @@ public class MessageSievingInputStreamTest {
       data1 = byteBufferBlob.array();
       blobContentSize = data1.length;
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
-    } else {
-      Assert.fail("Illegal blob version " + blobVersion + " and type " + blobType);
     }
 
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
@@ -163,14 +161,14 @@ public class MessageSievingInputStreamTest {
   }
 
   @Test
-  public void validMessageDetectionInputStreamTestForInValidBlobs()
+  public void testInValidBlobsAgainstCorruption()
       throws IOException, MessageFormatException {
-    validMessageDetectionInputStreamTestForInValidBlobsUtil(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
-    validMessageDetectionInputStreamTestForInValidBlobsUtil(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
-    validMessageDetectionInputStreamTestForInValidBlobsUtil(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
+    testInValidBlobs(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
+    testInValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
+    testInValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
   }
 
-  private void validMessageDetectionInputStreamTestForInValidBlobsUtil(short blobVersion, BlobType blobType)
+  private void testInValidBlobs(short blobVersion, BlobType blobType)
       throws IOException, MessageFormatException {
 
     // MessageSievingInputStream contains put records for 2 valid blobs and 1 corrupt blob
@@ -307,14 +305,14 @@ public class MessageSievingInputStreamTest {
   }
 
   @Test
-  public void validMessageDetectionInputStreamTestForDeletedBlobs()
+  public void testDeletedBlobsAgainstCorruption()
       throws IOException, MessageFormatException {
-    validMessageDetectionInputStreamTestForDeletedBlobsUtil(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
-    validMessageDetectionInputStreamTestForDeletedBlobsUtil(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
-    validMessageDetectionInputStreamTestForDeletedBlobsUtil(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
+    testDeletedBlobs(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
+    testDeletedBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
+    testDeletedBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
   }
 
-  private void validMessageDetectionInputStreamTestForDeletedBlobsUtil(short blobVersion, BlobType blobType)
+  private void testDeletedBlobs(short blobVersion, BlobType blobType)
       throws IOException, MessageFormatException {
 
     // MessageSievingInputStream contains put records for 2 valid blobs and 1 deleted blob

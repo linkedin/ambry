@@ -126,7 +126,7 @@ public class MessageFormatRecord {
     }
   }
 
-  public static BlobOutputInfo deserializeBlob(InputStream stream)
+  public static BlobData deserializeBlob(InputStream stream)
       throws IOException, MessageFormatException {
     return deserializeAndGetBlobWithVersion(stream).getBlobOutputInfo();
   }
@@ -516,7 +516,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobSize);
     }
 
-    public static BlobOutputInfo deserializeBlobRecord(CrcInputStream crcStream)
+    public static BlobData deserializeBlobRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long dataSize = dataStream.readLong();
@@ -531,7 +531,7 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobOutputInfo(BlobType.DataBlob, dataSize, output);
+      return new BlobData(BlobType.DataBlob, dataSize, output);
     }
   }
 
@@ -572,7 +572,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobContentSize);
     }
 
-    public static BlobOutputInfo deserializeBlobRecord(CrcInputStream crcStream)
+    public static BlobData deserializeBlobRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       short blobTypeOrdinal = dataStream.readShort();
@@ -594,7 +594,7 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobOutputInfo(blobContentType, dataSize, output);
+      return new BlobData(blobContentType, dataSize, output);
     }
   }
 
@@ -687,9 +687,9 @@ class DeserializedUserMetadata {
 
 class DeserializedBlob {
   private short version;
-  private BlobOutputInfo blobOutputInfo;
+  private BlobData blobOutputInfo;
 
-  public DeserializedBlob(short version, BlobOutputInfo blobOutputInfo) {
+  public DeserializedBlob(short version, BlobData blobOutputInfo) {
     this.version = version;
     this.blobOutputInfo = blobOutputInfo;
   }
@@ -698,7 +698,7 @@ class DeserializedBlob {
     return version;
   }
 
-  BlobOutputInfo getBlobOutputInfo() {
+  BlobData getBlobOutputInfo() {
     return blobOutputInfo;
   }
 }

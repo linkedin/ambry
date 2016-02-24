@@ -4,26 +4,26 @@ import java.io.InputStream;
 
 
 /**
- * Contains the blob output along with the blob type
+ * Contains the blob stream along with some required info
  */
-public class BlobOutputInfo {
-  private BlobType blobType;
-  private long size;
-  private InputStream stream;
+public class BlobData {
+  private final BlobType blobType;
+  private final long size;
+  private final InputStream stream;
 
   /**
-   * The blob output info that helps to read the blob/metadata blob
+   * The blob data contains the stream and other required info
    * @param blobType {@BlobType} of the blob
    * @param size The size of the blob
    * @param stream The stream that contains the blob
    */
-  public BlobOutputInfo(BlobType blobType, long size, InputStream stream) {
+  public BlobData(BlobType blobType, long size, InputStream stream) {
     this.blobType = blobType;
     this.size = size;
     this.stream = stream;
   }
 
-  public BlobType getBlobType(){
+  public BlobType getBlobType() {
     return this.blobType;
   }
 
@@ -35,7 +35,7 @@ public class BlobOutputInfo {
     return stream;
   }
 
-  public BlobOutput getBlobOutput(){
+  public BlobOutput getBlobOutput() {
     return new BlobOutput(size, stream);
   }
 }
