@@ -8,7 +8,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -64,9 +63,9 @@ class EchoHandler {
    */
   private static JSONObject echo(RestRequest restRequest, AdminMetrics adminMetrics)
       throws RestServiceException {
-    Map<String, List<String>> parameters = restRequest.getArgs();
+    Map<String, Object> parameters = restRequest.getArgs();
     if (parameters != null && parameters.containsKey(TEXT_KEY)) {
-      String text = parameters.get(TEXT_KEY).get(0);
+      String text = parameters.get(TEXT_KEY).toString();
       logger.trace("Text to echo for request {} is {}", restRequest.getUri(), text);
       try {
         return packageResult(text);

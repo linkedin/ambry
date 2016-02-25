@@ -15,7 +15,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -38,7 +37,7 @@ class NettyRequest implements RestRequest {
   private final QueryStringDecoder query;
   private final HttpRequest request;
   private final RestMethod restMethod;
-  private final Map<String, List<String>> args;
+  private final Map<String, Object> args;
 
   private final ReentrantLock contentLock = new ReentrantLock();
   private final Queue<HttpContent> requestContents = new LinkedBlockingQueue<HttpContent>();
@@ -48,6 +47,8 @@ class NettyRequest implements RestRequest {
 
   private volatile AsyncWritableChannel writeChannel = null;
   private volatile ReadIntoCallbackWrapper callbackWrapper = null;
+
+  protected static String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
 
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
@@ -82,15 +83,49 @@ class NettyRequest implements RestRequest {
     this.query = new QueryStringDecoder(request.getUri());
     this.nettyMetrics = nettyMetrics;
 
-    Map<String, List<String>> allArgs = new HashMap<String, List<String>>();
-    allArgs.putAll(query.parameters());
-    for (Map.Entry<String, String> e : request.headers()) {
-      if (!allArgs.containsKey(e.getKey())) {
-        allArgs.put(e.getKey(), new LinkedList<String>());
+    Map<String, Object> allArgs = new HashMap<String, Object>();
+    // query params.
+    for (Map.Entry<String, List<String>> e : query.parameters().entrySet()) {
+      StringBuilder value = null;
+      if (e.getValue() != null) {
+        StringBuilder combinedValues = combineVals(new StringBuilder(), e.getValue());
+        if (combinedValues.length() > 0) {
+          value = combinedValues;
+        }
       }
-      allArgs.get(e.getKey()).add(e.getValue());
+      allArgs.put(e.getKey(), value);
+    }
+    // headers.
+    for (Map.Entry<String, String> e : request.headers()) {
+      StringBuilder sb;
+      boolean valueNull = request.headers().get(e.getKey()) == null;
+      if (!valueNull && allArgs.get(e.getKey()) == null) {
+        sb = new StringBuilder(e.getValue());
+        allArgs.put(e.getKey(), sb);
+      } else if (!valueNull) {
+        sb = (StringBuilder) allArgs.get(e.getKey());
+        sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(e.getValue());
+      } else if (!allArgs.containsKey(e.getKey())) {
+        allArgs.put(e.getKey(), null);
+      }
+    }
+    // turn all StringBuilders into String
+    for (Map.Entry<String, Object> e : allArgs.entrySet()) {
+      if (allArgs.get(e.getKey()) != null) {
+        allArgs.put(e.getKey(), (e.getValue()).toString());
+      }
     }
     args = Collections.unmodifiableMap(allArgs);
+  }
+
+  private StringBuilder combineVals(StringBuilder currValue, List<String> values) {
+    for (String value : values) {
+      if (currValue.length() > 0) {
+        currValue.append(MULTIPLE_HEADER_VALUE_DELIMITER);
+      }
+      currValue.append(value);
+    }
+    return currValue;
   }
 
   @Override
@@ -109,7 +144,7 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
-  public Map<String, List<String>> getArgs() {
+  public Map<String, Object> getArgs() {
     return args;
   }
 

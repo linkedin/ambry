@@ -2,7 +2,6 @@ package com.github.ambry.rest;
 
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 
 
@@ -46,7 +45,7 @@ public interface RestRequest extends ReadableStreamChannel {
    * header values etc. or a combination of any of these.
    * @return the arguments and their values (if any) as a map.
    */
-  public Map<String, List<String>> getArgs();
+  public Map<String, Object> getArgs();
 
   /**
    * Closes this request channel and releases all of the resources associated with it. Also records some metrics via
