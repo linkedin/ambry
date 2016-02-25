@@ -7,6 +7,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkMetrics;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -21,14 +22,15 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getRouter()}.
  */
 public class NonBlockingRouterFactory implements RouterFactory {
-  protected final RouterConfig routerConfig;
-  protected final NonBlockingRouterMetrics routerMetrics;
-  protected final ClusterMap clusterMap;
-  protected final NetworkConfig networkConfig;
-  protected final NetworkMetrics networkMetrics;
-  protected final SSLConfig sslConfig;
-  protected final NotificationSystem notificationSystem;
-  protected final Time time;
+  private final RouterConfig routerConfig;
+  private final NonBlockingRouterMetrics routerMetrics;
+  private final ClusterMap clusterMap;
+  private final NetworkConfig networkConfig;
+  private final NetworkMetrics networkMetrics;
+  private final SSLFactory sslFactory;
+  private final NotificationSystem notificationSystem;
+  private final Time time;
+  private final RouterNetworkComponentsFactory routerNetworkComponentsFactory;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -51,8 +53,11 @@ public class NonBlockingRouterFactory implements RouterFactory {
       this.notificationSystem = notificationSystem;
       networkConfig = new NetworkConfig(verifiableProperties);
       networkMetrics = new NetworkMetrics(registry);
-      sslConfig = new SSLConfig(verifiableProperties);
+      SSLConfig sslConfig = new SSLConfig(verifiableProperties);
+      sslFactory = sslConfig.sslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
       this.time = SystemTime.getInstance();
+      routerNetworkComponentsFactory = new RouterNetworkComponentsFactory(networkMetrics, networkConfig, sslFactory,
+          routerConfig.routerMaxConnectionsPerPortPlainText, routerConfig.routerMaxConnectionsPerPortSsl, time);
     } else {
       throw new IllegalArgumentException("Null argument passed in");
     }
@@ -68,8 +73,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter()
       throws InstantiationException {
     try {
-      return new NonBlockingRouter(routerConfig, routerMetrics, networkConfig, networkMetrics, sslConfig,
-          notificationSystem, clusterMap, time);
+      return new NonBlockingRouter(routerConfig, routerMetrics, routerNetworkComponentsFactory, notificationSystem,
+          clusterMap, time);
     } catch (Exception e) {
       throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());
     }

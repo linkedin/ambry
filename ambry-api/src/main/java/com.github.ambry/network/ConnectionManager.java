@@ -32,17 +32,6 @@ public interface ConnectionManager {
   public void destroyConnection(String connectionId);
 
   /**
-   * Initiate sends of the given network requests and polls the ConnectionManager for results from prior requests.
-   * @param timeoutMs the timeout for poll in milliseconds.
-   * @param sends the list of Network requests to send.
-   * @return A {@link ConnectionManagerPollResponse} containing the result/status of prior requests,
-   * if any were received.
-   * @throws IOException if an error is encountered.
-   */
-  public ConnectionManagerPollResponse sendAndPoll(long timeoutMs, List<NetworkSend> sends)
-      throws IOException;
-
-  /**
    * Get the total number of connections managed by this ConnectionManager.
    * @return the total number of connections.
    */

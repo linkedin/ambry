@@ -1,19 +1,13 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.ConnectionManager;
-import com.github.ambry.network.ConnectionManagerFactory;
-import com.github.ambry.network.ConnectionManagerPollResponse;
-import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.NetworkSend;
-import com.github.ambry.network.NonBlockingConnectionManagerFactory;
-import com.github.ambry.network.SSLFactory;
+import com.github.ambry.network.Selector;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.Time;
@@ -38,9 +32,7 @@ import org.slf4j.LoggerFactory;
  */
 class NonBlockingRouter implements Router {
   private final RouterConfig routerConfig;
-  private final NetworkConfig networkConfig;
-  private final NetworkMetrics networkMetrics;
-  private final SSLConfig sslConfig;
+  private final RouterNetworkComponentsFactory routerNetworkComponentsFactory;
   private final NotificationSystem notificationSystem;
   private final ClusterMap clusterMap;
   private final NonBlockingRouterMetrics routerMetrics;
@@ -55,23 +47,20 @@ class NonBlockingRouter implements Router {
    * Constructs a NonBlockingRouter
    * @param routerConfig the configs for the router.
    * @param routerMetrics the metrics for the router.
-   * @param networkConfig  the config for the network.
-   * @param networkMetrics the metrics for the network.
-   * @param sslConfig the sslConfig used to initialize the SSL layer in the network.
+   * @param routerNetworkComponentsFactory the factory class to create {@link Selector}s and {@link
+   * ConnectionManager}s.
    * @param notificationSystem the notification system to use to notify about blob creations and deletions.
    * @param clusterMap the cluster map for the cluster.
    * @param time the time instance.
    * @throws IOException if the OperationController could not be successfully created.
    */
-  NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, NetworkConfig networkConfig,
-      NetworkMetrics networkMetrics, SSLConfig sslConfig, NotificationSystem notificationSystem,
+  NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      RouterNetworkComponentsFactory routerNetworkComponentsFactory, NotificationSystem notificationSystem,
       ClusterMap clusterMap, Time time)
       throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.networkConfig = networkConfig;
-    this.networkMetrics = networkMetrics;
-    this.sslConfig = sslConfig;
+    this.routerNetworkComponentsFactory = routerNetworkComponentsFactory;
     this.notificationSystem = notificationSystem;
     this.clusterMap = clusterMap;
     this.time = time;
@@ -264,6 +253,7 @@ class NonBlockingRouter implements Router {
     private final PutManager putManager;
     private final GetManager getManager;
     private final DeleteManager deleteManager;
+    private final Selector selector;
     private final ConnectionManager connectionManager;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
@@ -279,12 +269,11 @@ class NonBlockingRouter implements Router {
     OperationController()
         throws IOException {
       try {
-        ConnectionManagerFactory connectionManagerFactory = Utils
-            .getObj(routerConfig.routerConnectionManagerFactory, networkMetrics, networkConfig, sslConfig,
-                routerConfig.routerMaxConnectionsPerPortPlainText, routerConfig.routerMaxConnectionsPerPortSsl, time);
-        connectionManager = connectionManagerFactory.getConnectionManager();
+        RouterNetworkComponents networkComponents = routerNetworkComponentsFactory.getRouterNetworkComponents();
+        selector = networkComponents.getSelector();
+        connectionManager = networkComponents.getConnectionManager();
       } catch (Exception e) {
-        throw new IOException("Could not create connection manager using the given connection manager " + "factory");
+        throw new IOException("Could not create the selector using the given RouterNetworkFactory: " + e);
       }
       putManager = new PutManager(routerConfig.routerMaxPutChunkSizeBytes, connectionManager, routerConfig, clusterMap);
       getManager = new GetManager(connectionManager, clusterMap);
@@ -376,18 +365,27 @@ class NonBlockingRouter implements Router {
       putManager.poll(requests);
       getManager.poll(requests);
       deleteManager.poll(requests);
+      disconnectedIdsSet.clear();
       return requests;
     }
 
     /**
-     * This method is called by the RequestResponseHandler thread with the responses from the {@link
-     * ConnectionManager} poll.
-     * @param pollResponse the {@link ConnectionManagerPollResponse} received after the {@link ConnectionManager} was
-     *                     polled.
+     * Handle the response from polling the {@link Selector}.
+     * @param connected the list of newly established connections.
+     * @param disconnected the list of newly disconnected connections.
+     * @param completedSends the list of sends that completed.
+     * @param completedReceives the list of receives completed.
      */
-    private void onResponse(ConnectionManagerPollResponse pollResponse) {
-      disconnectedIdsSet.addAll(pollResponse.getDisconnectedIds());
-      for (NetworkReceive recv : pollResponse.getCompletedReceives()) {
+    private void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
+        List<NetworkReceive> completedReceives) {
+      for (String connId : connected) {
+        connectionManager.checkInConnection(connId);
+      }
+      for (String connId : disconnected) {
+        connectionManager.destroyConnection(connId);
+        disconnectedIdsSet.add(connId);
+      }
+      for (NetworkReceive recv : completedReceives) {
         handleResponsePayload(recv.getReceivedBytes().getPayload());
         connectionManager.checkInConnection(recv.getConnectionId());
       }
@@ -425,9 +423,9 @@ class NonBlockingRouter implements Router {
       try {
         while (isOpen.get()) {
           List<NetworkSend> sends = pollForRequests();
-          disconnectedIdsSet.clear();
-          ConnectionManagerPollResponse pollResponse = connectionManager.sendAndPoll(POLL_TIMEOUT_MS, sends);
-          onResponse(pollResponse);
+          selector.poll(POLL_TIMEOUT_MS, sends);
+          onResponse(selector.connected(), selector.disconnected(), selector.completedSends(),
+              selector.completedReceives());
         }
       } catch (Exception e) {
         logger.error("RequestResponseHandlerThread received exception: ", e);

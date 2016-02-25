@@ -4,7 +4,6 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,6 +24,7 @@ public class NonBlockingConnectionManager implements ConnectionManager {
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
   private final Time time;
+  private int connectionIdCount;
 
   /**
    * Instantiates a ConnectionManager
@@ -35,8 +35,13 @@ public class NonBlockingConnectionManager implements ConnectionManager {
    */
   public NonBlockingConnectionManager(Selector selector, NetworkConfig networkConfig,
       int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl, Time time) {
+    if (selector == null || networkConfig == null) {
+      throw new IllegalArgumentException("Invalid inputs passed in, Selector: " + selector +
+          " NetworkConfig: " + networkConfig);
+    }
     hostPortToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
     connectionIdToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
+    connectionIdCount = 0;
     this.selector = selector;
     this.networkConfig = networkConfig;
     this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
@@ -76,17 +81,6 @@ public class NonBlockingConnectionManager implements ConnectionManager {
   }
 
   /**
-   * Removes the given connectionId from the list of available connections. This connection id could be either a
-   * checked out connection or a connection that was available to be checked out. This gets called when the selector
-   * notifies that the connection is closed.
-   * @param connectionId the connection id of the connection.
-   */
-  private void removeConnection(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).removeConnection(connectionId);
-    connectionIdToPoolManager.remove(connectionId);
-  }
-
-  /**
    * Attempts to check out a connection to the host:port provided, or returns null if none available. In the
    * latter case, initiates a connection to the host:port unless max connections to it has been reached.
    * @param host The host to connect to.
@@ -113,36 +107,18 @@ public class NonBlockingConnectionManager implements ConnectionManager {
   }
 
   /**
-   * Destroy the connection associated with the given connectionId.
+   * Destroy the connection associated with the given connectionId. The connection maybe a checked out connection,
+   * or a connection that is not checked out. The connection could also have already been closed by the selector.
    * @param connectionId connection to destroy.
    */
   @Override
   public void destroyConnection(String connectionId) {
-    selector.close(connectionId);
-  }
-
-  /**
-   * Use the {@link Selector} to initiate sending of the given network requests and listen on network events.
-   * Updates state automatically for any connections and disconnections.
-   * @param timeoutMs the timeout for poll in milliseconds.
-   * @param sends the list of Network requests to send.
-   * @return A {@link ConnectionManagerPollResponse} containing the result/status of prior requests,
-   * @throws IOException if the selector encounters an error during poll.
-   */
-  @Override
-  public ConnectionManagerPollResponse sendAndPoll(long timeoutMs, List<NetworkSend> sends)
-      throws IOException {
-    selector.poll(timeoutMs, sends);
-    List<String> connected = selector.connected();
-    for (String connId : connected) {
-      checkInConnection(connId);
+    HostPortPoolManager hostPortPoolManager = connectionIdToPoolManager.remove(connectionId);
+    if (hostPortPoolManager != null) {
+      connectionIdCount--;
+      hostPortPoolManager.removeConnection(connectionId);
+      selector.close(connectionId);
     }
-    List<String> disconnected = selector.disconnected();
-    for (String connId : disconnected) {
-      removeConnection(connId);
-    }
-    return new ConnectionManagerPollResponse(connected, disconnected, selector.completedSends(),
-        selector.completedReceives());
   }
 
   /**
@@ -151,7 +127,7 @@ public class NonBlockingConnectionManager implements ConnectionManager {
    */
   @Override
   public int getTotalConnectionsCount() {
-    return connectionIdToPoolManager.size();
+    return connectionIdCount;
   }
 
   /**
@@ -169,11 +145,9 @@ public class NonBlockingConnectionManager implements ConnectionManager {
 
   /**
    * Close the ConnectionManager.
-   * Any subsequent {@link #checkOutConnection(String, Port)} will result in the selector throwing.
    */
   @Override
   public void close() {
-    selector.close();
   }
 
   /**
@@ -218,6 +192,7 @@ public class NonBlockingConnectionManager implements ConnectionManager {
           connectionIdToPoolManager.put(selector
               .connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
                   networkConfig.socketReceiveBufferBytes, port.getPortType()), this);
+          connectionIdCount++;
         } else {
           poolCount.decrementAndGet();
         }
