@@ -100,6 +100,8 @@ public class NettyServerTest {
     NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
     RestRequestHandler requestHandler = new MockRestRequestResponseHandler();
-    return new NettyServer(nettyConfig, nettyMetrics, requestHandler);
+    PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
+    VIPHealthCheckService vipHealthCheckService = new VIPHealthCheckService("/ambry-frontend/admin");
+    return new NettyServer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger, vipHealthCheckService);
   }
 }

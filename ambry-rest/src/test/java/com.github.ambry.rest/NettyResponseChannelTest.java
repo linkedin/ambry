@@ -64,7 +64,7 @@ public class NettyResponseChannelTest {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
     EmbeddedChannel channel = createEmbeddedChannel();
-    channel.writeInbound(createRequest(HttpMethod.POST, "/"));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.POST, "/", null));
     channel.writeInbound(createContent(content, false));
     channel.writeInbound(createContent(lastContent, true));
 
@@ -88,7 +88,8 @@ public class NettyResponseChannelTest {
   @Test
   public void noResponseBodyTest() {
     EmbeddedChannel channel = createEmbeddedChannel();
-    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString()));
+    channel.writeInbound(
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString(), null));
     // There should be a response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
@@ -154,7 +155,7 @@ public class NettyResponseChannelTest {
       MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
       ChannelOutboundHandler badOutboundHandler = new ExceptionOutboundHandler();
       EmbeddedChannel channel = new EmbeddedChannel(badOutboundHandler, processor);
-      channel.writeInbound(createRequest(HttpMethod.GET, "/"));
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
       // channel gets closed because of write failure
       channel.writeInbound(createContent(content, true));
       fail("Callback for write would have thrown an Exception");
@@ -165,13 +166,15 @@ public class NettyResponseChannelTest {
     // writing to channel with a outbound handler that generates an Error
     EmbeddedChannel channel = new EmbeddedChannel(new ErrorOutboundHandler(), new MockNettyMessageProcessor());
     try {
-      channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.WriteFailureWithThrowable.toString()));
+      channel.writeInbound(
+          RestTestUtils.createRequest(HttpMethod.GET, TestingUri.WriteFailureWithThrowable.toString(), null));
     } catch (Error e) {
       assertEquals("Unexpected error", ErrorOutboundHandler.ERROR_MESSAGE, e.getMessage());
     }
 
     channel = createEmbeddedChannel();
-    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidway.toString()));
+    channel
+        .writeInbound(RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidway.toString(), null));
     assertFalse("Channel is not closed at the remote end", channel.isActive());
   }
 
@@ -188,7 +191,7 @@ public class NettyResponseChannelTest {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
     EmbeddedChannel channel = createEmbeddedChannel();
-    channel.writeInbound(createRequest(HttpMethod.GET, TestingUri.FillWriteBuffer.toString()));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, TestingUri.FillWriteBuffer.toString(), null));
     channel.writeInbound(createContent(content, false));
     channel.writeInbound(createContent(lastContent, true));
 
@@ -259,16 +262,6 @@ public class NettyResponseChannelTest {
   // general
 
   /**
-   * Creates a {@link HttpRequest} with the specified {@code httpMethod} and {@code uri}.
-   * @param httpMethod the {@link HttpMethod} required.
-   * @param uri the URI to hit.
-   * @return a {@link HttpRequest} with the specified {@code httpMethod} and {@code uri}.
-   */
-  private HttpRequest createRequest(HttpMethod httpMethod, String uri) {
-    return new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
-  }
-
-  /**
    * Creates {@link HttpContent} wrapping the {@code content}.
    * @param content the content to wrap.
    * @param isLast {@code true} if this is the last piece of content. {@code false} otherwise.
@@ -317,7 +310,7 @@ public class NettyResponseChannelTest {
    */
   private void doOnResponseCompleteWithExceptionTest(TestingUri uri, HttpResponseStatus expectedResponseStatus) {
     EmbeddedChannel channel = createEmbeddedChannel();
-    channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", expectedResponseStatus, response.getStatus());
@@ -339,7 +332,7 @@ public class NettyResponseChannelTest {
       throws Exception {
     EmbeddedChannel channel = createEmbeddedChannel();
     try {
-      channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
       fail("This test was expecting the handler in the channel to throw an exception");
     } catch (Exception e) {
       if (!exceptionClass.isInstance(e)) {
@@ -358,7 +351,7 @@ public class NettyResponseChannelTest {
   private void doIdempotentOperationsTest(TestingUri uri) {
     EmbeddedChannel channel = createEmbeddedChannel();
     // no exceptions.
-    channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
   }
@@ -373,7 +366,7 @@ public class NettyResponseChannelTest {
     ExceptionOutboundHandler exceptionOutboundHandler = new ExceptionOutboundHandler();
     EmbeddedChannel channel = new EmbeddedChannel(exceptionOutboundHandler, processor);
     // no exception because onResponseComplete() swallows it.
-    channel.writeInbound(createRequest(HttpMethod.GET, uri.toString()));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
     assertFalse("Channel is not closed at the remote end", channel.isActive());
   }
 
@@ -387,7 +380,7 @@ public class NettyResponseChannelTest {
    */
   private HttpRequest createRequestWithHeaders(HttpMethod httpMethod, String uri) {
     long currentTime = System.currentTimeMillis();
-    HttpRequest request = createRequest(httpMethod, uri);
+    HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, null);
     HttpHeaders.setHeader(request, HttpHeaders.Names.CONTENT_TYPE, "dummy/content-type");
     HttpHeaders.setHeader(request, HttpHeaders.Names.CONTENT_LENGTH, 100);
     HttpHeaders.setHeader(request, HttpHeaders.Names.LOCATION, "dummyLocation");

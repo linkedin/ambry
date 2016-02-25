@@ -26,6 +26,9 @@ import org.slf4j.LoggerFactory;
  * 3. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
  * 4. A {@link RestRequestHandler} and a {@link RestResponseHandler} - Scaling units that are responsible for
  * interfacing between the {@link NioServer} and the {@link BlobStorageService}.
+ * 5. A {@link PublicAccessLogger} - To assist in public access logging
+ * 6. A {@link VIPHealthCheckService} - To maintain the health of the system in order to respond to
+ * VIP health check requests.
  * <p/>
  * Depending upon what is specified in the configuration file, the RestServer can start different implementations of
  * {@link NioServer} and {@link BlobStorageService} and behave accordingly.
@@ -48,6 +51,8 @@ public class RestServer {
   private final RestRequestHandler restRequestHandler;
   private final RestResponseHandler restResponseHandler;
   private final NioServer nioServer;
+  private final PublicAccessLogger publicAccessLogger;
+  private final VIPHealthCheckService vipHealthCheckService;
 
   /**
    * Creates an instance of RestServer.
@@ -95,10 +100,12 @@ public class RestServer {
           .getObj(restServerConfig.restServerRequestHandlerFactory,
               restServerConfig.restServerRequestHandlerScalingUnitCount, restServerMetrics, blobStorageService);
       restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
-
+      publicAccessLogger = new PublicAccessLogger(restServerConfig.publicAccessLogReqeustHeaders.split(","),
+          restServerConfig.publicAccessLogResponseHeaders.split(","));
+      vipHealthCheckService = new VIPHealthCheckService(restServerConfig.healthCheckUri);
       NioServerFactory nioServerFactory = Utils
           .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
-              restRequestHandler);
+              restRequestHandler, publicAccessLogger, vipHealthCheckService);
       nioServer = nioServerFactory.getNioServer();
       if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
           || nioServer == null) {
@@ -150,6 +157,10 @@ public class RestServer {
       elapsedTime = System.currentTimeMillis() - restRequestHandlerStartTime;
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
+
+      vipHealthCheckService.startUp();
+      logger.info("VIP Health check service started");
+
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       logger.info("RestServer start took {} ms", startupTime);
@@ -165,6 +176,7 @@ public class RestServer {
     long shutdownBeginTime = System.currentTimeMillis();
     try {
       //ordering is important.
+      vipHealthCheckService.shutdown();
       nioServer.shutdown();
       long nioServerShutdownTime = System.currentTimeMillis();
       long elapsedTime = nioServerShutdownTime - shutdownBeginTime;

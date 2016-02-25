@@ -327,8 +327,8 @@ public class AdminBlobStorageServiceTest {
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
     Map<String, String> userMetadata = new HashMap<String, String>();
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
@@ -1130,7 +1130,7 @@ public class AdminBlobStorageServiceTest {
     Iterator itr = expectedHeaders.keys();
     while (itr.hasNext()) {
       String key = (String) itr.next();
-      if (key.startsWith(RestUtils.Headers.UserMetaData_Header_Prefix)) {
+      if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
         String outValue = restResponseChannel.getHeader(key);
         assertEquals("Value for " + key + "does not match in user metadata", expectedHeaders.getString(key), outValue);
       }

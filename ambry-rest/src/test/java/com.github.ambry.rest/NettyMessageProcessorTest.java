@@ -89,7 +89,7 @@ public class NettyMessageProcessorTest {
     // content when no content is expected.
     content = "@@randomContent@@@";
     channel = createChannel();
-    channel.writeInbound(createRequest(HttpMethod.GET, "/"));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
@@ -145,16 +145,6 @@ public class NettyMessageProcessorTest {
   }
 
   /**
-   * Creates a {@link HttpRequest} with the given parameters.
-   * @param httpMethod the {@link HttpMethod} required.
-   * @param uri the URI to hit.
-   * @return a {@link HttpRequest} with the given parameters.
-   */
-  private HttpRequest createRequest(HttpMethod httpMethod, String uri) {
-    return new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
-  }
-
-  /**
    * Converts the content in {@code httpContent} to a human readable string.
    * @param httpContent the {@link HttpContent} whose content needs to be converted to a human readable string.
    * @return content that is inside {@code httpContent} as a human readable string.
@@ -179,7 +169,7 @@ public class NettyMessageProcessorTest {
   private void doRequestHandleWithGoodInputTest(HttpMethod httpMethod, RestMethod restMethod)
       throws IOException {
     EmbeddedChannel channel = createChannel();
-    channel.writeInbound(createRequest(httpMethod, MockBlobStorageService.ECHO_REST_METHOD));
+    channel.writeInbound(RestTestUtils.createRequest(httpMethod, MockBlobStorageService.ECHO_REST_METHOD, null));
     if (httpMethod != HttpMethod.POST) {
       // For POST, adding LastHttpContent will throw an exception simply because of the way ECHO_REST_METHOD works in
       // MockBlobStorageService (doesn't wait for content and closes the RestRequest once response is written). Except
@@ -203,7 +193,7 @@ public class NettyMessageProcessorTest {
    */
   private void doRequestHandlerExceptionTest(HttpMethod httpMethod, HttpResponseStatus expectedStatus) {
     EmbeddedChannel channel = createChannel();
-    channel.writeInbound(createRequest(httpMethod, "/"));
+    channel.writeInbound(RestTestUtils.createRequest(httpMethod, "/", null));
     channel.writeInbound(new DefaultLastHttpContent());
     // first outbound has to be response.
     HttpResponse response = (HttpResponse) channel.readOutbound();

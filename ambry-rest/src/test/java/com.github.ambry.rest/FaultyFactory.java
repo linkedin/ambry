@@ -16,8 +16,13 @@ public class FaultyFactory implements BlobStorageServiceFactory, NioServerFactor
     // don't care.
   }
 
-  // for NioServerFactory, RestRequestHandlerFactory and RouterFactory
+  // for RestRequestHandlerFactory and RouterFactory
   public FaultyFactory(Object obj1, Object obj2, Object obj3) {
+    // don't care.
+  }
+
+  // for NioServerFactory
+  public FaultyFactory(Object obj1, Object obj2, Object obj3, Object obj4, Object obj5) {
     // don't care.
   }
 
