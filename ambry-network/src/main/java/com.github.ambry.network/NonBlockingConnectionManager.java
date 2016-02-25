@@ -28,7 +28,7 @@ public class NonBlockingConnectionManager implements ConnectionManager {
 
   /**
    * Instantiates a ConnectionManager
-   * @param selector the selector to use
+   * @param selector the {@link Selector} to use to make connections.
    * @param networkConfig The {@link NetworkConfig} containing the config for the Network.
    * @param maxConnectionsPerPortPlainText the connection pool limit for plain text connections to a (host, port)
    * @param maxConnectionsPerPortPlainSsl the connection pool limit for ssl connections to a (host, port)
