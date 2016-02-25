@@ -47,7 +47,7 @@ public class MessageSievingInputStreamTest {
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-      ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data1 = byteBufferBlob.array();
       blobContentSize = data1.length;
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
@@ -72,7 +72,7 @@ public class MessageSievingInputStreamTest {
     byte[] data2 = new byte[blobContentSize];
     new Random().nextBytes(data2);
     if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-      ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data2 = byteBufferBlob.array();
       blobContentSize = data2.length;
     }
@@ -95,7 +95,7 @@ public class MessageSievingInputStreamTest {
     byte[] data3 = new byte[blobContentSize];
     new Random().nextBytes(data3);
     if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-      ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data3 = byteBufferBlob.array();
       blobContentSize = data3.length;
     }
@@ -188,7 +188,7 @@ public class MessageSievingInputStreamTest {
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-      ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data1 = byteBufferBlob.array();
       blobContentSize = data1.length;
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
@@ -214,7 +214,7 @@ public class MessageSievingInputStreamTest {
     byte[] data2 = new byte[blobContentSize];
     new Random().nextBytes(data2);
     if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-      ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data2 = byteBufferBlob.array();
       blobContentSize = data2.length;
     }
@@ -243,7 +243,7 @@ public class MessageSievingInputStreamTest {
     byte[] data3 = new byte[blobContentSize];
     new Random().nextBytes(data3);
     if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-      ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data3 = byteBufferBlob.array();
       blobContentSize = data3.length;
     }
@@ -328,7 +328,7 @@ public class MessageSievingInputStreamTest {
       byte[] data1 = new byte[blobContentSize];
       new Random().nextBytes(data1);
       if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-        ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+        ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
         data1 = byteBufferBlob.array();
         blobContentSize = data1.length;
       }
@@ -357,7 +357,7 @@ public class MessageSievingInputStreamTest {
       byte[] data3 = new byte[blobContentSize];
       new Random().nextBytes(data3);
       if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-        ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+        ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
         data3 = byteBufferBlob.array();
         blobContentSize = data3.length;
       }

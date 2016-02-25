@@ -42,15 +42,6 @@ public class BlobStoreHardDeleteTest {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(blob);
 
-      int[] blobStreamSize = new int[blobVersions.length];
-      for (int i = 0; i < blobVersions.length; i++) {
-        if (blobVersions[i] == MessageFormatRecord.Blob_Version_V2 && blobTypes[i] == BlobType.MetadataBlob) {
-          blobStreamSize[i] = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(BLOB_SIZE);
-        } else if (blobVersions[i] == MessageFormatRecord.Blob_Version_V1 || (
-            blobVersions[i] == MessageFormatRecord.Blob_Version_V2 && blobTypes[i] == BlobType.DataBlob)) {
-          blobStreamSize[i] = BLOB_SIZE;
-        }
-      }
       BlobProperties blobProperties = new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
@@ -107,8 +98,8 @@ public class BlobStoreHardDeleteTest {
       writeToBuffer(msg2, (int) msg2.getSize());
       HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
           new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
-              MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[2], blobTypes[2],
-              blobStreamSize[2], keys[2]);
+              MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[2], blobTypes[2], BLOB_SIZE,
+              keys[2]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg3d: Delete Record. Not part of readSet.
@@ -119,8 +110,8 @@ public class BlobStoreHardDeleteTest {
       readSet.addMessage(buffer.position(), keys[3], (int) msg4.getSize());
       writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
       hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
-          MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[3], blobTypes[3],
-          blobStreamSize[3], keys[3]);
+          MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[3], blobTypes[3], BLOB_SIZE,
+          keys[3]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
 
       // msg5: A message with blob record corrupted that will be part of hard delete, without recoveryInfo.
@@ -139,14 +130,8 @@ public class BlobStoreHardDeleteTest {
         return new PutMessageFormatInputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
       } else {
-        if (blobType == BlobType.DataBlob) {
-          return new PutMessageFormatBlobV2InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
-        } else {
-          return new PutMessageFormatBlobV2InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(MessageFormatUtils.getBlobContentForMetadataBlob(blobSize)), blobSize,
-              BlobType.MetadataBlob);
-        }
+        return new PutMessageFormatBlobV2InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
       }
     }
 
@@ -355,11 +340,25 @@ public class BlobStoreHardDeleteTest {
     }
 
     // msg1
-    Assert.assertNotNull(hardDeletedList.get(0));
+    HardDeleteInfo hardDeleteInfo = hardDeletedList.get(0);
+    Assert.assertNotNull(hardDeleteInfo);
+    HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
+        new HardDeleteRecoveryMetadata(hardDeleteInfo.getRecoveryInfo(), keyFactory);
+    Assert.assertEquals(blobTypes[1], hardDeleteRecoveryMetadata.getBlobType());
+    Assert.assertEquals(blobVersions[1], hardDeleteRecoveryMetadata.getBlobRecordVersion());
+
     // msg2
-    Assert.assertNotNull(hardDeletedList.get(1));
+    hardDeleteInfo = hardDeletedList.get(1);
+    Assert.assertNotNull(hardDeleteInfo);
+    hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(hardDeleteInfo.getRecoveryInfo(), keyFactory);
+    Assert.assertEquals(blobTypes[2], hardDeleteRecoveryMetadata.getBlobType());
+    Assert.assertEquals(blobVersions[2], hardDeleteRecoveryMetadata.getBlobRecordVersion());
     // msg4
-    Assert.assertNotNull(hardDeletedList.get(2));
+    hardDeleteInfo = hardDeletedList.get(2);
+    Assert.assertNotNull(hardDeleteInfo);
+    hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(hardDeleteInfo.getRecoveryInfo(), keyFactory);
+    Assert.assertEquals(blobTypes[3], hardDeleteRecoveryMetadata.getBlobType());
+    Assert.assertEquals(blobVersions[3], hardDeleteRecoveryMetadata.getBlobRecordVersion());
     // msg5 - NULL.
     Assert.assertNull(hardDeletedList.get(3));
   }

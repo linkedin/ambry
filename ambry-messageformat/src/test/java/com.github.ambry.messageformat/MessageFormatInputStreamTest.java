@@ -38,7 +38,7 @@ public class MessageFormatInputStreamTest {
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
-      ByteBuffer byteBufferBlob = MessageFormatUtils.getBlobContentForMetadataBlob(blobContentSize);
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data = byteBufferBlob.array();
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
     }
