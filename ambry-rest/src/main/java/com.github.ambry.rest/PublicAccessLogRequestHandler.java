@@ -108,29 +108,26 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
     if (requestInProgress) {
+      boolean recognized = false;
       if (msg instanceof HttpResponse) {
+        recognized = true;
         HttpResponse response = (HttpResponse) msg;
         logHeaders("Response", response, publicAccessLogger.getResponseHeaders());
         logMessage.append(", ");
         logMessage.append("status=").append(response.getStatus().code());
         logMessage.append(", ");
-
-        if (!HttpHeaders.isTransferEncodingChunked(response)) {
-          requestInProgress = false;
-          logDurations();
-          publicAccessLogger.logInfo(logMessage.toString());
-        } else {
+        if (HttpHeaders.isTransferEncodingChunked(response)) {
           this.responseFirstChunkStartTimeInMs = System.currentTimeMillis();
         }
-      } else if (msg instanceof HttpContent) {
-        HttpContent httpContent = (HttpContent) msg;
-        if (httpContent instanceof LastHttpContent) {
-          requestInProgress = false;
-          logDurations();
-          publicAccessLogger.logInfo(logMessage.toString());
-        }
-      } else {
-        logger.error("Sending response (writeRequested) that is not of type HttpResponse or HttpChunk. " +
+      }
+      if (msg instanceof LastHttpContent) {
+        recognized = true;
+        logDurations();
+        reset();
+        publicAccessLogger.logInfo(logMessage.toString());
+      }
+      if (!recognized && !(msg instanceof HttpContent)) {
+        logger.error("Sending response (writeRequested) that is not of type Response or LastHttpContent. " +
             "Sending response to " + ctx.channel().remoteAddress() + ". " +
             "Request is of type " + msg.getClass() + ". " +
             "No action being taken other than logging this unexpected state.");
@@ -141,6 +138,15 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
           "No action being taken other than logging this unexpected state.");
     }
     super.write(ctx, msg, promise);
+  }
+
+  /**
+   * Resets some variables as part of logging a response
+   */
+  private void reset() {
+    requestInProgress = false;
+    responseFirstChunkStartTimeInMs = INVALID_CHUNK_TIME;
+    requestLastChunkArrivalTimeInMs = INVALID_CHUNK_TIME;
   }
 
   @Override

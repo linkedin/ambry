@@ -7,6 +7,7 @@ import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
@@ -15,12 +16,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class EchoMethodHandler extends SimpleChannelInboundHandler {
+public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private FullHttpResponse response;
 
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, Object obj)
+  public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
       throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     if (obj instanceof HttpRequest) {
