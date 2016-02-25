@@ -25,11 +25,11 @@ public class NettyServerFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
     PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
-    VIPHealthCheckService vipHealthCheckService = new VIPHealthCheckService("/ambry-frontend/admin");
+    RestServerState restServerState = new RestServerState("/healthCheck");
 
     NettyServerFactory nettyServerFactory =
         new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler, publicAccessLogger,
-            vipHealthCheckService);
+            restServerState);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
@@ -47,11 +47,11 @@ public class NettyServerFactoryTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
     PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
-    VIPHealthCheckService vipHealthCheckService = new VIPHealthCheckService("/ambry-frontend/admin");
+    RestServerState restServerState = new RestServerState("/ambry-frontend/admin");
 
     // VerifiableProperties null.
     try {
-      new NettyServerFactory(null, metricRegistry, restRequestHandler, publicAccessLogger, vipHealthCheckService);
+      new NettyServerFactory(null, metricRegistry, restRequestHandler, publicAccessLogger, restServerState);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -59,7 +59,7 @@ public class NettyServerFactoryTest {
 
     // MetricRegistry null.
     try {
-      new NettyServerFactory(verifiableProperties, null, restRequestHandler, publicAccessLogger, vipHealthCheckService);
+      new NettyServerFactory(verifiableProperties, null, restRequestHandler, publicAccessLogger, restServerState);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -67,7 +67,7 @@ public class NettyServerFactoryTest {
 
     // RestRequestHandler null.
     try {
-      new NettyServerFactory(verifiableProperties, metricRegistry, null, publicAccessLogger, vipHealthCheckService);
+      new NettyServerFactory(verifiableProperties, metricRegistry, null, publicAccessLogger, restServerState);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -75,13 +75,13 @@ public class NettyServerFactoryTest {
 
     // PublicAccessLogger null.
     try {
-      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, null, vipHealthCheckService);
+      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, null, restServerState);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
-    // VIPHealthCheckService null.
+    // RestServerState null.
     try {
       new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger, null);
       fail("Instantiation should have failed because one of the arguments was null");

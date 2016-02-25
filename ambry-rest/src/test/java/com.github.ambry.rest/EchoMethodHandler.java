@@ -1,27 +1,26 @@
 package com.github.ambry.rest;
 
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class EchoMethodHandler extends ChannelDuplexHandler {
+public class EchoMethodHandler extends SimpleChannelInboundHandler {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private FullHttpResponse response;
 
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object obj)
+  public void channelRead0(ChannelHandlerContext ctx, Object obj)
       throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     if (obj instanceof HttpRequest) {
@@ -43,14 +42,8 @@ public class EchoMethodHandler extends ChannelDuplexHandler {
         HttpHeaders
             .setHeader(response, RestUtils.Headers.BLOB_SIZE, request.headers().get(RestUtils.Headers.BLOB_SIZE));
       }
-    } else if (obj instanceof DefaultLastHttpContent) {
+    } else if (obj instanceof LastHttpContent) {
       ctx.writeAndFlush(response);
     }
-  }
-
-  @Override
-  public void disconnect(ChannelHandlerContext ctx, ChannelPromise future)
-      throws Exception {
-    super.disconnect(ctx, future);
   }
 }

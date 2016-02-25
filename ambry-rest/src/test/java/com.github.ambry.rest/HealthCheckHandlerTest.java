@@ -17,14 +17,14 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 
-public class VIPHealthCheckHandlerTest {
-  private VIPHealthCheckService vipHealthCheckService;
+public class HealthCheckHandlerTest {
+  private RestServerState restServerState;
   private final String healthCheckUri = "/healthCheckUri";
   private final byte[] goodBytes = "GOOD".getBytes();
   private final byte[] badBytes = "BAD".getBytes();
 
-  public VIPHealthCheckHandlerTest() {
-    this.vipHealthCheckService = new VIPHealthCheckService(healthCheckUri);
+  public HealthCheckHandlerTest() {
+    this.restServerState = new RestServerState(healthCheckUri);
   }
 
   /**
@@ -63,7 +63,7 @@ public class VIPHealthCheckHandlerTest {
     Random random = new Random();
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
-    vipHealthCheckService.startUp();
+    restServerState.markServiceUp();
     String location = UtilsTest.getRandomString(60);
     int size = random.nextInt(10000);
     // for POST, the EchoMethodHandler sets location and blob size(in response) based on the values from the request headers
@@ -72,7 +72,7 @@ public class VIPHealthCheckHandlerTest {
       headers.add(RestUtils.Headers.BLOB_SIZE, size);
     }
     if (!isServiceUp) {
-      vipHealthCheckService.shutdown();
+      restServerState.markServiceDown();
     }
     channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri, headers));
     FullHttpResponse response = (FullHttpResponse) channel.readOutbound();
@@ -83,7 +83,7 @@ public class VIPHealthCheckHandlerTest {
     assertEquals("Unexpected content", RestTestUtils.getContentString(expectedBytes),
         RestTestUtils.getContentString(response.content().array()));
     assertTrue("Channel is closed", channel.isOpen());
-    vipHealthCheckService.shutdown();
+    restServerState.markServiceDown();
     channel.close();
   }
 
@@ -129,12 +129,12 @@ public class VIPHealthCheckHandlerTest {
   // general
 
   /**
-   * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link VIPHealthCheckHandler}
+   * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link HealthCheckHandler}
    * and {@link EchoMethodHandler}.
-   * @return an {@link EmbeddedChannel} that incorporates an instance of {@link VIPHealthCheckHandler}
+   * @return an {@link EmbeddedChannel} that incorporates an instance of {@link HealthCheckHandler}
    * and {@link EchoMethodHandler}.
    */
   private EmbeddedChannel createChannel() {
-    return new EmbeddedChannel(new VIPHealthCheckHandler(vipHealthCheckService), new EchoMethodHandler());
+    return new EmbeddedChannel(new HealthCheckHandler(restServerState), new EchoMethodHandler());
   }
 }

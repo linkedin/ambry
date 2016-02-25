@@ -68,26 +68,24 @@ class RestServerConfig {
 
   /**
    * Request Headers that needs to be logged as part of public access log entries
-   * @param verifiableProperties
    */
   @Config("rest.server.public.access.log.request.headers")
   @Default(
       "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For")
-  public final String publicAccessLogReqeustHeaders;
+  public final String restServerPublicAccessLogRequestHeaders;
 
   /**
    * Response Headers that needs to be logged as part of public access log entries
-   * @param verifiableProperties
    */
   @Config("rest.server.public.access.log.response.headers")
   @Default("Location,x-ambry-blob-size")
-  public final String publicAccessLogResponseHeaders;
+  public final String restServerPublicAccessLogResponseHeaders;
 
   /**
    * Health check URI for load balancers (VIPs)
    */
   @Config("rest.server.healthCheckUri")
-  @Default("/ambry-frontend/admin")
+  @Default("/healthCheck")
   public final String healthCheckUri;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
@@ -104,10 +102,10 @@ class RestServerConfig {
         .getString("rest.server.response.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerRouterFactory = verifiableProperties
         .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
-    publicAccessLogReqeustHeaders = verifiableProperties.getString("rest.server.public.access.log.reqeust.headers",
+    restServerPublicAccessLogRequestHeaders = verifiableProperties.getString("rest.server.public.access.log.reqeust.headers",
         "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
-    publicAccessLogResponseHeaders =
+    restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
-    healthCheckUri = verifiableProperties.getString("rest.server.healthCheckUri","/ambry-frontend/admin");
+    healthCheckUri = verifiableProperties.getString("rest.server.healthCheckUri","/healthCheck");
   }
 }

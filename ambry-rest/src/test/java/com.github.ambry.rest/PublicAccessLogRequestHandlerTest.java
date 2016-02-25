@@ -84,7 +84,7 @@ public class PublicAccessLogRequestHandlerTest {
       } else {
         channel.writeInbound(new DefaultLastHttpContent());
       }
-      String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry().toString();
+      String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
 
       // verify remote host, http method and uri
       String subString = "Info:embedded" + " " + httpMethod + " " + uri;

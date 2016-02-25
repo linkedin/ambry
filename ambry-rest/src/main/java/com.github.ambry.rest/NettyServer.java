@@ -46,10 +46,11 @@ class NettyServer implements NioServer {
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    */
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler,
-      PublicAccessLogger publicAccessLogger, VIPHealthCheckService vipHealthCheckService) {
+      PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger, vipHealthCheckService);
+    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger,
+        restServerState);
     nettyServerDeployerThread = new Thread(nettyServerDeployer);
     logger.trace("Instantiated NettyServer");
   }
@@ -103,7 +104,7 @@ class NettyServerDeployer implements Runnable {
   private final NettyMetrics nettyMetrics;
   private final RestRequestHandler requestHandler;
   private final PublicAccessLogger publicAccessLogger;
-  private final VIPHealthCheckService vipHealthCheckService;
+  private final RestServerState restServerState;
   private Exception exception = null;
 
   /**
@@ -112,18 +113,18 @@ class NettyServerDeployer implements Runnable {
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
-   * @param vipHealthCheckService the {@link VIPHealthCheckService} that can be used to check the health of the system
+   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to VIP health check requests
    */
   public NettyServerDeployer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler,
-      PublicAccessLogger publicAccessLogger, VIPHealthCheckService vipHealthCheckService) {
+      PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
     this.requestHandler = requestHandler;
     bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
     workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
     this.publicAccessLogger = publicAccessLogger;
-    this.vipHealthCheckService = vipHealthCheckService;
+    this.restServerState = restServerState;
     logger.trace("Instantiated NettyServerDeployer");
   }
 
@@ -145,7 +146,7 @@ class NettyServerDeployer implements Runnable {
               // to go here.
               .addLast("codec", new HttpServerCodec())
                   // for VIP request handling
-              .addLast("VIPRequestHandler", new VIPHealthCheckHandler(vipHealthCheckService))
+              .addLast("VIPRequestHandler", new HealthCheckHandler(restServerState))
                   // for public access logging
               .addLast("PublicAccessLogHandler",
                   new PublicAccessLogRequestHandler(publicAccessLogger))

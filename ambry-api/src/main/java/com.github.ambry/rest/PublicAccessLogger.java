@@ -29,11 +29,11 @@ public class PublicAccessLogger {
     return responseHeaders;
   }
 
-  public void logError(StringBuilder message) {
-    publicAccessLogger.error(message.toString());
+  public void logError(String message) {
+    publicAccessLogger.error(message);
   }
 
-  public void logInfo(StringBuilder message) {
-    publicAccessLogger.info(message.toString());
+  public void logInfo(String message) {
+    publicAccessLogger.info(message);
   }
 }

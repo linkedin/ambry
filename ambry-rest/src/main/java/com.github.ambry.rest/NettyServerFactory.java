@@ -18,7 +18,7 @@ public class NettyServerFactory implements NioServerFactory {
   private final NettyMetrics nettyMetrics;
   private final RestRequestHandler requestHandler;
   private final PublicAccessLogger publicAccessLogger;
-  private final VIPHealthCheckService vipHealthCheckService;
+  private final RestServerState restServerState;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -27,19 +27,19 @@ public class NettyServerFactory implements NioServerFactory {
    * @param metricRegistry the {@link MetricRegistry} to use.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
-   * @param vipHealthCheckService the {@link VIPHealthCheckService} that can be used to check the health of the system
+   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to VIP health check requests
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, VIPHealthCheckService vipHealthCheckService) {
+      RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
     if (verifiableProperties != null && metricRegistry != null && requestHandler != null && publicAccessLogger != null &&
-        vipHealthCheckService != null) {
+        restServerState != null) {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
       this.requestHandler = requestHandler;
       this.publicAccessLogger = publicAccessLogger;
-      this.vipHealthCheckService = vipHealthCheckService;
+      this.restServerState = restServerState;
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
@@ -55,8 +55,8 @@ public class NettyServerFactory implements NioServerFactory {
       if (publicAccessLogger == null) {
         errorMessage.append(" [PublicAccessLogger] ");
       }
-      if (vipHealthCheckService == null) {
-        errorMessage.append(" [VIPHealthCheckService] ");
+      if (restServerState == null) {
+        errorMessage.append(" [RestServerState] ");
       }
       throw new IllegalArgumentException(errorMessage.toString());
     }
@@ -69,6 +69,6 @@ public class NettyServerFactory implements NioServerFactory {
    */
   @Override
   public NioServer getNioServer() {
-    return new NettyServer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger, vipHealthCheckService);
+    return new NettyServer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger, restServerState);
   }
 }

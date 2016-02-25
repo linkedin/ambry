@@ -19,10 +19,10 @@ import org.slf4j.LoggerFactory;
  * {@link PublicAccessLogger} assists in logging the required information
  */
 public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
-  private PublicAccessLogger publicAccessLogger;
-  private volatile long requestArrivalTimeInMs;
-  private volatile long requestLastChunkArrivalTimeInMs;
-  private volatile long responseFirstChunkStartTimeInMs;
+  private final PublicAccessLogger publicAccessLogger;
+  private long requestArrivalTimeInMs;
+  private long requestLastChunkArrivalTimeInMs;
+  private long responseFirstChunkStartTimeInMs;
   private volatile boolean requestInProgress = false;
   private volatile StringBuilder logMessage;
   private volatile HttpRequest request;
@@ -90,10 +90,6 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
       logMessage.append(request.getUri()).append(", ");
       logHeaders("Request", request, publicAccessLogger.getRequestHeaders());
       logMessage.append(", ");
-
-      // TODO: Fix RPC trace handling
-      // Not the standard way to get rpcTrace, but it's only used for logging here
-      // logMessage.append("Context ").append(MDC.get(TraceDataConstants.MDC_RPCTRACE_KEY)).append(", ");
     } else if (obj instanceof HttpContent) {
       HttpContent httpContent = (HttpContent) obj;
       if (httpContent instanceof LastHttpContent) {
@@ -122,7 +118,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
         if (!HttpHeaders.isTransferEncodingChunked(response)) {
           requestInProgress = false;
           logDurations();
-          publicAccessLogger.logInfo(logMessage);
+          publicAccessLogger.logInfo(logMessage.toString());
         } else {
           this.responseFirstChunkStartTimeInMs = System.currentTimeMillis();
         }
@@ -131,7 +127,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
         if (httpContent instanceof LastHttpContent) {
           requestInProgress = false;
           logDurations();
-          publicAccessLogger.logInfo(logMessage);
+          publicAccessLogger.logInfo(logMessage.toString());
         }
       } else {
         logger.error("Sending response (writeRequested) that is not of type HttpResponse or HttpChunk. " +
@@ -147,12 +143,6 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
     super.write(ctx, msg, promise);
   }
 
-  /**
-   * Calls {@link ChannelHandlerContext#disconnect(io.netty.channel.ChannelPromise)} to forward
-   * to the next {@link ChannelOutboundHandler} in the {@link io.netty.channel.ChannelPipeline}.
-   *
-   * Sub-classes may override this method to change behavior.
-   */
   @Override
   public void disconnect(ChannelHandlerContext ctx, ChannelPromise future)
       throws Exception {
@@ -160,7 +150,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
       requestInProgress = false;
       logDurations();
       logMessage.append(" : Channel disconnected while request in progress.");
-      publicAccessLogger.logError(logMessage);
+      publicAccessLogger.logError(logMessage.toString());
     }
     super.disconnect(ctx, future);
   }
