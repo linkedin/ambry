@@ -1,12 +1,11 @@
 package com.github.ambry.network;
 
 import java.io.IOException;
-import java.util.List;
 
 
 /**
  * An interface that manages all network connections to a set of nodes (host-port). Provides methods to check out and
- * check in connections to the nodes and to send requests and receive responses.
+ * check in connections to the nodes and to destroy them.
  */
 public interface ConnectionManager {
   /**
@@ -20,28 +19,20 @@ public interface ConnectionManager {
       throws IOException;
 
   /**
-   * Check in a previously checked out connection.
+   * Check in a connection. This could be a previously checked out connection or a newly available connection to be
+   * managed by this connection manager.
+   * It is illegal to call this method with an invalid connection id.
    * @param connectionId the id of the previously checked out connection.
    */
   public void checkInConnection(String connectionId);
 
   /**
-   * Destroy the connection associated with the given connectionId.
-   * @param connectionId connection to destroy.
+   * Remove the connection associated with the given connectionId. Calling this method with an invalid connection id
+   * may result in unexpected behavior.
+   * @param connectionId connection to remove.
    */
-  public void destroyConnection(String connectionId);
+  public void removeConnection(String connectionId);
 
-  /**
-   * Get the total number of connections managed by this ConnectionManager.
-   * @return the total number of connections.
-   */
-  public int getTotalConnectionsCount();
-
-  /**
-   * Get the number of connections managed by this ConnectionManager that are available.
-   * @return return the count of available connections.
-   */
-  public int getAvailableConnectionsCount();
   /**
    * Close the ConnectionManager.
    * Any subsequent {@link #checkOutConnection(String, Port)} will result in an exception.

@@ -41,7 +41,7 @@ public class SSLFactory {
   private boolean wantClientAuth;
 
   public SSLFactory(SSLConfig sslConfig)
-      throws Exception {
+      throws GeneralSecurityException, IOException {
 
     this.protocol = sslConfig.sslContextProtocol;
     if (sslConfig.sslContextProvider.length() > 0) {
@@ -160,27 +160,13 @@ public class SSLFactory {
     return sslContext;
   }
 
-  private void createKeyStore(String type, String path, String password, String keyPassword)
-      throws Exception {
-    if (path == null && password != null) {
-      throw new Exception("SSL key store password is not specified.");
-    } else if (path != null && password == null) {
-      throw new Exception("SSL key store is not specified, but key store password is specified.");
-    } else if (path != null && password != null) {
-      this.keystore = new SecurityStore(type, path, password);
-      this.keyPassword = keyPassword;
-    }
+  private void createKeyStore(String type, String path, String password, String keyPassword) {
+    this.keystore = new SecurityStore(type, path, password);
+    this.keyPassword = keyPassword;
   }
 
-  private void createTrustStore(String type, String path, String password)
-      throws Exception {
-    if (path == null && password != null) {
-      throw new Exception("SSL key store password is not specified.");
-    } else if (path != null && password == null) {
-      throw new Exception("SSL key store is not specified, but key store password is specified.");
-    } else if (path != null && password != null) {
-      this.truststore = new SecurityStore(type, path, password);
-    }
+  private void createTrustStore(String type, String path, String password) {
+    this.truststore = new SecurityStore(type, path, password);
   }
 
   private class SecurityStore {

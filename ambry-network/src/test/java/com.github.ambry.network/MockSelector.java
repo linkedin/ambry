@@ -4,8 +4,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.MockTime;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -62,7 +60,7 @@ class MockSelector extends Selector {
     this.sends = sends;
     if (sends != null) {
       for (NetworkSend send : sends) {
-        receives.add(new MockReceive(send.getConnectionId()));
+        receives.add(new NetworkReceive(send.getConnectionId(), new BoundedByteBufferReceive(), new MockTime()));
       }
     }
   }
@@ -129,78 +127,6 @@ class MockSelector extends Selector {
   @Override
   public void close() {
 
-  }
-}
-
-/**
- * A dummy implementation of the {@link Send} interface.
- */
-class MockSend implements Send {
-  private ByteBuffer buf;
-  private int size;
-
-  /**
-   * Construct a MockSend
-   */
-  public MockSend() {
-    buf = ByteBuffer.allocate(16);
-    size = 16;
-  }
-
-  /**
-   * Write the contents of the buffer to the channel.
-   * @param channel The channel into which data needs to be written to
-   * @return the number of bytes written.
-   * @throws IOException if the write encounters an exception.
-   */
-  @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
-    long written = channel.write(buf);
-    return written;
-  }
-
-  /**
-   * Returns if all data has been written out.
-   * @return true if all data has been written out, false otherwise.
-   */
-  @Override
-  public boolean isSendComplete() {
-    return buf.remaining() == 0;
-  }
-
-  /**
-   * The size of the payload in the Send.
-   * @return the size of the payload.
-   */
-  @Override
-  public long sizeInBytes() {
-    return size;
-  }
-}
-
-/**
- * Mocks {@link NetworkReceive} by extending it.
- */
-class MockReceive extends NetworkReceive {
-  String connectionId;
-
-  /**
-   * Construct a MockReceive on the given connection id.
-   * @param connectionId the connection id on which the receive is mocked.
-   */
-  public MockReceive(String connectionId) {
-    super(connectionId, new BoundedByteBufferReceive(), new MockTime());
-    this.connectionId = connectionId;
-  }
-
-  /**
-   * Return the connection id associated with the MockReceive.
-   * @return the connection id of the MockReceive.
-   */
-  @Override
-  public String getConnectionId() {
-    return connectionId;
   }
 }
 

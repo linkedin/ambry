@@ -11,6 +11,8 @@ import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,11 +42,11 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @param clusterMap the {@link ClusterMap} to use to determine where operations should go.
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
    * @throws IllegalArgumentException if any of the arguments are null.
-   * @throws Exception if the SSL configs could not be initialized.
+   * @throws IOException if the SSL configs could not be initialized.
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem)
-      throws Exception {
+      throws GeneralSecurityException, IOException {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
       routerConfig = new RouterConfig(verifiableProperties);
       MetricRegistry registry = clusterMap.getMetricRegistry();
@@ -57,7 +59,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
       sslFactory = sslConfig.sslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
       this.time = SystemTime.getInstance();
       routerNetworkComponentsFactory = new RouterNetworkComponentsFactory(networkMetrics, networkConfig, sslFactory,
-          routerConfig.routerMaxConnectionsPerPortPlainText, routerConfig.routerMaxConnectionsPerPortSsl, time);
+          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
     } else {
       throw new IllegalArgumentException("Null argument passed in");
     }
@@ -75,7 +78,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, routerNetworkComponentsFactory, notificationSystem,
           clusterMap, time);
-    } catch (Exception e) {
+    } catch (IOException e) {
       throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());
     }
   }

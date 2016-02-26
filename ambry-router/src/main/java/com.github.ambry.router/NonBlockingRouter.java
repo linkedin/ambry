@@ -266,15 +266,15 @@ class NonBlockingRouter implements Router {
     private static final int POLL_TIMEOUT_MS = 30;
     private static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
 
+    /**
+     * Constructs an OperationController
+     * @throws IOException if the network components could not be created.
+     */
     OperationController()
         throws IOException {
-      try {
-        RouterNetworkComponents networkComponents = routerNetworkComponentsFactory.getRouterNetworkComponents();
-        selector = networkComponents.getSelector();
-        connectionManager = networkComponents.getConnectionManager();
-      } catch (Exception e) {
-        throw new IOException("Could not create the selector using the given RouterNetworkFactory: " + e);
-      }
+      RouterNetworkComponents networkComponents = routerNetworkComponentsFactory.getRouterNetworkComponents();
+      selector = networkComponents.getSelector();
+      connectionManager = networkComponents.getConnectionManager();
       putManager = new PutManager(routerConfig.routerMaxPutChunkSizeBytes, connectionManager, routerConfig, clusterMap);
       getManager = new GetManager(connectionManager, clusterMap);
       deleteManager = new DeleteManager(connectionManager, clusterMap);
@@ -343,6 +343,7 @@ class NonBlockingRouter implements Router {
         logger.error("Exception while shutting down, forcing shutdown", e);
       }
       connectionManager.close();
+      selector.close();
     }
 
     /**
@@ -382,7 +383,7 @@ class NonBlockingRouter implements Router {
         connectionManager.checkInConnection(connId);
       }
       for (String connId : disconnected) {
-        connectionManager.destroyConnection(connId);
+        connectionManager.removeConnection(connId);
         disconnectedIdsSet.add(connId);
       }
       for (NetworkReceive recv : completedReceives) {

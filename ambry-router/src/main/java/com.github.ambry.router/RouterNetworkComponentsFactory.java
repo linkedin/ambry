@@ -7,6 +7,7 @@ import com.github.ambry.network.NonBlockingConnectionManager;
 import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.Selector;
 import com.github.ambry.utils.Time;
+import java.io.IOException;
 
 
 /**
@@ -31,10 +32,6 @@ class RouterNetworkComponentsFactory {
    */
   RouterNetworkComponentsFactory(NetworkMetrics networkMetrics, NetworkConfig networkConfig, SSLFactory sslFactory,
       int maxConnectionsPerPortPlainText, int maxConnectionsPerPortSsl, Time time) {
-    if (networkMetrics == null || networkConfig == null) {
-      throw new IllegalArgumentException("Invalid inputs passed in, NetworkMetrics: " + networkMetrics + " " +
-          "NetworkConfig: " + networkConfig);
-    }
     this.networkMetrics = networkMetrics;
     this.networkConfig = networkConfig;
     this.sslFactory = sslFactory;
@@ -46,10 +43,10 @@ class RouterNetworkComponentsFactory {
   /**
    * Construct and return a new {@link RouterNetworkComponents} instance.
    * @return return a new {@link RouterNetworkComponents} instance.
-   * @throws Exception if either the {@link Selector} or the {@link ConnectionManager} could not be constructed.
+   * @throws IOException if either the {@link Selector} or the {@link ConnectionManager} could not be constructed.
    */
   RouterNetworkComponents getRouterNetworkComponents()
-      throws Exception {
+      throws IOException {
     Selector selector = new Selector(networkMetrics, time, sslFactory);
     ConnectionManager connectionManager =
         new NonBlockingConnectionManager(selector, networkConfig, maxConnectionsPerPortPlainText,
@@ -62,8 +59,8 @@ class RouterNetworkComponentsFactory {
  * A composite class to store the network components required by the Router, together with getters and setters.
  */
 class RouterNetworkComponents {
-  final Selector selector;
-  final ConnectionManager connectionManager;
+  private final Selector selector;
+  private final ConnectionManager connectionManager;
 
   /**
    * Construct a RouterNetworkComponents with the given {@link Selector} and {@link ConnectionManager}

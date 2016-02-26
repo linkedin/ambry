@@ -16,17 +16,16 @@ import org.junit.Test;
 
 /**
  * Tests the {@link NonBlockingConnectionManager}. Constructs one using a {@link MockSelector}. Checks out and
- * checks in connections and ensures that the pool limit is honored. Also tests sending, receiving,
- * destroying and closing the connection manager.
- * @throws IOException
+ * checks in connections and ensures that the pool limit is honored. Also tests removing connections and closing the
+ * connection manager.
  */
 public class NonBlockingConnectionManagerTest {
-  MockSelector selector;
-  NonBlockingConnectionManager connectionManager;
-  VerifiableProperties verifiableProperties;
-  RouterConfig routerConfig;
-  NetworkConfig networkConfig;
-  Time time;
+  private MockSelector selector;
+  private NonBlockingConnectionManager connectionManager;
+  private VerifiableProperties verifiableProperties;
+  private RouterConfig routerConfig;
+  private NetworkConfig networkConfig;
+  private Time time;
 
   @Before
   public void initialize()
@@ -34,8 +33,8 @@ public class NonBlockingConnectionManagerTest {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "DC1");
-    props.setProperty("router.max.connections.per.port.plain.text", "3");
-    props.setProperty("router.max.connections.per.port.ssl", "2");
+    props.setProperty("router.scaling.unit.max.connections.per.port.plain.text", "3");
+    props.setProperty("router.scaling.unit.max.connections.per.port.ssl", "2");
     verifiableProperties = new VerifiableProperties((props));
     routerConfig = new RouterConfig(verifiableProperties);
     networkConfig = new NetworkConfig(verifiableProperties);
@@ -48,9 +47,9 @@ public class NonBlockingConnectionManagerTest {
    */
   @Test
   public void testNonBlockingConnectionManagerInstantiation() {
-    connectionManager =
-        new NonBlockingConnectionManager(selector, networkConfig, routerConfig.routerMaxConnectionsPerPortPlainText,
-            routerConfig.routerMaxConnectionsPerPortSsl, time);
+    connectionManager = new NonBlockingConnectionManager(selector, networkConfig,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
   }
 
   /**
@@ -59,65 +58,68 @@ public class NonBlockingConnectionManagerTest {
   @Test
   public void testNonBlockingConnectionManagerInstantiationBadInputs() {
     try {
-      connectionManager =
-          new NonBlockingConnectionManager(null, networkConfig, routerConfig.routerMaxConnectionsPerPortPlainText,
-              routerConfig.routerMaxConnectionsPerPortSsl, time);
-      Assert.fail();
+      connectionManager = new NonBlockingConnectionManager(null, networkConfig,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
+      Assert.fail("NonBlockingConnectionManager should not get constructed with a null Selector");
     } catch (IllegalArgumentException e) {
     }
 
     try {
       connectionManager =
-          new NonBlockingConnectionManager(selector, null, routerConfig.routerMaxConnectionsPerPortPlainText,
-              routerConfig.routerMaxConnectionsPerPortSsl, time);
-      Assert.fail();
+          new NonBlockingConnectionManager(selector, null, routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+              routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
+      Assert.fail("NonBlockingConnectionManager should not get constructed with a null NetworkConfig");
     } catch (IllegalArgumentException e) {
     }
   }
 
   /**
    * Tests honoring of pool limits.
-   * @throws Exception
+   * @throws IOException
    */
   @Test
   public void testNonBlockingConnectionManager()
-      throws Exception {
-    connectionManager =
-        new NonBlockingConnectionManager(selector, networkConfig, routerConfig.routerMaxConnectionsPerPortPlainText,
-            routerConfig.routerMaxConnectionsPerPortSsl, time);
+      throws IOException {
+    connectionManager = new NonBlockingConnectionManager(selector, networkConfig,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
     // When no connections were ever made to a host:port, connectionManager should return null, but
     // initiate connections.
+    int poolCountPlain = routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText;
+    int poolCountSSL = routerConfig.routerScalingUnitMaxConnectionsPerPortSsl;
+    int limit = poolCountPlain + poolCountSSL;
     Port port1 = new Port(100, PortType.PLAINTEXT);
     for (int i = 0; i < 4; i++) {
       Assert.assertNull(connectionManager.checkOutConnection("host1", port1));
     }
-    Assert.assertEquals(3, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(poolCountPlain, connectionManager.getTotalConnectionsCount());
     Assert.assertEquals(0, connectionManager.getAvailableConnectionsCount());
 
     Port port2 = new Port(200, PortType.SSL);
     for (int i = 0; i < 4; i++) {
       Assert.assertNull(connectionManager.checkOutConnection("host2", port2));
     }
-    Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getTotalConnectionsCount());
     Assert.assertEquals(0, connectionManager.getAvailableConnectionsCount());
 
     selector.poll(0, null);
     for (String conn : selector.connected()) {
       connectionManager.checkInConnection(conn);
     }
-    Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
-    Assert.assertEquals(5, connectionManager.getAvailableConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getAvailableConnectionsCount());
 
     String conn = connectionManager.checkOutConnection("host2", port2);
     Assert.assertNotNull(conn);
-    Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
-    Assert.assertEquals(4, connectionManager.getAvailableConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit - 1, connectionManager.getAvailableConnectionsCount());
 
     // Check this connection id back in. This should be returned in a future
     // checkout.
     connectionManager.checkInConnection(conn);
-    Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
-    Assert.assertEquals(5, connectionManager.getAvailableConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getAvailableConnectionsCount());
 
     String checkedInConn = conn;
     Set<String> connIds = new HashSet<String>();
@@ -126,8 +128,8 @@ public class NonBlockingConnectionManagerTest {
       Assert.assertNotNull(conn);
       connIds.add(conn);
     }
-    Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
-    Assert.assertEquals(3, connectionManager.getAvailableConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit - 2, connectionManager.getAvailableConnectionsCount());
 
     // Make sure that one of the checked out connection is the same as the previously checked in connection.
     Assert.assertTrue(connIds.contains(checkedInConn));
@@ -135,46 +137,54 @@ public class NonBlockingConnectionManagerTest {
     // Now that the pool has been exhausted, checkOutConnection should return null.
     Assert.assertNull(connectionManager.checkOutConnection("host2", port2));
     //And it should not have initiated a new connection.
-    Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
-    Assert.assertEquals(3, connectionManager.getAvailableConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit - 2, connectionManager.getAvailableConnectionsCount());
 
     // test invalid connectionId
     try {
       connectionManager.checkInConnection("invalid");
-      Assert.assertFalse(true);
-    } catch (Exception e) {
+      Assert.fail("Invalid connections should not get checked in.");
+    } catch (IllegalArgumentException e) {
     }
 
-    // destroying an invalid connection does not throw an exception (as the selector just adds these to a metric),
-    // but should not affect the counts or the pool limit;
-    connectionManager.destroyConnection("invalid");
+    try {
+      connectionManager.removeConnection("invalid");
+      Assert.fail("Removing invalid connections should not succeed.");
+    } catch (IllegalArgumentException e) {
+    }
 
-    // test destroy
+    // test connection removal.
     String conn11 = connectionManager.checkOutConnection("host1", port1);
     Assert.assertNotNull(conn11);
     String conn12 = connectionManager.checkOutConnection("host1", port1);
     Assert.assertNotNull(conn12);
     connectionManager.checkInConnection(conn11);
     // Remove a checked out connection.
-    connectionManager.destroyConnection(conn12);
+    connectionManager.removeConnection(conn12);
     // Remove a checked in connection.
-    connectionManager.destroyConnection(conn11);
+    connectionManager.removeConnection(conn11);
 
-    // Remove the same connection again, which should work. We need this behavior as connections can get disconnected
-    // on their own.
-    connectionManager.destroyConnection(conn11);
-    Assert.assertEquals(3, connectionManager.getTotalConnectionsCount());
-    Assert.assertEquals(1, connectionManager.getAvailableConnectionsCount());
-
-    for (int i = 0; i < 1; i++) {
-      Assert.assertNotNull(connectionManager.checkOutConnection("host1", port1));
+    // Remove the same connection again, which should throw.
+    try {
+      connectionManager.removeConnection(conn11);
+      Assert.fail("Removing the same connection twice should not succeed.");
+    } catch (IllegalArgumentException e) {
     }
+    Assert.assertEquals(limit - 2, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit - 4, connectionManager.getAvailableConnectionsCount());
+
+    Assert.assertNotNull(connectionManager.checkOutConnection("host1", port1));
     for (int i = 0; i < 2; i++) {
       Assert.assertNull(connectionManager.checkOutConnection("host1", port1));
     }
-    Assert.assertEquals(5, connectionManager.getTotalConnectionsCount());
+    Assert.assertEquals(limit, connectionManager.getTotalConnectionsCount());
     Assert.assertEquals(0, connectionManager.getAvailableConnectionsCount());
     connectionManager.close();
+    try {
+      connectionManager.checkOutConnection("host1", port1);
+      Assert.fail("Attempting an operation on a closed connection manager should throw");
+    } catch (IllegalStateException e) {
+    }
   }
 }
 
