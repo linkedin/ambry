@@ -23,6 +23,7 @@ public class PublicAccessLogRequestHandlerTest {
       "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For";
   private String responseHeaders = "Location,x-ambry-blob-size";
   private final String invalidHeaderKeyPrefix = "headerKey";
+  private final String disconnectUri = "disconnect";
 
   /**
    * Sets up the mock public access logger that {@link PublicAccessLogRequestHandler} can use.
@@ -61,12 +62,12 @@ public class PublicAccessLogRequestHandlerTest {
    * @throws IOException
    */
   @Test
-  public void requestHandleOnDisonnectTest()
+  public void requestHandleOnDisconnectTest()
       throws IOException {
     // disonnecting the embedded channel, calls close of PubliAccessLogRequestHandler
-    doRequestHandleTest(HttpMethod.POST, "disconnect", true);
-    doRequestHandleTest(HttpMethod.GET, "disconnect", true);
-    doRequestHandleTest(HttpMethod.DELETE, "disconnect", true);
+    doRequestHandleTest(HttpMethod.POST, disconnectUri, true);
+    doRequestHandleTest(HttpMethod.GET, disconnectUri, true);
+    doRequestHandleTest(HttpMethod.DELETE, disconnectUri, true);
   }
 
   // requestHandleWithGoodInputTest() helpers
@@ -91,7 +92,7 @@ public class PublicAccessLogRequestHandlerTest {
         headers.add(RestUtils.Headers.BLOB_SIZE, size);
       }
       channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri, headers));
-      if (uri.equals("disconnect")) {
+      if (uri.equals(disconnectUri)) {
         channel.disconnect();
       } else {
         channel.writeInbound(new DefaultLastHttpContent());
