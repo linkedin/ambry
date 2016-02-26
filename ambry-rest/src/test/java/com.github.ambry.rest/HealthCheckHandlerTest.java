@@ -22,7 +22,7 @@ public class HealthCheckHandlerTest {
   private RestServerState restServerState;
   private final String healthCheckUri = "/healthCheck";
   private final String goodStr = "GOOD";
-  private final String badStr  = "BAD";
+  private final String badStr = "BAD";
 
   public HealthCheckHandlerTest() {
     this.restServerState = new RestServerState(healthCheckUri);
@@ -81,8 +81,7 @@ public class HealthCheckHandlerTest {
         (isServiceUp) ? HttpResponseStatus.OK : HttpResponseStatus.SERVICE_UNAVAILABLE;
     assertEquals("Unexpected response status", httpResponseStatus, response.getStatus());
     String expectedStr = (isServiceUp) ? goodStr : badStr;
-    assertEquals("Unexpected content", expectedStr ,
-        RestTestUtils.getContentString(response));
+    assertEquals("Unexpected content", expectedStr, RestTestUtils.getContentString(response));
     assertTrue("Channel is closed", channel.isOpen());
     restServerState.markServiceDown();
     channel.close();
@@ -120,8 +119,7 @@ public class HealthCheckHandlerTest {
       responseStatus = HttpResponseStatus.ACCEPTED;
     }
     assertEquals("Unexpected response status", responseStatus, response.getStatus());
-    assertEquals("Unexpected content", httpMethod.toString(),
-        RestTestUtils.getContentString(response));
+    assertEquals("Unexpected content", httpMethod.toString(), RestTestUtils.getContentString(response));
     assertFalse("Channel not closed", channel.isOpen());
     channel.close();
   }

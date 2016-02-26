@@ -45,16 +45,28 @@ public class PublicAccessLogRequestHandlerTest {
   }
 
   /**
-   * Tests for the bad input request handling flow.
+   * Tests for the request handling flow for close
    * @throws IOException
    */
   @Test
-  public void requestHandleWithBadInputTest()
+  public void requestHandleOnCloseTest()
       throws IOException {
-    /*doRequestHandleTest(HttpMethod.POST, "disconnect", true);
-    doRequestHandleTest(HttpMethod.GET, "GET", true);
-    doRequestHandleTest(HttpMethod.GET, MockBlobStorageService.ECHO_REST_METHOD, true);
-    doRequestHandleTest(HttpMethod.DELETE, "DELETE", true);*/
+    doRequestHandleTest(HttpMethod.POST, "close", true);
+    doRequestHandleTest(HttpMethod.GET, "close", true);
+    doRequestHandleTest(HttpMethod.DELETE, "close", true);
+  }
+
+  /**
+   * Tests for the request handling flow on disconnect
+   * @throws IOException
+   */
+  @Test
+  public void requestHandleOnDisonnectTest()
+      throws IOException {
+    // disonnecting the embedded channel, calls close of PubliAccessLogRequestHandler
+    doRequestHandleTest(HttpMethod.POST, "disconnect", true);
+    doRequestHandleTest(HttpMethod.GET, "disconnect", true);
+    doRequestHandleTest(HttpMethod.DELETE, "disconnect", true);
   }
 
   // requestHandleWithGoodInputTest() helpers
@@ -79,20 +91,19 @@ public class PublicAccessLogRequestHandlerTest {
         headers.add(RestUtils.Headers.BLOB_SIZE, size);
       }
       channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri, headers));
-      channel.writeInbound(new DefaultLastHttpContent());
+      if (uri.equals("disconnect")) {
+        channel.disconnect();
+      } else {
+        channel.writeInbound(new DefaultLastHttpContent());
+      }
       String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
 
       // verify remote host, http method and uri
-      String subString = "Info:embedded" + " " + httpMethod + " " + uri;
-      if (!testErrorCase) {
-        Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
-            lastLogEntry.startsWith(subString));
-      } else {
-        Assert.assertFalse("Public Access log entry have unexpected remote host/method/uri ",
-            lastLogEntry.startsWith(subString));
-      }
+      String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpMethod + " " + uri;
+      Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
+          lastLogEntry.startsWith(subString));
       // verify headers
-      verifyPublicAccessLogEntryForHeaders(lastLogEntry, headers, httpMethod, !testErrorCase);
+      verifyPublicAccessLogEntryForHeaders(lastLogEntry, headers, httpMethod);
 
       // verify response
       subString = "Response (";
@@ -111,7 +122,11 @@ public class PublicAccessLogRequestHandlerTest {
             lastLogEntry.contains(subString));
       } else {
         Assert.assertTrue("Public Access log entry doesn't have error set correctly ",
-            lastLogEntry.contains(": Channel disconnected while request in progress."));
+            lastLogEntry.contains(": Channel closed while request in progress."));
+      }
+      if (testErrorCase) {
+        // during error cases, the channel would have been closed
+        channel = createChannel();
       }
     }
     channel.close();
@@ -175,21 +190,15 @@ public class PublicAccessLogRequestHandlerTest {
    * @param logEntry the public access log entry
    * @param headers expected headers
    * @param httpMethod HttpMethod type
-   * @param expected true, if the headers are expected, false otherwise
    */
-  private void verifyPublicAccessLogEntryForHeaders(String logEntry, HttpHeaders headers, HttpMethod httpMethod,
-      boolean expected) {
+  private void verifyPublicAccessLogEntryForHeaders(String logEntry, HttpHeaders headers, HttpMethod httpMethod) {
     Iterator<Map.Entry<String, String>> itr = headers.iterator();
     while (itr.hasNext()) {
       Map.Entry<String, String> entry = itr.next();
       if (!entry.getKey().startsWith(invalidHeaderKeyPrefix)) {
         if (httpMethod == HttpMethod.GET && !entry.getKey().equals(HttpHeaders.Names.CONTENT_TYPE)) {
           String subString = "[" + entry.getKey() + "=" + entry.getValue() + "]";
-          if (expected) {
-            Assert.assertTrue("Public Access log entry does not have expected header", logEntry.contains(subString));
-          } else {
-            Assert.assertFalse("Public Access log entry have unexpected header", logEntry.contains(subString));
-          }
+          Assert.assertTrue("Public Access log entry does not have expected header", logEntry.contains(subString));
         }
       }
     }

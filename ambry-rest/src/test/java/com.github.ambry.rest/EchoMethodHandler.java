@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 public class EchoMethodHandler extends ChannelDuplexHandler {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final static String disconnect_Uri = "disconnect";
+  private final static String close_Uri = "close";
   private FullHttpResponse response;
   private String requestUri;
 
@@ -41,16 +42,18 @@ public class EchoMethodHandler extends ChannelDuplexHandler {
           new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, httpResponseStatus, Unpooled.wrappedBuffer(methodBytes));
       HttpHeaders.setContentLength(response, methodBytes.length);
       if (request.getMethod() == HttpMethod.POST) {
-        HttpHeaders
-            .setHeader(response, RestUtils.Headers.LOCATION, request.headers().get(RestUtils.Headers.LOCATION));
+        HttpHeaders.setHeader(response, RestUtils.Headers.LOCATION, request.headers().get(RestUtils.Headers.LOCATION));
         HttpHeaders
             .setHeader(response, RestUtils.Headers.BLOB_SIZE, request.headers().get(RestUtils.Headers.BLOB_SIZE));
       }
     } else if (obj instanceof LastHttpContent) {
-      if(requestUri.equals(disconnect_Uri)) {
+      if (requestUri.equals(disconnect_Uri)) {
         ReferenceCountUtil.release(obj);
         disconnect(ctx, ctx.newPromise());
-      } else{
+      } else if (requestUri.equals(close_Uri)) {
+        ReferenceCountUtil.release(obj);
+        close(ctx, ctx.newPromise());
+      } else {
         ctx.writeAndFlush(response);
       }
     }

@@ -159,4 +159,15 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
     }
     super.disconnect(ctx, future);
   }
+
+  @Override
+  public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
+    if (requestInProgress) {
+      requestInProgress = false;
+      logDurations();
+      logMessage.append(" : Channel closed while request in progress.");
+      publicAccessLogger.logError(logMessage.toString());
+    }
+    super.close(ctx, future);
+  }
 }
