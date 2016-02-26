@@ -1,12 +1,15 @@
 package com.github.ambry.rest;
 
 import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import org.junit.Test;
 
 
 /**
@@ -30,13 +33,14 @@ public class RestTestUtils {
 
   /**
    * Converts the content in {@code httpContent} to a human readable string.
+   * @param httpContent the {@link HttpContent} whose content needs to be converted to a human readable string.
    * @return content that is inside {@code httpContent} as a human readable string.
-   * @throws java.io.IOException
+   * @throws IOException
    */
-  public static String getContentString(byte[] data)
+  public static String getContentString(HttpContent httpContent)
       throws IOException {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
-    out.write(data, 0, data.length);
-    return out.toString("UTF-8");
+    httpContent.content().readBytes(out, httpContent.content().readableBytes());
+    return out.toString(StandardCharsets.UTF_8.name());
   }
 }

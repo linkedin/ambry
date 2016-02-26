@@ -2,7 +2,6 @@ package com.github.ambry.rest;
 
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -27,7 +26,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private volatile StringBuilder logMessage;
   private volatile HttpRequest request;
 
-  private static final long INVALID_CHUNK_TIME = -1;
+  private static final long INIT_TIME = -1;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   public PublicAccessLogRequestHandler(PublicAccessLogger publicAccessLogger) {
@@ -59,11 +58,11 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private void logDurations() {
     long nowMs = System.currentTimeMillis();
     logMessage.append("duration=").append(nowMs - requestArrivalTimeInMs).append("ms ");
-    if (requestLastChunkArrivalTimeInMs != INVALID_CHUNK_TIME) {
+    if (requestLastChunkArrivalTimeInMs != INIT_TIME) {
       logMessage.append("(chunked request receive=").append(requestLastChunkArrivalTimeInMs - requestArrivalTimeInMs)
           .append("ms) ");
     }
-    if (responseFirstChunkStartTimeInMs != INVALID_CHUNK_TIME) {
+    if (responseFirstChunkStartTimeInMs != INIT_TIME) {
       logMessage.append("(chunked response send=").append(nowMs - responseFirstChunkStartTimeInMs).append("ms) ");
     }
   }
@@ -81,8 +80,8 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
       this.requestInProgress = true;
       this.logMessage = new StringBuilder();
       this.requestArrivalTimeInMs = System.currentTimeMillis();
-      this.requestLastChunkArrivalTimeInMs = INVALID_CHUNK_TIME;
-      this.responseFirstChunkStartTimeInMs = INVALID_CHUNK_TIME;
+      this.requestLastChunkArrivalTimeInMs = INIT_TIME;
+      this.responseFirstChunkStartTimeInMs = INIT_TIME;
       this.request = (HttpRequest) obj;
 
       logMessage.append(ctx.channel().remoteAddress()).append(" ");
@@ -145,8 +144,8 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
    */
   private void reset() {
     requestInProgress = false;
-    responseFirstChunkStartTimeInMs = INVALID_CHUNK_TIME;
-    requestLastChunkArrivalTimeInMs = INVALID_CHUNK_TIME;
+    responseFirstChunkStartTimeInMs = INIT_TIME;
+    requestLastChunkArrivalTimeInMs = INIT_TIME;
   }
 
   @Override

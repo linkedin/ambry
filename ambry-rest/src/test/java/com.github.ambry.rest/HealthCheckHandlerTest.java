@@ -5,6 +5,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -19,45 +20,45 @@ import static org.junit.Assert.assertTrue;
 
 public class HealthCheckHandlerTest {
   private RestServerState restServerState;
-  private final String healthCheckUri = "/healthCheckUri";
-  private final byte[] goodBytes = "GOOD".getBytes();
-  private final byte[] badBytes = "BAD".getBytes();
+  private final String healthCheckUri = "/healthCheck";
+  private final String goodStr = "GOOD";
+  private final String badStr  = "BAD";
 
   public HealthCheckHandlerTest() {
     this.restServerState = new RestServerState(healthCheckUri);
   }
 
   /**
-   * Tests for the common case request handling flow for VIP requests.
+   * Tests for the common case request handling flow for health check requests.
    * @throws java.io.IOException
    */
   @Test
-  public void requestHandleWithVIPRequestTest()
+  public void requestHandleWithHealthCheckRequestTest()
       throws IOException {
-    testVIPRequest(HttpMethod.POST, healthCheckUri, true);
-    testVIPRequest(HttpMethod.POST, healthCheckUri, false);
+    testHealthCheckRequest(HttpMethod.POST, healthCheckUri, true);
+    testHealthCheckRequest(HttpMethod.POST, healthCheckUri, false);
   }
 
   /**
-   * Tests non VIP requests handling
+   * Tests non health check requests handling
    * @throws java.io.IOException
    */
   @Test
-  public void requestHandleWithNonVIPRequestTest()
+  public void requestHandleWithNonHealthCheckRequestTest()
       throws IOException {
-    testNonVIPRequest(HttpMethod.POST, "POST");
-    testNonVIPRequest(HttpMethod.GET, "GET");
-    testNonVIPRequest(HttpMethod.GET, MockBlobStorageService.ECHO_REST_METHOD);
-    testNonVIPRequest(HttpMethod.DELETE, "DELETE");
+    testNonHealthCheckRequest(HttpMethod.POST, "POST");
+    testNonHealthCheckRequest(HttpMethod.GET, "GET");
+    testNonHealthCheckRequest(HttpMethod.GET, MockBlobStorageService.ECHO_REST_METHOD);
+    testNonHealthCheckRequest(HttpMethod.DELETE, "DELETE");
   }
 
   /**
-   * Does a test to see that request handling with good input succeeds.
+   * Does a test to see that a health check request results in expected response from the health check handler
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
    * @throws IOException
    */
-  private void testVIPRequest(HttpMethod httpMethod, String uri, boolean isServiceUp)
+  private void testHealthCheckRequest(HttpMethod httpMethod, String uri, boolean isServiceUp)
       throws IOException {
     EmbeddedChannel channel = createChannel();
     Random random = new Random();
@@ -79,21 +80,21 @@ public class HealthCheckHandlerTest {
     HttpResponseStatus httpResponseStatus =
         (isServiceUp) ? HttpResponseStatus.OK : HttpResponseStatus.SERVICE_UNAVAILABLE;
     assertEquals("Unexpected response status", httpResponseStatus, response.getStatus());
-    byte[] expectedBytes = (isServiceUp) ? goodBytes : badBytes;
-    assertEquals("Unexpected content", RestTestUtils.getContentString(expectedBytes),
-        RestTestUtils.getContentString(response.content().array()));
+    String expectedStr = (isServiceUp) ? goodStr : badStr;
+    assertEquals("Unexpected content", expectedStr ,
+        RestTestUtils.getContentString(response));
     assertTrue("Channel is closed", channel.isOpen());
     restServerState.markServiceDown();
     channel.close();
   }
 
   /**
-   * Does a test to see that request handling with good input succeeds.
+   * Does a test to see that a non health check request results in expected responses
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
    * @throws IOException
    */
-  private void testNonVIPRequest(HttpMethod httpMethod, String uri)
+  private void testNonHealthCheckRequest(HttpMethod httpMethod, String uri)
       throws IOException {
     EmbeddedChannel channel = createChannel();
     Random random = new Random();
@@ -120,7 +121,7 @@ public class HealthCheckHandlerTest {
     }
     assertEquals("Unexpected response status", responseStatus, response.getStatus());
     assertEquals("Unexpected content", httpMethod.toString(),
-        RestTestUtils.getContentString(response.content().array()));
+        RestTestUtils.getContentString(response));
     assertFalse("Channel not closed", channel.isOpen());
     channel.close();
   }

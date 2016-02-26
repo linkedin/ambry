@@ -20,7 +20,7 @@ import org.junit.Test;
 public class PublicAccessLogRequestHandlerTest {
   private MockPublicAccessLogger publicAccessLogger = null;
   private String requestHeaders =
-      "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For";
+      "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For";
   private String responseHeaders = "Location,x-ambry-blob-size";
   private final String invalidHeaderKeyPrefix = "headerKey";
 
@@ -51,7 +51,7 @@ public class PublicAccessLogRequestHandlerTest {
   @Test
   public void requestHandleWithBadInputTest()
       throws IOException {
-    /*doRequestHandleTest(HttpMethod.POST, "POST", true);
+    /*doRequestHandleTest(HttpMethod.POST, "disconnect", true);
     doRequestHandleTest(HttpMethod.GET, "GET", true);
     doRequestHandleTest(HttpMethod.GET, MockBlobStorageService.ECHO_REST_METHOD, true);
     doRequestHandleTest(HttpMethod.DELETE, "DELETE", true);*/
@@ -79,11 +79,7 @@ public class PublicAccessLogRequestHandlerTest {
         headers.add(RestUtils.Headers.BLOB_SIZE, size);
       }
       channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri, headers));
-      if (testErrorCase) {
-        channel.disconnect();
-      } else {
-        channel.writeInbound(new DefaultLastHttpContent());
-      }
+      channel.writeInbound(new DefaultLastHttpContent());
       String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
 
       // verify remote host, http method and uri
@@ -166,7 +162,6 @@ public class PublicAccessLogRequestHandlerTest {
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
     headers.add(RestUtils.Headers.CONTENT_TYPE, "content-type1");
     headers.add(RestUtils.Headers.OWNER_ID, "ownerId1");
-    headers.add(RestUtils.Headers.AMBRY_CLIENT_HEADER, "ambry-client-header1");
     headers.add(RestUtils.Headers.TTL, "ttl1");
     headers.add(RestUtils.Headers.PRIVATE, "private1");
     headers.add(RestUtils.Headers.SERVICE_ID, "serviceId1");
@@ -191,7 +186,7 @@ public class PublicAccessLogRequestHandlerTest {
         if (httpMethod == HttpMethod.GET && !entry.getKey().equals(HttpHeaders.Names.CONTENT_TYPE)) {
           String subString = "[" + entry.getKey() + "=" + entry.getValue() + "]";
           if (expected) {
-            Assert.assertTrue("Public Access log entry doesnt have expected header", logEntry.contains(subString));
+            Assert.assertTrue("Public Access log entry does not have expected header", logEntry.contains(subString));
           } else {
             Assert.assertFalse("Public Access log entry have unexpected header", logEntry.contains(subString));
           }

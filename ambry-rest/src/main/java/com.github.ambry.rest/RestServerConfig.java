@@ -71,7 +71,7 @@ class RestServerConfig {
    */
   @Config("rest.server.public.access.log.request.headers")
   @Default(
-      "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For")
+      "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For")
   public final String restServerPublicAccessLogRequestHeaders;
 
   /**

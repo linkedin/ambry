@@ -72,10 +72,10 @@ public class NettyResponseChannelTest {
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     // content echoed back.
-    String returnedContent = getContentString((HttpContent) channel.readOutbound());
+    String returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
     assertEquals("Content does not match with expected content", content, returnedContent);
     // last content echoed back.
-    returnedContent = getContentString((HttpContent) channel.readOutbound());
+    returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
     assertEquals("Content does not match with expected content", lastContent, returnedContent);
     assertFalse("Channel not closed on the server", channel.isActive());
   }
@@ -201,13 +201,13 @@ public class NettyResponseChannelTest {
     // content echoed back.
     StringBuilder returnedContent = new StringBuilder();
     while (returnedContent.length() < content.length()) {
-      returnedContent.append(getContentString((HttpContent) channel.readOutbound()));
+      returnedContent.append(RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
     }
     assertEquals("Content does not match with expected content", content, returnedContent.toString());
     // last content echoed back.
     StringBuilder returnedLastContent = new StringBuilder();
     while (returnedLastContent.length() < lastContent.length()) {
-      returnedLastContent.append(getContentString((HttpContent) channel.readOutbound()));
+      returnedLastContent.append(RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
     }
     assertEquals("Content does not match with expected content", lastContent, returnedLastContent.toString());
     assertFalse("Channel not closed on the server", channel.isActive());
@@ -285,19 +285,6 @@ public class NettyResponseChannelTest {
     ChunkedWriteHandler chunkedWriteHandler = new ChunkedWriteHandler();
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
     return new EmbeddedChannel(chunkedWriteHandler, processor);
-  }
-
-  /**
-   * Converts the content in {@link HttpContent} to a human readable string.
-   * @param httpContent the content that needs to be converted to a human readable string.
-   * @return {@code httpContent} as a human readable string.
-   * @throws IOException
-   */
-  private String getContentString(HttpContent httpContent)
-      throws IOException {
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    httpContent.content().readBytes(out, httpContent.content().readableBytes());
-    return out.toString("UTF-8");
   }
 
   // onResponseCompleteWithExceptionTest() helpers

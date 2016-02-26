@@ -145,8 +145,8 @@ class NettyServerDeployer implements Runnable {
               // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
               // to go here.
               .addLast("codec", new HttpServerCodec())
-                  // for VIP request handling
-              .addLast("VIPRequestHandler", new HealthCheckHandler(restServerState))
+                  // for health check request handling
+              .addLast("HealthCheckHandler", new HealthCheckHandler(restServerState))
                   // for public access logging
               .addLast("PublicAccessLogHandler",
                   new PublicAccessLogRequestHandler(publicAccessLogger))

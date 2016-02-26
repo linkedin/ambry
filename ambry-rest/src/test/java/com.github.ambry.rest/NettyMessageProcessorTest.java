@@ -144,19 +144,6 @@ public class NettyMessageProcessorTest {
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 
-  /**
-   * Converts the content in {@code httpContent} to a human readable string.
-   * @param httpContent the {@link HttpContent} whose content needs to be converted to a human readable string.
-   * @return content that is inside {@code httpContent} as a human readable string.
-   * @throws IOException
-   */
-  private String getContentString(HttpContent httpContent)
-      throws IOException {
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    httpContent.content().readBytes(out, httpContent.content().readableBytes());
-    return out.toString("UTF-8");
-  }
-
   // requestHandleWithGoodInputTest() helpers
 
   /**
@@ -179,7 +166,7 @@ public class NettyMessageProcessorTest {
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     // MockBlobStorageService echoes the RestMethod.
-    assertEquals("Unexpected content", restMethod.toString(), getContentString((HttpContent) channel.readOutbound()));
+    assertEquals("Unexpected content", restMethod.toString(), RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
     assertFalse("Channel not closed", channel.isOpen());
   }
 
