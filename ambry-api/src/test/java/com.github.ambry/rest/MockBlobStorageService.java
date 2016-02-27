@@ -156,8 +156,9 @@ public class MockBlobStorageService implements BlobStorageService {
       shouldProceed = false;
       ReadableStreamChannel response = null;
       Exception exception = null;
-      if (ECHO_REST_METHOD.equals(uri)) {
-        ByteBuffer buffer = ByteBuffer.wrap(restRequest.getRestMethod().toString().getBytes());
+      if (uri.startsWith(ECHO_REST_METHOD)) {
+        String responseStr = restRequest.getRestMethod().toString() + uri.substring(ECHO_REST_METHOD.length());
+        ByteBuffer buffer = ByteBuffer.wrap(responseStr.getBytes());
         response = new ByteBufferRSC(buffer);
       } else if (THROW_RUNTIME_EXCEPTION.equals(uri)) {
         throw new RuntimeException(THROW_RUNTIME_EXCEPTION);

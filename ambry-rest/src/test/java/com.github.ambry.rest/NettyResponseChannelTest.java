@@ -34,12 +34,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -64,20 +62,29 @@ public class NettyResponseChannelTest {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
     EmbeddedChannel channel = createEmbeddedChannel();
-    channel.writeInbound(createRequest(HttpMethod.POST, "/"));
-    channel.writeInbound(createContent(content, false));
-    channel.writeInbound(createContent(lastContent, true));
+    AtomicLong requestIdGenerator = new AtomicLong(0);
 
-    // first outbound has to be response.
-    HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-    // content echoed back.
-    String returnedContent = getContentString((HttpContent) channel.readOutbound());
-    assertEquals("Content does not match with expected content", content, returnedContent);
-    // last content echoed back.
-    returnedContent = getContentString((HttpContent) channel.readOutbound());
-    assertEquals("Content does not match with expected content", lastContent, returnedContent);
-    assertFalse("Channel not closed on the server", channel.isActive());
+    final int ITERATIONS = 5;
+    for (int i = 0; i < 5; i++) {
+      boolean isKeepAlive = i != (ITERATIONS - 1);
+      String contentToSend = content + requestIdGenerator.getAndIncrement();
+      HttpRequest httpRequest = createRequest(HttpMethod.POST, "/");
+      HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
+      channel.writeInbound(httpRequest);
+      channel.writeInbound(createContent(contentToSend, false));
+      channel.writeInbound(createContent(lastContent, true));
+      // first outbound has to be response.
+      HttpResponse response = (HttpResponse) channel.readOutbound();
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+      // content echoed back.
+      String returnedContent = getContentString((HttpContent) channel.readOutbound());
+      assertEquals("Content does not match with expected content", contentToSend, returnedContent);
+      // last content echoed back.
+      returnedContent = getContentString((HttpContent) channel.readOutbound());
+      assertEquals("Content does not match with expected content", lastContent, returnedContent);
+      assertTrue("Did not receive end marker", channel.readOutbound() instanceof LastHttpContent);
+      assertEquals("Unexpected channel state on the server", isKeepAlive, channel.isActive());
+    }
   }
 
   /**
@@ -240,6 +247,7 @@ public class NettyResponseChannelTest {
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.getStatus());
+    assertFalse("Channel not closed on the server", channel.isActive());
   }
 
   /**
@@ -253,6 +261,7 @@ public class NettyResponseChannelTest {
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.getStatus());
+    assertFalse("Channel not closed on the server", channel.isActive());
   }
 
   // helpers
@@ -265,7 +274,9 @@ public class NettyResponseChannelTest {
    * @return a {@link HttpRequest} with the specified {@code httpMethod} and {@code uri}.
    */
   private HttpRequest createRequest(HttpMethod httpMethod, String uri) {
-    return new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
+    HttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
+    HttpHeaders.setKeepAlive(request, false);
+    return request;
   }
 
   /**
@@ -547,7 +558,6 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     MetricRegistry metricRegistry = new MetricRegistry();
     nettyMetrics = new NettyMetrics(metricRegistry);
     RestRequestMetricsTracker.setDefaults(metricRegistry);
-    restResponseChannel = new NettyResponseChannel(ctx, new NettyMetrics(new MetricRegistry()));
   }
 
   @Override
@@ -581,89 +591,86 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    */
   private void handleRequest(HttpRequest httpRequest)
       throws Exception {
-    if (request == null) {
-      request = new NettyRequest(httpRequest, nettyMetrics);
-      restResponseChannel.setRequest(request);
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
-      TestingUri uri = TestingUri.getTestingURI(request.getUri());
-      switch (uri) {
-        case CopyHeaders:
-          copyHeaders(httpRequest);
-          restResponseChannel.onResponseComplete(null);
-          assertFalse("Request channel is not closed", request.isOpen());
-          break;
-        case ImmediateResponseComplete:
-          restResponseChannel.onResponseComplete(null);
-          assertFalse("Request channel is not closed", request.isOpen());
-          break;
-        case FillWriteBuffer:
-          ctx.channel().config().setWriteBufferLowWaterMark(1);
-          ctx.channel().config().setWriteBufferHighWaterMark(2);
-          break;
-        case ModifyResponseMetadataAfterWrite:
-          restResponseChannel.write(ByteBuffer.wrap(new byte[0]), null);
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
-          break;
-        case MultipleClose:
-          restResponseChannel.onResponseComplete(null);
-          assertFalse("Request channel is not closed", request.isOpen());
-          restResponseChannel.close();
-          restResponseChannel.close();
-          break;
-        case MultipleOnResponseComplete:
-          restResponseChannel.onResponseComplete(null);
-          assertFalse("Request channel is not closed", request.isOpen());
-          restResponseChannel.onResponseComplete(null);
-          break;
-        case OnResponseCompleteWithBadRequest:
-          restResponseChannel.onResponseComplete(
-              new RestServiceException(TestingUri.OnResponseCompleteWithBadRequest.toString(),
-                  RestServiceErrorCode.BadRequest));
-          assertFalse("Request channel is not closed", request.isOpen());
-          break;
-        case OnResponseCompleteWithInternalServerError:
-          restResponseChannel.onResponseComplete(
-              new RestServiceException(TestingUri.OnResponseCompleteWithInternalServerError.toString(),
-                  RestServiceErrorCode.InternalServerError));
-          assertFalse("Request channel is not closed", request.isOpen());
-          break;
-        case OnResponseCompleteWithNonRestException:
-          restResponseChannel
-              .onResponseComplete(new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
-          assertFalse("Request channel is not closed", request.isOpen());
-          break;
-        case ResponseFailureMidway:
-          ChannelWriteCallback callback = new ChannelWriteCallback();
-          callback.compareWithFuture(
-              restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
-          assertNull("There shouldn't have been any exceptions on the first write", callback.exception);
-          restResponseChannel.onResponseComplete(new Exception());
-          // this should close the channel and the test will check for that.
-          break;
-        case SetNullHeader:
-          setNullHeaders();
-          break;
-        case SetRequestTest:
-          setRequestTest();
-          break;
-        case WriteAfterClose:
-          restResponseChannel.close();
-          assertFalse("Request channel is not closed", request.isOpen());
-          callback = new ChannelWriteCallback();
-          callback.compareWithFuture(
-              restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
-          if (callback.exception != null) {
-            throw callback.exception;
-          }
-          break;
-        case WriteFailureWithThrowable:
-          callback = new ChannelWriteCallback();
-          callback.compareWithFuture(
-              restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
-          break;
-      }
-    } else {
-      restResponseChannel.onResponseComplete(null);
+    request = new NettyRequest(httpRequest, nettyMetrics);
+    restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics);
+    restResponseChannel.setRequest(request);
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
+    TestingUri uri = TestingUri.getTestingURI(request.getUri());
+    switch (uri) {
+      case CopyHeaders:
+        copyHeaders(httpRequest);
+        restResponseChannel.onResponseComplete(null);
+        assertFalse("Request channel is not closed", request.isOpen());
+        break;
+      case ImmediateResponseComplete:
+        restResponseChannel.onResponseComplete(null);
+        assertFalse("Request channel is not closed", request.isOpen());
+        break;
+      case FillWriteBuffer:
+        ctx.channel().config().setWriteBufferLowWaterMark(1);
+        ctx.channel().config().setWriteBufferHighWaterMark(2);
+        break;
+      case ModifyResponseMetadataAfterWrite:
+        restResponseChannel.write(ByteBuffer.wrap(new byte[0]), null);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
+        break;
+      case MultipleClose:
+        restResponseChannel.onResponseComplete(null);
+        assertFalse("Request channel is not closed", request.isOpen());
+        restResponseChannel.close();
+        restResponseChannel.close();
+        break;
+      case MultipleOnResponseComplete:
+        restResponseChannel.onResponseComplete(null);
+        assertFalse("Request channel is not closed", request.isOpen());
+        restResponseChannel.onResponseComplete(null);
+        break;
+      case OnResponseCompleteWithBadRequest:
+        restResponseChannel.onResponseComplete(
+            new RestServiceException(TestingUri.OnResponseCompleteWithBadRequest.toString(),
+                RestServiceErrorCode.BadRequest));
+        assertFalse("Request channel is not closed", request.isOpen());
+        break;
+      case OnResponseCompleteWithInternalServerError:
+        restResponseChannel.onResponseComplete(
+            new RestServiceException(TestingUri.OnResponseCompleteWithInternalServerError.toString(),
+                RestServiceErrorCode.InternalServerError));
+        assertFalse("Request channel is not closed", request.isOpen());
+        break;
+      case OnResponseCompleteWithNonRestException:
+        restResponseChannel
+            .onResponseComplete(new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
+        assertFalse("Request channel is not closed", request.isOpen());
+        break;
+      case ResponseFailureMidway:
+        ChannelWriteCallback callback = new ChannelWriteCallback();
+        callback.compareWithFuture(
+            restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
+        assertNull("There shouldn't have been any exceptions on the first write", callback.exception);
+        restResponseChannel.onResponseComplete(new Exception());
+        // this should close the channel and the test will check for that.
+        break;
+      case SetNullHeader:
+        setNullHeaders();
+        break;
+      case SetRequestTest:
+        setRequestTest();
+        break;
+      case WriteAfterClose:
+        restResponseChannel.close();
+        assertFalse("Request channel is not closed", request.isOpen());
+        callback = new ChannelWriteCallback();
+        callback.compareWithFuture(
+            restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
+        if (callback.exception != null) {
+          throw callback.exception;
+        }
+        break;
+      case WriteFailureWithThrowable:
+        callback = new ChannelWriteCallback();
+        callback.compareWithFuture(
+            restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
+        break;
     }
   }
 

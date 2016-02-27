@@ -262,6 +262,14 @@ class NettyRequest implements RestRequest {
   }
 
   /**
+   * Provides info on whether this request desires keep-alive or not.
+   * @return {@code true} if keep-alive. {@code false} otherwise.
+   */
+  protected boolean isKeepAlive() {
+    return HttpHeaders.isKeepAlive(request);
+  }
+
+  /**
    * Writes the data in the provided {@code httpContent} to the given {@code writeChannel}.
    * @param writeChannel the {@link AsyncWritableChannel} to write the data of {@code httpContent} to.
    * @param callbackWrapper the {@link ReadIntoCallbackWrapper} for the read operation.

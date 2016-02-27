@@ -10,20 +10,24 @@ import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 
 /**
@@ -33,6 +37,8 @@ public class NettyMessageProcessorTest {
   private final Router router;
   private final BlobStorageService blobStorageService;
   private final MockRestRequestResponseHandler requestHandler;
+
+  private static final AtomicLong requestIdGenerator = new AtomicLong(0);
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -68,10 +74,16 @@ public class NettyMessageProcessorTest {
   @Test
   public void requestHandleWithGoodInputTest()
       throws IOException {
-    doRequestHandleWithGoodInputTest(HttpMethod.GET, RestMethod.GET);
-    doRequestHandleWithGoodInputTest(HttpMethod.POST, RestMethod.POST);
-    doRequestHandleWithGoodInputTest(HttpMethod.DELETE, RestMethod.DELETE);
-    doRequestHandleWithGoodInputTest(HttpMethod.HEAD, RestMethod.HEAD);
+    doRequestHandleWithoutKeepAlive(HttpMethod.GET, RestMethod.GET);
+    doRequestHandleWithoutKeepAlive(HttpMethod.POST, RestMethod.POST);
+    doRequestHandleWithoutKeepAlive(HttpMethod.DELETE, RestMethod.DELETE);
+    doRequestHandleWithoutKeepAlive(HttpMethod.HEAD, RestMethod.HEAD);
+
+    EmbeddedChannel channel = createChannel();
+    doRequestHandleWithKeepAlive(channel, HttpMethod.GET, RestMethod.GET);
+    doRequestHandleWithKeepAlive(channel, HttpMethod.POST, RestMethod.POST);
+    doRequestHandleWithKeepAlive(channel, HttpMethod.DELETE, RestMethod.DELETE);
+    doRequestHandleWithKeepAlive(channel, HttpMethod.HEAD, RestMethod.HEAD);
   }
 
   /**
@@ -151,7 +163,10 @@ public class NettyMessageProcessorTest {
    * @return a {@link HttpRequest} with the given parameters.
    */
   private HttpRequest createRequest(HttpMethod httpMethod, String uri) {
-    return new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
+    HttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
+    // keep-alive by default but set it for readability
+    HttpHeaders.setKeepAlive(request, true);
+    return request;
   }
 
   /**
@@ -167,20 +182,24 @@ public class NettyMessageProcessorTest {
     return out.toString("UTF-8");
   }
 
-  // requestHandleWithGoodInputTest() helpers
-
   /**
-   * Does a test to see that request handling with good input succeeds.
+   * Sends the provided {@code httpRequest} and verifies that the response is an echo of the {@code restMethod}.
+   * @param channel the {@link EmbeddedChannel} to send the request over.
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param restMethod the equivalent {@link RestMethod} for {@code httpMethod}. Used to check for correctness of
    *                   response.
+   * @param isKeepAlive if the request needs to be keep-alive.
    * @throws IOException
    */
-  private void doRequestHandleWithGoodInputTest(HttpMethod httpMethod, RestMethod restMethod)
+  private void sendRequestCheckResponse(EmbeddedChannel channel, HttpMethod httpMethod, RestMethod restMethod,
+      boolean isKeepAlive)
       throws IOException {
-    EmbeddedChannel channel = createChannel();
-    channel.writeInbound(createRequest(httpMethod, MockBlobStorageService.ECHO_REST_METHOD));
-    if (httpMethod != HttpMethod.POST) {
+    long requestId = requestIdGenerator.getAndIncrement();
+    String uri = MockBlobStorageService.ECHO_REST_METHOD + requestId;
+    HttpRequest httpRequest = createRequest(httpMethod, uri);
+    HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
+    channel.writeInbound(httpRequest);
+    if (!restMethod.equals(RestMethod.POST)) {
       // For POST, adding LastHttpContent will throw an exception simply because of the way ECHO_REST_METHOD works in
       // MockBlobStorageService (doesn't wait for content and closes the RestRequest once response is written). Except
       // POST, no one has this problem because NettyMessageProcessor waits for LastHttpContent.
@@ -188,9 +207,42 @@ public class NettyMessageProcessorTest {
     }
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-    // MockBlobStorageService echoes the RestMethod.
-    assertEquals("Unexpected content", restMethod.toString(), getContentString((HttpContent) channel.readOutbound()));
+    // MockBlobStorageService echoes the RestMethod + request id.
+    String expectedResponse = restMethod.toString() + requestId;
+    assertEquals("Unexpected content", expectedResponse, getContentString((HttpContent) channel.readOutbound()));
+    assertTrue("End marker was expected", channel.readOutbound() instanceof LastHttpContent);
+  }
+
+  // requestHandleWithGoodInputTest() helpers
+
+  /**
+   * Does a test to see that request handling with good input succeeds when channel is not keep alive.
+   * @param httpMethod the {@link HttpMethod} for the request.
+   * @param restMethod the equivalent {@link RestMethod} for {@code httpMethod}. Used to check for correctness of
+   *                   response.
+   * @throws IOException
+   */
+  private void doRequestHandleWithoutKeepAlive(HttpMethod httpMethod, RestMethod restMethod)
+      throws IOException {
+    EmbeddedChannel channel = createChannel();
+    sendRequestCheckResponse(channel, httpMethod, restMethod, false);
     assertFalse("Channel not closed", channel.isOpen());
+  }
+
+  /**
+   * Does a test to see that request handling with good input succeeds when channel is keep alive.
+   * @param channel the {@link EmbeddedChannel} to use.
+   * @param httpMethod the {@link HttpMethod} for the request.
+   * @param restMethod the equivalent {@link RestMethod} for {@code httpMethod}. Used to check for correctness of
+   *                   response.
+   * @throws IOException
+   */
+  private void doRequestHandleWithKeepAlive(EmbeddedChannel channel, HttpMethod httpMethod, RestMethod restMethod)
+      throws IOException {
+    for (int i = 0; i < 5; i++) {
+      sendRequestCheckResponse(channel, httpMethod, restMethod, true);
+      assertTrue("Channel is closed", channel.isOpen());
+    }
   }
 
   // requestHandlerExceptionTest() helpers.
