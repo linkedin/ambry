@@ -128,7 +128,7 @@ public class MessageFormatRecord {
 
   public static BlobData deserializeBlob(InputStream stream)
       throws IOException, MessageFormatException {
-    return deserializeAndGetBlobWithVersion(stream).getBlobOutputInfo();
+    return deserializeAndGetBlobWithVersion(stream).getBlobData();
   }
 
   static DeserializedBlob deserializeAndGetBlobWithVersion(InputStream stream)
@@ -687,18 +687,18 @@ class DeserializedUserMetadata {
 
 class DeserializedBlob {
   private short version;
-  private BlobData blobOutputInfo;
+  private BlobData blobData;
 
-  public DeserializedBlob(short version, BlobData blobOutputInfo) {
+  public DeserializedBlob(short version, BlobData blobData) {
     this.version = version;
-    this.blobOutputInfo = blobOutputInfo;
+    this.blobData = blobData;
   }
 
   public short getVersion() {
     return version;
   }
 
-  BlobData getBlobOutputInfo() {
-    return blobOutputInfo;
+  BlobData getBlobData() {
+    return blobData;
   }
 }

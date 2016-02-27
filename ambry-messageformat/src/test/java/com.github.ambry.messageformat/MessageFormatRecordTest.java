@@ -112,10 +112,10 @@ public class MessageFormatRecordTest {
       crc.update(sData.array(), 0, sData.position());
       sData.putLong(crc.getValue());
       sData.flip();
-      BlobOutput outputData = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData)).getBlobOutput();
-      Assert.assertEquals(outputData.getSize(), 2000);
+      BlobData blobData = MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(sData));
+      Assert.assertEquals(blobData.getSize(), 2000);
       byte[] verify = new byte[2000];
-      outputData.getStream().read(verify);
+      blobData.getStream().read(verify);
       Assert.assertArrayEquals(verify, data.array());
 
       // corrupt blob record V1
@@ -200,10 +200,10 @@ public class MessageFormatRecordTest {
     new Random().nextBytes(blobContent.array());
     int size = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobSize);
     ByteBuffer entireBlob = ByteBuffer.allocate(size);
-    BlobOutput outputData = getBlobRecordV2(blobSize, blobType, blobContent, entireBlob);
-    Assert.assertEquals("Blob size mismatch", blobSize, outputData.getSize());
+    BlobData blobData = getBlobRecordV2(blobSize, blobType, blobContent, entireBlob);
+    Assert.assertEquals("Blob size mismatch", blobSize, blobData.getSize());
     byte[] verify = new byte[blobSize];
-    outputData.getStream().read(verify);
+    blobData.getStream().read(verify);
     Assert.assertArrayEquals("BlobContent mismatch", blobContent.array(), verify);
 
     // corrupt blob record V2
@@ -220,7 +220,7 @@ public class MessageFormatRecordTest {
 
   /**
    * Serializes the blob content using BlobRecord Verison 2 with the passsed in params
-   * De-serialized the blob returns the {@link BlobOutput} for the same
+   * De-serialized the blob returns the {@link BlobData} for the same
    * @param blobSize
    * @param blobType
    * @param blobContent
@@ -229,7 +229,7 @@ public class MessageFormatRecordTest {
    * @throws IOException
    * @throws MessageFormatException
    */
-  private BlobOutput getBlobRecordV2(int blobSize, BlobType blobType, ByteBuffer blobContent, ByteBuffer outputBuffer)
+  private BlobData getBlobRecordV2(int blobSize, BlobType blobType, ByteBuffer blobContent, ByteBuffer outputBuffer)
       throws IOException, MessageFormatException {
     MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(outputBuffer, blobSize, blobType);
     outputBuffer.put(blobContent);
@@ -237,7 +237,7 @@ public class MessageFormatRecordTest {
     crc.update(outputBuffer.array(), 0, outputBuffer.position());
     outputBuffer.putLong(crc.getValue());
     outputBuffer.flip();
-    return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(outputBuffer)).getBlobOutput();
+    return MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(outputBuffer));
   }
 
   @Test
@@ -251,11 +251,11 @@ public class MessageFormatRecordTest {
         MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
     ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
-    BlobOutput outputData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
+    BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
 
-    Assert.assertEquals(outputData.getSize(), metadataContentSize);
+    Assert.assertEquals(metadataContentSize, blobData.getSize());
     byte[] verify = new byte[metadataContentSize];
-    outputData.getStream().read(verify);
+    blobData.getStream().read(verify);
     Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
 
     // deserialize and check for metadata contents

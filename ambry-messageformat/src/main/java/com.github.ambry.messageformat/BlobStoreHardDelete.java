@@ -198,10 +198,10 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               blobRecordInfo = getBlobRecordInfo(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
                   headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
                       .getBlobPropertiesRecordRelativeOffset()));
-              blobStreamSize = blobRecordInfo.getBlobOutputInfo().getSize();
+              blobStreamSize = blobRecordInfo.getBlobData().getSize();
               blobRecordVersion = blobRecordInfo.getVersion();
               if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
-                blobType = blobRecordInfo.getBlobOutputInfo().getBlobType();
+                blobType = blobRecordInfo.getBlobData().getBlobType();
               } else {
                 blobType = BlobType.DataBlob;
               }

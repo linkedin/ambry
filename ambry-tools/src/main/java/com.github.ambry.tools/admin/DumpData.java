@@ -6,7 +6,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -278,8 +278,9 @@ public class DumpData {
     return numberOfKeysProcessed;
   }
 
-  private boolean isExpired(IndexValue value){
-    return value.getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs();
+  private boolean isExpired(IndexValue value) {
+    return value.getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > value
+        .getTimeToLiveInMs();
   }
 
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
@@ -573,8 +574,8 @@ public class DumpData {
                 " serviceId " + props.getServiceId();
             ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
             usermetadata = " Metadata - size " + metadata.capacity();
-            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
-            blobOutput = "Blob - size " + output.getSize();
+            BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+            blobOutput = "Blob - size " + blobData.getSize();
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
             isDeleted = true;
@@ -744,8 +745,8 @@ public class DumpData {
               " serviceId " + props.getServiceId();
           ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
           usermetadata = " Metadata - size " + metadata.capacity();
-          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog).getBlobOutput();
-          blobOutput = "Blob - size " + output.getSize();
+          BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+          blobOutput = "Blob - size " + blobData.getSize();
         } else {
           boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
           isDeleted = true;

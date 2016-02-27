@@ -6,7 +6,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -153,7 +153,7 @@ public class ServerHardDeleteTest {
             short userMetadataVersion = stream.readShort();
             int userMetadataSize = stream.readInt();
             short blobRecordVersion = stream.readShort();
-            if(blobRecordVersion == MessageFormatRecord.Blob_Version_V2){
+            if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
               short blobType = stream.readShort();
             }
             long blobStreamSize = stream.readLong();
@@ -352,10 +352,10 @@ public class ServerHardDeleteTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 6; i++) {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
-        Assert.assertEquals(blobOutput.getSize(), properties.get(i).getBlobSize());
-        byte[] dataOutput = new byte[(int) blobOutput.getSize()];
-        blobOutput.getStream().read(dataOutput);
+        BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+        Assert.assertEquals(properties.get(i).getBlobSize(), blobData.getSize());
+        byte[] dataOutput = new byte[(int) blobData.getSize()];
+        blobData.getStream().read(dataOutput);
         Assert.assertArrayEquals(dataOutput, data.get(i));
       }
     } catch (Exception e) {
@@ -477,10 +477,10 @@ public class ServerHardDeleteTest {
       resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
 
       for (int i = 0; i < 9; i++) {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream()).getBlobOutput();
-        Assert.assertEquals(blobOutput.getSize(), properties.get(i).getBlobSize());
-        byte[] dataOutput = new byte[(int) blobOutput.getSize()];
-        blobOutput.getStream().read(dataOutput);
+        BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+        Assert.assertEquals(blobData.getSize(), properties.get(i).getBlobSize());
+        byte[] dataOutput = new byte[(int) blobData.getSize()];
+        blobData.getStream().read(dataOutput);
         Assert.assertArrayEquals(dataOutput, data.get(i));
       }
     } catch (MessageFormatException e) {
