@@ -30,6 +30,7 @@ public class NonBlockingRouterTest {
     properties.setProperty("router.datacenter.name", "DC1");
     return properties;
   }
+
   /**
    * Test Router with a single scaling unit.
    */

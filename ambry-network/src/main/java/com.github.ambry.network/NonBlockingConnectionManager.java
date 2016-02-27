@@ -1,6 +1,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,33 +10,46 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
- * The ConnectionManager keeps track of current connections to datanodes, and provides methods
+ * A {@link ConnectionManager} implementation that keeps track of current connections to datanodes, and provides methods
  * to checkout and checkin connections.
+ *
+ * This class is not thread safe.
  */
 
-public class ConnectionManager {
+public class NonBlockingConnectionManager implements ConnectionManager {
   private final ConcurrentHashMap<String, HostPortPoolManager> hostPortToPoolManager;
   private final ConcurrentHashMap<String, HostPortPoolManager> connectionIdToPoolManager;
   private final Selector selector;
   private final NetworkConfig networkConfig;
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
+  private final Time time;
+  private int totalManagedConnectionsCount;
+  private boolean isOpen;
 
   /**
-   * Instantiates a ConnectionManager
-   * @param selector The {@link Selector} to be used to make connections.
+   * Instantiates a NonBlockingConnectionManager
+   * @param selector the {@link Selector} to use to make connections.
    * @param networkConfig The {@link NetworkConfig} containing the config for the Network.
    * @param maxConnectionsPerPortPlainText the connection pool limit for plain text connections to a (host, port)
-   * @param maxConnectionsPerPortPlainSsl the conneciton pool limit for ssl connections to a (host, port)
+   * @param maxConnectionsPerPortPlainSsl the connection pool limit for ssl connections to a (host, port)
+   * @param time The Time instance to use.
    */
-  public ConnectionManager(Selector selector, NetworkConfig networkConfig, int maxConnectionsPerPortPlainText,
-      int maxConnectionsPerPortPlainSsl) {
+  public NonBlockingConnectionManager(Selector selector, NetworkConfig networkConfig,
+      int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl, Time time) {
+    if (selector == null || networkConfig == null) {
+      throw new IllegalArgumentException("Invalid inputs passed in, Selector: " + selector +
+          " NetworkConfig: " + networkConfig);
+    }
     hostPortToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
     connectionIdToPoolManager = new ConcurrentHashMap<String, HostPortPoolManager>();
+    totalManagedConnectionsCount = 0;
     this.selector = selector;
     this.networkConfig = networkConfig;
     this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
     this.maxConnectionsPerPortSsl = maxConnectionsPerPortPlainSsl;
+    this.time = time;
+    this.isOpen = true;
   }
 
   /**
@@ -59,7 +73,6 @@ public class ConnectionManager {
     String lookupStr = getHostPortString(host, port.getPort());
     HostPortPoolManager poolManager = hostPortToPoolManager.get(lookupStr);
     if (poolManager == null) {
-      // @todo: maxConnections and port type to be obtained by looking up host and port.
       HostPortPoolManager newPoolManager = new HostPortPoolManager(host, port);
       poolManager = hostPortToPoolManager.putIfAbsent(lookupStr, newPoolManager);
       if (poolManager == null) {
@@ -70,15 +83,22 @@ public class ConnectionManager {
   }
 
   /**
+   * {@inheritDoc}
+   * <p/>
    * Attempts to check out a connection to the host:port provided, or returns null if none available. In the
    * latter case, initiates a connection to the host:port unless max connections to it has been reached.
    * @param host The host to connect to.
    * @param port The port on the host to connect to.
    * @return connectionId, if there is one available to use, null otherwise.
    * @throws IOException if an attempt to initiate a connection as a result of this call fails.
+   * @throws IllegalStateException if the connection manager is closed.
    */
+  @Override
   public String checkOutConnection(String host, Port port)
       throws IOException {
+    if (!isOpen) {
+      throw new IllegalStateException("Connection Manager is closed");
+    }
     // if any available, give that
     // else if max connections to hostport is reached, return null
     // else initiate a new connection and return null
@@ -86,34 +106,89 @@ public class ConnectionManager {
   }
 
   /**
-   * Check in a previously checked out connection.
+   * {@inheritDoc}
+   * <p/>
    * @param connectionId the id of the previously checked out connection.
+   * @throws IllegalStateException if the connection manager is closed.
+   * @throws IllegalArgumentException if the connection id is invalid.
    */
+  @Override
   public void checkInConnection(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).checkInConnection(connectionId);
+    if (!isOpen) {
+      throw new IllegalStateException("Connection Manager is closed");
+    }
+    HostPortPoolManager hostPortPoolManager = connectionIdToPoolManager.get(connectionId);
+    if (hostPortPoolManager == null) {
+      throw new IllegalArgumentException("Attempt to check in an invalid connection id");
+    }
+    hostPortPoolManager.checkInConnection(connectionId);
   }
 
   /**
-   * Removes the given connectionId from the list of available connections. This connection id could be either a
-   * checked out connection or a connection that was available to be checked out. Attempting to destroy the same
-   * connection more than once, or attempting to destroy an invalid connection will result in unexpected behavior.
-   * @param connectionId the connection id of the connection.
+   * {@inheritDoc}
+   * <p/>
+   * @param connectionId connection to remove.
+   * @throws IllegalStateException if the connection manager is closed.
+   * @throws IllegalArgumentException if the connection id is invalid.
    */
-  public void destroyConnection(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).destroyConnection(connectionId);
-    connectionIdToPoolManager.remove(connectionId);
+  @Override
+  public void removeConnection(String connectionId) {
+    if (!isOpen) {
+      throw new IllegalStateException("Connection Manager is closed");
+    }
+    HostPortPoolManager hostPortPoolManager = connectionIdToPoolManager.remove(connectionId);
+    if (hostPortPoolManager == null) {
+      throw new IllegalArgumentException("Attempt to remove an invalid connection id");
+    }
+    totalManagedConnectionsCount--;
+    hostPortPoolManager.removeConnection(connectionId);
   }
 
   /**
-   * HostPortPoolManager manages all the connections to a specific (host, port) pair. The {@link ConnectionManager}
-   * creates one for every (host, port) pair it knows of.
+   * Return the total number of connections that are managed by this connection manager.
+   * @return the total number of initiated and/or established connections.
+   */
+  public int getTotalConnectionsCount() {
+    if (!isOpen) {
+      throw new IllegalStateException("Connection Manager is closed");
+    }
+    return totalManagedConnectionsCount;
+  }
+
+  /**
+   * Return the total available connections across all hostPortPoolManagers.
+   * @return total established and available connections.
+   */
+  public int getAvailableConnectionsCount() {
+    if (!isOpen) {
+      throw new IllegalStateException("Connection Manager is closed");
+    }
+    int count = 0;
+    for (HostPortPoolManager hostPortPoolManager : hostPortToPoolManager.values()) {
+      count += hostPortPoolManager.getAvailableConnectionsCount();
+    }
+    return count;
+  }
+
+  /**
+   * Close the NonBlockingConnectionManager.
+   */
+  @Override
+  public void close() {
+    isOpen = false;
+  }
+
+  /**
+   * HostPortPoolManager manages all the connections to a specific (host,
+   * port) pair. The  {@link NonBlockingConnectionManager} creates one for every (host, port) pair it knows of.
    */
   private class HostPortPoolManager {
-    final String host;
-    final Port port;
-    final int maxConnectionsToHostPort;
-    final ConcurrentLinkedQueue<String> availableConnections;
-    final AtomicInteger poolCount = new AtomicInteger(0);
+    private final String host;
+    private final Port port;
+    private final int maxConnectionsToHostPort;
+    private final ConcurrentLinkedQueue<String> availableConnections;
+    private final AtomicInteger poolCount = new AtomicInteger(0);
+    private final AtomicInteger availableCount = new AtomicInteger(0);
 
     /**
      * Instantiate a HostPortPoolManager
@@ -145,9 +220,13 @@ public class ConnectionManager {
           connectionIdToPoolManager.put(selector
               .connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
                   networkConfig.socketReceiveBufferBytes, port.getPortType()), this);
+          totalManagedConnectionsCount++;
+          // @todo: if the connection does not get established, how do we deal with it?
         } else {
           poolCount.decrementAndGet();
         }
+      } else {
+        availableCount.decrementAndGet();
       }
       return connectionId;
     }
@@ -158,16 +237,27 @@ public class ConnectionManager {
      */
     void checkInConnection(String connectionId) {
       availableConnections.add(connectionId);
+      availableCount.incrementAndGet();
     }
 
-    /** Destroy a connection managed by this manager. This connection id could be either a checked out connection or a
-     * connection that was available to be checked out. Attempting to destroy the same connection more than once will
-     * result in unexpected behavior.
+    /**
+     * Remove a connection managed by this manager. This connection id could be either a checked out connection or a
+     * connection that was previously available to be checked out.
      * @param connectionId the connection id of the connection.
      */
-    void destroyConnection(String connectionId) {
-      availableConnections.remove(connectionId);
+    void removeConnection(String connectionId) {
+      if (availableConnections.remove(connectionId)) {
+        availableCount.decrementAndGet();
+      }
       poolCount.decrementAndGet();
+    }
+
+    /**
+     * Return the number of available connections to this hostPort
+     * @return number of available connections
+     */
+    int getAvailableConnectionsCount() {
+      return availableCount.get();
     }
   }
 }
