@@ -5,7 +5,7 @@ import java.io.IOException;
 
 /**
  * An interface that manages all network connections to a set of nodes (host-port). Provides methods to check out and
- * check in connections to the nodes and to destroy them.
+ * check in connections to the nodes and to remove them.
  */
 public interface ConnectionManager {
   /**

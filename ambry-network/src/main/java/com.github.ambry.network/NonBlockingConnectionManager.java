@@ -83,12 +83,15 @@ public class NonBlockingConnectionManager implements ConnectionManager {
   }
 
   /**
+   * {@inheritDoc}
+   * <p/>
    * Attempts to check out a connection to the host:port provided, or returns null if none available. In the
    * latter case, initiates a connection to the host:port unless max connections to it has been reached.
    * @param host The host to connect to.
    * @param port The port on the host to connect to.
    * @return connectionId, if there is one available to use, null otherwise.
    * @throws IOException if an attempt to initiate a connection as a result of this call fails.
+   * @throws IllegalStateException if the connection manager is closed.
    */
   @Override
   public String checkOutConnection(String host, Port port)
@@ -103,9 +106,11 @@ public class NonBlockingConnectionManager implements ConnectionManager {
   }
 
   /**
-   * Check in a previously checked out connection. If this is not a valid connection id associated with the selector
-   * of this this connection manager, then an IllegalArgumentException will be thrown.
+   * {@inheritDoc}
+   * <p/>
    * @param connectionId the id of the previously checked out connection.
+   * @throws IllegalStateException if the connection manager is closed.
+   * @throws IllegalArgumentException if the connection id is invalid.
    */
   @Override
   public void checkInConnection(String connectionId) {
@@ -120,9 +125,11 @@ public class NonBlockingConnectionManager implements ConnectionManager {
   }
 
   /**
-   * Remove the connection associated with the given connectionId. The connection maybe a checked out connection,
-   * or a connection that is not checked out. It is illegal to call this method with an invalid connection id.
+   * {@inheritDoc}
+   * <p/>
    * @param connectionId connection to remove.
+   * @throws IllegalStateException if the connection manager is closed.
+   * @throws IllegalArgumentException if the connection id is invalid.
    */
   @Override
   public void removeConnection(String connectionId) {
