@@ -698,7 +698,7 @@ class DeserializedBlob {
     return version;
   }
 
-  BlobData getBlobData() {
+  public BlobData getBlobData() {
     return blobData;
   }
 }

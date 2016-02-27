@@ -271,7 +271,7 @@ public class BlobStoreHardDeleteTest {
     blobTypes[1] = BlobType.MetadataBlob;
 
     blobVersions[2] = MessageFormatRecord.Blob_Version_V2;
-    blobTypes[2] = BlobType.MetadataBlob;
+    blobTypes[2] = BlobType.DataBlob;
 
     blobVersions[3] = MessageFormatRecord.Blob_Version_V2;
     blobTypes[3] = BlobType.MetadataBlob;
