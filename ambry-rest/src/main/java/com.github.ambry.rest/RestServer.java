@@ -101,7 +101,7 @@ public class RestServer {
       restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
       publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
           restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
-      restServerState = new RestServerState(restServerConfig.healthCheckUri);
+      restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
       NioServerFactory nioServerFactory = Utils
           .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
               restRequestHandler, publicAccessLogger, restServerState);
@@ -158,8 +158,7 @@ public class RestServer {
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
 
       restServerState.markServiceUp();
-      logger.info("VIP Health check service started");
-
+      logger.info("Service marked as up");
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       logger.info("RestServer start took {} ms", startupTime);
@@ -176,6 +175,7 @@ public class RestServer {
     try {
       //ordering is important.
       restServerState.markServiceDown();
+      logger.info("Service marked as down ");
       nioServer.shutdown();
       long nioServerShutdownTime = System.currentTimeMillis();
       long elapsedTime = nioServerShutdownTime - shutdownBeginTime;

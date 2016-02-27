@@ -1,6 +1,5 @@
 package com.github.ambry.rest;
 
-import com.github.ambry.utils.UtilsTest;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
@@ -18,12 +17,13 @@ import org.junit.Test;
 
 
 public class PublicAccessLogRequestHandlerTest {
-  private MockPublicAccessLogger publicAccessLogger = null;
+  private final MockPublicAccessLogger publicAccessLogger;
   private String requestHeaders =
       "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For";
   private String responseHeaders = "Location,x-ambry-blob-size";
-  private final String invalidHeaderKeyPrefix = "headerKey";
-  private final String disconnectUri = "disconnect";
+  private static final String INVALID_HEADER_KEY_PREFIX = "headerKey";
+  private static final String DISCONNECT_URI = "disconnect";
+  private static final String CLOSE_URI = "close";
 
   /**
    * Sets up the mock public access logger that {@link PublicAccessLogRequestHandler} can use.
@@ -41,7 +41,6 @@ public class PublicAccessLogRequestHandlerTest {
       throws IOException {
     doRequestHandleTest(HttpMethod.POST, "POST", false);
     doRequestHandleTest(HttpMethod.GET, "GET", false);
-    doRequestHandleTest(HttpMethod.GET, MockBlobStorageService.ECHO_REST_METHOD, false);
     doRequestHandleTest(HttpMethod.DELETE, "DELETE", false);
   }
 
@@ -52,9 +51,9 @@ public class PublicAccessLogRequestHandlerTest {
   @Test
   public void requestHandleOnCloseTest()
       throws IOException {
-    doRequestHandleTest(HttpMethod.POST, "close", true);
-    doRequestHandleTest(HttpMethod.GET, "close", true);
-    doRequestHandleTest(HttpMethod.DELETE, "close", true);
+    doRequestHandleTest(HttpMethod.POST, CLOSE_URI, true);
+    doRequestHandleTest(HttpMethod.GET, CLOSE_URI, true);
+    doRequestHandleTest(HttpMethod.DELETE, CLOSE_URI, true);
   }
 
   /**
@@ -65,9 +64,9 @@ public class PublicAccessLogRequestHandlerTest {
   public void requestHandleOnDisconnectTest()
       throws IOException {
     // disonnecting the embedded channel, calls close of PubliAccessLogRequestHandler
-    doRequestHandleTest(HttpMethod.POST, disconnectUri, true);
-    doRequestHandleTest(HttpMethod.GET, disconnectUri, true);
-    doRequestHandleTest(HttpMethod.DELETE, disconnectUri, true);
+    doRequestHandleTest(HttpMethod.POST, DISCONNECT_URI, true);
+    doRequestHandleTest(HttpMethod.GET, DISCONNECT_URI, true);
+    doRequestHandleTest(HttpMethod.DELETE, DISCONNECT_URI, true);
   }
 
   // requestHandleWithGoodInputTest() helpers
@@ -81,18 +80,10 @@ public class PublicAccessLogRequestHandlerTest {
   private void doRequestHandleTest(HttpMethod httpMethod, String uri, boolean testErrorCase)
       throws IOException {
     EmbeddedChannel channel = createChannel();
-    Random random = new Random();
     List<HttpHeaders> httpHeadersList = getHeadersList();
     for (HttpHeaders headers : httpHeadersList) {
-      String location = UtilsTest.getRandomString(60);
-      int size = random.nextInt(10000);
-      // for POST, the EchoMethodHandler sets location and blob size(in response) based on the values from the request headers
-      if (httpMethod == HttpMethod.POST) {
-        headers.add(RestUtils.Headers.LOCATION, location);
-        headers.add(RestUtils.Headers.BLOB_SIZE, size);
-      }
       channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri, headers));
-      if (uri.equals(disconnectUri)) {
+      if (uri.equals(DISCONNECT_URI)) {
         channel.disconnect();
       } else {
         channel.writeInbound(new DefaultLastHttpContent());
@@ -107,16 +98,7 @@ public class PublicAccessLogRequestHandlerTest {
       verifyPublicAccessLogEntryForHeaders(lastLogEntry, headers, httpMethod);
 
       // verify response
-      subString = "Response (";
-      if (httpMethod == HttpMethod.GET) {
-        subString += "[isChunked=false])" + "," + " status=" + HttpResponseStatus.OK.code();
-      } else if (httpMethod == HttpMethod.DELETE) {
-        subString += "[isChunked=false])" + "," + " status=" + HttpResponseStatus.ACCEPTED.code();
-      } else if (httpMethod == HttpMethod.POST) {
-        subString +=
-            "[" + RestUtils.Headers.LOCATION + "=" + location + "] [" + RestUtils.Headers.BLOB_SIZE + "=" + size
-                + "] [isChunked=false])" + "," + " status=" + HttpResponseStatus.CREATED.code();
-      }
+      subString = "Response ([isChunked=false]), status=" + HttpResponseStatus.OK.code();
 
       if (!testErrorCase) {
         Assert.assertTrue("Public Access log entry doesn't have response set correctly",
@@ -160,14 +142,14 @@ public class PublicAccessLogRequestHandlerTest {
 
     // contains one valid and one invalid header
     headers = new DefaultHttpHeaders();
-    headers.add(invalidHeaderKeyPrefix + "1", "headerValue1");
+    headers.add(INVALID_HEADER_KEY_PREFIX + "1", "headerValue1");
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
     headersList.add(headers);
 
     // contains all invalid headers
     headers = new DefaultHttpHeaders();
-    headers.add(invalidHeaderKeyPrefix + "1", "headerVxalue1");
-    headers.add(invalidHeaderKeyPrefix + "2", "headerValue2");
+    headers.add(INVALID_HEADER_KEY_PREFIX + "1", "headerVxalue1");
+    headers.add(INVALID_HEADER_KEY_PREFIX + "2", "headerValue2");
     headersList.add(headers);
 
     // contains all the expected headers
@@ -196,7 +178,7 @@ public class PublicAccessLogRequestHandlerTest {
     Iterator<Map.Entry<String, String>> itr = headers.iterator();
     while (itr.hasNext()) {
       Map.Entry<String, String> entry = itr.next();
-      if (!entry.getKey().startsWith(invalidHeaderKeyPrefix)) {
+      if (!entry.getKey().startsWith(INVALID_HEADER_KEY_PREFIX)) {
         if (httpMethod == HttpMethod.GET && !entry.getKey().equals(HttpHeaders.Names.CONTENT_TYPE)) {
           String subString = "[" + entry.getKey() + "=" + entry.getValue() + "]";
           Assert.assertTrue("Public Access log entry does not have expected header", logEntry.contains(subString));

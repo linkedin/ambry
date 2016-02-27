@@ -84,9 +84,9 @@ class RestServerConfig {
   /**
    * Health check URI for load balancers (VIPs)
    */
-  @Config("rest.server.healthCheckUri")
+  @Config("rest.server.restServerHealthCheckUri")
   @Default("/healthCheck")
-  public final String healthCheckUri;
+  public final String restServerHealthCheckUri;
 
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
@@ -102,10 +102,11 @@ class RestServerConfig {
         .getString("rest.server.response.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerRouterFactory = verifiableProperties
         .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
-    restServerPublicAccessLogRequestHeaders = verifiableProperties.getString("rest.server.public.access.log.reqeust.headers",
-        "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
+    restServerPublicAccessLogRequestHeaders = verifiableProperties
+        .getString("rest.server.public.access.log.reqeust.headers",
+            "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
-    healthCheckUri = verifiableProperties.getString("rest.server.healthCheckUri","/healthCheck");
+    restServerHealthCheckUri = verifiableProperties.getString("rest.server.restServerHealthCheckUri", "/healthCheck");
   }
 }

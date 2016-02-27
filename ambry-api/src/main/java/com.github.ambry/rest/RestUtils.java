@@ -94,11 +94,6 @@ public class RestUtils {
     // prefix for old style user metadata that will be served as headers
     protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
 
-    /**
-     * Header to indicate if the client request is internal to LinkedIn
-     */
-    protected final static String AMBRY_CLIENT_HEADER = "x-li-ambry-client";
-
     protected final static String X_FORWARDED_FOR = "X-Forwarded-For";
   }
 

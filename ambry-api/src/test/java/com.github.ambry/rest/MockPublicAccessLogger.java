@@ -11,17 +11,17 @@ public class MockPublicAccessLogger extends PublicAccessLogger {
 
   @Override
   public void logError(String message) {
-    lastPublicAccessLogEntry = "Error:"+message;
+    lastPublicAccessLogEntry = "Error:" + message;
     publicAccessLogger.append(lastPublicAccessLogEntry);
   }
 
   @Override
   public void logInfo(String message) {
-    lastPublicAccessLogEntry = "Info:"+message;
+    lastPublicAccessLogEntry = "Info:" + message;
     publicAccessLogger.append(lastPublicAccessLogEntry);
   }
 
-  public String getLastPublicAccessLogEntry(){
+  public String getLastPublicAccessLogEntry() {
     return lastPublicAccessLogEntry;
   }
 }

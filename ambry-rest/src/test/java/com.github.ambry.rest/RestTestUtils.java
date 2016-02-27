@@ -18,10 +18,10 @@ import org.junit.Test;
 public class RestTestUtils {
 
   /**
-   * Creates a {@link io.netty.handler.codec.http.HttpRequest} with the given parameters.
-   * @param httpMethod the {@link io.netty.handler.codec.http.HttpMethod} required.
+   * Creates a {@link HttpRequest} with the given parameters.
+   * @param httpMethod the {@link HttpMethod} required.
    * @param uri the URI to hit.
-   * @return a {@link io.netty.handler.codec.http.HttpRequest} with the given parameters.
+   * @return a {@link HttpRequest} with the given parameters.
    */
   public static HttpRequest createRequest(HttpMethod httpMethod, String uri, HttpHeaders headers) {
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);

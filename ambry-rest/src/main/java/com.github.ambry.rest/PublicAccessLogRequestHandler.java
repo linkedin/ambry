@@ -22,7 +22,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private long requestArrivalTimeInMs;
   private long requestLastChunkArrivalTimeInMs;
   private long responseFirstChunkStartTimeInMs;
-  private volatile boolean requestInProgress = false;
+  private boolean requestInProgress = false;
   private volatile StringBuilder logMessage;
   private volatile HttpRequest request;
 
@@ -77,12 +77,10 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
         logMessage.append(" : Received request while another request in progress. Resetting log message.");
         logger.error(logMessage.toString());
       }
-      this.requestInProgress = true;
-      this.logMessage = new StringBuilder();
-      this.requestArrivalTimeInMs = System.currentTimeMillis();
-      this.requestLastChunkArrivalTimeInMs = INIT_TIME;
-      this.responseFirstChunkStartTimeInMs = INIT_TIME;
-      this.request = (HttpRequest) obj;
+      logMessage = new StringBuilder();
+      requestArrivalTimeInMs = System.currentTimeMillis();
+      reset(true);
+      request = (HttpRequest) obj;
 
       logMessage.append(ctx.channel().remoteAddress()).append(" ");
       logMessage.append(request.getMethod().toString()).append(" ");
@@ -116,13 +114,13 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
         logMessage.append("status=").append(response.getStatus().code());
         logMessage.append(", ");
         if (HttpHeaders.isTransferEncodingChunked(response)) {
-          this.responseFirstChunkStartTimeInMs = System.currentTimeMillis();
+          responseFirstChunkStartTimeInMs = System.currentTimeMillis();
         }
       }
       if (msg instanceof LastHttpContent) {
         recognized = true;
         logDurations();
-        reset();
+        reset(false);
         publicAccessLogger.logInfo(logMessage.toString());
       }
       if (!recognized && !(msg instanceof HttpContent)) {
@@ -142,8 +140,8 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   /**
    * Resets some variables as part of logging a response
    */
-  private void reset() {
-    requestInProgress = false;
+  private void reset(boolean requestInProgress) {
+    this.requestInProgress = requestInProgress;
     responseFirstChunkStartTimeInMs = INIT_TIME;
     requestLastChunkArrivalTimeInMs = INIT_TIME;
   }
@@ -152,22 +150,28 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   public void disconnect(ChannelHandlerContext ctx, ChannelPromise future)
       throws Exception {
     if (requestInProgress) {
-      requestInProgress = false;
-      logDurations();
-      logMessage.append(" : Channel disconnected while request in progress.");
-      publicAccessLogger.logError(logMessage.toString());
+      logError(" : Channel disconnected while request in progress.");
     }
     super.disconnect(ctx, future);
   }
 
   @Override
-  public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
+  public void close(ChannelHandlerContext ctx, ChannelPromise future)
+      throws Exception {
     if (requestInProgress) {
-      requestInProgress = false;
-      logDurations();
-      logMessage.append(" : Channel closed while request in progress.");
-      publicAccessLogger.logError(logMessage.toString());
+      logError(" : Channel closed while request in progress.");
     }
     super.close(ctx, future);
+  }
+
+  /**
+   * Rests the requestInProgress and logs error message
+   * @param msg
+   */
+  private void logError(String msg) {
+    requestInProgress = false;
+    logDurations();
+    logMessage.append(msg);
+    publicAccessLogger.logError(logMessage.toString());
   }
 }
