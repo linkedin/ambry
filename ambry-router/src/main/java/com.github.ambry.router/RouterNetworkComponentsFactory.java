@@ -10,6 +10,7 @@ import com.github.ambry.utils.Time;
 import java.io.IOException;
 
 
+@Deprecated
 /**
  * A factory class used to get new instances of a {@link Selector} and a {@link ConnectionManager}
  */
