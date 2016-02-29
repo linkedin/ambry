@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import junit.framework.Assert;
-import org.apache.log4j.Appender;
 import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.spi.LoggingEvent;
 import org.junit.Test;
@@ -31,16 +30,6 @@ public class PublicAccessLoggerTest {
   @Test
   public void testPublicAccessLogger() {
     Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
-  }
-
-  @Test
-  public void testSomething() {
-    MockAppender mockAppender = new MockAppender();
-    /*Logger.getRootLogger().addAppender(mockAppender);
-
-    // Check INFO is set (from log4j.xml).
-    level = (String) mbserver.getAttribute(objectName, "Level");
-    assertEquals("INFO", level);*/
   }
 
   public static final class MockAppender extends AppenderSkeleton {
