@@ -12,11 +12,14 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Handler to echo the Method type of the request.
+ * Used purely for testing purposes
+ */
 public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final static String DISCONNECT_URI = "disconnect";

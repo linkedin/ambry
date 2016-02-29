@@ -18,8 +18,7 @@ import org.junit.Test;
 
 public class PublicAccessLogRequestHandlerTest {
   private final MockPublicAccessLogger publicAccessLogger;
-  private String requestHeaders =
-      "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For";
+  private String requestHeaders = "Host,Content-Length,x-ambry-content-type";
   private String responseHeaders = "Location,x-ambry-blob-size";
   private static final String INVALID_HEADER_KEY_PREFIX = "headerKey";
   private static final String DISCONNECT_URI = "disconnect";
@@ -69,7 +68,7 @@ public class PublicAccessLogRequestHandlerTest {
     doRequestHandleTest(HttpMethod.DELETE, DISCONNECT_URI, true);
   }
 
-  // requestHandleWithGoodInputTest() helpers
+  // requestHandleTest() helpers
 
   /**
    * Does a test to see that request handling results in expected entries in public access log
@@ -155,15 +154,8 @@ public class PublicAccessLogRequestHandlerTest {
     // contains all the expected headers
     headers = new DefaultHttpHeaders();
     headers.add(HttpHeaders.Names.HOST, "host1");
-    headers.add(HttpHeaders.Names.REFERER, "referrer1");
-    headers.add(HttpHeaders.Names.USER_AGENT, "user-agent1");
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
     headers.add(RestUtils.Headers.CONTENT_TYPE, "content-type1");
-    headers.add(RestUtils.Headers.OWNER_ID, "ownerId1");
-    headers.add(RestUtils.Headers.TTL, "ttl1");
-    headers.add(RestUtils.Headers.PRIVATE, "private1");
-    headers.add(RestUtils.Headers.SERVICE_ID, "serviceId1");
-    headers.add(RestUtils.Headers.X_FORWARDED_FOR, "x-forwarded-for");
     headersList.add(headers);
     return headersList;
   }

@@ -28,7 +28,7 @@ public class NettyServerFactory implements NioServerFactory {
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
-   *                              to respond to VIP health check requests
+   *                              to respond to health check requests
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,

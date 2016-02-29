@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Captures headers and other required info from request and responses to make public access log entries
+ * Captures headers and other required info from request and responses, to make public access log entries
  * {@link PublicAccessLogger} assists in logging the required information
  */
 public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
@@ -31,40 +31,6 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
 
   public PublicAccessLogRequestHandler(PublicAccessLogger publicAccessLogger) {
     this.publicAccessLogger = publicAccessLogger;
-  }
-
-  /**
-   * Appends specified headers to the log message if those headers are not null
-   * @param tag pretty name for set of headers to append
-   * @param message http message from which to log headers
-   * @param headers array of headers to log
-   */
-  private void logHeaders(String tag, HttpMessage message, String[] headers) {
-    logMessage.append(tag).append(" (");
-    for (String header : headers) {
-      if (message.headers().get(header) != null) {
-        logMessage.append("[").append(header).append("=").append(message.headers().get(header)).append("] ");
-      }
-    }
-    boolean isChunked = HttpHeaders.isTransferEncodingChunked(message);
-    logMessage.append("[isChunked=").append(isChunked).append("]");
-    logMessage.append(")");
-  }
-
-  /**
-   * Appends duration of operation to the log message. Also appends duration of receive or send phases of
-   * operations if those phases used chunked encoding.
-   */
-  private void logDurations() {
-    long nowMs = System.currentTimeMillis();
-    logMessage.append("duration=").append(nowMs - requestArrivalTimeInMs).append("ms ");
-    if (requestLastChunkArrivalTimeInMs != INIT_TIME) {
-      logMessage.append("(chunked request receive=").append(requestLastChunkArrivalTimeInMs - requestArrivalTimeInMs)
-          .append("ms) ");
-    }
-    if (responseFirstChunkStartTimeInMs != INIT_TIME) {
-      logMessage.append("(chunked response send=").append(nowMs - responseFirstChunkStartTimeInMs).append("ms) ");
-    }
   }
 
   @Override
@@ -135,6 +101,40 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
           "No action being taken other than logging this unexpected state.");
     }
     super.write(ctx, msg, promise);
+  }
+
+  /**
+   * Appends specified headers to the log message if those headers are not null
+   * @param tag pretty name for set of headers to append
+   * @param message http message from which to log headers
+   * @param headers array of headers to log
+   */
+  private void logHeaders(String tag, HttpMessage message, String[] headers) {
+    logMessage.append(tag).append(" (");
+    for (String header : headers) {
+      if (message.headers().get(header) != null) {
+        logMessage.append("[").append(header).append("=").append(message.headers().get(header)).append("] ");
+      }
+    }
+    boolean isChunked = HttpHeaders.isTransferEncodingChunked(message);
+    logMessage.append("[isChunked=").append(isChunked).append("]");
+    logMessage.append(")");
+  }
+
+  /**
+   * Appends duration of operation to the log message. Also appends duration of receive or send phases of
+   * operations if those phases used chunked encoding.
+   */
+  private void logDurations() {
+    long nowMs = System.currentTimeMillis();
+    logMessage.append("duration=").append(nowMs - requestArrivalTimeInMs).append("ms ");
+    if (requestLastChunkArrivalTimeInMs != INIT_TIME) {
+      logMessage.append("(chunked request receive=").append(requestLastChunkArrivalTimeInMs - requestArrivalTimeInMs)
+          .append("ms) ");
+    }
+    if (responseFirstChunkStartTimeInMs != INIT_TIME) {
+      logMessage.append("(chunked response send=").append(nowMs - responseFirstChunkStartTimeInMs).append("ms) ");
+    }
   }
 
   /**

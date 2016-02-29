@@ -47,7 +47,7 @@ public class NettyServerFactoryTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
     PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
-    RestServerState restServerState = new RestServerState("/ambry-frontend/admin");
+    RestServerState restServerState = new RestServerState("/healthCheck");
 
     // VerifiableProperties null.
     try {

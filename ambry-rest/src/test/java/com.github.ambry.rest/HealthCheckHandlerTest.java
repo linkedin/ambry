@@ -89,6 +89,7 @@ public class HealthCheckHandlerTest {
     FullHttpResponse response = (FullHttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     assertEquals("Unexpected content", httpMethod.toString(), RestTestUtils.getContentString(response));
+    channel.close();
   }
 
   // helpers

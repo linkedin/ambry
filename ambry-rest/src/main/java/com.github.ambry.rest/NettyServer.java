@@ -114,7 +114,7 @@ class NettyServerDeployer implements Runnable {
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
-   *                              to respond to VIP health check requests
+   *                              to respond to health check requests
    */
   public NettyServerDeployer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler,
       PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
