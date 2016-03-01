@@ -546,7 +546,7 @@ public class DumpData {
       String blobId = null;
       String blobProperty = null;
       String usermetadata = null;
-      String blobOutput = null;
+      String blobDataOutput = null;
       String deleteMsg = null;
       try {
         short version = randomAccessFile.readShort();
@@ -575,7 +575,7 @@ public class DumpData {
             ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
             usermetadata = " Metadata - size " + metadata.capacity();
             BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
-            blobOutput = "Blob - size " + blobData.getSize();
+            blobDataOutput = "Blob - size " + blobData.getSize();
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
             isDeleted = true;
@@ -586,10 +586,10 @@ public class DumpData {
             if (filter) {
               if (blobs.contains(id.getID())) {
                 logOutput(
-                    messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
+                    messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobDataOutput);
               }
             } else {
-              logOutput(messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
+              logOutput(messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobDataOutput);
             }
           } else {
             if (filter) {
@@ -612,13 +612,13 @@ public class DumpData {
       } catch (IllegalArgumentException e) {
         logOutput("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
             "while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
-            + blobProperty + usermetadata + blobOutput + " exception: " + e);
+            + blobProperty + usermetadata + blobDataOutput + " exception: " + e);
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
       } catch (MessageFormatException e) {
         logOutput("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
             " while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
-            + blobProperty + usermetadata + blobOutput + " exception: " + e);
+            + blobProperty + usermetadata + blobDataOutput + " exception: " + e);
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
       } catch (EOFException e) {
