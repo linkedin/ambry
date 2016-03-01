@@ -19,7 +19,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -47,11 +49,14 @@ public class NettyRequestTest {
   public void conversionWithGoodInputTest()
       throws IOException, RestServiceException {
     // headers
-    HttpHeaders headers = new DefaultHttpHeaders();
+    HttpHeaders headers = new DefaultHttpHeaders(false);
+    headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextInt(Integer.MAX_VALUE));
     headers.add("headerKey", "headerValue1");
     headers.add("headerKey", "headerValue2");
     headers.add("overLoadedKey", "headerOverloadedValue");
-    headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
+    headers.add("paramNoValueInUriButValueInHeader", "paramValueInHeader");
+    headers.add("headerNoValue", (Object) null);
+    headers.add("headerNoValueButValueInUri", (Object) null);
 
     // params
     Map<String, List<String>> params = new HashMap<String, List<String>>();
@@ -62,11 +67,20 @@ public class NettyRequestTest {
     values = new ArrayList<String>(1);
     values.add("paramOverloadedValue");
     params.put("overLoadedKey", values);
+    values = new ArrayList<String>(1);
+    values.add("headerValueInUri");
+    params.put("headerNoValueButValueInUri", values);
+    params.put("paramNoValue", null);
+    params.put("paramNoValueInUriButValueInHeader", null);
 
     StringBuilder uriAttachmentBuilder = new StringBuilder("?");
     for (Map.Entry<String, List<String>> param : params.entrySet()) {
-      for (String value : param.getValue()) {
-        uriAttachmentBuilder.append(param.getKey()).append("=").append(value).append("&");
+      if (param.getValue() != null) {
+        for (String value : param.getValue()) {
+          uriAttachmentBuilder.append(param.getKey()).append("=").append(value).append("&");
+        }
+      } else {
+        uriAttachmentBuilder.append(param.getKey()).append("&");
       }
     }
     uriAttachmentBuilder.deleteCharAt(uriAttachmentBuilder.length() - 1);
@@ -423,6 +437,24 @@ public class NettyRequestTest {
     }
   }
 
+  @Test
+  public void keepAliveTest()
+      throws RestServiceException {
+    NettyRequest request = createNettyRequest(HttpMethod.GET, "/", null);
+    // by default, keep-alive is true for HTTP 1.1
+    assertTrue("Keep-alive not as expected", request.isKeepAlive());
+
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+    request = createNettyRequest(HttpMethod.GET, "/", headers);
+    assertTrue("Keep-alive not as expected", request.isKeepAlive());
+
+    headers = new DefaultHttpHeaders();
+    headers.set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
+    request = createNettyRequest(HttpMethod.GET, "/", headers);
+    assertFalse("Keep-alive not as expected", request.isKeepAlive());
+  }
+
   /**
    * Tests the {@link NettyRequest#getSize()} function to see that it respects priorities.
    * @throws RestServiceException
@@ -487,7 +519,7 @@ public class NettyRequestTest {
       throws RestServiceException {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
-    HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
+    HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, false);
     if (headers != null) {
       httpRequest.headers().set(headers);
     }
@@ -549,17 +581,47 @@ public class NettyRequestTest {
     assertEquals("Mismatch in path", uri.substring(0, uri.indexOf("?")), nettyRequest.getPath());
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
 
-    Map<String, List<String>> args = nettyRequest.getArgs();
+    Map<String, List<String>> receivedArgs = new HashMap<String, List<String>>();
+    for (Map.Entry<String, Object> e : nettyRequest.getArgs().entrySet()) {
+      if (!receivedArgs.containsKey(e.getKey())) {
+        receivedArgs.put(e.getKey(), new LinkedList<String>());
+      }
+      if (e.getValue() != null) {
+        List<String> values =
+            Arrays.asList(e.getValue().toString().split(NettyRequest.MULTIPLE_HEADER_VALUE_DELIMITER));
+        receivedArgs.get(e.getKey()).addAll(values);
+      }
+    }
+    Map<String, Integer> keyValueCount = new HashMap<String, Integer>();
     for (Map.Entry<String, List<String>> param : params.entrySet()) {
-      assertTrue("Did not find key: " + param.getKey(), args.containsKey(param.getKey()));
-      boolean containsAllValues = args.get(param.getKey()).containsAll(param.getValue());
-      assertTrue("Did not find all values expected for key: " + param.getKey(), containsAllValues);
+      assertTrue("Did not find key: " + param.getKey(), receivedArgs.containsKey(param.getKey()));
+      if (!keyValueCount.containsKey(param.getKey())) {
+        keyValueCount.put(param.getKey(), 0);
+      }
+
+      if (param.getValue() != null) {
+        boolean containsAllValues = receivedArgs.get(param.getKey()).containsAll(param.getValue());
+        assertTrue("Did not find all values expected for key: " + param.getKey(), containsAllValues);
+        keyValueCount.put(param.getKey(), keyValueCount.get(param.getKey()) + param.getValue().size());
+      }
     }
 
     for (Map.Entry<String, String> e : headers) {
-      assertTrue("Did not find key: " + e.getKey(), args.containsKey(e.getKey()));
-      boolean containsValue = args.get(e.getKey()).contains(e.getValue());
-      assertTrue("Did not find value '" + e.getValue() + "' expected for key: '" + e.getKey() + "'", containsValue);
+      assertTrue("Did not find key: " + e.getKey(), receivedArgs.containsKey(e.getKey()));
+      if (!keyValueCount.containsKey(e.getKey())) {
+        keyValueCount.put(e.getKey(), 0);
+      }
+      if (headers.get(e.getKey()) != null) {
+        assertTrue("Did not find value '" + e.getValue() + "' expected for key: '" + e.getKey() + "'",
+            receivedArgs.get(e.getKey()).contains(e.getValue()));
+        keyValueCount.put(e.getKey(), keyValueCount.get(e.getKey()) + 1);
+      }
+    }
+
+    assertEquals("Number of args does not match", keyValueCount.size(), receivedArgs.size());
+    for (Map.Entry<String, Integer> e : keyValueCount.entrySet()) {
+      assertEquals("Value count for key " + e.getKey() + " does not match", e.getValue().intValue(),
+          receivedArgs.get(e.getKey()).size());
     }
   }
 

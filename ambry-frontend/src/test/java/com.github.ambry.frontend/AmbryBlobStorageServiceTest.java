@@ -1107,7 +1107,7 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  public Map<String, List<String>> getArgs() {
+  public Map<String, Object> getArgs() {
     throw new IllegalStateException("Not implemented");
   }
 

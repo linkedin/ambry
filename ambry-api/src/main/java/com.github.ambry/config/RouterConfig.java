@@ -30,16 +30,16 @@ public class RouterConfig {
   /**
    * The max connections allowed per (datanode, port) for plain text
    */
-  @Config("router.max.connections.per.port.plain.text")
+  @Config("router.scaling.unit.max.connections.per.port.plain.text")
   @Default("5")
-  public final int routerMaxConnectionsPerPortPlainText;
+  public final int routerScalingUnitMaxConnectionsPerPortPlainText;
 
   /**
    * The max connections allowed per (datanode, port) for ssl
    */
-  @Config("router.max.connections.per.port.ssl")
+  @Config("router.scaling.unit.max.connections.per.port.ssl")
   @Default("2")
-  public final int routerMaxConnectionsPerPortSsl;
+  public final int routerScalingUnitMaxConnectionsPerPortSsl;
 
   /**
    * The max chunk size to be used for put operations.
@@ -56,10 +56,10 @@ public class RouterConfig {
     routerScalingUnitCount = verifiableProperties.getIntInRange("router.scaling.unit.count", 1, 0, 10);
     routerHostname = verifiableProperties.getString("router.hostname");
     routerDatacenterName = verifiableProperties.getString("router.datacenter.name");
-    routerMaxConnectionsPerPortPlainText =
-        verifiableProperties.getIntInRange("router.max.connections.per.port.plain.text", 5, 1, 20);
-    routerMaxConnectionsPerPortSsl =
-        verifiableProperties.getIntInRange("router.max.connections.per.port.ssl", 2, 1, 20);
+    routerScalingUnitMaxConnectionsPerPortPlainText =
+        verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.plain.text", 5, 1, 20);
+    routerScalingUnitMaxConnectionsPerPortSsl =
+        verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 20);
     routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.put.chunk.size.bytes", 4 * 1024 * 1024);
   }
 }
