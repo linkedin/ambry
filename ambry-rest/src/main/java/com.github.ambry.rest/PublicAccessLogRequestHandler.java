@@ -44,6 +44,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
         logger.error(logMessage.toString());
       }
       reset();
+      requestArrivalTimeInMs = System.currentTimeMillis();
       request = (HttpRequest) obj;
       logMessage.append(ctx.channel().remoteAddress()).append(" ");
       logMessage.append(request.getMethod().toString()).append(" ");
