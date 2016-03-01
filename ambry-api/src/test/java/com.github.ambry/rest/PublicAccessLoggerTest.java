@@ -5,6 +5,9 @@ import junit.framework.Assert;
 import org.junit.Test;
 
 
+/**
+ * Unit tests {@link PublicAccessLogger}
+ */
 public class PublicAccessLoggerTest {
   private final String REQUEST_HEADER_PREFIX = "requestHeader";
   private final String RESPONSE_HEADER_PREFIX = "responseHeader";

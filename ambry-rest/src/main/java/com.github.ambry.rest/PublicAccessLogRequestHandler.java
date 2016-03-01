@@ -22,7 +22,6 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private long requestArrivalTimeInMs;
   private long requestLastChunkArrivalTimeInMs;
   private long responseFirstChunkStartTimeInMs;
-  private boolean requestInProgress = false;
   private volatile StringBuilder logMessage;
   private volatile HttpRequest request;
 
@@ -31,6 +30,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
 
   public PublicAccessLogRequestHandler(PublicAccessLogger publicAccessLogger) {
     this.publicAccessLogger = publicAccessLogger;
+    reset();
   }
 
   @Override
@@ -38,14 +38,12 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
       throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     if (obj instanceof HttpRequest) {
-      if (requestInProgress) {
+      if (request != null) {
         logDurations();
         logMessage.append(" : Received request while another request in progress. Resetting log message.");
         logger.error(logMessage.toString());
       }
-      logMessage = new StringBuilder();
-      requestArrivalTimeInMs = System.currentTimeMillis();
-      reset(true);
+      reset();
       request = (HttpRequest) obj;
 
       logMessage.append(ctx.channel().remoteAddress()).append(" ");
@@ -53,13 +51,10 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
       logMessage.append(request.getUri()).append(", ");
       logHeaders("Request", request, publicAccessLogger.getRequestHeaders());
       logMessage.append(", ");
-    } else if (obj instanceof HttpContent) {
-      HttpContent httpContent = (HttpContent) obj;
-      if (httpContent instanceof LastHttpContent) {
-        requestLastChunkArrivalTimeInMs = System.currentTimeMillis();
-      }
-    } else {
-      logger.error("Receiving request (messageReceived) that is not of type HttpRequest or HttpChunk. " +
+    } else if (obj instanceof LastHttpContent) {
+      requestLastChunkArrivalTimeInMs = System.currentTimeMillis();
+    } else if(!(obj instanceof HttpContent)){
+      logger.error("Receiving request (messageReceived) that is not of type HttpRequest or HttpContent. " +
           "Receiving request from " + ctx.channel().remoteAddress() + ". " +
           "Request is of type " + obj.getClass() + ". " +
           "No action being taken other than logging this unexpected state.");
@@ -70,7 +65,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
-    if (requestInProgress) {
+    if (request != null) {
       boolean recognized = false;
       if (msg instanceof HttpResponse) {
         recognized = true;
@@ -86,11 +81,11 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
       if (msg instanceof LastHttpContent) {
         recognized = true;
         logDurations();
-        reset(false);
         publicAccessLogger.logInfo(logMessage.toString());
+        reset();
       }
       if (!recognized && !(msg instanceof HttpContent)) {
-        logger.error("Sending response (writeRequested) that is not of type Response or LastHttpContent. " +
+        logger.error("Sending response (writeRequested) that is not of type HttpResponse or HttpContent. " +
             "Sending response to " + ctx.channel().remoteAddress() + ". " +
             "Request is of type " + msg.getClass() + ". " +
             "No action being taken other than logging this unexpected state.");
@@ -101,6 +96,24 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
           "No action being taken other than logging this unexpected state.");
     }
     super.write(ctx, msg, promise);
+  }
+
+  @Override
+  public void disconnect(ChannelHandlerContext ctx, ChannelPromise future)
+      throws Exception {
+    if (request != null) {
+      logError(" : Channel disconnected while request in progress.");
+    }
+    super.disconnect(ctx, future);
+  }
+
+  @Override
+  public void close(ChannelHandlerContext ctx, ChannelPromise future)
+      throws Exception {
+    if (request != null) {
+      logError(" : Channel closed while request in progress.");
+    }
+    super.close(ctx, future);
   }
 
   /**
@@ -140,36 +153,19 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   /**
    * Resets some variables as part of logging a response
    */
-  private void reset(boolean requestInProgress) {
-    this.requestInProgress = requestInProgress;
+  private void reset() {
     responseFirstChunkStartTimeInMs = INIT_TIME;
     requestLastChunkArrivalTimeInMs = INIT_TIME;
-  }
-
-  @Override
-  public void disconnect(ChannelHandlerContext ctx, ChannelPromise future)
-      throws Exception {
-    if (requestInProgress) {
-      logError(" : Channel disconnected while request in progress.");
-    }
-    super.disconnect(ctx, future);
-  }
-
-  @Override
-  public void close(ChannelHandlerContext ctx, ChannelPromise future)
-      throws Exception {
-    if (requestInProgress) {
-      logError(" : Channel closed while request in progress.");
-    }
-    super.close(ctx, future);
+    requestArrivalTimeInMs = INIT_TIME;
+    logMessage = new StringBuilder();
+    request = null;
   }
 
   /**
-   * Rests the requestInProgress and logs error message
+   * Logs error message
    * @param msg
    */
   private void logError(String msg) {
-    requestInProgress = false;
     logDurations();
     logMessage.append(msg);
     publicAccessLogger.logError(logMessage.toString());

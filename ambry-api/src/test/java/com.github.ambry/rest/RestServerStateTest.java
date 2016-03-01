@@ -4,15 +4,20 @@ import junit.framework.Assert;
 import org.junit.Test;
 
 
+/**
+ * Unit tests {@link RestServerState}
+ */
 public class RestServerStateTest {
-  RestServerState serverState;
+  private final RestServerState serverState;
+  private final String healthCheckUri = "/healthCheck";
 
   public RestServerStateTest() {
-    serverState = new RestServerState("/healthCheck");
+    serverState = new RestServerState(healthCheckUri);
   }
 
   @Test
   public void testRestServerState() {
+    Assert.assertEquals("Health check Uri mismatch ", healthCheckUri, serverState.getHealthCheckUri());
     Assert.assertFalse("Service should be down by default ", serverState.isServiceUp());
     serverState.markServiceUp();
     Assert.assertTrue("Service is expected to be up ", serverState.isServiceUp());

@@ -5,6 +5,7 @@ import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -16,6 +17,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
+/**
+ * Unit tests for {@link PublicAccessLogRequestHandler}
+ */
 public class PublicAccessLogRequestHandlerTest {
   private final MockPublicAccessLogger publicAccessLogger;
   private String requestHeaders = "Host,Content-Length,x-ambry-content-type";
@@ -74,6 +78,7 @@ public class PublicAccessLogRequestHandlerTest {
    * Does a test to see that request handling results in expected entries in public access log
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
+   * @param testErrorCase true if error case has to be tested, false otherwise
    * @throws IOException
    */
   private void doRequestHandleTest(HttpMethod httpMethod, String uri, boolean testErrorCase)
@@ -81,37 +86,54 @@ public class PublicAccessLogRequestHandlerTest {
     EmbeddedChannel channel = createChannel();
     List<HttpHeaders> httpHeadersList = getHeadersList();
     for (HttpHeaders headers : httpHeadersList) {
-      channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri, headers));
-      if (uri.equals(DISCONNECT_URI)) {
-        channel.disconnect();
-      } else {
-        channel.writeInbound(new DefaultLastHttpContent());
-      }
-      String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
-
-      // verify remote host, http method and uri
-      String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpMethod + " " + uri;
-      Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
-          lastLogEntry.startsWith(subString));
-      // verify headers
-      verifyPublicAccessLogEntryForHeaders(lastLogEntry, headers, httpMethod);
-
-      // verify response
-      subString = "Response ([isChunked=false]), status=" + HttpResponseStatus.OK.code();
-
+      HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
+      HttpHeaders.setKeepAlive(request, true);
+      sendRequestCheckResponse(channel, request, uri, headers, testErrorCase);
       if (!testErrorCase) {
-        Assert.assertTrue("Public Access log entry doesn't have response set correctly",
-            lastLogEntry.contains(subString));
+        Assert.assertTrue("Channel should not be closed ", channel.isOpen());
       } else {
-        Assert.assertTrue("Public Access log entry doesn't have error set correctly ",
-            lastLogEntry.contains(": Channel closed while request in progress."));
-      }
-      if (testErrorCase) {
-        // during error cases, the channel would have been closed
+        Assert.assertFalse("Channel should have been closed ", channel.isOpen());
         channel = createChannel();
       }
     }
     channel.close();
+  }
+
+  /**
+   * Sends the provided {@code httpRequest} and verifies that the response is as expected.
+   * @param channel the {@link EmbeddedChannel} to send the request over.
+   * @param httpRequest the {@link HttpRequest} that has to be sent
+   * @param uri, Uri to be used for the request
+   * @param headers {@link HttpHeaders} that is set in the request to be used for verification purposes
+   * @param testErrorCase true if error case has to be tested, false otherwise
+   */
+  private void sendRequestCheckResponse(EmbeddedChannel channel, HttpRequest httpRequest, String uri,
+      HttpHeaders headers, boolean testErrorCase) {
+    channel.writeInbound(httpRequest);
+    if (uri.equals(DISCONNECT_URI)) {
+      channel.disconnect();
+    } else {
+      channel.writeInbound(new DefaultLastHttpContent());
+    }
+    String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
+
+    // verify remote host, http method and uri
+    String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpRequest.getMethod() + " " + uri;
+    Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
+        lastLogEntry.startsWith(subString));
+    // verify headers
+    verifyPublicAccessLogEntryForHeaders(lastLogEntry, headers, httpRequest.getMethod());
+
+    // verify response
+    subString = "Response ([isChunked=false]), status=" + HttpResponseStatus.OK.code();
+
+    if (!testErrorCase) {
+      Assert
+          .assertTrue("Public Access log entry doesn't have response set correctly", lastLogEntry.contains(subString));
+    } else {
+      Assert.assertTrue("Public Access log entry doesn't have error set correctly ",
+          lastLogEntry.contains(": Channel closed while request in progress."));
+    }
   }
 
   // helpers

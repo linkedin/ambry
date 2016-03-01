@@ -33,7 +33,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   public HealthCheckHandler(RestServerState restServerState) {
     this.restServerState = restServerState;
     this.healthCheckUri = restServerState.getHealthCheckUri();
-    logger.info("Created HealthCheckRequestHandler for restServerHealthCheckUri=" + healthCheckUri);
+    logger.info("Created HealthCheckHandler for HealthCheckUri=" + healthCheckUri);
   }
 
   @Override
@@ -56,15 +56,14 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
             HttpHeaders.setKeepAlive(response, false);
             HttpHeaders.setContentLength(response, badBytes.length);
           }
-          ReferenceCountUtil.release(obj);
       } else {
         forwardObj = true;
       }
     }
     if (obj instanceof LastHttpContent) {
       if (response != null) {  // response was created when we received the request with health check uri
-        ReferenceCountUtil.release(obj);
         ctx.writeAndFlush(response);
+        request = null;
       } else {
         // request was not for health check uri
         forwardObj = true;
@@ -75,6 +74,8 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     }
     if (forwardObj) {
       super.channelRead(ctx, obj);
+    } else{
+      ReferenceCountUtil.release(obj);
     }
   }
 
@@ -89,5 +90,8 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
       }
     }
     super.write(ctx, msg, promise);
+    if(response != null && !HttpHeaders.isKeepAlive(response)){
+      ctx.close(promise);
+    }
   }
 }
