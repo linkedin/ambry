@@ -22,8 +22,8 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private long requestArrivalTimeInMs;
   private long requestLastChunkArrivalTimeInMs;
   private long responseFirstChunkStartTimeInMs;
-  private volatile StringBuilder logMessage;
-  private volatile HttpRequest request;
+  private StringBuilder logMessage;
+  private HttpRequest request;
 
   private static final long INIT_TIME = -1;
   private final Logger logger = LoggerFactory.getLogger(getClass());

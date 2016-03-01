@@ -2,6 +2,7 @@ package com.github.ambry.rest;
 
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -57,14 +58,17 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
             HttpHeaders.setContentLength(response, badBytes.length);
           }
       } else {
+        // Rest server could be down even if not for health check request. We intentionally don't take any action in this
+        // handler for such cases and leave it to the downstream handlers to handle it
         forwardObj = true;
       }
     }
     if (obj instanceof LastHttpContent) {
-      if (response != null) {  // response was created when we received the request with health check uri
-        ctx.writeAndFlush(response);
+      if (response != null) {
+        // response was created when we received the request with health check uri
+        ChannelFuture future = ctx.writeAndFlush(response);
         if(!HttpHeaders.isKeepAlive(response)){
-          ctx.close(ctx.newPromise());
+          future.addListener(ChannelFutureListener.CLOSE);
         }
         request = null;
       } else {
@@ -93,8 +97,5 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
       }
     }
     super.write(ctx, msg, promise);
-    if(response != null && !HttpHeaders.isKeepAlive(response)){
-      ctx.close(promise);
-    }
   }
 }
