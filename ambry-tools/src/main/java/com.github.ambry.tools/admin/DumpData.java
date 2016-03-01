@@ -6,7 +6,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -278,8 +278,9 @@ public class DumpData {
     return numberOfKeysProcessed;
   }
 
-  private boolean isExpired(IndexValue value){
-    return value.getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > value.getTimeToLiveInMs();
+  private boolean isExpired(IndexValue value) {
+    return value.getTimeToLiveInMs() != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > value
+        .getTimeToLiveInMs();
   }
 
   public long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
@@ -545,7 +546,7 @@ public class DumpData {
       String blobId = null;
       String blobProperty = null;
       String usermetadata = null;
-      String blobOutput = null;
+      String blobDataOutput = null;
       String deleteMsg = null;
       try {
         short version = randomAccessFile.readShort();
@@ -573,8 +574,8 @@ public class DumpData {
                 " serviceId " + props.getServiceId();
             ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
             usermetadata = " Metadata - size " + metadata.capacity();
-            BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
-            blobOutput = "Blob - size " + output.getSize();
+            BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+            blobDataOutput = "Blob - size " + blobData.getSize();
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
             isDeleted = true;
@@ -585,10 +586,10 @@ public class DumpData {
             if (filter) {
               if (blobs.contains(id.getID())) {
                 logOutput(
-                    messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
+                    messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobDataOutput);
               }
             } else {
-              logOutput(messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
+              logOutput(messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobDataOutput);
             }
           } else {
             if (filter) {
@@ -611,13 +612,13 @@ public class DumpData {
       } catch (IllegalArgumentException e) {
         logOutput("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
             "while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
-            + blobProperty + usermetadata + blobOutput + " exception: " + e);
+            + blobProperty + usermetadata + blobDataOutput + " exception: " + e);
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
       } catch (MessageFormatException e) {
         logOutput("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
             " while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
-            + blobProperty + usermetadata + blobOutput + " exception: " + e);
+            + blobProperty + usermetadata + blobDataOutput + " exception: " + e);
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
       } catch (EOFException e) {
@@ -744,8 +745,8 @@ public class DumpData {
               " serviceId " + props.getServiceId();
           ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
           usermetadata = " Metadata - size " + metadata.capacity();
-          BlobOutput output = MessageFormatRecord.deserializeBlob(streamlog);
-          blobOutput = "Blob - size " + output.getSize();
+          BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+          blobOutput = "Blob - size " + blobData.getSize();
         } else {
           boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
           isDeleted = true;

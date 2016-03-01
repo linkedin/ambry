@@ -1,5 +1,7 @@
 package com.github.ambry.messageformat;
 
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
@@ -8,6 +10,8 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +31,8 @@ public class MessageFormatRecord {
   public static final short Delete_Version_V1 = 1;
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Blob_Version_V1 = 1;
+  public static final short Blob_Version_V2 = 2;
+  public static final short Metadata_Content_Version_V1 = 1;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
   static boolean isValidHeaderVersion(short headerVersion) {
@@ -120,9 +126,9 @@ public class MessageFormatRecord {
     }
   }
 
-  public static BlobOutput deserializeBlob(InputStream stream)
+  public static BlobData deserializeBlob(InputStream stream)
       throws IOException, MessageFormatException {
-    return deserializeAndGetBlobWithVersion(stream).getBlobOutput();
+    return deserializeAndGetBlobWithVersion(stream).getBlobData();
   }
 
   static DeserializedBlob deserializeAndGetBlobWithVersion(InputStream stream)
@@ -133,6 +139,8 @@ public class MessageFormatRecord {
     switch (version) {
       case Blob_Version_V1:
         return new DeserializedBlob(Blob_Version_V1, Blob_Format_V1.deserializeBlobRecord(crcStream));
+      case Blob_Version_V2:
+        return new DeserializedBlob(Blob_Version_V2, Blob_Format_V2.deserializeBlobRecord(crcStream));
       default:
         throw new MessageFormatException("data version not supported", MessageFormatErrorCodes.Unknown_Format_Version);
     }
@@ -141,6 +149,8 @@ public class MessageFormatRecord {
   static boolean isValidBlobRecordVersion(short blobRecordVersion) {
     switch (blobRecordVersion) {
       case Blob_Version_V1:
+        return true;
+      case Blob_Version_V2:
         return true;
       default:
         return false;
@@ -506,7 +516,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobSize);
     }
 
-    public static BlobOutput deserializeBlobRecord(CrcInputStream crcStream)
+    public static BlobData deserializeBlobRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long dataSize = dataStream.readLong();
@@ -521,7 +531,120 @@ public class MessageFormatRecord {
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new BlobOutput(dataSize, output);
+      return new BlobData(BlobType.DataBlob, dataSize, output);
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * |         |           |            |            |            |
+   * | version | blobType  |    size    |  content   |     Crc    |
+   * |(2 bytes)| (2 bytes) |  (8 bytes) |  (n bytes) |  (8 bytes) |
+   * |         |           |            |            |            |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  version    - The version of the blob record
+   *
+   *  blobType   - The type of the blob
+   *
+   *  size       - The size of the blob content
+   *
+   *  content    - The actual content that represents the blob
+   *
+   *  crc        - The crc of the blob record
+   *
+   */
+  public static class Blob_Format_V2 {
+    public static final int Blob_Size_Field_In_Bytes = 8;
+    public static final int Blob_Type_Field_In_Bytes = 2;
+    private static Logger logger = LoggerFactory.getLogger(Blob_Format_V2.class);
+
+    public static long getBlobRecordSize(long blobSize) {
+      return Version_Field_Size_In_Bytes +
+          Blob_Type_Field_In_Bytes +
+          Blob_Size_Field_In_Bytes +
+          blobSize +
+          Crc_Size;
+    }
+
+    public static void serializePartialBlobRecord(ByteBuffer outputBuffer, long blobContentSize, BlobType blobType) {
+      outputBuffer.putShort(Blob_Version_V2);
+      outputBuffer.putShort((short) blobType.ordinal());
+      outputBuffer.putLong(blobContentSize);
+    }
+
+    public static BlobData deserializeBlobRecord(CrcInputStream crcStream)
+        throws IOException, MessageFormatException {
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      short blobTypeOrdinal = dataStream.readShort();
+      if (blobTypeOrdinal > BlobType.values().length) {
+        logger.error("corrupt data while parsing blob content BlobContentType {}", blobTypeOrdinal);
+        throw new MessageFormatException("corrupt data while parsing blob content",
+            MessageFormatErrorCodes.Data_Corrupt);
+      }
+      BlobType blobContentType = BlobType.values()[blobTypeOrdinal];
+      long dataSize = dataStream.readLong();
+      if (dataSize > Integer.MAX_VALUE) {
+        throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
+      }
+      ByteBufferInputStream output = new ByteBufferInputStream(crcStream, (int) dataSize);
+      long crc = crcStream.getValue();
+      long streamCrc = dataStream.readLong();
+      if (crc != streamCrc) {
+        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
+        throw new MessageFormatException("corrupt data while parsing blob content",
+            MessageFormatErrorCodes.Data_Corrupt);
+      }
+      return new BlobData(blobContentType, dataSize, output);
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * |         |               |            |            |          |
+   * | version |   no of keys  |    key1    |     key2   |  ......  |
+   * |(2 bytes)|    (4 bytes)  |            |            |  ......  |
+   * |         |               |            |            |          |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  version         - The version of the blob property record
+   *
+   *  no of keys      - total number of keys
+   *
+   *  key1            - first key to be part of metadata blob
+   *
+   *  key2            - second key to be part of metadata blob
+   *
+   */
+  public static class Metadata_Content_Format_V1 {
+    public static final int Key_Count_Field_Size_In_Bytes = 4;
+
+    public static int getMetadataContentSize(int keySize, int numberOfKeys) {
+      return Version_Field_Size_In_Bytes +
+          Key_Count_Field_Size_In_Bytes +
+          (numberOfKeys * keySize);
+    }
+
+    public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, List<StoreKey> keys) {
+      int keySize = keys.get(0).sizeInBytes();
+      outputBuffer.putShort(Metadata_Content_Version_V1);
+      outputBuffer.putInt(keys.size());
+      for (StoreKey storeKey : keys) {
+        if (storeKey.sizeInBytes() != keySize) {
+          throw new IllegalArgumentException("Keys are not of same size");
+        }
+        outputBuffer.put(storeKey.toBytes());
+      }
+    }
+
+    public static List<StoreKey> deserializeMetadataContentRecord(DataInputStream stream,
+        StoreKeyFactory storeKeyFactory)
+        throws IOException, MessageFormatException {
+      List<StoreKey> keys = new ArrayList<StoreKey>();
+      int numberOfKeys = stream.readInt();
+      for (int i = 0; i < numberOfKeys; i++) {
+        StoreKey storeKey = storeKeyFactory.getStoreKey(stream);
+        keys.add(storeKey);
+      }
+      return keys;
     }
   }
 }
@@ -564,18 +687,18 @@ class DeserializedUserMetadata {
 
 class DeserializedBlob {
   private short version;
-  private BlobOutput blobOutput;
+  private BlobData blobData;
 
-  public DeserializedBlob(short version, BlobOutput blobOutput) {
+  public DeserializedBlob(short version, BlobData blobData) {
     this.version = version;
-    this.blobOutput = blobOutput;
+    this.blobData = blobData;
   }
 
   public short getVersion() {
     return version;
   }
 
-  public BlobOutput getBlobOutput() {
-    return blobOutput;
+  public BlobData getBlobData() {
+    return blobData;
   }
 }

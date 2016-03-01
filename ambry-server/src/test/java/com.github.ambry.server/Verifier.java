@@ -4,7 +4,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -148,11 +148,11 @@ class Verifier implements Runnable {
                 throw new IllegalStateException();
               } else {
                 try {
-                  BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-                  byte[] blobout = new byte[(int) blobOutput.getSize()];
+                  BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+                  byte[] blobout = new byte[(int) blobData.getSize()];
                   int readsize = 0;
-                  while (readsize < blobOutput.getSize()) {
-                    readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+                  while (readsize < blobData.getSize()) {
+                    readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
                   }
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();

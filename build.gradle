@@ -115,6 +115,7 @@ project(':ambry-messageformat') {
         compile project(':ambry-api'),
                 project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        testCompile project(':ambry-utils').sourceSets.test.output
     }
 }
 
