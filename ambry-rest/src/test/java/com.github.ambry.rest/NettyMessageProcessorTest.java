@@ -6,9 +6,11 @@ import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -84,6 +86,29 @@ public class NettyMessageProcessorTest {
     doRequestHandleWithKeepAlive(channel, HttpMethod.POST, RestMethod.POST);
     doRequestHandleWithKeepAlive(channel, HttpMethod.DELETE, RestMethod.DELETE);
     doRequestHandleWithKeepAlive(channel, HttpMethod.HEAD, RestMethod.HEAD);
+  }
+
+  /**
+   * Tests for the case where request also contains content.
+   * @throws IOException
+   */
+  @Test
+  public void requestWithContentTest()
+      throws IOException {
+    EmbeddedChannel channel = createChannel();
+    long requestId = requestIdGenerator.getAndIncrement();
+    String uri = MockBlobStorageService.ECHO_REST_METHOD + requestId;
+    // request with content.
+    FullHttpRequest requestWithContent = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
+    HttpHeaders.setKeepAlive(requestWithContent, false);
+    channel.writeInbound(requestWithContent);
+    HttpResponse response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    // MockBlobStorageService echoes the RestMethod + request id.
+    String expectedResponse = HttpMethod.GET.toString() + requestId;
+    assertEquals("Unexpected content", expectedResponse, getContentString((HttpContent) channel.readOutbound()));
+    assertTrue("End marker was expected", channel.readOutbound() instanceof LastHttpContent);
+    assertFalse("Channel not closed", channel.isOpen());
   }
 
   /**

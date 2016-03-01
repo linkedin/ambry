@@ -242,6 +242,10 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         if (request.getRestMethod().equals(RestMethod.POST)) {
           requestHandler.handleRequest(request, responseChannel);
         }
+        // handle content if request is also an instance of HttpContent
+        if (httpRequest instanceof HttpContent) {
+          handleContent((HttpContent) httpRequest);
+        }
       } finally {
         request.getMetricsTracker().nioMetricsTracker
             .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
@@ -278,10 +282,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         } catch (IllegalStateException e) {
           nettyMetrics.contentAdditionError.inc();
           throw new RestServiceException(e, RestServiceErrorCode.InvalidRequestState);
-        } catch (ClosedChannelException e) {
-          nettyMetrics.contentAdditionError.inc();
-          throw new RestServiceException("The request has been closed and is not accepting content",
-              RestServiceErrorCode.RequestChannelClosed);
         }
       } finally {
         long chunkProcessingTime = System.currentTimeMillis() - processingStartTime;

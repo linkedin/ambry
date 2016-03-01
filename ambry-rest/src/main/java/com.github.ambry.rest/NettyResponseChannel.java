@@ -24,7 +24,6 @@ import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Date;
@@ -218,13 +217,8 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private void closeRequest() {
     if (request != null && request.isOpen()) {
-      try {
-        request.getMetricsTracker().nioMetricsTracker.markRequestCompleted();
-        request.close();
-      } catch (IOException e) {
-        nettyMetrics.resourceReleaseError.inc();
-        logger.error("Error closing request", e);
-      }
+      request.getMetricsTracker().nioMetricsTracker.markRequestCompleted();
+      request.close();
     }
   }
 

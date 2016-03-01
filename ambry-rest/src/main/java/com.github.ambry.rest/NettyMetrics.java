@@ -46,13 +46,19 @@ class NettyMetrics {
   public final Counter missingResponseChannelError;
   public final Counter noRequestError;
   public final Counter unknownHttpObjectError;
+  // NettyMultipartRequest
+  public final Counter multipartRequestAlreadyClosedError;
+  public final Counter multipartRequestDecodeError;
+  public final Counter multipartRequestSizeMismatchError;
+  public final Counter repeatedPartsError;
+  public final Counter unsupportedPartError;
   // NettyRequest
+  public final Counter requestAlreadyClosedError;
   public final Counter unsupportedHttpMethodError;
   // NettyResponseChannel
   public final Counter channelWriteError;
   public final Counter deadResponseAccessError;
   public final Counter responseCompleteTasksError;
-  public final Counter resourceReleaseError;
   // NettyServer
   public final Counter nettyServerShutdownError;
   public final Counter nettyServerStartError;
@@ -130,7 +136,18 @@ class NettyMetrics {
     noRequestError = metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "NoRequestError"));
     unknownHttpObjectError =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "UnknownHttpObjectError"));
+    // NettyMultipartRequest
+    multipartRequestAlreadyClosedError =
+        metricRegistry.counter(MetricRegistry.name(NettyMultipartRequest.class, "AlreadyClosedError"));
+    multipartRequestDecodeError =
+        metricRegistry.counter(MetricRegistry.name(NettyMultipartRequest.class, "DecodeError"));
+    multipartRequestSizeMismatchError =
+        metricRegistry.counter(MetricRegistry.name(NettyMultipartRequest.class, "SizeMismatchError"));
+    repeatedPartsError = metricRegistry.counter(MetricRegistry.name(NettyMultipartRequest.class, "RepeatedPartsError"));
+    unsupportedPartError =
+        metricRegistry.counter(MetricRegistry.name(NettyMultipartRequest.class, "UnsupportedPartError"));
     // NettyRequest
+    requestAlreadyClosedError = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "AlreadyClosedError"));
     unsupportedHttpMethodError =
         metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "UnsupportedHttpMethodError"));
     // NettyResponseChannel
@@ -139,8 +156,6 @@ class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "DeadResponseAccessError"));
     responseCompleteTasksError =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResponseCompleteTasksError"));
-    resourceReleaseError =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ResourceReleaseError"));
     // NettyServer
     nettyServerShutdownError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "ShutdownError"));
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));
