@@ -61,6 +61,18 @@ public class PublicAccessLogRequestHandlerTest {
   }
 
   /**
+   * Tests two successive request without completing first request
+   * @throws IOException
+   */
+  @Test
+  public void requestHandleWithTwoSuccessiveRequest()
+      throws IOException {
+    doRequestHandleWithMultipleRequest(HttpMethod.POST, "POST");
+    doRequestHandleWithMultipleRequest(HttpMethod.GET, "GET");
+    doRequestHandleWithMultipleRequest(HttpMethod.DELETE, "DELETE");
+  }
+
+  /**
    * Tests for the request handling flow for close
    * @throws IOException
    */
@@ -144,6 +156,41 @@ public class PublicAccessLogRequestHandlerTest {
   }
 
   /**
+   * Does a test to see that two consecutive requests without sending last http content for first request fails
+   * @param httpMethod the {@link HttpMethod} for the request.
+   * @param uri Uri to be used during the request
+   * @throws IOException
+   */
+  private void doRequestHandleWithMultipleRequest(HttpMethod httpMethod, String uri)
+      throws IOException {
+    EmbeddedChannel channel = createChannel();
+    // contains one logged request header
+    HttpHeaders headers1 = new DefaultHttpHeaders();
+    headers1.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
+
+    HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers1);
+    HttpHeaders.setKeepAlive(request, true);
+    channel.writeInbound(request);
+
+    // contains one logged and not logged header
+    HttpHeaders headers2 = new DefaultHttpHeaders();
+    headers2.add(NOT_LOGGED_HEADER_KEY + "1", "headerValue1");
+    headers2.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
+    // sending another request w/o sending last http content
+    request = RestTestUtils.createRequest(httpMethod, uri, headers2);
+    HttpHeaders.setKeepAlive(request, true);
+    sendRequestCheckResponse(channel, request, uri, headers2, false);
+    Assert.assertTrue("Channel should not be closed ", channel.isOpen());
+
+    // verify that headers from first request is not found in public access log
+    String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
+    // verify request headers
+    verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers1, request.getMethod(), false);
+
+    channel.close();
+  }
+
+  /**
    * Sends the provided {@code httpRequest} and verifies that the response is as expected.
    * @param channel the {@link EmbeddedChannel} to send the request over.
    * @param httpRequest the {@link HttpRequest} that has to be sent
@@ -166,7 +213,7 @@ public class PublicAccessLogRequestHandlerTest {
     Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
         lastLogEntry.startsWith(subString));
     // verify request headers
-    verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers, httpRequest.getMethod());
+    verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers, httpRequest.getMethod(), true);
 
     // verify response
     subString = "Response (";
@@ -240,8 +287,8 @@ public class PublicAccessLogRequestHandlerTest {
    * @param headers expected headers
    * @param httpMethod HttpMethod type
    */
-  private void verifyPublicAccessLogEntryForRequestHeaders(String logEntry, HttpHeaders headers,
-      HttpMethod httpMethod) {
+  private void verifyPublicAccessLogEntryForRequestHeaders(String logEntry, HttpHeaders headers, HttpMethod httpMethod,
+      boolean expected) {
     Iterator<Map.Entry<String, String>> itr = headers.iterator();
     while (itr.hasNext()) {
       Map.Entry<String, String> entry = itr.next();
@@ -250,7 +297,11 @@ public class PublicAccessLogRequestHandlerTest {
         if (httpMethod == HttpMethod.GET && !entry.getKey().equals(HttpHeaders.Names.CONTENT_TYPE)) {
           String subString = "[" + entry.getKey() + "=" + entry.getValue() + "]";
           boolean actual = logEntry.contains(subString);
-          Assert.assertTrue("Public Access log entry does not have expected header", actual);
+          if (expected) {
+            Assert.assertTrue("Public Access log entry does not have expected header", actual);
+          } else {
+            Assert.assertFalse("Public Access log entry have unexpected header", actual);
+          }
         }
       }
     }
