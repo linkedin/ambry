@@ -26,6 +26,8 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
   private final static String CLOSE_URI = "close";
   private FullHttpResponse response;
   private String requestUri;
+  public static String responseHeaderKey1 = "responseHeaderKey1";
+  public static String responseHeaderKey2 = "responseHeaderKey2";
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
@@ -39,6 +41,12 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
       response =
           new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(methodBytes));
       HttpHeaders.setContentLength(response, methodBytes.length);
+      if(HttpHeaders.getHeader(request, responseHeaderKey1) != null){
+        HttpHeaders.setHeader(response, responseHeaderKey1, HttpHeaders.getHeader(request, responseHeaderKey1));
+      }
+      if(HttpHeaders.getHeader(request, responseHeaderKey2) != null){
+        HttpHeaders.setHeader(response, responseHeaderKey2, HttpHeaders.getHeader(request, responseHeaderKey2));
+      }
     } else if (obj instanceof LastHttpContent) {
       if (requestUri.equals(DISCONNECT_URI)) {
         ctx.disconnect();

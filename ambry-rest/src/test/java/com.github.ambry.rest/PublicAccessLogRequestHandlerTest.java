@@ -23,8 +23,8 @@ import org.junit.Test;
 public class PublicAccessLogRequestHandlerTest {
   private final MockPublicAccessLogger publicAccessLogger;
   private String requestHeaders = "Host,Content-Length,x-ambry-content-type";
-  private String responseHeaders = "Location,x-ambry-blob-size";
-  private static final String INVALID_HEADER_KEY_PREFIX = "headerKey";
+  private String responseHeaders = "responseHeaderKey1,responseHeaderKey2";
+  private static final String NOT_LOGGED_HEADER_KEY = "headerKey";
   private static final String DISCONNECT_URI = "disconnect";
   private static final String CLOSE_URI = "close";
 
@@ -121,11 +121,17 @@ public class PublicAccessLogRequestHandlerTest {
     String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpRequest.getMethod() + " " + uri;
     Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
         lastLogEntry.startsWith(subString));
-    // verify headers
+    // verify request headers
     verifyPublicAccessLogEntryForHeaders(lastLogEntry, headers, httpRequest.getMethod());
 
     // verify response
-    subString = "Response ([isChunked=false]), status=" + HttpResponseStatus.OK.code();
+    subString = "Response (";
+    for(String responseHeader : responseHeaders.split(",")){
+      if(headers.contains(responseHeader)){
+        subString += "["+responseHeader+"="+headers.get(responseHeader)+"] ";
+      }
+    }
+    subString += "[isChunked=false]), status=" + HttpResponseStatus.OK.code();
 
     if (!testErrorCase) {
       Assert
@@ -156,28 +162,30 @@ public class PublicAccessLogRequestHandlerTest {
   private List<HttpHeaders> getHeadersList() {
     List<HttpHeaders> headersList = new ArrayList<HttpHeaders>();
 
-    // contains one valid request header
+    // contains one logged request header
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
     headersList.add(headers);
 
-    // contains one valid and one invalid header
+    // contains one logged and not logged header
     headers = new DefaultHttpHeaders();
-    headers.add(INVALID_HEADER_KEY_PREFIX + "1", "headerValue1");
+    headers.add(NOT_LOGGED_HEADER_KEY + "1", "headerValue1");
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
     headersList.add(headers);
 
-    // contains all invalid headers
+    // contains all not logged headers
     headers = new DefaultHttpHeaders();
-    headers.add(INVALID_HEADER_KEY_PREFIX + "1", "headerVxalue1");
-    headers.add(INVALID_HEADER_KEY_PREFIX + "2", "headerValue2");
+    headers.add(NOT_LOGGED_HEADER_KEY + "1", "headerValue1");
+    headers.add(NOT_LOGGED_HEADER_KEY + "2", "headerValue2");
     headersList.add(headers);
 
-    // contains all the expected headers
+    // contains all the logged headers
     headers = new DefaultHttpHeaders();
     headers.add(HttpHeaders.Names.HOST, "host1");
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
     headers.add(RestUtils.Headers.CONTENT_TYPE, "content-type1");
+    headers.add(EchoMethodHandler.responseHeaderKey1, "responseHeaderValue1");
+    headers.add(EchoMethodHandler.responseHeaderKey2, "responseHeaderValue1");
     headersList.add(headers);
     return headersList;
   }
@@ -192,7 +200,7 @@ public class PublicAccessLogRequestHandlerTest {
     Iterator<Map.Entry<String, String>> itr = headers.iterator();
     while (itr.hasNext()) {
       Map.Entry<String, String> entry = itr.next();
-      if (!entry.getKey().startsWith(INVALID_HEADER_KEY_PREFIX)) {
+      if (!entry.getKey().startsWith(NOT_LOGGED_HEADER_KEY)) {
         if (httpMethod == HttpMethod.GET && !entry.getKey().equals(HttpHeaders.Names.CONTENT_TYPE)) {
           String subString = "[" + entry.getKey() + "=" + entry.getValue() + "]";
           Assert.assertTrue("Public Access log entry does not have expected header", logEntry.contains(subString));

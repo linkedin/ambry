@@ -103,7 +103,7 @@ class RestServerConfig {
     restServerRouterFactory = verifiableProperties
         .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
     restServerPublicAccessLogRequestHeaders = verifiableProperties
-        .getString("rest.server.public.access.log.reqeust.headers",
+        .getString("rest.server.public.access.log.request.headers",
             "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
