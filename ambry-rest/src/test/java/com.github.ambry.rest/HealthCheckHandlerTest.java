@@ -80,7 +80,7 @@ public class HealthCheckHandlerTest {
       String expectedStr = (isServiceUp) ? goodStr : badStr;
       assertEquals("Unexpected content", expectedStr, RestTestUtils.getContentString(response));
       restServerState.markServiceDown();
-      if (keepAlive || isServiceUp) {
+      if (keepAlive && isServiceUp) {
         Assert.assertTrue("Channel should not be closed ", channel.isOpen());
       } else {
         Assert.assertFalse("Channel should have been closed by now ", channel.isOpen());

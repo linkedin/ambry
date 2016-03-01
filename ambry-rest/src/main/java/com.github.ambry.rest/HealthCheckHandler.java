@@ -63,6 +63,9 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     if (obj instanceof LastHttpContent) {
       if (response != null) {  // response was created when we received the request with health check uri
         ctx.writeAndFlush(response);
+        if(!HttpHeaders.isKeepAlive(response)){
+          ctx.close(ctx.newPromise());
+        }
         request = null;
       } else {
         // request was not for health check uri
