@@ -48,9 +48,8 @@ public class ConnectionTrackerTest {
    */
   @Test
   public void testConnectionTrackerInstantiation() {
-    connectionTracker =
-        new ConnectionTracker(networkConfig, routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-            routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
+    connectionTracker = new ConnectionTracker(routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
   }
 
   /**
@@ -59,9 +58,8 @@ public class ConnectionTrackerTest {
    */
   @Test
   public void testConnectionTracker() {
-    connectionTracker =
-        new ConnectionTracker(networkConfig, routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-            routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
+    connectionTracker = new ConnectionTracker(routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
     // When no connections were ever made to a host:port, connectionTracker should return null, but
     // initiate connections.
     int totalConnectionsCount = 0;

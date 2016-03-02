@@ -49,7 +49,7 @@ class NetworkClientFactory {
       throws IOException {
     Selector selector = new Selector(networkMetrics, time, sslFactory);
     ConnectionTracker connectionTracker =
-        new ConnectionTracker(networkConfig, maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl, time);
+        new ConnectionTracker(maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl, time);
     return new NetworkClient(selector, connectionTracker, networkConfig, networkRequestMetrics,
         connectionCheckoutTimeoutMs, time);
   }

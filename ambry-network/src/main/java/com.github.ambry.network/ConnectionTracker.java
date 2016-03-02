@@ -1,6 +1,5 @@
 package com.github.ambry.network;
 
-import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -14,7 +13,6 @@ import java.util.LinkedList;
 class ConnectionTracker {
   private final HashMap<String, HostPortPoolManager> hostPortToPoolManager;
   private final HashMap<String, HostPortPoolManager> connectionIdToPoolManager;
-  private final NetworkConfig networkConfig;
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
   private final Time time;
@@ -22,17 +20,14 @@ class ConnectionTracker {
 
   /**
    * Instantiates a ConnectionTracker
-   * @param networkConfig The {@link NetworkConfig} containing the config for the Network.
    * @param maxConnectionsPerPortPlainText the connection pool limit for plain text connections to a (host, port)
    * @param maxConnectionsPerPortPlainSsl the connection pool limit for ssl connections to a (host, port)
    * @param time The Time instance to use.
    */
-  ConnectionTracker(NetworkConfig networkConfig, int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl,
-      Time time) {
+  ConnectionTracker(int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl, Time time) {
     hostPortToPoolManager = new HashMap<String, HostPortPoolManager>();
     connectionIdToPoolManager = new HashMap<String, HostPortPoolManager>();
     totalManagedConnectionsCount = 0;
-    this.networkConfig = networkConfig;
     this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
     this.maxConnectionsPerPortSsl = maxConnectionsPerPortPlainSsl;
     this.time = time;
@@ -73,7 +68,7 @@ class ConnectionTracker {
   }
 
   /**
-   * Set the given connection id as available.
+   * Add connection to available pool.
    * @param connectionId the id of the newly established or previously checked out connection.
    */
   void checkInConnection(String connectionId) {
@@ -91,7 +86,7 @@ class ConnectionTracker {
   }
 
   /**
-   * Return the total number of connections that are managed by this connection manager.
+   * Return the total number of connections that are managed by this connection tracker.
    * @return the total number of initiated and/or established connections.
    */
   int getTotalConnectionsCount() {
@@ -136,7 +131,6 @@ class ConnectionTracker {
     private final int maxConnectionsToHostPort;
     private final LinkedList<String> availableConnections;
     private int poolCount;
-    private int availableCount;
 
     /**
      * Instantiate a HostPortPoolManager
@@ -144,7 +138,6 @@ class ConnectionTracker {
      */
     HostPortPoolManager(int poolLimit) {
       this.poolCount = 0;
-      this.availableCount = 0;
       this.maxConnectionsToHostPort = poolLimit;
       availableConnections = new LinkedList<String>();
     }
@@ -169,20 +162,15 @@ class ConnectionTracker {
      * @return returns a connection id, if there is one; null otherwise.
      */
     String checkOutConnection() {
-      String connectionId = availableConnections.poll();
-      if (connectionId != null) {
-        availableCount--;
-      }
-      return connectionId;
+      return availableConnections.poll();
     }
 
     /**
-     * Check in a previously checked out connection.
+     * Add connection to available pool.
      * @param connectionId the connection id of the connection.
      */
     void checkInConnection(String connectionId) {
       availableConnections.add(connectionId);
-      availableCount++;
     }
 
     /**
@@ -191,9 +179,7 @@ class ConnectionTracker {
      * @param connectionId the connection id of the connection.
      */
     void removeConnection(String connectionId) {
-      if (availableConnections.remove(connectionId)) {
-        availableCount--;
-      }
+      availableConnections.remove(connectionId);
       poolCount--;
     }
 
@@ -202,7 +188,7 @@ class ConnectionTracker {
      * @return number of available connections
      */
     int getAvailableConnectionsCount() {
-      return availableCount;
+      return availableConnections.size();
     }
   }
 }

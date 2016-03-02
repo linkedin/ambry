@@ -18,9 +18,9 @@ import org.slf4j.LoggerFactory;
  * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(java.util.List)} call,
  * that could not be immediately sent is queued and an attempt will be made in subsequent invocations of the call (or
  * until they time out).
- * (Note: We will empirically determine whether, rather than queueing a request, whether a request should be failed if
- * connections could not be checked out if pool limit for its hostPort has been reached and all connections to the
- * hostPort are unavailable).
+ * (Note: We will empirically determine whether, rather than queueing a request,
+ * a request should be failed if connections could not be checked out if pool limit for its hostPort has been reached
+ * and all connections to the hostPort are unavailable).
  */
 public class NetworkClient {
   private final Selector selector;
