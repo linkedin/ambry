@@ -10,7 +10,6 @@ import java.io.IOException;
  */
 class NetworkClientFactory {
   private final NetworkMetrics networkMetrics;
-  private final NetworkRequestMetrics networkRequestMetrics;
   private final NetworkConfig networkConfig;
   private final SSLFactory sslFactory;
   private final int maxConnectionsPerPortPlainText;
@@ -27,11 +26,9 @@ class NetworkClientFactory {
    * @param maxConnectionsPerPortSsl the max number of ports per ssl port for this connection manager.
    * @param time the Time instance to use.
    */
-  NetworkClientFactory(NetworkMetrics networkMetrics, NetworkRequestMetrics networkRequestMetrics,
-      NetworkConfig networkConfig, SSLFactory sslFactory, int maxConnectionsPerPortPlainText,
-      int maxConnectionsPerPortSsl, int connectionCheckoutTimeoutMs, Time time) {
+  NetworkClientFactory(NetworkMetrics networkMetrics, NetworkConfig networkConfig, SSLFactory sslFactory,
+      int maxConnectionsPerPortPlainText, int maxConnectionsPerPortSsl, int connectionCheckoutTimeoutMs, Time time) {
     this.networkMetrics = networkMetrics;
-    this.networkRequestMetrics = networkRequestMetrics;
     this.networkConfig = networkConfig;
     this.sslFactory = sslFactory;
     this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
@@ -50,8 +47,7 @@ class NetworkClientFactory {
     Selector selector = new Selector(networkMetrics, time, sslFactory);
     ConnectionTracker connectionTracker =
         new ConnectionTracker(maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl, time);
-    return new NetworkClient(selector, connectionTracker, networkConfig, networkRequestMetrics,
-        connectionCheckoutTimeoutMs, time);
+    return new NetworkClient(selector, connectionTracker, networkConfig, connectionCheckoutTimeoutMs, time);
   }
 }
 

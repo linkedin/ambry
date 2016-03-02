@@ -27,7 +27,6 @@ public class NetworkClient implements Closeable {
   private final Selector selector;
   private final ConnectionTracker connectionTracker;
   private final NetworkConfig networkConfig;
-  private final NetworkRequestMetrics networkRequestMetrics;
   private final Time time;
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
@@ -41,18 +40,15 @@ public class NetworkClient implements Closeable {
    * @param selector the {@link Selector} for this NetworkClient
    * @param connectionTracker the {@link ConnectionTracker} for this NetworkClient
    * @param networkConfig the {@link NetworkConfig} for this NetworkClient
-   * @param networkRequestMetrics the {@link NetworkRequestMetrics} that this NetworkClient should use in
-   *                              constructing {@link NetworkSend} objects that are handed to its selector.
    * @param checkoutTimeoutMs the maximum time a request should remain in this NetworkClient's pending queue waiting
    *                          for an available connection to its destination.
    * @param time The Time instance to use.
    */
   public NetworkClient(Selector selector, ConnectionTracker connectionTracker, NetworkConfig networkConfig,
-      NetworkRequestMetrics networkRequestMetrics, int checkoutTimeoutMs, Time time) {
+      int checkoutTimeoutMs, Time time) {
     this.selector = selector;
     this.connectionTracker = connectionTracker;
     this.networkConfig = networkConfig;
-    this.networkRequestMetrics = networkRequestMetrics;
     this.checkoutTimeoutMs = checkoutTimeoutMs;
     this.time = time;
     pendingRequests = new LinkedList<RequestMetadata>();
@@ -134,7 +130,7 @@ public class NetworkClient implements Closeable {
             connectionTracker.addNewConnection(host, port, connId);
           }
         } else {
-          sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), networkRequestMetrics, time));
+          sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), null, time));
           requestMetadata.connId = connId;
           connectionIdToRequestInFlight.put(connId, requestMetadata);
           iter.remove();
