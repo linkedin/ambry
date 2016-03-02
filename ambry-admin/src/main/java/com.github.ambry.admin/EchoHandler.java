@@ -44,6 +44,7 @@ class EchoHandler {
     try {
       String echoStr = echo(restRequest, adminMetrics).toString();
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, echoStr.length());
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(echoStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;

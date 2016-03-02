@@ -685,7 +685,7 @@ public class AmbryBlobStorageServiceTest {
    *                  expiry.
    * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
    * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header. Required.
-   * @param contentType sets the {@link RestUtils.Headers#CONTENT_TYPE} header. Required and has to be a valid MIME
+   * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header. Required and has to be a valid MIME
    *                    type.
    * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
