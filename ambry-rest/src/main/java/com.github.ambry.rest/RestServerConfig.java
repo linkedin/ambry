@@ -84,7 +84,7 @@ class RestServerConfig {
   /**
    * Health check URI for load balancers (VIPs)
    */
-  @Config("rest.server.rest.server.health.check.uri")
+  @Config("rest.server.health.check.uri")
   @Default("/healthCheck")
   public final String restServerHealthCheckUri;
 
@@ -104,9 +104,9 @@ class RestServerConfig {
         .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
     restServerPublicAccessLogRequestHeaders = verifiableProperties
         .getString("rest.server.public.access.log.request.headers",
-            "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-li-ambry-client,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
+            "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
-    restServerHealthCheckUri = verifiableProperties.getString("rest.server.rest.server.health.check.uri", "/healthCheck");
+    restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
   }
 }
