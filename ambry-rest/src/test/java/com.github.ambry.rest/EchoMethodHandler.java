@@ -1,17 +1,24 @@
 package com.github.ambry.rest;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.util.ReferenceCountUtil;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,13 +29,16 @@ import org.slf4j.LoggerFactory;
  */
 public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final static String DISCONNECT_URI = "disconnect";
-  private final static String CLOSE_URI = "close";
+  public static final String IS_CHUNKED = "is_chunked_header";
+  public static final String DISCONNECT_URI = "disconnect";
+  public static final String CLOSE_URI = "close";
   private FullHttpResponse response;
+  private HttpResponse httpResponse;
+  private List<HttpContent> httpContentList;
   private String requestUri;
-  public static String RESPONSE_HEADER_KEY_PREFIX = "response_Header_Key";
-  public static String RESPONSE_HEADER_KEY_1 = RESPONSE_HEADER_KEY_PREFIX + "_1";
-  public static String RESPONSE_HEADER_KEY_2 = RESPONSE_HEADER_KEY_PREFIX + "_2";
+  public static final String RESPONSE_HEADER_KEY_PREFIX = "response_Header_Key";
+  public static final String RESPONSE_HEADER_KEY_1 = RESPONSE_HEADER_KEY_PREFIX + "_1";
+  public static final String RESPONSE_HEADER_KEY_2 = RESPONSE_HEADER_KEY_PREFIX + "_2";
 
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
@@ -39,14 +49,19 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
       logger.trace("Handling incoming request " + request);
       requestUri = request.getUri();
       byte[] methodBytes = request.getMethod().toString().getBytes();
-      response =
-          new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(methodBytes));
-      HttpHeaders.setContentLength(response, methodBytes.length);
-      if (HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_1) != null) {
-        HttpHeaders.setHeader(response, RESPONSE_HEADER_KEY_1, HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_1));
-      }
-      if (HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_2) != null) {
-        HttpHeaders.setHeader(response, RESPONSE_HEADER_KEY_2, HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_2));
+      if (request.headers().get(IS_CHUNKED) == null || !request.headers().get(IS_CHUNKED).equals("true")) {
+        response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
+            Unpooled.wrappedBuffer(methodBytes));
+        updateHeaders(response, request, methodBytes.length);
+      } else {
+        httpResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+        HttpHeaders.setTransferEncodingChunked(httpResponse);
+        httpContentList = new ArrayList<HttpContent>();
+        ByteBuf content = Unpooled.wrappedBuffer(methodBytes);
+        HttpContent httpContent = new DefaultHttpContent(content);
+        httpContentList.add(httpContent);
+        httpContentList.add(httpContent);
+        updateHeaders(httpResponse, request, methodBytes.length);
       }
     } else if (obj instanceof LastHttpContent) {
       if (requestUri.equals(DISCONNECT_URI)) {
@@ -54,8 +69,26 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
       } else if (requestUri.equals(CLOSE_URI)) {
         ctx.close();
       } else {
-        ctx.writeAndFlush(response);
+        if (response != null) {
+          ctx.writeAndFlush(response);
+        } else if (httpResponse != null) {
+          ctx.writeAndFlush(httpResponse);
+          for (HttpContent httpContent : httpContentList) {
+            ctx.writeAndFlush(httpContent);
+          }
+          ctx.writeAndFlush(new DefaultLastHttpContent());
+        }
       }
+    }
+  }
+
+  private void updateHeaders(HttpResponse response, HttpRequest request, int contentLength) {
+    HttpHeaders.setContentLength(response, contentLength);
+    if (HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_1) != null) {
+      HttpHeaders.setHeader(response, RESPONSE_HEADER_KEY_1, HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_1));
+    }
+    if (HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_2) != null) {
+      HttpHeaders.setHeader(response, RESPONSE_HEADER_KEY_2, HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_2));
     }
   }
 }

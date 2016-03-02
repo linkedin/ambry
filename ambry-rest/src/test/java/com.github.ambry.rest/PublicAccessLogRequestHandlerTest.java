@@ -26,8 +26,6 @@ public class PublicAccessLogRequestHandlerTest {
   private static final String RESPONSE_HEADERS =
       EchoMethodHandler.RESPONSE_HEADER_KEY_1 + "," + EchoMethodHandler.RESPONSE_HEADER_KEY_2;
   private static final String NOT_LOGGED_HEADER_KEY = "headerKey";
-  private static final String DISCONNECT_URI = "disconnect";
-  private static final String CLOSE_URI = "close";
 
   /**
    * Sets up the mock public access logger that {@link PublicAccessLogRequestHandler} can use.
@@ -79,9 +77,9 @@ public class PublicAccessLogRequestHandlerTest {
   @Test
   public void requestHandleOnCloseTest()
       throws IOException {
-    doRequestHandleTest(HttpMethod.POST, CLOSE_URI, true);
-    doRequestHandleTest(HttpMethod.GET, CLOSE_URI, true);
-    doRequestHandleTest(HttpMethod.DELETE, CLOSE_URI, true);
+    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.CLOSE_URI, true);
+    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.CLOSE_URI, true);
+    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.CLOSE_URI, true);
   }
 
   /**
@@ -92,9 +90,25 @@ public class PublicAccessLogRequestHandlerTest {
   public void requestHandleOnDisconnectTest()
       throws IOException {
     // disonnecting the embedded channel, calls close of PubliAccessLogRequestHandler
-    doRequestHandleTest(HttpMethod.POST, DISCONNECT_URI, true);
-    doRequestHandleTest(HttpMethod.GET, DISCONNECT_URI, true);
-    doRequestHandleTest(HttpMethod.DELETE, DISCONNECT_URI, true);
+    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.DISCONNECT_URI, true);
+    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.DISCONNECT_URI, true);
+    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.DISCONNECT_URI, true);
+  }
+
+  /**
+   * Tests for the request handling flow with transfer encoding chunked
+   */
+  @Test
+  public void doRequestHandleWithChunkedResponse()
+      throws IOException {
+    EmbeddedChannel channel = createChannel();
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(EchoMethodHandler.IS_CHUNKED, "true");
+    HttpRequest request = RestTestUtils.createRequest(HttpMethod.POST, "POST", headers);
+    HttpHeaders.setKeepAlive(request, true);
+    sendRequestCheckResponse(channel, request, "POST", headers, false, true);
+    Assert.assertTrue("Channel should not be closed ", channel.isOpen());
+    channel.close();
   }
 
   // requestHandleTest() helpers
@@ -113,7 +127,7 @@ public class PublicAccessLogRequestHandlerTest {
     for (HttpHeaders headers : httpHeadersList) {
       HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
       HttpHeaders.setKeepAlive(request, true);
-      sendRequestCheckResponse(channel, request, uri, headers, testErrorCase);
+      sendRequestCheckResponse(channel, request, uri, headers, testErrorCase, false);
       if (!testErrorCase) {
         Assert.assertTrue("Channel should not be closed ", channel.isOpen());
       } else {
@@ -140,7 +154,7 @@ public class PublicAccessLogRequestHandlerTest {
 
     HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
     HttpHeaders.setKeepAlive(request, true);
-    sendRequestCheckResponse(channel, request, uri, headers, false);
+    sendRequestCheckResponse(channel, request, uri, headers, false, false);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
 
     // contains one logged and not logged header
@@ -150,7 +164,7 @@ public class PublicAccessLogRequestHandlerTest {
 
     request = RestTestUtils.createRequest(httpMethod, uri, headers);
     HttpHeaders.setKeepAlive(request, true);
-    sendRequestCheckResponse(channel, request, uri, headers, false);
+    sendRequestCheckResponse(channel, request, uri, headers, false, false);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
     channel.close();
   }
@@ -179,7 +193,7 @@ public class PublicAccessLogRequestHandlerTest {
     // sending another request w/o sending last http content
     request = RestTestUtils.createRequest(httpMethod, uri, headers2);
     HttpHeaders.setKeepAlive(request, true);
-    sendRequestCheckResponse(channel, request, uri, headers2, false);
+    sendRequestCheckResponse(channel, request, uri, headers2, false, false);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
 
     // verify that headers from first request is not found in public access log
@@ -199,9 +213,9 @@ public class PublicAccessLogRequestHandlerTest {
    * @param testErrorCase true if error case has to be tested, false otherwise
    */
   private void sendRequestCheckResponse(EmbeddedChannel channel, HttpRequest httpRequest, String uri,
-      HttpHeaders headers, boolean testErrorCase) {
+      HttpHeaders headers, boolean testErrorCase, boolean chunkedResponse) {
     channel.writeInbound(httpRequest);
-    if (uri.equals(DISCONNECT_URI)) {
+    if (uri.equals(EchoMethodHandler.DISCONNECT_URI)) {
       channel.disconnect();
     } else {
       channel.writeInbound(new DefaultLastHttpContent());
@@ -222,7 +236,7 @@ public class PublicAccessLogRequestHandlerTest {
         subString += "[" + responseHeader + "=" + headers.get(responseHeader) + "] ";
       }
     }
-    subString += "[isChunked=false]), status=" + HttpResponseStatus.OK.code();
+    subString += "[isChunked=" + chunkedResponse + "]), status=" + HttpResponseStatus.OK.code();
 
     if (!testErrorCase) {
       Assert
