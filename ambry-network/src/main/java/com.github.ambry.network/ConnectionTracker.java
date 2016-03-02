@@ -8,6 +8,8 @@ import java.util.LinkedList;
 /**
  * The ConnectionTracker keeps track of current connections to datanodes, and provides methods to check out and
  * check in connections.
+ *
+ * This class is not thread safe.
  */
 
 class ConnectionTracker {
@@ -36,8 +38,8 @@ class ConnectionTracker {
   /**
    * Returns true if a new connection may be created for the given hostPort, that is if the number of connections for
    * the given hostPort has not reached the pool limit.
-   * @param host the host
-   * @param port the port
+   * @param host the host associated with this check.
+   * @param port the port associated with this check.
    * @return true if a new connection may be created, false otherwise.
    */
   boolean mayCreateNewConnection(String host, Port port) {
@@ -46,8 +48,8 @@ class ConnectionTracker {
 
   /**
    * Start tracking a new connection id associated with the given host and port.
-   * @param host the host
-   * @param port the port
+   * @param host the host to which this connection belongs.
+   * @param port the port on the host to which this connection belongs.
    * @param connId the connection id
    */
   void addNewConnection(String host, Port port, String connId) {
@@ -137,8 +139,8 @@ class ConnectionTracker {
      * @param poolLimit the max connections allowed for this hostPort.
      */
     HostPortPoolManager(int poolLimit) {
-      this.poolCount = 0;
-      this.maxConnectionsToHostPort = poolLimit;
+      poolCount = 0;
+      maxConnectionsToHostPort = poolLimit;
       availableConnections = new LinkedList<String>();
     }
 

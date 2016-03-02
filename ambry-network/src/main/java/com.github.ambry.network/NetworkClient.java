@@ -2,6 +2,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.Time;
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -22,7 +23,7 @@ import org.slf4j.LoggerFactory;
  * a request should be failed if connections could not be checked out if pool limit for its hostPort has been reached
  * and all connections to the hostPort are unavailable).
  */
-public class NetworkClient {
+public class NetworkClient implements Closeable {
   private final Selector selector;
   private final ConnectionTracker connectionTracker;
   private final NetworkConfig networkConfig;
@@ -30,9 +31,9 @@ public class NetworkClient {
   private final Time time;
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
-
   private final int checkoutTimeoutMs;
   private final int POLL_TIMEOUT_MS = 10;
+  private boolean closed = false;
   private static final Logger logger = LoggerFactory.getLogger(NetworkClient.class);
 
   /**
@@ -66,8 +67,14 @@ public class NetworkClient {
    *                     could be empty.
    * @return a list of {@link ResponseInfo} representing the responses received for any requests that were sent out
    * so far.
+   * @throws IOException if the {@link Selector} associated with this NetworkClient throws
+   * @throws IllegalStateException if the NetworkClient is closed.
    */
-  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos) {
+  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos)
+      throws IOException {
+    if (closed) {
+      throw new IllegalStateException("The NetworkClient is closed.");
+    }
     List<ResponseInfo> responseInfoList = new ArrayList<ResponseInfo>();
     for (RequestInfo requestInfo : requestInfos) {
       pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, null));
@@ -78,7 +85,9 @@ public class NetworkClient {
       handleSelectorEvents(responseInfoList);
     } catch (IOException e) {
       //@todo: add to a metric.
-      logger.error("Received exception while polling the selector", e);
+      logger.error("Received exception while polling the selector, closing NetworkClient.", e);
+      close();
+      throw e;
     }
     return responseInfoList;
   }
@@ -139,8 +148,8 @@ public class NetworkClient {
   }
 
   /**
-   * Handle the Selector events after a poll, newly established connections, new disconnections,
-   * newly completed sends and receives.
+   * Handle Selector events after a poll: newly established connections, new disconnections, newly completed sends and
+   * receives.
    * @param responseInfoList the list to populate with {@link ResponseInfo} objects for responses created based on
    *                         the selector events.
    */
@@ -172,7 +181,16 @@ public class NetworkClient {
   }
 
   /**
-   * A class that consists of a RequestInfo with the time at which it is added to the queue.
+   * Close the NetworkClient and cleanup.
+   */
+  @Override
+  public void close() {
+    selector.close();
+    closed = true;
+  }
+
+  /**
+   * A class that consists of a {@link RequestInfo} with the time at which it is added to the queue.
    */
   private class RequestMetadata {
     // the time at which this request was queued.
