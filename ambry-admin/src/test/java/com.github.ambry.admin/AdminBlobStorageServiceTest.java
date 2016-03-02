@@ -348,6 +348,7 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
     String echoedText = getJsonizedResponseBody(channel).getString(EchoHandler.TEXT_KEY);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     assertEquals("Unexpected Content-Type", "application/json",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertEquals("Did not get expected response", inputText, echoedText);
@@ -373,7 +374,7 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests the {@link AdminBlobStorageService#ECHO} admin operation.
+   * Tests the {@link AdminBlobStorageService#GET_REPLICAS_FOR_BLOB_ID} admin operation.
    * <p/>
    * For the each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created.
    * The string representation is sent to the {@link AdminBlobStorageService} as a part of getReplicasForBlobId request.
@@ -390,6 +391,7 @@ public class AdminBlobStorageServiceTest {
       RestRequest restRequest = createGetReplicasForBlobIdRestRequest(blobId.getID());
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
+      assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
       assertEquals("Unexpected Content-Type", "application/json",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       String returnedReplicasStr =

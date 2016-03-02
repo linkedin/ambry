@@ -343,83 +343,83 @@ public class MockRestRequest implements RestRequest {
       }
     }
   }
-}
-
-/**
- * Callback for each write into the given {@link AsyncWritableChannel}.
- */
-class ContentWriteCallback implements Callback<Long> {
-  private final boolean isLast;
-  private final ReadIntoCallbackWrapper callbackWrapper;
 
   /**
-   * Creates a new instance of ContentWriteCallback.
-   * @param isLast if this is the last piece of content for this request.
-   * @param callbackWrapper the {@link ReadIntoCallbackWrapper} that will receive updates of bytes read and one that
-   *                        should be invoked in {@link #onCompletion(Long, Exception)} if {@code isLast} is
-   *                        {@code true} or exception passed is not null.
+   * Callback for each write into the given {@link AsyncWritableChannel}.
    */
-  public ContentWriteCallback(boolean isLast, ReadIntoCallbackWrapper callbackWrapper) {
-    this.isLast = isLast;
-    this.callbackWrapper = callbackWrapper;
-  }
+  private class ContentWriteCallback implements Callback<Long> {
+    private final boolean isLast;
+    private final ReadIntoCallbackWrapper callbackWrapper;
 
-  /**
-   * Updates the number of bytes read and invokes {@link ReadIntoCallbackWrapper#invokeCallback(Exception)} if
-   * {@code exception} is not {@code null} or if this is the last piece of content in the request.
-   * @param result The result of the request. This would be non null when the request executed successfully
-   * @param exception The exception that was reported on execution of the request
-   */
-  @Override
-  public void onCompletion(Long result, Exception exception) {
-    callbackWrapper.updateBytesRead(result);
-    if (exception != null || isLast) {
-      callbackWrapper.invokeCallback(exception);
+    /**
+     * Creates a new instance of ContentWriteCallback.
+     * @param isLast if this is the last piece of content for this request.
+     * @param callbackWrapper the {@link ReadIntoCallbackWrapper} that will receive updates of bytes read and one that
+     *                        should be invoked in {@link #onCompletion(Long, Exception)} if {@code isLast} is
+     *                        {@code true} or exception passed is not null.
+     */
+    public ContentWriteCallback(boolean isLast, ReadIntoCallbackWrapper callbackWrapper) {
+      this.isLast = isLast;
+      this.callbackWrapper = callbackWrapper;
+    }
+
+    /**
+     * Updates the number of bytes read and invokes {@link ReadIntoCallbackWrapper#invokeCallback(Exception)} if
+     * {@code exception} is not {@code null} or if this is the last piece of content in the request.
+     * @param result The result of the request. This would be non null when the request executed successfully
+     * @param exception The exception that was reported on execution of the request
+     */
+    @Override
+    public void onCompletion(Long result, Exception exception) {
+      callbackWrapper.updateBytesRead(result);
+      if (exception != null || isLast) {
+        callbackWrapper.invokeCallback(exception);
+      }
     }
   }
-}
-
-/**
- * Wrapper for callbacks provided to {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)}.
- */
-class ReadIntoCallbackWrapper {
-  /**
-   * The {@link Future} where the result of {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)} will
-   * eventually be updated.
-   */
-  public final FutureResult<Long> futureResult = new FutureResult<Long>();
-
-  private final Callback<Long> callback;
-  private final AtomicLong totalBytesRead = new AtomicLong(0);
-  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
   /**
-   * Creates an instance of ReadIntoCallbackWrapper with the given {@code callback}.
-   * @param callback the {@link Callback} to invoke on operation completion.
+   * Wrapper for callbacks provided to {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)}.
    */
-  public ReadIntoCallbackWrapper(Callback<Long> callback) {
-    this.callback = callback;
-  }
+  private class ReadIntoCallbackWrapper {
+    /**
+     * The {@link Future} where the result of {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)} will
+     * eventually be updated.
+     */
+    public final FutureResult<Long> futureResult = new FutureResult<Long>();
 
-  /**
-   * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
-   * @param delta the number of bytes read in the current invocation.
-   * @return the total number of bytes read until now.
-   */
-  public long updateBytesRead(long delta) {
-    return totalBytesRead.addAndGet(delta);
-  }
+    private final Callback<Long> callback;
+    private final AtomicLong totalBytesRead = new AtomicLong(0);
+    private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
-  /**
-   * Invokes the callback and updates the future once this is called. This function ensures that the callback is invoked
-   * just once.
-   * @param exception the {@link Exception}, if any, to pass to the callback.
-   */
-  public void invokeCallback(Exception exception) {
-    if (callbackInvoked.compareAndSet(false, true)) {
-      futureResult.done(totalBytesRead.get(), exception);
-      if (callback != null) {
-        callback.onCompletion(totalBytesRead.get(), exception);
+    /**
+     * Creates an instance of ReadIntoCallbackWrapper with the given {@code callback}.
+     * @param callback the {@link Callback} to invoke on operation completion.
+     */
+    public ReadIntoCallbackWrapper(Callback<Long> callback) {
+      this.callback = callback;
+    }
+
+    /**
+     * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
+     * @param delta the number of bytes read in the current invocation.
+     * @return the total number of bytes read until now.
+     */
+    public long updateBytesRead(long delta) {
+      return totalBytesRead.addAndGet(delta);
+    }
+
+    /**
+     * Invokes the callback and updates the future once this is called. This function ensures that the callback is invoked
+     * just once.
+     * @param exception the {@link Exception}, if any, to pass to the callback.
+     */
+    public void invokeCallback(Exception exception) {
+      if (callbackInvoked.compareAndSet(false, true)) {
+        futureResult.done(totalBytesRead.get(), exception);
+        if (callback != null) {
+          callback.onCompletion(totalBytesRead.get(), exception);
+        }
       }
     }
   }
