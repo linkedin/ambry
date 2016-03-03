@@ -3,8 +3,7 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.ConnectionManager;
-import com.github.ambry.network.NetworkSend;
+import com.github.ambry.network.RequestInfo;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -15,8 +14,7 @@ import java.util.List;
  */
 class PutManager {
 
-  public PutManager(int maxChunkSize, ConnectionManager connectionManager, RouterConfig routerConfig,
-      ClusterMap clusterMap) {
+  public PutManager(int maxChunkSize, RouterConfig routerConfig, ClusterMap clusterMap) {
     //@todo
   }
 
@@ -27,7 +25,7 @@ class PutManager {
     return null;
   }
 
-  public void poll(List<NetworkSend> requests) {
+  public void poll(List<RequestInfo> requests) {
     //@todo
   }
 

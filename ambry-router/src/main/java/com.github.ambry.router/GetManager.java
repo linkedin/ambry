@@ -2,8 +2,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.network.ConnectionManager;
-import com.github.ambry.network.NetworkSend;
+import com.github.ambry.network.RequestInfo;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -13,7 +12,7 @@ import java.util.List;
  * These methods have to be thread safe.
  */
 class GetManager {
-  GetManager(ConnectionManager connectionManager, ClusterMap clusterMap) {
+  GetManager(ClusterMap clusterMap) {
     //@todo
   }
 
@@ -27,7 +26,7 @@ class GetManager {
     //@todo
   }
 
-  void poll(List<NetworkSend> requests) {
+  void poll(List<RequestInfo> requests) {
     //@todo
   }
 
