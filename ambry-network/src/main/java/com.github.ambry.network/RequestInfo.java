@@ -10,7 +10,7 @@ public class RequestInfo {
   private final Send request;
 
   /**
-   * Construct a SendInfo with the given parameters
+   * Construct a RequestInfo with the given parameters
    * @param host the host to which the data is meant for
    * @param port the port on the host to which the data is meant for
    * @param request the data to be sent.

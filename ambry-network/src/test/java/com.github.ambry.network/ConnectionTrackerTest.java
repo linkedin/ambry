@@ -49,7 +49,7 @@ public class ConnectionTrackerTest {
   @Test
   public void testConnectionTrackerInstantiation() {
     connectionTracker = new ConnectionTracker(routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
+        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl);
   }
 
   /**
@@ -59,7 +59,7 @@ public class ConnectionTrackerTest {
   @Test
   public void testConnectionTracker() {
     connectionTracker = new ConnectionTracker(routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, time);
+        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl);
     // When no connections were ever made to a host:port, connectionTracker should return null, but
     // initiate connections.
     int totalConnectionsCount = 0;
@@ -71,7 +71,7 @@ public class ConnectionTrackerTest {
       String connId = connectionTracker.checkOutConnection("host1", port1);
       if (connId == null && connectionTracker.mayCreateNewConnection("host1", port1)) {
         connId = mockNewConnection("host1", port1);
-        connectionTracker.addNewConnection("host1", port1, connId);
+        connectionTracker.startTrackingInitiatedConnection("host1", port1, connId);
       } else {
         done = true;
       }
@@ -86,7 +86,7 @@ public class ConnectionTrackerTest {
       String connId = connectionTracker.checkOutConnection("host2", port2);
       if (connId == null && connectionTracker.mayCreateNewConnection("host2", port2)) {
         connId = mockNewConnection("host2", port2);
-        connectionTracker.addNewConnection("host2", port2, connId);
+        connectionTracker.startTrackingInitiatedConnection("host2", port2, connId);
       } else {
         done = true;
       }
@@ -174,7 +174,7 @@ public class ConnectionTrackerTest {
     for (int i = 0; i < 2; i++) {
       Assert.assertNull(connectionTracker.checkOutConnection("host1", port1));
       Assert.assertTrue(connectionTracker.mayCreateNewConnection("host1", port1));
-      connectionTracker.addNewConnection("host1", port1, mockNewConnection("host1", port1));
+      connectionTracker.startTrackingInitiatedConnection("host1", port1, mockNewConnection("host1", port1));
       totalConnectionsCount++;
     }
     assertCounts(totalConnectionsCount, availableCount);

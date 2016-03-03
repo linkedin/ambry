@@ -16,12 +16,14 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The NetworkClient provides a method for sending a list of requests in the form of {@link Send} to a host:port,
- * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(java.util.List)} call,
+ * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(List)} call,
  * that could not be immediately sent is queued and an attempt will be made in subsequent invocations of the call (or
  * until they time out).
  * (Note: We will empirically determine whether, rather than queueing a request,
  * a request should be failed if connections could not be checked out if pool limit for its hostPort has been reached
  * and all connections to the hostPort are unavailable).
+ *
+ * This class is not thread safe.
  */
 public class NetworkClient implements Closeable {
   private final Selector selector;
@@ -31,7 +33,7 @@ public class NetworkClient implements Closeable {
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
   private final int checkoutTimeoutMs;
-  private final int POLL_TIMEOUT_MS = 10;
+  private final int POLL_TIMEOUT_MS = 1;
   private boolean closed = false;
   private static final Logger logger = LoggerFactory.getLogger(NetworkClient.class);
 
@@ -76,15 +78,8 @@ public class NetworkClient implements Closeable {
       pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, null));
     }
     List<NetworkSend> sends = prepareSends(responseInfoList);
-    try {
-      selector.poll(POLL_TIMEOUT_MS, sends);
-      handleSelectorEvents(responseInfoList);
-    } catch (IOException e) {
-      //@todo: add to a metric.
-      logger.error("Received exception while polling the selector, closing NetworkClient.", e);
-      close();
-      throw e;
-    }
+    selector.poll(POLL_TIMEOUT_MS, sends);
+    handleSelectorEvents(responseInfoList);
     return responseInfoList;
   }
 
@@ -127,7 +122,7 @@ public class NetworkClient implements Closeable {
           if (connectionTracker.mayCreateNewConnection(host, port)) {
             connId = selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
                 networkConfig.socketReceiveBufferBytes, port.getPortType());
-            connectionTracker.addNewConnection(host, port, connId);
+            connectionTracker.startTrackingInitiatedConnection(host, port, connId);
           }
         } else {
           sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), null, time));

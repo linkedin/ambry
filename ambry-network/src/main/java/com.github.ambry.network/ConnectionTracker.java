@@ -1,6 +1,5 @@
 package com.github.ambry.network;
 
-import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.LinkedList;
 
@@ -17,22 +16,19 @@ class ConnectionTracker {
   private final HashMap<String, HostPortPoolManager> connectionIdToPoolManager;
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
-  private final Time time;
   private int totalManagedConnectionsCount;
 
   /**
    * Instantiates a ConnectionTracker
    * @param maxConnectionsPerPortPlainText the connection pool limit for plain text connections to a (host, port)
    * @param maxConnectionsPerPortPlainSsl the connection pool limit for ssl connections to a (host, port)
-   * @param time The Time instance to use.
    */
-  ConnectionTracker(int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl, Time time) {
+  ConnectionTracker(int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl) {
     hostPortToPoolManager = new HashMap<String, HostPortPoolManager>();
     connectionIdToPoolManager = new HashMap<String, HostPortPoolManager>();
     totalManagedConnectionsCount = 0;
     this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
     this.maxConnectionsPerPortSsl = maxConnectionsPerPortPlainSsl;
-    this.time = time;
   }
 
   /**
@@ -47,12 +43,13 @@ class ConnectionTracker {
   }
 
   /**
-   * Start tracking a new connection id associated with the given host and port.
+   * Start tracking a new connection id associated with the given host and port. Note that this connection will not
+   * be made available for checking out until a {@link #checkInConnection(String)} is called on it.
    * @param host the host to which this connection belongs.
    * @param port the port on the host to which this connection belongs.
-   * @param connId the connection id
+   * @param connId the connection id of the connection.
    */
-  void addNewConnection(String host, Port port, String connId) {
+  void startTrackingInitiatedConnection(String host, Port port, String connId) {
     HostPortPoolManager hostPortPoolManager = getHostPortPoolManager(host, port);
     hostPortPoolManager.incrementPoolCount();
     connectionIdToPoolManager.put(connId, hostPortPoolManager);
