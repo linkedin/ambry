@@ -167,12 +167,8 @@ public class NetworkClient implements Closeable {
       String connId = recv.getConnectionId();
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
-      if (requestMetadata != null) {
-        responseInfoList.add(
-            new ResponseInfo(requestMetadata.requestInfo.getRequest(), null, recv.getReceivedBytes().getPayload()));
-      } else {
-        logger.trace("Received response for a request that timed out");
-      }
+      responseInfoList
+          .add(new ResponseInfo(requestMetadata.requestInfo.getRequest(), null, recv.getReceivedBytes().getPayload()));
     }
   }
 
