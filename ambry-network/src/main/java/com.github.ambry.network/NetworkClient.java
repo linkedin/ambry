@@ -33,7 +33,7 @@ public class NetworkClient implements Closeable {
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
   private final int checkoutTimeoutMs;
-  private final int POLL_TIMEOUT_MS = 1;
+  private final int POLL_TIMEOUT_MS = 1; // @todo: this needs to be empirically determined.
   private boolean closed = false;
   private static final Logger logger = LoggerFactory.getLogger(NetworkClient.class);
 
