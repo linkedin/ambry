@@ -132,6 +132,6 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   private boolean hasFailed() {
-    return (totalReplicaCount - failedCount ) < successTarget;
+    return (totalReplicaCount - failedCount) < successTarget;
   }
 }

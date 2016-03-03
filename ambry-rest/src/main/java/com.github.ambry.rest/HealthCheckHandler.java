@@ -43,20 +43,20 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     logger.trace("Reading on channel {}", ctx.channel());
     boolean forwardObj = false;
     if (obj instanceof HttpRequest) {
-      if(request == null &&  ((HttpRequest) obj).getUri().equals(healthCheckUri)) {
+      if (request == null && ((HttpRequest) obj).getUri().equals(healthCheckUri)) {
         logger.trace("Handling health check request while in state " + restServerState.isServiceUp());
-          request = (HttpRequest) obj;
-          if (restServerState.isServiceUp()) {
-            response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
-                Unpooled.wrappedBuffer(goodBytes));
-            HttpHeaders.setKeepAlive(response, HttpHeaders.isKeepAlive(request));
-            HttpHeaders.setContentLength(response, goodBytes.length);
-          } else {
-            response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.SERVICE_UNAVAILABLE,
-                Unpooled.wrappedBuffer(badBytes));
-            HttpHeaders.setKeepAlive(response, false);
-            HttpHeaders.setContentLength(response, badBytes.length);
-          }
+        request = (HttpRequest) obj;
+        if (restServerState.isServiceUp()) {
+          response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
+              Unpooled.wrappedBuffer(goodBytes));
+          HttpHeaders.setKeepAlive(response, HttpHeaders.isKeepAlive(request));
+          HttpHeaders.setContentLength(response, goodBytes.length);
+        } else {
+          response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.SERVICE_UNAVAILABLE,
+              Unpooled.wrappedBuffer(badBytes));
+          HttpHeaders.setKeepAlive(response, false);
+          HttpHeaders.setContentLength(response, badBytes.length);
+        }
       } else {
         // Rest server could be down even if not for health check request. We intentionally don't take any action in this
         // handler for such cases and leave it to the downstream handlers to handle it
@@ -67,7 +67,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
       if (response != null) {
         // response was created when we received the request with health check uri
         ChannelFuture future = ctx.writeAndFlush(response);
-        if(!HttpHeaders.isKeepAlive(response)){
+        if (!HttpHeaders.isKeepAlive(response)) {
           future.addListener(ChannelFutureListener.CLOSE);
         }
         request = null;
@@ -81,7 +81,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     }
     if (forwardObj) {
       super.channelRead(ctx, obj);
-    } else{
+    } else {
       ReferenceCountUtil.release(obj);
     }
   }

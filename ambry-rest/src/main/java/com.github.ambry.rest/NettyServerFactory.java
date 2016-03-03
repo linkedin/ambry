@@ -33,8 +33,8 @@ public class NettyServerFactory implements NioServerFactory {
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
-    if (verifiableProperties != null && metricRegistry != null && requestHandler != null && publicAccessLogger != null &&
-        restServerState != null) {
+    if (verifiableProperties != null && metricRegistry != null && requestHandler != null && publicAccessLogger != null
+        && restServerState != null) {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
       this.requestHandler = requestHandler;

@@ -53,7 +53,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
       logMessage.append(", ");
     } else if (obj instanceof LastHttpContent) {
       requestLastChunkArrivalTimeInMs = System.currentTimeMillis();
-    } else if(!(obj instanceof HttpContent)){
+    } else if (!(obj instanceof HttpContent)) {
       logger.error("Receiving request (messageReceived) that is not of type HttpRequest or HttpContent. " +
           "Receiving request from " + ctx.channel().remoteAddress() + ". " +
           "Request is of type " + obj.getClass() + ". " +

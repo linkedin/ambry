@@ -95,7 +95,8 @@ public class NettyResponseChannelTest {
   @Test
   public void noResponseBodyTest() {
     EmbeddedChannel channel = createEmbeddedChannel();
-    HttpRequest httpRequest =  RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString(), null);
+    HttpRequest httpRequest =
+        RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString(), null);
     HttpHeaders.setKeepAlive(httpRequest, false);
     channel.writeInbound(httpRequest);
     // There should be a response.
@@ -199,7 +200,7 @@ public class NettyResponseChannelTest {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
     EmbeddedChannel channel = createEmbeddedChannel();
-    HttpRequest httpRequest =  RestTestUtils.createRequest(HttpMethod.GET, TestingUri.FillWriteBuffer.toString(), null);
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.GET, TestingUri.FillWriteBuffer.toString(), null);
     HttpHeaders.setKeepAlive(httpRequest, false);
     channel.writeInbound(httpRequest);
     channel.writeInbound(createContent(content, false));

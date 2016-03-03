@@ -49,8 +49,8 @@ class NettyServer implements NioServer {
       PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    nettyServerDeployer = new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger,
-        restServerState);
+    nettyServerDeployer =
+        new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger, restServerState);
     nettyServerDeployerThread = new Thread(nettyServerDeployer);
     logger.trace("Instantiated NettyServer");
   }
@@ -148,8 +148,7 @@ class NettyServerDeployer implements Runnable {
                   // for health check request handling
               .addLast("HealthCheckHandler", new HealthCheckHandler(restServerState))
                   // for public access logging
-              .addLast("PublicAccessLogHandler",
-                  new PublicAccessLogRequestHandler(publicAccessLogger))
+              .addLast("PublicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger))
                   // for detecting connections that have been idle too long - probably because of an error.
               .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
                   // for safe writing of chunks for responses
