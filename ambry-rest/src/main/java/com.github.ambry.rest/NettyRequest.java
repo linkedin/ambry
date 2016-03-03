@@ -252,8 +252,8 @@ class NettyRequest implements RestRequest {
         } else if (writeChannel != null) {
           writeContent(writeChannel, callbackWrapper, httpContent);
         } else {
-          requestContents.add(httpContent);
           ReferenceCountUtil.retain(httpContent);
+          requestContents.add(httpContent);
         }
       } finally {
         contentLock.unlock();

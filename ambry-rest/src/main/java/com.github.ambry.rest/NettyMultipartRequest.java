@@ -63,8 +63,8 @@ public class NettyMultipartRequest extends NettyRequest {
     super.close();
     logger
         .trace("Closing NettyMultipartRequest {} with {} raw content chunks unread", getUri(), requestContents.size());
-    while (rawRequestContents.peek() != null) {
-      ReferenceCountUtil.release(rawRequestContents.poll());
+    for(HttpContent rawContent : rawRequestContents) {
+      ReferenceCountUtil.release(rawContent);
     }
   }
 
