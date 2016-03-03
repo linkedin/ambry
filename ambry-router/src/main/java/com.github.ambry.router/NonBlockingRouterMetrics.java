@@ -11,6 +11,7 @@ import com.codahale.metrics.MetricRegistry;
 public class NonBlockingRouterMetrics {
   //@todo add metrics.
   MetricRegistry registry;
+
   public NonBlockingRouterMetrics(MetricRegistry registry) {
     this.registry = registry;
   }

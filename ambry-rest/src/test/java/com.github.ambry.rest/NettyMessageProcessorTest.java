@@ -183,7 +183,8 @@ public class NettyMessageProcessorTest {
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     // MockBlobStorageService echoes the RestMethod + request id.
     String expectedResponse = restMethod.toString() + requestId;
-    assertEquals("Unexpected content", expectedResponse, RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
+    assertEquals("Unexpected content", expectedResponse,
+        RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
     assertTrue("End marker was expected", channel.readOutbound() instanceof LastHttpContent);
   }
 

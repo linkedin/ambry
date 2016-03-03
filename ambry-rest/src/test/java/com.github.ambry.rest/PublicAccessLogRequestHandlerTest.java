@@ -300,6 +300,7 @@ public class PublicAccessLogRequestHandlerTest {
    * @param logEntry the public access log entry
    * @param headers expected headers
    * @param httpMethod HttpMethod type
+   * @param expected, true if the headers are expected, false otherwise
    */
   private void verifyPublicAccessLogEntryForRequestHeaders(String logEntry, HttpHeaders headers, HttpMethod httpMethod,
       boolean expected) {
