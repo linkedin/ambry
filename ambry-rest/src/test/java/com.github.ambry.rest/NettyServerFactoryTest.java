@@ -24,9 +24,12 @@ public class NettyServerFactoryTest {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
+    PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
+    RestServerState restServerState = new RestServerState("/healthCheck");
 
     NettyServerFactory nettyServerFactory =
-        new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler);
+        new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler, publicAccessLogger,
+            restServerState);
     NioServer nioServer = nettyServerFactory.getNioServer();
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
@@ -43,10 +46,12 @@ public class NettyServerFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
+    PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
+    RestServerState restServerState = new RestServerState("/healthCheck");
 
     // VerifiableProperties null.
     try {
-      new NettyServerFactory(null, metricRegistry, restRequestHandler);
+      new NettyServerFactory(null, metricRegistry, restRequestHandler, publicAccessLogger, restServerState);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -54,7 +59,7 @@ public class NettyServerFactoryTest {
 
     // MetricRegistry null.
     try {
-      new NettyServerFactory(verifiableProperties, null, restRequestHandler);
+      new NettyServerFactory(verifiableProperties, null, restRequestHandler, publicAccessLogger, restServerState);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -62,7 +67,23 @@ public class NettyServerFactoryTest {
 
     // RestRequestHandler null.
     try {
-      new NettyServerFactory(verifiableProperties, metricRegistry, null);
+      new NettyServerFactory(verifiableProperties, metricRegistry, null, publicAccessLogger, restServerState);
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // PublicAccessLogger null.
+    try {
+      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, null, restServerState);
+      fail("Instantiation should have failed because one of the arguments was null");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // RestServerState null.
+    try {
+      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger, null);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

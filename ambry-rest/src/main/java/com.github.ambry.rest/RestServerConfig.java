@@ -66,6 +66,28 @@ class RestServerConfig {
   @Default("com.github.ambry.router.CoordinatorBackedRouterFactory")
   public final String restServerRouterFactory;
 
+  /**
+   * Request Headers that needs to be logged as part of public access log entries
+   */
+  @Config("rest.server.public.access.log.request.headers")
+  @Default(
+      "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For")
+  public final String restServerPublicAccessLogRequestHeaders;
+
+  /**
+   * Response Headers that needs to be logged as part of public access log entries
+   */
+  @Config("rest.server.public.access.log.response.headers")
+  @Default("Location,x-ambry-blob-size")
+  public final String restServerPublicAccessLogResponseHeaders;
+
+  /**
+   * Health check URI for load balancers (VIPs)
+   */
+  @Config("rest.server.health.check.uri")
+  @Default("/healthCheck")
+  public final String restServerHealthCheckUri;
+
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
     restServerNioServerFactory =
@@ -80,5 +102,11 @@ class RestServerConfig {
         .getString("rest.server.response.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerRouterFactory = verifiableProperties
         .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
+    restServerPublicAccessLogRequestHeaders = verifiableProperties
+        .getString("rest.server.public.access.log.request.headers",
+            "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
+    restServerPublicAccessLogResponseHeaders =
+        verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
+    restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
   }
 }
