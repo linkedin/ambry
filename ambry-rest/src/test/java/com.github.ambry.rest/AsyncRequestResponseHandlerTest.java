@@ -419,18 +419,19 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void multipleRequestsInQueueTest()
       throws Exception {
-    final int EXPECTED_QUEUE_SIZE = 5;
+    final int EXPECTED_MIN_QUEUE_SIZE = 5;
     blobStorageService.blockAllOperations();
     try {
       // the first request that each worker processes will block.
-      for (int i = 0; i < EXPECTED_QUEUE_SIZE + asyncRequestResponseHandler.getWorkersAlive(); i++) {
+      for (int i = 0; i < EXPECTED_MIN_QUEUE_SIZE + asyncRequestResponseHandler.getWorkersAlive(); i++) {
         MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
         restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
         MockRestResponseChannel restResponseChannel = new MockRestResponseChannel(restRequest);
         asyncRequestResponseHandler.handleRequest(restRequest, restResponseChannel);
       }
-      assertTrue("Request queue size should be at least " + EXPECTED_QUEUE_SIZE + ". Is " + asyncRequestResponseHandler
-          .getRequestQueueSize(), asyncRequestResponseHandler.getRequestQueueSize() >= EXPECTED_QUEUE_SIZE);
+      assertTrue(
+          "Request queue size should be at least " + EXPECTED_MIN_QUEUE_SIZE + ". Is " + asyncRequestResponseHandler
+              .getRequestQueueSize(), asyncRequestResponseHandler.getRequestQueueSize() >= EXPECTED_MIN_QUEUE_SIZE);
     } finally {
       blobStorageService.releaseAllOperations();
     }
