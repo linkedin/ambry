@@ -17,13 +17,13 @@ class GetManager {
     //@todo
   }
 
-  void submitGetBlobOperation(long operationId, String blobId,
-      FutureResult<ReadableStreamChannel> futureResult, Callback<ReadableStreamChannel> callback) {
+  void submitGetBlobOperation(long operationId, String blobId, FutureResult<ReadableStreamChannel> futureResult,
+      Callback<ReadableStreamChannel> callback) {
     //@todo
   }
 
-  void submitGetBlobInfoOperation(long operationId, String blobId,
-      FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
+  void submitGetBlobInfoOperation(long operationId, String blobId, FutureResult<BlobInfo> futureResult,
+      Callback<BlobInfo> callback) {
     //@todo
   }
 

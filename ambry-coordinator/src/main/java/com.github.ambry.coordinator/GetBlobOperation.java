@@ -3,6 +3,7 @@ package com.github.ambry.coordinator;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -92,7 +93,8 @@ final class GetBlobOperationRequest extends GetOperationRequest {
   @Override
   protected void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException {
-    getBlobOperation.setBlobOutput(MessageFormatRecord.deserializeBlob(inputStream));
+    BlobData blobData = MessageFormatRecord.deserializeBlob(inputStream);
+    getBlobOperation.setBlobOutput(new BlobOutput(blobData.getSize(), blobData.getStream()));
   }
 }
 

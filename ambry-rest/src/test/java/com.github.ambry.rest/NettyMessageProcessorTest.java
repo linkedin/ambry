@@ -7,7 +7,6 @@ import com.github.ambry.router.Router;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
-import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -20,7 +19,6 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicLong;
@@ -106,7 +104,8 @@ public class NettyMessageProcessorTest {
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     // MockBlobStorageService echoes the RestMethod + request id.
     String expectedResponse = HttpMethod.GET.toString() + requestId;
-    assertEquals("Unexpected content", expectedResponse, getContentString((HttpContent) channel.readOutbound()));
+    assertEquals("Unexpected content", expectedResponse,
+        RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
     assertTrue("End marker was expected", channel.readOutbound() instanceof LastHttpContent);
     assertFalse("Channel not closed", channel.isOpen());
   }
@@ -126,7 +125,7 @@ public class NettyMessageProcessorTest {
     // content when no content is expected.
     content = "@@randomContent@@@";
     channel = createChannel();
-    channel.writeInbound(createRequest(HttpMethod.GET, "/"));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
@@ -182,32 +181,6 @@ public class NettyMessageProcessorTest {
   }
 
   /**
-   * Creates a {@link HttpRequest} with the given parameters.
-   * @param httpMethod the {@link HttpMethod} required.
-   * @param uri the URI to hit.
-   * @return a {@link HttpRequest} with the given parameters.
-   */
-  private HttpRequest createRequest(HttpMethod httpMethod, String uri) {
-    HttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
-    // keep-alive by default but set it for readability
-    HttpHeaders.setKeepAlive(request, true);
-    return request;
-  }
-
-  /**
-   * Converts the content in {@code httpContent} to a human readable string.
-   * @param httpContent the {@link HttpContent} whose content needs to be converted to a human readable string.
-   * @return content that is inside {@code httpContent} as a human readable string.
-   * @throws IOException
-   */
-  private String getContentString(HttpContent httpContent)
-      throws IOException {
-    ByteArrayOutputStream out = new ByteArrayOutputStream();
-    httpContent.content().readBytes(out, httpContent.content().readableBytes());
-    return out.toString("UTF-8");
-  }
-
-  /**
    * Sends the provided {@code httpRequest} and verifies that the response is an echo of the {@code restMethod}.
    * @param channel the {@link EmbeddedChannel} to send the request over.
    * @param httpMethod the {@link HttpMethod} for the request.
@@ -221,7 +194,7 @@ public class NettyMessageProcessorTest {
       throws IOException {
     long requestId = requestIdGenerator.getAndIncrement();
     String uri = MockBlobStorageService.ECHO_REST_METHOD + requestId;
-    HttpRequest httpRequest = createRequest(httpMethod, uri);
+    HttpRequest httpRequest = RestTestUtils.createRequest(httpMethod, uri, null);
     HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
     channel.writeInbound(httpRequest);
     if (!restMethod.equals(RestMethod.POST)) {
@@ -234,7 +207,8 @@ public class NettyMessageProcessorTest {
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     // MockBlobStorageService echoes the RestMethod + request id.
     String expectedResponse = restMethod.toString() + requestId;
-    assertEquals("Unexpected content", expectedResponse, getContentString((HttpContent) channel.readOutbound()));
+    assertEquals("Unexpected content", expectedResponse,
+        RestTestUtils.getContentString((HttpContent) channel.readOutbound()));
     assertTrue("End marker was expected", channel.readOutbound() instanceof LastHttpContent);
   }
 
@@ -280,7 +254,7 @@ public class NettyMessageProcessorTest {
    */
   private void doRequestHandlerExceptionTest(HttpMethod httpMethod, HttpResponseStatus expectedStatus) {
     EmbeddedChannel channel = createChannel();
-    channel.writeInbound(createRequest(httpMethod, "/"));
+    channel.writeInbound(RestTestUtils.createRequest(httpMethod, "/", null));
     channel.writeInbound(new DefaultLastHttpContent());
     // first outbound has to be response.
     HttpResponse response = (HttpResponse) channel.readOutbound();

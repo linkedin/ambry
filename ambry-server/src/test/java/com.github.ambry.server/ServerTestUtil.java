@@ -17,6 +17,7 @@ import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.coordinator.OperationContext;
 import com.github.ambry.coordinator.PutOperation;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -394,11 +395,11 @@ public final class ServerTestUtil {
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           //System.out.println("response from get " + resp.getError());
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-            byte[] blobout = new byte[(int) blobOutput.getSize()];
+            BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            byte[] blobout = new byte[(int) blobData.getSize()];
             int readsize = 0;
-            while (readsize < blobOutput.getSize()) {
-              readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+            while (readsize < blobData.getSize()) {
+              readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
             }
             Assert.assertArrayEquals(blobout, data);
           } catch (MessageFormatException e) {
@@ -561,11 +562,11 @@ public final class ServerTestUtil {
           blobsChecked.add(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-            byte[] blobout = new byte[(int) blobOutput.getSize()];
+            BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            byte[] blobout = new byte[(int) blobData.getSize()];
             int readsize = 0;
-            while (readsize < blobOutput.getSize()) {
-              readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+            while (readsize < blobData.getSize()) {
+              readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
             }
             Assert.assertArrayEquals(blobout, data);
           } catch (MessageFormatException e) {
@@ -670,11 +671,11 @@ public final class ServerTestUtil {
           blobsChecked.remove(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-            byte[] blobout = new byte[(int) blobOutput.getSize()];
+            BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            byte[] blobout = new byte[(int) blobData.getSize()];
             int readsize = 0;
-            while (readsize < blobOutput.getSize()) {
-              readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+            while (readsize < blobData.getSize()) {
+              readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
             }
             Assert.assertArrayEquals(blobout, data);
           } catch (MessageFormatException e) {
@@ -882,11 +883,11 @@ public final class ServerTestUtil {
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       //System.out.println("response from get " + resp3.getError());
       try {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
-        byte[] blobout = new byte[(int) blobOutput.getSize()];
+        BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
+        byte[] blobout = new byte[(int) blobData.getSize()];
         int readsize = 0;
-        while (readsize < blobOutput.getSize()) {
-          readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+        while (readsize < blobData.getSize()) {
+          readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
         }
         Assert.assertArrayEquals(blobout, data);
       } catch (MessageFormatException e) {
@@ -1168,11 +1169,11 @@ public final class ServerTestUtil {
     InputStream stream = channel.receive().getInputStream();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
     Assert.assertEquals(resp.getError(), ServerErrorCode.No_Error);
-    BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-    byte[] blobout = new byte[(int) blobOutput.getSize()];
+    BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+    byte[] blobout = new byte[(int) blobData.getSize()];
     int readsize = 0;
-    while (readsize < blobOutput.getSize()) {
-      readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+    while (readsize < blobData.getSize()) {
+      readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
     }
     Assert.assertArrayEquals(blobout, dataToCheck);
   }

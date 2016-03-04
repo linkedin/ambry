@@ -5,7 +5,7 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -413,7 +413,7 @@ class HardDeleteVerifier {
                 != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
               BlobProperties props;
               ByteBuffer metadata;
-              BlobOutput output;
+              BlobData output;
               try {
                 props = MessageFormatRecord.deserializeBlobProperties(streamlog);
                 metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
@@ -676,12 +676,12 @@ class HardDeleteVerifier {
     boolean caughtExceptionInOld = false;
     ByteBuffer usermetadata = null;
     ByteBuffer oldUsermetadata = null;
-    BlobOutput blobOutput = null;
-    BlobOutput oldBlobOutput = null;
+    BlobData blobData = null;
+    BlobData oldBlobData = null;
 
     try {
       usermetadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-      blobOutput = MessageFormatRecord.deserializeBlob(streamlog);
+      blobData = MessageFormatRecord.deserializeBlob(streamlog);
     } catch (MessageFormatException e) {
       caughtException = true;
     } catch (IOException e) {
@@ -690,7 +690,7 @@ class HardDeleteVerifier {
 
     try {
       oldUsermetadata = MessageFormatRecord.deserializeUserMetadata(oldStreamlog);
-      oldBlobOutput = MessageFormatRecord.deserializeBlob(oldStreamlog);
+      oldBlobData = MessageFormatRecord.deserializeBlob(oldStreamlog);
     } catch (MessageFormatException e) {
       caughtExceptionInOld = true;
     } catch (IOException e) {
@@ -703,18 +703,18 @@ class HardDeleteVerifier {
       if (isDeleted) {
         try {
           asExpected = verifyZeroed(usermetadata.array()) && verifyZeroed(Utils
-              .readBytesFromStream(blobOutput.getStream(), new byte[(int) blobOutput.getSize()], 0,
-                  (int) blobOutput.getSize()));
+              .readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
+                  (int) blobData.getSize()));
         } catch (IOException e) {
           asExpected = false;
         }
       } else {
         try {
           asExpected = Arrays.equals(usermetadata.array(), oldUsermetadata.array()) && Arrays.equals(Utils
-              .readBytesFromStream(blobOutput.getStream(), new byte[(int) blobOutput.getSize()], 0,
-                  (int) blobOutput.getSize()), Utils
-              .readBytesFromStream(oldBlobOutput.getStream(), new byte[(int) oldBlobOutput.getSize()], 0,
-                  (int) oldBlobOutput.getSize()));
+              .readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
+                  (int) blobData.getSize()), Utils
+              .readBytesFromStream(oldBlobData.getStream(), new byte[(int) oldBlobData.getSize()], 0,
+                  (int) oldBlobData.getSize()));
         } catch (IOException e) {
           asExpected = false;
         }

@@ -10,7 +10,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -129,9 +129,8 @@ public class ServerReadPerformance {
       }
 
       long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt,
-          sslKeystoreTypeOpt, sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt,
-          sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
+          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
 
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
@@ -192,7 +191,7 @@ public class ServerReadPerformance {
 
       while ((line = br.readLine()) != null) {
         String[] id = line.split("-");
-        BlobOutput output = null;
+        BlobData blobData = null;
         BlobId blobId = new BlobId(id[1], map);
         ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
         blobIds.add(blobId);
@@ -211,12 +210,12 @@ public class ServerReadPerformance {
             channel.send(getRequest);
             InputStream receiveStream = channel.receive().getInputStream();
             GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), map);
-            output = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+            blobData = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
             long sizeRead = 0;
-            byte[] outputBuffer = new byte[(int) output.getSize()];
+            byte[] outputBuffer = new byte[(int) blobData.getSize()];
             ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
-            while (sizeRead < output.getSize()) {
-              streamOut.write(output.getStream().read());
+            while (sizeRead < blobData.getSize()) {
+              streamOut.write(blobData.getStream().read());
               sizeRead++;
             }
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;

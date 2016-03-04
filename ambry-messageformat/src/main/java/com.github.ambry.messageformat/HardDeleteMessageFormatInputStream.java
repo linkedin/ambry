@@ -12,6 +12,8 @@ import java.nio.ByteBuffer;
  * Represents a message that consist of just the user metadata and blob content. Additionally, these fields are
  * zeroed out.
  * This format is used to replace a put record's user metadata and blob content part as part of hard deleting it.
+ * The usermetadata and blob record versions of the replacement stream will have to be the same as the versions in
+ * the original put record.
  *
  *  - - - - - - - - - - - - - - - - - - -
  * |           Message Header            |
@@ -30,18 +32,18 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
   private int hardDeleteStreamRelativeOffset;
 
   /**
-   * Creates a hard delete stream using the given parameters to replace the usermetadata and blob record fields. The
-   * method takes the blobProperties field as a parameter, but that is just used to generate the stream.
+   * Creates a hard delete stream using the given parameters to replace the usermetadata and blob record fields.
    * @param userMetadataRelativeOffset the relative offset of userMetadata.
    * @param userMetadataVersion the version of the userMetadata.
    * @param userMetadataSize the size of the userMetadata field.
    * @param blobRecordVersion the version of the blob record.
+   * @param blobType {@link BlobType} of the blob
    * @param blobStreamSize the size of the blob stream.
    * @throws MessageFormatException
    * @throws IOException
    */
   public HardDeleteMessageFormatInputStream(int userMetadataRelativeOffset, short userMetadataVersion,
-      int userMetadataSize, short blobRecordVersion, long blobStreamSize)
+      int userMetadataSize, short blobRecordVersion, BlobType blobType, long blobStreamSize)
       throws MessageFormatException, IOException {
 
     ByteBuffer userMetadata = ByteBuffer.allocate(userMetadataSize);
@@ -71,6 +73,14 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
         serializedBlobPartialRecord =
             ByteBuffer.allocate((int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
         MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize);
+        serializedBlobPartialRecord.flip();
+        break;
+      case MessageFormatRecord.Blob_Version_V2:
+        blobRecordSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobStreamSize);
+        serializedBlobPartialRecord =
+            ByteBuffer.allocate((int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
+        MessageFormatRecord.Blob_Format_V2
+            .serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize, blobType);
         serializedBlobPartialRecord.flip();
         break;
       default:

@@ -159,7 +159,7 @@ public class MessageSievingInputStream extends InputStream {
     boolean isValid = false;
     BlobProperties props = null;
     ByteBuffer metadata = null;
-    BlobOutput output = null;
+    BlobData blobData = null;
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       int availableBeforeParsing = byteArrayInputStream.available();
@@ -181,7 +181,7 @@ public class MessageSievingInputStream extends InputStream {
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
           props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
           metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
-          output = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
+          blobData = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
         } else {
           throw new IllegalStateException("Message cannot be a deleted record ");
         }
@@ -198,7 +198,7 @@ public class MessageSievingInputStream extends InputStream {
                 header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
                 header.getBlobRecordRelativeOffset(), header.getDeleteRecordRelativeOffset(), header.getCrc());
             logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
-                props.getBlobSize(), metadata.capacity(), output.getSize());
+                props.getBlobSize(), metadata.capacity(), blobData.getSize());
           }
           if (msgInfo.getStoreKey().equals(storeKey)) {
             isValid = true;

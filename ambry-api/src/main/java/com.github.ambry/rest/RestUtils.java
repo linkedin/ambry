@@ -88,10 +88,12 @@ public class RestUtils {
     /**
      * prefix for any header to be set as user metadata for the given blob
      */
-    public final static String UserMetaData_Header_Prefix = "x-ambry-um-";
+    public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
 
     // prefix for old style user metadata that will be served as headers
-    protected final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
+    protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
+
+    protected final static String X_FORWARDED_FOR = "X-Forwarded-For";
   }
 
   public static final class MultipartPost {
@@ -206,10 +208,10 @@ public class RestUtils {
     int sizeToAllocate = 0;
     for (Map.Entry<String, Object> entry : args.entrySet()) {
       String key = entry.getKey();
-      if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
+      if (key.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
         // key size
         sizeToAllocate += 4;
-        String keyToStore = key.substring(Headers.UserMetaData_Header_Prefix.length());
+        String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
         sizeToAllocate += keyToStore.length();
         String value = getHeader(args, key, true);
         userMetadataMap.put(keyToStore, value);
@@ -272,7 +274,7 @@ public class RestUtils {
               while (counter++ < entryCount) {
                 String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
                 String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-                toReturn.put(Headers.UserMetaData_Header_Prefix + key, value);
+                toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
               }
               long actualCRC = userMetadataBuffer.getLong();
               Crc32 crc32 = new Crc32();
@@ -311,7 +313,7 @@ public class RestUtils {
     int sizeRead = 0;
     int counter = 0;
     while (sizeRead < totalSize) {
-      String key = Headers.UserMetaData_OldStyle_Prefix + counter++;
+      String key = Headers.USER_META_DATA_OLD_STYLE_PREFIX + counter++;
       int sizeToRead = Math.min(totalSize - sizeRead, Max_UserMetadata_Value_Size);
       String value = new String(userMetadata, sizeRead, sizeToRead, StandardCharsets.US_ASCII);
       toReturn.put(key, value);
