@@ -41,6 +41,7 @@ class NettyRequest implements RestRequest {
   protected volatile ReadIntoCallbackWrapper callbackWrapper = null;
   protected volatile Map<String, Object> allArgsReadOnly = null;
 
+  private final long size;
   private final QueryStringDecoder query;
   private final RestMethod restMethod;
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
@@ -83,6 +84,12 @@ class NettyRequest implements RestRequest {
     this.request = request;
     this.query = new QueryStringDecoder(request.getUri());
     this.nettyMetrics = nettyMetrics;
+
+    if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
+      size = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
+    } else {
+      size = HttpHeaders.getContentLength(request, 0);
+    }
 
     // query params.
     for (Map.Entry<String, List<String>> e : query.parameters().entrySet()) {
@@ -160,8 +167,10 @@ class NettyRequest implements RestRequest {
       try {
         logger.trace("Closing NettyRequest {} with {} content chunks unread", getUri(), requestContents.size());
         // For non-POST we usually have one content chunk unread - this the LastHttpContent chunk. This is OK.
-        while (requestContents.peek() != null) {
-          ReferenceCountUtil.release(requestContents.poll());
+        HttpContent content = requestContents.poll();
+        while (content != null) {
+          ReferenceCountUtil.release(content);
+          content = requestContents.poll();
         }
       } finally {
         contentLock.unlock();
@@ -198,13 +207,7 @@ class NettyRequest implements RestRequest {
    */
   @Override
   public long getSize() {
-    long contentLength;
-    if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
-      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
-    } else {
-      contentLength = HttpHeaders.getContentLength(request, 0);
-    }
-    return contentLength;
+    return size;
   }
 
   @Override
@@ -212,15 +215,20 @@ class NettyRequest implements RestRequest {
     ReadIntoCallbackWrapper tempWrapper = new ReadIntoCallbackWrapper(callback);
     contentLock.lock();
     try {
-      if (!channelOpen.get()) {
+      if (!isOpen()) {
         nettyMetrics.requestAlreadyClosedError.inc();
         tempWrapper.invokeCallback(new ClosedChannelException());
       } else if (writeChannel != null) {
         throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }
-      while (requestContents.peek() != null) {
-        writeContent(asyncWritableChannel, tempWrapper, requestContents.peek());
-        ReferenceCountUtil.release(requestContents.poll());
+      HttpContent content = requestContents.poll();
+      while (content != null) {
+        try {
+          writeContent(asyncWritableChannel, tempWrapper, content);
+        } finally {
+          ReferenceCountUtil.release(content);
+        }
+        content = requestContents.poll();
       }
       callbackWrapper = tempWrapper;
       writeChannel = asyncWritableChannel;
@@ -252,8 +260,7 @@ class NettyRequest implements RestRequest {
         } else if (writeChannel != null) {
           writeContent(writeChannel, callbackWrapper, httpContent);
         } else {
-          ReferenceCountUtil.retain(httpContent);
-          requestContents.add(httpContent);
+          requestContents.add(ReferenceCountUtil.retain(httpContent));
         }
       } finally {
         contentLock.unlock();
@@ -284,7 +291,7 @@ class NettyRequest implements RestRequest {
     boolean isLast = httpContent instanceof LastHttpContent;
     if (httpContent.content().nioBufferCount() > 0) {
       // not a copy.
-      ReferenceCountUtil.retain(httpContent);
+      httpContent = ReferenceCountUtil.retain(httpContent);
       retained = true;
       contentBuffers = httpContent.content().nioBuffers();
       writeCallbacks = new ContentWriteCallback[contentBuffers.length];

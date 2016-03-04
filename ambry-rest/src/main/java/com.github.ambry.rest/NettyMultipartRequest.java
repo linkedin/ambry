@@ -62,11 +62,10 @@ public class NettyMultipartRequest extends NettyRequest {
   public void close() {
     super.close();
     logger.trace("Closing NettyMultipartRequest with {} raw content chunks unread", rawRequestContents.size());
-    while (rawRequestContents.size() > 0) {
-      HttpContent content = rawRequestContents.poll();
-      if (content != null) {
-        ReferenceCountUtil.release(content);
-      }
+    HttpContent content = rawRequestContents.poll();
+    while (content != null) {
+      ReferenceCountUtil.release(content);
+      content = rawRequestContents.poll();
     }
   }
 
@@ -91,13 +90,14 @@ public class NettyMultipartRequest extends NettyRequest {
       nettyMetrics.multipartRequestAlreadyClosedError.inc();
       callbackWrapper.invokeCallback(new ClosedChannelException());
     }
-    HttpContent content;
-    while ((content = requestContents.poll()) != null) {
+    HttpContent content = requestContents.poll();
+    while (content != null) {
       try {
         writeContent(asyncWritableChannel, callbackWrapper, content);
       } finally {
         ReferenceCountUtil.release(content);
       }
+      content = requestContents.poll();
     }
     return callbackWrapper.futureResult;
   }
@@ -117,13 +117,14 @@ public class NettyMultipartRequest extends NettyRequest {
       throw new RestServiceException("The request has been closed and is not accepting content",
           RestServiceErrorCode.RequestChannelClosed);
     } else {
-      ReferenceCountUtil.retain(httpContent);
-      rawRequestContents.add(httpContent);
+      rawRequestContents.add(ReferenceCountUtil.retain(httpContent));
     }
   }
 
   /**
    * Prepares the request for reading by decoding all the content added via {@link #addContent(HttpContent)}.
+   * <p/>
+   * This is a CPU bound task and should not be called in a I/O bound thread.
    * @throws RestServiceException if request channel has been closed or if the request could not be decoded/processed.
    */
   public void prepare()
@@ -137,13 +138,17 @@ public class NettyMultipartRequest extends NettyRequest {
       HttpPostMultipartRequestDecoder postRequestDecoder =
           new HttpPostMultipartRequestDecoder(httpDataFactory, request);
       try {
-        HttpContent httpContent;
-        while ((httpContent = rawRequestContents.poll()) != null) {
+        HttpContent httpContent = rawRequestContents.poll();
+        while (httpContent != null) {
           try {
-            postRequestDecoder.offer(httpContent);
+            // doing this check because HttpPostMultipartRequestDecoder adds request that is content automatically.
+            if (httpContent != request) {
+              postRequestDecoder.offer(httpContent);
+            }
           } finally {
             ReferenceCountUtil.release(httpContent);
           }
+          httpContent = rawRequestContents.poll();
         }
         for (InterfaceHttpData part : postRequestDecoder.getBodyHttpDatas()) {
           processPart(part);
@@ -181,8 +186,7 @@ public class NettyMultipartRequest extends NettyRequest {
               RestServiceErrorCode.BadRequest);
         } else {
           hasBlob = true;
-          long expectedStreamSize = getSize();
-          if (expectedStreamSize > 0 && fileUpload.length() != expectedStreamSize) {
+          if (fileUpload.length() != getSize()) {
             nettyMetrics.multipartRequestSizeMismatchError.inc();
             throw new RestServiceException(
                 "Request size [" + fileUpload.length() + "] does not match Content-Length [" + getSize() + "]",
@@ -191,8 +195,7 @@ public class NettyMultipartRequest extends NettyRequest {
             contentLock.lock();
             try {
               if (isOpen()) {
-                ReferenceCountUtil.retain(fileUpload.content());
-                requestContents.add(new DefaultHttpContent(fileUpload.content()));
+                requestContents.add(new DefaultHttpContent(ReferenceCountUtil.retain(fileUpload.content())));
               } else {
                 nettyMetrics.multipartRequestAlreadyClosedError.inc();
                 throw new RestServiceException("Request is closed", RestServiceErrorCode.RequestChannelClosed);

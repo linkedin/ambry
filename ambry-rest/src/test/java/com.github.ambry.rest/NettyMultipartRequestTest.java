@@ -103,7 +103,7 @@ public class NettyMultipartRequestTest {
     // request with blob and other parts
     files[NUM_TOTAL_PARTS - 1] =
         new InMemoryFile(RestUtils.MultipartPost.Blob_Part, ByteBuffer.wrap(getRandomBytes(BLOB_PART_SIZE)));
-    doMultipartDecodeTest(0, files);
+    doMultipartDecodeTest(BLOB_PART_SIZE, files);
   }
 
   /**
