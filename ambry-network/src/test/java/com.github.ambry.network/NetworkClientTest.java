@@ -141,10 +141,10 @@ public class NetworkClientTest {
       throws IOException, InterruptedException {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     List<ResponseInfo> responseInfoList;
-    int requestCount;
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(5)));
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(6)));
-    requestCount = requestInfoList.size();
+    int requestCount = requestInfoList.size();
+    int responseCount = 0;
 
     // set beBad so that requests end up failing due to "network error".
     selector.setBeBad(true);
@@ -158,9 +158,9 @@ public class NetworkClientTest {
         Assert.assertEquals("Should have received a connection unavailable error", NetworkClientErrorCode.NetworkError,
             error);
         Assert.assertNull("Should not have received a valid response", response);
-        requestCount--;
+        responseCount++;
       }
-    } while (requestCount > 0);
+    } while (requestCount > responseCount);
     responseInfoList = networkClient.sendAndPoll(requestInfoList);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
