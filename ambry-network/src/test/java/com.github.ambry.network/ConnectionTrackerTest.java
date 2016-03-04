@@ -135,13 +135,13 @@ public class ConnectionTrackerTest {
     try {
       connectionTracker.checkInConnection("invalid");
       Assert.fail("Invalid connections should not get checked in.");
-    } catch (NullPointerException e) {
+    } catch (IllegalArgumentException e) {
     }
 
     try {
       connectionTracker.removeConnection("invalid");
       Assert.fail("Removing invalid connections should not succeed.");
-    } catch (NullPointerException e) {
+    } catch (IllegalArgumentException e) {
     }
 
     // test connection removal.
@@ -165,7 +165,7 @@ public class ConnectionTrackerTest {
     try {
       connectionTracker.removeConnection(conn11);
       Assert.fail("Removing the same connection twice should not succeed.");
-    } catch (NullPointerException e) {
+    } catch (IllegalArgumentException e) {
     }
     assertCounts(totalConnectionsCount, availableCount);
 
@@ -181,8 +181,10 @@ public class ConnectionTrackerTest {
   }
 
   private void assertCounts(int totalConnectionsCount, int availableCount) {
-    Assert.assertEquals(totalConnectionsCount, connectionTracker.getTotalConnectionsCount());
-    Assert.assertEquals(availableCount, connectionTracker.getAvailableConnectionsCount());
+    Assert.assertEquals("total connections should match", totalConnectionsCount,
+        connectionTracker.getTotalConnectionsCount());
+    Assert.assertEquals("available connections should match", availableCount,
+        connectionTracker.getAvailableConnectionsCount());
   }
 
   /**

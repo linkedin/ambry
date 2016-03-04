@@ -69,17 +69,26 @@ class ConnectionTracker {
   /**
    * Add connection to available pool.
    * @param connectionId the id of the newly established or previously checked out connection.
+   * @throws {@link IllegalArgumentException} if the passed in connection id is invalid.
    */
   void checkInConnection(String connectionId) {
-    connectionIdToPoolManager.get(connectionId).checkInConnection(connectionId);
+    HostPortPoolManager hostPortPoolManager = connectionIdToPoolManager.get(connectionId);
+    if (hostPortPoolManager == null) {
+      throw new IllegalArgumentException("Invalid connection id passed in");
+    }
+    hostPortPoolManager.checkInConnection(connectionId);
   }
 
   /**
    * Remove and stop tracking the given connection id.
    * @param connectionId connection to remove.
+   * @throws {@link IllegalArgumentException} if the passed in connection id is invalid.
    */
   void removeConnection(String connectionId) {
     HostPortPoolManager hostPortPoolManager = connectionIdToPoolManager.remove(connectionId);
+    if (hostPortPoolManager == null) {
+      throw new IllegalArgumentException("Invalid connection id passed in");
+    }
     hostPortPoolManager.removeConnection(connectionId);
     totalManagedConnectionsCount--;
   }

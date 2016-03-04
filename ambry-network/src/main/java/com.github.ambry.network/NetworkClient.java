@@ -33,7 +33,8 @@ public class NetworkClient implements Closeable {
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
   private final int checkoutTimeoutMs;
-  private final int POLL_TIMEOUT_MS = 1; // @todo: this needs to be empirically determined.
+  // @todo: this needs to be empirically determined.
+  private final int POLL_TIMEOUT_MS = 1;
   private boolean closed = false;
   private static final Logger logger = LoggerFactory.getLogger(NetworkClient.class);
 
@@ -75,7 +76,7 @@ public class NetworkClient implements Closeable {
     }
     List<ResponseInfo> responseInfoList = new ArrayList<ResponseInfo>();
     for (RequestInfo requestInfo : requestInfos) {
-      pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, null));
+      pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo));
     }
     List<NetworkSend> sends = prepareSends(responseInfoList);
     selector.poll(POLL_TIMEOUT_MS, sends);
@@ -126,7 +127,6 @@ public class NetworkClient implements Closeable {
           }
         } else {
           sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), null, time));
-          requestMetadata.connId = connId;
           connectionIdToRequestInFlight.put(connId, requestMetadata);
           iter.remove();
         }
@@ -184,13 +184,10 @@ public class NetworkClient implements Closeable {
     long requestQueuedTimeMs;
     // the RequestInfo associated with the request.
     RequestInfo requestInfo;
-    // if this request is in flight, the connection id on which it is in flight; else null.
-    String connId;
 
-    RequestMetadata(long requestQueuedTimeMs, RequestInfo requestInfo, String connId) {
+    RequestMetadata(long requestQueuedTimeMs, RequestInfo requestInfo) {
       this.requestInfo = requestInfo;
       this.requestQueuedTimeMs = requestQueuedTimeMs;
-      this.connId = connId;
     }
   }
 }

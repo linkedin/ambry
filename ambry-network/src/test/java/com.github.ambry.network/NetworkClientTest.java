@@ -22,10 +22,10 @@ import org.junit.Test;
  * Test the {@link NetworkClient}
  */
 public class NetworkClientTest {
-  final int CHECKOUT_TIMEOUT_MS = 1000;
-  final int MAX_PORTS_PLAIN_TEXT = 3;
-  final int MAX_PORTS_SSL = 3;
-  Time time;
+  private final int CHECKOUT_TIMEOUT_MS = 1000;
+  private final int MAX_PORTS_PLAIN_TEXT = 3;
+  private final int MAX_PORTS_SSL = 3;
+  private final Time time;
 
   MockSelector selector;
   NetworkClient networkClient;
@@ -47,10 +47,10 @@ public class NetworkClientTest {
     NetworkClientFactory networkClientFactory =
         new NetworkClientFactory(networkMetrics, networkConfig, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockTime());
-    networkClientFactory.getNetworkClient();
+    Assert.assertNotNull("NetworkClient returned should be non-null", networkClientFactory.getNetworkClient());
   }
 
-  private void initialize()
+  public NetworkClientTest()
       throws IOException {
     Properties props = new Properties();
     VerifiableProperties vprops = new VerifiableProperties(props);
@@ -67,13 +67,12 @@ public class NetworkClientTest {
   @Test
   public void testBasicSendAndPoll()
       throws IOException {
-    initialize();
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     List<ResponseInfo> responseInfoList;
-    int requestCount;
     requestInfoList.add(new RequestInfo(host1, port1, new MockSend(1)));
     requestInfoList.add(new RequestInfo(host1, port1, new MockSend(2)));
-    requestCount = requestInfoList.size();
+    int requestCount = requestInfoList.size();
+    int responseCount = 0;
 
     do {
       responseInfoList = networkClient.sendAndPoll(requestInfoList);
@@ -87,10 +86,10 @@ public class NetworkClientTest {
         int correlationIdInRequest = send.getCorrelationId();
         int correlationIdInResponse = response.getInt();
         Assert.assertEquals("Received response for the wrong request", correlationIdInRequest, correlationIdInResponse);
-        requestCount--;
+        responseCount++;
       }
-    } while (requestCount > 0);
-    Assert.assertEquals("Should receive only as many responses as there were requests", 0, requestCount);
+    } while (requestCount > responseCount);
+    Assert.assertEquals("Should receive only as many responses as there were requests", requestCount, responseCount);
 
     responseInfoList = networkClient.sendAndPoll(requestInfoList);
     requestInfoList.clear();
@@ -103,13 +102,12 @@ public class NetworkClientTest {
   @Test
   public void testConnectionUnavailable()
       throws IOException, InterruptedException {
-    initialize();
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     List<ResponseInfo> responseInfoList;
-    int requestCount;
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
-    requestCount = requestInfoList.size();
+    int requestCount = requestInfoList.size();
+    int responseCount = 0;
 
     responseInfoList = networkClient.sendAndPoll(requestInfoList);
     requestInfoList.clear();
@@ -127,9 +125,9 @@ public class NetworkClientTest {
         Assert.assertEquals("Should have received a connection unavailable error",
             NetworkClientErrorCode.ConnectionUnavailable, error);
         Assert.assertNull("Should not have received a valid response", response);
-        requestCount--;
+        responseCount++;
       }
-    } while (requestCount > 0);
+    } while (requestCount > responseCount);
     responseInfoList = networkClient.sendAndPoll(requestInfoList);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
@@ -141,7 +139,6 @@ public class NetworkClientTest {
   @Test
   public void testNetworkError()
       throws IOException, InterruptedException {
-    initialize();
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     List<ResponseInfo> responseInfoList;
     int requestCount;
@@ -171,21 +168,17 @@ public class NetworkClientTest {
   }
 
   /**
-   * Test to ensure subsequent operations after a close throw an IllegalStateException.
+   * Test to ensure subsequent operations after a close throw an {@link IllegalStateException}.
    */
   @Test
   public void testClose()
       throws IOException {
-    initialize();
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
-    {
-      networkClient.close();
-      try {
-        networkClient.sendAndPoll(requestInfoList);
-        requestInfoList.clear();
-        Assert.fail("Polling after close should throw");
-      } catch (IllegalStateException e) {
-      }
+    networkClient.close();
+    try {
+      networkClient.sendAndPoll(requestInfoList);
+      Assert.fail("Polling after close should throw");
+    } catch (IllegalStateException e) {
     }
   }
 }
@@ -248,7 +241,7 @@ class MockSend implements Send {
  * id and returns that buffer as part of {@link #getPayload()}.
  */
 class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
-  ByteBuffer buf;
+  private final ByteBuffer buf;
 
   /**
    * Construct a MockBoundedByteBufferReceive with the given correlation id.
@@ -275,7 +268,7 @@ class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
  * returns them in the next calls to {@link #connected()} and {@link #completedSends()} calls.
  */
 class MockSelector extends Selector {
-  int index;
+  private int index;
   private Set<String> connectionIds = new HashSet<String>();
   private List<String> connected = new ArrayList<String>();
   private List<String> disconnected = new ArrayList<String>();
