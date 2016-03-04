@@ -130,11 +130,11 @@ public class FrontendIntegrationTest {
     } else {
       contentBuf = Unpooled.buffer(0);
     }
-    FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, contentBuf);
+    FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, contentBuf);
     if (headers != null) {
-      request.headers().set(headers);
+      httpRequest.headers().set(headers);
     }
-    return request;
+    return httpRequest;
   }
 
   /**
@@ -177,7 +177,8 @@ public class FrontendIntegrationTest {
    */
   private static VerifiableProperties buildFrontendVProps() {
     Properties properties = new Properties();
-    properties.put("rest.server.blob.storage.service.factory", "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
+    properties
+        .put("rest.server.blob.storage.service.factory", "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
     properties.put("netty.server.port", Integer.toString(SERVER_PORT));
     return new VerifiableProperties(properties);
@@ -235,7 +236,7 @@ public class FrontendIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  public String postBlobAndVerify(HttpHeaders headers, ByteBuffer content)
+  private String postBlobAndVerify(HttpHeaders headers, ByteBuffer content)
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -262,7 +263,7 @@ public class FrontendIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  public void getBlobAndVerify(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent)
+  private void getBlobAndVerify(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent)
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
