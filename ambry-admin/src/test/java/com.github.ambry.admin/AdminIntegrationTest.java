@@ -99,8 +99,8 @@ public class AdminIntegrationTest {
       throws ExecutionException, InterruptedException, JSONException {
     String inputText = "loremIpsum";
     String uri = AdminBlobStorageService.ECHO + "?" + EchoHandler.TEXT_KEY + "=" + inputText;
-    FullHttpRequest request = buildRequest(HttpMethod.GET, uri, null, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(request, null, null).get();
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, uri, null, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected status", HttpResponseStatus.OK, response.getStatus());
     assertEquals("Unexpected Content-Type", "application/json",
@@ -129,8 +129,8 @@ public class AdminIntegrationTest {
     BlobId blobId = new BlobId(partitionId);
     String uri =
         AdminBlobStorageService.GET_REPLICAS_FOR_BLOB_ID + "?" + GetReplicasForBlobIdHandler.BLOB_ID_KEY + "=" + blobId;
-    FullHttpRequest request = buildRequest(HttpMethod.GET, uri, null, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(request, null, null).get();
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, uri, null, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected status", HttpResponseStatus.OK, response.getStatus());
     assertEquals("Unexpected Content-Type", "application/json",
@@ -138,8 +138,8 @@ public class AdminIntegrationTest {
     ByteBuffer buffer = getContent(response, responseParts);
     JSONObject responseObj = new JSONObject(new String(buffer.array()));
     String returnedReplicasStr = responseObj.getString(GetReplicasForBlobIdHandler.REPLICAS_KEY).replace("\"", "");
-    assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
-        originalReplicaStr, returnedReplicasStr);
+    assertEquals("Returned response for the BlobId do no match with the replicas IDs of partition", originalReplicaStr,
+        returnedReplicasStr);
   }
 
   /**
@@ -188,11 +188,11 @@ public class AdminIntegrationTest {
     } else {
       contentBuf = Unpooled.buffer(0);
     }
-    FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, contentBuf);
+    FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, contentBuf);
     if (headers != null) {
-      request.headers().set(headers);
+      httpRequest.headers().set(headers);
     }
-    return request;
+    return httpRequest;
   }
 
   /**
@@ -293,7 +293,7 @@ public class AdminIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  public String postBlobAndVerify(HttpHeaders headers, ByteBuffer content)
+  private String postBlobAndVerify(HttpHeaders headers, ByteBuffer content)
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -320,7 +320,7 @@ public class AdminIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  public void getBlobAndVerify(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent)
+  private void getBlobAndVerify(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent)
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();

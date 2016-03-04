@@ -136,7 +136,7 @@ public class NettyClient implements Closeable {
   private void createChannel()
       throws InterruptedException {
     channelConnectFuture = b.connect(hostname, port);
-    // add a listener to the close to create a new channel if this disconnects.
+    // add a listener to create a new channel if this channel disconnects.
     ChannelFuture channelCloseFuture = channelConnectFuture.channel().closeFuture();
     channelCloseFuture.addListener(channelCloseListener);
   }
