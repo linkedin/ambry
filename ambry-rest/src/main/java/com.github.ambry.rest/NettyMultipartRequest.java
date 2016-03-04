@@ -61,10 +61,12 @@ public class NettyMultipartRequest extends NettyRequest {
   @Override
   public void close() {
     super.close();
-    logger
-        .trace("Closing NettyMultipartRequest {} with {} raw content chunks unread", getUri(), requestContents.size());
-    for(HttpContent rawContent : rawRequestContents) {
-      ReferenceCountUtil.release(rawContent);
+    logger.trace("Closing NettyMultipartRequest with {} raw content chunks unread", rawRequestContents.size());
+    while (rawRequestContents.size() > 0) {
+      HttpContent content = rawRequestContents.poll();
+      if (content != null) {
+        ReferenceCountUtil.release(content);
+      }
     }
   }
 
@@ -81,7 +83,7 @@ public class NettyMultipartRequest extends NettyRequest {
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     if (callbackWrapper != null) {
       throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
-    } else if (isOpen() && !readyForRead) {
+    } else if (!readyForRead) {
       throw new IllegalStateException("The channel cannot be read yet");
     }
     callbackWrapper = new ReadIntoCallbackWrapper(callback);
@@ -89,9 +91,13 @@ public class NettyMultipartRequest extends NettyRequest {
       nettyMetrics.multipartRequestAlreadyClosedError.inc();
       callbackWrapper.invokeCallback(new ClosedChannelException());
     }
-    while (requestContents.peek() != null) {
-      writeContent(asyncWritableChannel, callbackWrapper, requestContents.peek());
-      ReferenceCountUtil.release(requestContents.poll());
+    HttpContent content;
+    while ((content = requestContents.poll()) != null) {
+      try {
+        writeContent(asyncWritableChannel, callbackWrapper, content);
+      } finally {
+        ReferenceCountUtil.release(content);
+      }
     }
     return callbackWrapper.futureResult;
   }
@@ -111,8 +117,8 @@ public class NettyMultipartRequest extends NettyRequest {
       throw new RestServiceException("The request has been closed and is not accepting content",
           RestServiceErrorCode.RequestChannelClosed);
     } else {
-      rawRequestContents.add(httpContent);
       ReferenceCountUtil.retain(httpContent);
+      rawRequestContents.add(httpContent);
     }
   }
 
@@ -126,16 +132,18 @@ public class NettyMultipartRequest extends NettyRequest {
       nettyMetrics.multipartRequestAlreadyClosedError.inc();
       throw new RestServiceException("Request is closed", RestServiceErrorCode.RequestChannelClosed);
     } else if (!readyForRead) {
-      // make sure data does *not* go to disk. It should be held in memory.
+      // make sure data is held in memory.
       HttpDataFactory httpDataFactory = new DefaultHttpDataFactory(false);
       HttpPostMultipartRequestDecoder postRequestDecoder =
           new HttpPostMultipartRequestDecoder(httpDataFactory, request);
       try {
-        HttpContent httpContent = rawRequestContents.peek();
-        while (httpContent != null) {
-          postRequestDecoder.offer(httpContent);
-          ReferenceCountUtil.release(rawRequestContents.poll());
-          httpContent = rawRequestContents.peek();
+        HttpContent httpContent;
+        while ((httpContent = rawRequestContents.poll()) != null) {
+          try {
+            postRequestDecoder.offer(httpContent);
+          } finally {
+            ReferenceCountUtil.release(httpContent);
+          }
         }
         for (InterfaceHttpData part : postRequestDecoder.getBodyHttpDatas()) {
           processPart(part);
@@ -173,7 +181,8 @@ public class NettyMultipartRequest extends NettyRequest {
               RestServiceErrorCode.BadRequest);
         } else {
           hasBlob = true;
-          if (getSize() > 0 && fileUpload.length() != getSize()) {
+          long expectedStreamSize = getSize();
+          if (expectedStreamSize > 0 && fileUpload.length() != expectedStreamSize) {
             nettyMetrics.multipartRequestSizeMismatchError.inc();
             throw new RestServiceException(
                 "Request size [" + fileUpload.length() + "] does not match Content-Length [" + getSize() + "]",

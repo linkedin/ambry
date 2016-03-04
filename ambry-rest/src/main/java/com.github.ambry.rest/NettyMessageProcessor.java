@@ -186,11 +186,17 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     logger.trace("Reading on channel {}", ctx.channel());
     long currentTime = System.currentTimeMillis();
 
+    boolean recognized = false;
     if (obj instanceof HttpRequest) {
+      recognized = true;
       handleRequest((HttpRequest) obj);
-    } else if (obj instanceof HttpContent) {
+    }
+    // this is an if and not an else-if because a HttpObject can be both HttpRequest and HttpContent.
+    if (obj instanceof HttpContent) {
+      recognized = true;
       handleContent((HttpContent) obj);
-    } else {
+    }
+    if (!recognized) {
       logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
       nettyMetrics.unknownHttpObjectError.inc();
       if (responseChannel == null || responseChannel.isResponseComplete()) {
@@ -241,10 +247,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         // schedule the other methods for handling in handleContent().
         if (request.getRestMethod().equals(RestMethod.POST)) {
           requestHandler.handleRequest(request, responseChannel);
-        }
-        // handle content if request is also an instance of HttpContent
-        if (httpRequest instanceof HttpContent) {
-          handleContent((HttpContent) httpRequest);
         }
       } finally {
         request.getMetricsTracker().nioMetricsTracker

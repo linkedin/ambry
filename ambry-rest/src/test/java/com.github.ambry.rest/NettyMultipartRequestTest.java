@@ -139,20 +139,21 @@ public class NettyMultipartRequestTest {
   public void operationsAfterCloseTest()
       throws Exception {
     NettyMultipartRequest request = createRequest(null, null);
+    request.prepare();
     closeRequestAndValidate(request);
     // close should be idempotent.
     request.close();
 
     try {
       request.readInto(new ByteBufferAsyncWritableChannel(), null).get();
-      fail("Content addition should have failed because request is closed");
+      fail("Reading should have failed because request is closed");
     } catch (ExecutionException e) {
       assertEquals("Unexpected exception", ClosedChannelException.class, getRootCause(e).getClass());
     }
 
     try {
       request.prepare();
-      fail("Content addition should have failed because request is closed");
+      fail("Preparing should have failed because request is closed");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestChannelClosed, e.getErrorCode());
     }
