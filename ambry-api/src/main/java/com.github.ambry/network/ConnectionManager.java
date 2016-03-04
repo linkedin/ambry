@@ -3,6 +3,7 @@ package com.github.ambry.network;
 import java.io.IOException;
 
 
+@Deprecated
 /**
  * An interface that manages all network connections to a set of nodes (host-port). Provides methods to check out and
  * check in connections to the nodes and to remove them.

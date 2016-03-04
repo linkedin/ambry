@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This class is not thread safe.
  */
 
+@Deprecated
 public class NonBlockingConnectionManager implements ConnectionManager {
   private final ConcurrentHashMap<String, HostPortPoolManager> hostPortToPoolManager;
   private final ConcurrentHashMap<String, HostPortPoolManager> connectionIdToPoolManager;

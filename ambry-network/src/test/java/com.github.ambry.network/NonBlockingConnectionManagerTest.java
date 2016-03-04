@@ -19,6 +19,7 @@ import org.junit.Test;
  * checks in connections and ensures that the pool totalConnectionsCount is honored. Also tests removing connections and closing the
  * connection manager.
  */
+@Deprecated
 public class NonBlockingConnectionManagerTest {
   private MockSelector selector;
   private NonBlockingConnectionManager connectionManager;
