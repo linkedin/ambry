@@ -255,7 +255,6 @@ class NonBlockingRouter implements Router {
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
     // @todo: these numbers need to be determined.
-    private static final int POLL_TIMEOUT_MS = 30;
     private static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
 
     /**
