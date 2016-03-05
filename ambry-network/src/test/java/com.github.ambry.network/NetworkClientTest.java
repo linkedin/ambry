@@ -111,9 +111,9 @@ public class NetworkClientTest {
 
     responseInfoList = networkClient.sendAndPoll(requestInfoList);
     requestInfoList.clear();
-    // The first sendAndPoll initiates the connections, so the after the selector poll, new connections
-    // would have been established, but the NetworkClient would not have been available to create any
-    // responses.
+    // The first sendAndPoll() initiates the connections. So, after the selector poll, new connections
+    // would have been established, but no new responses or disconnects, so the NetworkClient should not have been
+    // able to create any ResponseInfos.
     Assert.assertEquals("There are no responses expected", 0, responseInfoList.size());
     // the requests were queued. Now increment the time so that they get timed out in the next sendAndPoll.
     time.sleep(CHECKOUT_TIMEOUT_MS + 1);
@@ -299,10 +299,17 @@ class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
   }
 }
 
+/**
+ * An enum that reflects the state of the MockSelector.
+ */
 enum MockSelectorState {
+  // the good state
   Good,
+  // a state that causes all connect calls to throw an IOException
   ThrowExceptionOnConnect,
+  // a state that causes disconnections of connections on which a send is attempted.
   DisconnectOnSend,
+  // a state that causes all poll calls to throw an IOException
   ThrowExceptionOnPoll,
 }
 
