@@ -27,7 +27,7 @@ public class ConnectionTrackerTest {
   private NetworkConfig networkConfig;
   private Time time;
   private int connStringIndex = 0;
-  ArrayList<String> connIds = new ArrayList<String>();
+  private ArrayList<String> connIds = new ArrayList<String>();
 
   @Before
   public void initialize()
@@ -172,11 +172,17 @@ public class ConnectionTrackerTest {
     Assert.assertNotNull(connectionTracker.checkOutConnection("host1", port1));
     availableCount--;
     for (int i = 0; i < 2; i++) {
-      Assert.assertNull(connectionTracker.checkOutConnection("host1", port1));
-      Assert.assertTrue(connectionTracker.mayCreateNewConnection("host1", port1));
+      Assert.assertNull("There should not be any available connections to check out",
+          connectionTracker.checkOutConnection("host1", port1));
+      Assert.assertTrue("It should be okay to initiate a new connection",
+          connectionTracker.mayCreateNewConnection("host1", port1));
       connectionTracker.startTrackingInitiatedConnection("host1", port1, mockNewConnection("host1", port1));
       totalConnectionsCount++;
     }
+    Assert.assertNull("There should not be any available connections to check out",
+        connectionTracker.checkOutConnection("host1", port1));
+    Assert.assertFalse("It should not be okay to initiate a new connection",
+        connectionTracker.mayCreateNewConnection("host1", port1));
     assertCounts(totalConnectionsCount, availableCount);
   }
 

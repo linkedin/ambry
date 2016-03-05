@@ -54,9 +54,9 @@ public class NetworkClientTest {
       throws IOException {
     Properties props = new Properties();
     VerifiableProperties vprops = new VerifiableProperties(props);
+    NetworkConfig networkConfig = new NetworkConfig(vprops);
     selector = new MockSelector();
     ConnectionTracker connectionTracker = new ConnectionTracker(MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL);
-    NetworkConfig networkConfig = new NetworkConfig(vprops);
     time = new MockTime();
     networkClient = new NetworkClient(selector, connectionTracker, networkConfig, CHECKOUT_TIMEOUT_MS, time);
   }
@@ -111,6 +111,9 @@ public class NetworkClientTest {
 
     responseInfoList = networkClient.sendAndPoll(requestInfoList);
     requestInfoList.clear();
+    // The first sendAndPoll() initiates the connections. So, after the selector poll, new connections
+    // would have been established, but no new responses or disconnects, so the NetworkClient should not have been
+    // able to create any ResponseInfos.
     Assert.assertEquals("There are no responses expected", 0, responseInfoList.size());
     // the requests were queued. Now increment the time so that they get timed out in the next sendAndPoll.
     time.sleep(CHECKOUT_TIMEOUT_MS + 1);
@@ -147,7 +150,7 @@ public class NetworkClientTest {
     int responseCount = 0;
 
     // set beBad so that requests end up failing due to "network error".
-    selector.setBeBad(true);
+    selector.setState(MockSelectorState.DisconnectOnSend);
     do {
       responseInfoList = networkClient.sendAndPoll(requestInfoList);
       requestInfoList.clear();
@@ -164,7 +167,40 @@ public class NetworkClientTest {
     responseInfoList = networkClient.sendAndPoll(requestInfoList);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
-    selector.setBeBad(false);
+    selector.setState(MockSelectorState.Good);
+  }
+
+  /**
+   * Test exception on connect
+   */
+  @Test
+  public void testExceptionOnConnect() {
+    List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
+    selector.setState(MockSelectorState.ThrowExceptionOnConnect);
+    try {
+      networkClient.sendAndPoll(requestInfoList);
+    } catch (IOException e) {
+      Assert.fail("If selector throws on connect, sendAndPoll() should not throw");
+    }
+  }
+
+  /**
+   * Test exception on poll
+   */
+  @Test
+  public void testExceptionOnPoll() {
+    List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
+    selector.setState(MockSelectorState.ThrowExceptionOnPoll);
+    try {
+      networkClient.sendAndPoll(requestInfoList);
+      Assert.fail("If selector throws on poll, sendAndPoll() should throw as well");
+    } catch (IOException e) {
+    }
+    selector.setState(MockSelectorState.Good);
   }
 
   /**
@@ -264,6 +300,28 @@ class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
 }
 
 /**
+ * An enum that reflects the state of the MockSelector.
+ */
+enum MockSelectorState {
+  /**
+   * The Good state.
+   */
+  Good,
+  /**
+   * A state that causes all connect calls to throw an IOException.
+   */
+  ThrowExceptionOnConnect,
+  /**
+   * A state that causes disconnections of connections on which a send is attempted.
+   */
+  DisconnectOnSend,
+  /**
+   * A state that causes all poll calls to throw an IOException.
+   */
+  ThrowExceptionOnPoll,
+}
+
+/**
  * A class that mocks the {@link Selector} and simply queues connection requests and send requests within itself and
  * returns them in the next calls to {@link #connected()} and {@link #completedSends()} calls.
  */
@@ -274,7 +332,7 @@ class MockSelector extends Selector {
   private List<String> disconnected = new ArrayList<String>();
   private List<NetworkSend> sends = new ArrayList<NetworkSend>();
   private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
-  private boolean beBad = false;
+  private MockSelectorState state = MockSelectorState.Good;
 
   /**
    * Create a MockSelector
@@ -286,11 +344,12 @@ class MockSelector extends Selector {
   }
 
   /**
-   * Set the beBad state of this selector. If beBad is on, all sends will result in disconnections in the poll.
-   * @param beBad the beBad state.
+   * Set the state of this selector. Based on the state, connect or poll may throw, or all sends will result in
+   * disconnections in the poll.
+   * @param state the MockSelectorState to set this MockSelector to.
    */
-  void setBeBad(boolean beBad) {
-    this.beBad = beBad;
+  void setState(MockSelectorState state) {
+    this.state = state;
   }
 
   /**
@@ -302,7 +361,11 @@ class MockSelector extends Selector {
    * @return the connection id for the connection.
    */
   @Override
-  public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize, PortType portType) {
+  public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize, PortType portType)
+      throws IOException {
+    if (state == MockSelectorState.ThrowExceptionOnConnect) {
+      throw new IOException("Mock connect exception");
+    }
     String hostPortString = address.getHostString() + address.getPort() + index++;
     connected.add(hostPortString);
     connectionIds.add(hostPortString);
@@ -318,12 +381,16 @@ class MockSelector extends Selector {
    *
    */
   @Override
-  public void poll(long timeoutMs, List<NetworkSend> sends) {
+  public void poll(long timeoutMs, List<NetworkSend> sends)
+      throws IOException {
+    if (state == MockSelectorState.ThrowExceptionOnPoll) {
+      throw new IOException("Mock exception on poll");
+    }
     this.sends = sends;
     if (sends != null) {
       for (NetworkSend send : sends) {
         MockSend mockSend = (MockSend) send.getPayload();
-        if (beBad) {
+        if (state == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
         } else {
           receives.add(

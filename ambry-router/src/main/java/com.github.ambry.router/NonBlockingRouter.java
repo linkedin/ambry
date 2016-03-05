@@ -4,10 +4,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.network.ConnectionManager;
-import com.github.ambry.network.NetworkReceive;
-import com.github.ambry.network.NetworkSend;
-import com.github.ambry.network.Selector;
+import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.network.RequestInfo;
+import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.Time;
@@ -15,7 +15,6 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
@@ -32,7 +31,7 @@ import org.slf4j.LoggerFactory;
  */
 class NonBlockingRouter implements Router {
   private final RouterConfig routerConfig;
-  private final RouterNetworkComponentsFactory routerNetworkComponentsFactory;
+  private final NetworkClientFactory networkClientFactory;
   private final NotificationSystem notificationSystem;
   private final ClusterMap clusterMap;
   private final NonBlockingRouterMetrics routerMetrics;
@@ -47,20 +46,20 @@ class NonBlockingRouter implements Router {
    * Constructs a NonBlockingRouter
    * @param routerConfig the configs for the router.
    * @param routerMetrics the metrics for the router.
-   * @param routerNetworkComponentsFactory the factory class to create {@link Selector}s and {@link
-   * ConnectionManager}s.
+   * @param networkClientFactory the {@link NetworkClientFactory} used by the {@link OperationController} to create
+   *                             instances of {@link NetworkClient}
    * @param notificationSystem the notification system to use to notify about blob creations and deletions.
    * @param clusterMap the cluster map for the cluster.
    * @param time the time instance.
    * @throws IOException if the OperationController could not be successfully created.
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      RouterNetworkComponentsFactory routerNetworkComponentsFactory, NotificationSystem notificationSystem,
-      ClusterMap clusterMap, Time time)
+      NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
+      Time time)
       throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.routerNetworkComponentsFactory = routerNetworkComponentsFactory;
+    this.networkClientFactory = networkClientFactory;
     this.notificationSystem = notificationSystem;
     this.clusterMap = clusterMap;
     this.time = time;
@@ -243,27 +242,19 @@ class NonBlockingRouter implements Router {
   /**
    * OperationController is the scaling unit for the NonBlockingRouter. The NonBlockingRouter can have multiple
    * OperationControllers. Any operation submitted to the NonBlockingRouter will be submitted to one of the
-   * OperationControllers. A worker thread will poll The OperationController for requests to be sent and will
-   * notify it on receiving responses. The OperationController in turn makes use of the {@link PutManager},
-   * {@link GetManager} and {@link DeleteManager} to perform puts, gets and deletes, respectively. A
-   * {@link com.github.ambry.network.ConnectionManager} is used to keep track of connections to datanodes, and to checkOut and checkIn
-   * connections over which requests will be sent out.
+   * OperationControllers. A worker thread (the RequestResponseHandler thread) will poll The OperationController for
+   * requests to be sent and will notify it on receiving responses. The OperationController in turn makes use of the
+   * {@link PutManager}, {@link GetManager} and {@link DeleteManager} to perform puts, gets and deletes,
+   * respectively. A {@link NetworkClient} is used to interact with the network.
    */
   private class OperationController implements Runnable {
     private final PutManager putManager;
     private final GetManager getManager;
     private final DeleteManager deleteManager;
-    private final Selector selector;
-    private final ConnectionManager connectionManager;
+    private final NetworkClient networkClient;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
-    // this set is used to keep track of the disconnections after the ConnectionManager is polled. This will be used by
-    // the operation managers indirectly when they go over the requests they initiated to fail a request immediately
-    // if the associated connection has closed (rather than timing out). This set will be cleared every time after the
-    // operation managers are polled (and before the connection manager is polled).
-    private final HashSet<String> disconnectedIdsSet = new HashSet<String>();
     // @todo: these numbers need to be determined.
-    private static final int POLL_TIMEOUT_MS = 30;
     private static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
 
     /**
@@ -272,12 +263,10 @@ class NonBlockingRouter implements Router {
      */
     OperationController()
         throws IOException {
-      RouterNetworkComponents networkComponents = routerNetworkComponentsFactory.getRouterNetworkComponents();
-      selector = networkComponents.getSelector();
-      connectionManager = networkComponents.getConnectionManager();
-      putManager = new PutManager(routerConfig.routerMaxPutChunkSizeBytes, connectionManager, routerConfig, clusterMap);
-      getManager = new GetManager(connectionManager, clusterMap);
-      deleteManager = new DeleteManager(connectionManager, clusterMap);
+      networkClient = networkClientFactory.getNetworkClient();
+      putManager = new PutManager(routerConfig.routerMaxPutChunkSizeBytes, routerConfig, clusterMap);
+      getManager = new GetManager(clusterMap);
+      deleteManager = new DeleteManager(clusterMap);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
       requestResponseHandlerThread.start();
     }
@@ -342,15 +331,14 @@ class NonBlockingRouter implements Router {
       } catch (InterruptedException e) {
         logger.error("Exception while shutting down, forcing shutdown", e);
       }
-      connectionManager.close();
-      selector.close();
+      networkClient.close();
     }
 
     /**
      * This method is used by the RequestResponseHandler thread to poll for requests to be sent
-     * @return a list of {@link NetworkSend} that contains the requests to be sent out.
+     * @return a list of {@link RequestInfo} that contains the requests to be sent out.
      */
-    private List<NetworkSend> pollForRequests() {
+    private List<RequestInfo> pollForRequests() {
       // these are ids that were successfully put for an operation that eventually failed
       List<String> idsToDelete = putManager.getIdsToDelete();
       if (idsToDelete != null) {
@@ -362,33 +350,20 @@ class NonBlockingRouter implements Router {
               .submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), id, new FutureResult<Void>(), null);
         }
       }
-      List<NetworkSend> requests = new ArrayList<NetworkSend>();
+      List<RequestInfo> requests = new ArrayList<RequestInfo>();
       putManager.poll(requests);
       getManager.poll(requests);
       deleteManager.poll(requests);
-      disconnectedIdsSet.clear();
       return requests;
     }
 
     /**
-     * Handle the response from polling the {@link Selector}.
-     * @param connected the list of newly established connections.
-     * @param disconnected the list of newly disconnected connections.
-     * @param completedSends the list of sends that completed.
-     * @param completedReceives the list of receives completed.
+     * Handle the response from polling the {@link NetworkClient}.
+     * @param responseInfoList the list of {@link ResponseInfo} containing the responses.
      */
-    private void onResponse(List<String> connected, List<String> disconnected, List<NetworkSend> completedSends,
-        List<NetworkReceive> completedReceives) {
-      for (String connId : connected) {
-        connectionManager.checkInConnection(connId);
-      }
-      for (String connId : disconnected) {
-        connectionManager.removeConnection(connId);
-        disconnectedIdsSet.add(connId);
-      }
-      for (NetworkReceive recv : completedReceives) {
-        handleResponsePayload(recv.getReceivedBytes().getPayload());
-        connectionManager.checkInConnection(recv.getConnectionId());
+    private void onResponse(List<ResponseInfo> responseInfoList) {
+      for (ResponseInfo responseInfo : responseInfoList) {
+        handleResponsePayload(responseInfo.getResponse());
       }
     }
 
@@ -423,10 +398,9 @@ class NonBlockingRouter implements Router {
     public void run() {
       try {
         while (isOpen.get()) {
-          List<NetworkSend> sends = pollForRequests();
-          selector.poll(POLL_TIMEOUT_MS, sends);
-          onResponse(selector.connected(), selector.disconnected(), selector.completedSends(),
-              selector.completedReceives());
+          List<RequestInfo> requestInfoList = pollForRequests();
+          List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList);
+          onResponse(responseInfoList);
         }
       } catch (Exception e) {
         logger.error("RequestResponseHandlerThread received exception: ", e);

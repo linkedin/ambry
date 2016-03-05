@@ -8,7 +8,7 @@ import java.io.IOException;
 /**
  * A factory class used to get new instances of a {@link NetworkClient}
  */
-class NetworkClientFactory {
+public class NetworkClientFactory {
   private final NetworkMetrics networkMetrics;
   private final NetworkConfig networkConfig;
   private final SSLFactory sslFactory;
@@ -26,7 +26,7 @@ class NetworkClientFactory {
    * @param maxConnectionsPerPortSsl the max number of ports per ssl port for this connection manager.
    * @param time the Time instance to use.
    */
-  NetworkClientFactory(NetworkMetrics networkMetrics, NetworkConfig networkConfig, SSLFactory sslFactory,
+  public NetworkClientFactory(NetworkMetrics networkMetrics, NetworkConfig networkConfig, SSLFactory sslFactory,
       int maxConnectionsPerPortPlainText, int maxConnectionsPerPortSsl, int connectionCheckoutTimeoutMs, Time time) {
     this.networkMetrics = networkMetrics;
     this.networkConfig = networkConfig;
@@ -42,7 +42,7 @@ class NetworkClientFactory {
    * @return return a new {@link NetworkClient}
    * @throws IOException if the {@link Selector} could not be instantiated.
    */
-  NetworkClient getNetworkClient()
+  public NetworkClient getNetworkClient()
       throws IOException {
     Selector selector = new Selector(networkMetrics, time, sslFactory);
     ConnectionTracker connectionTracker =
