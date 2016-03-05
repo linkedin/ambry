@@ -303,13 +303,21 @@ class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
  * An enum that reflects the state of the MockSelector.
  */
 enum MockSelectorState {
-  // the good state
+  /**
+   * The Good state.
+   */
   Good,
-  // a state that causes all connect calls to throw an IOException
+  /**
+   * A state that causes all connect calls to throw an IOException.
+   */
   ThrowExceptionOnConnect,
-  // a state that causes disconnections of connections on which a send is attempted.
+  /**
+   * A state that causes disconnections of connections on which a send is attempted.
+   */
   DisconnectOnSend,
-  // a state that causes all poll calls to throw an IOException
+  /**
+   * A state that causes all poll calls to throw an IOException.
+   */
   ThrowExceptionOnPoll,
 }
 
