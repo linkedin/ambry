@@ -3,6 +3,7 @@ package com.github.ambry.rest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import io.netty.handler.codec.http.CookieDecoder;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -15,9 +16,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -95,26 +98,41 @@ class NettyRequest implements RestRequest {
       }
       allArgs.put(e.getKey(), value);
     }
+
+    Set<io.netty.handler.codec.http.Cookie> httpCookies = new HashSet<io.netty.handler.codec.http.Cookie>();
     // headers.
     for (Map.Entry<String, String> e : request.headers()) {
       StringBuilder sb;
-      boolean valueNull = request.headers().get(e.getKey()) == null;
-      if (!valueNull && allArgs.get(e.getKey()) == null) {
-        sb = new StringBuilder(e.getValue());
-        allArgs.put(e.getKey(), sb);
-      } else if (!valueNull) {
-        sb = (StringBuilder) allArgs.get(e.getKey());
-        sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(e.getValue());
-      } else if (!allArgs.containsKey(e.getKey())) {
-        allArgs.put(e.getKey(), null);
+      if (e.getKey().equals(HttpHeaders.Names.COOKIE)) {
+        String value = e.getValue();
+        if (value == null) {
+          httpCookies = Collections.emptySet();
+        } else {
+          httpCookies = CookieDecoder.decode(value);
+        }
+      } else {
+        boolean valueNull = request.headers().get(e.getKey()) == null;
+        if (!valueNull && allArgs.get(e.getKey()) == null) {
+          sb = new StringBuilder(e.getValue());
+          allArgs.put(e.getKey(), sb);
+        } else if (!valueNull) {
+          sb = (StringBuilder) allArgs.get(e.getKey());
+          sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(e.getValue());
+        } else if (!allArgs.containsKey(e.getKey())) {
+          allArgs.put(e.getKey(), null);
+        }
       }
     }
+
     // turn all StringBuilders into String
     for (Map.Entry<String, Object> e : allArgs.entrySet()) {
       if (allArgs.get(e.getKey()) != null) {
         allArgs.put(e.getKey(), (e.getValue()).toString());
       }
     }
+    // add cookies to the args as java cookies
+    Set<javax.servlet.http.Cookie> cookies = NettyUtils.convertHttpToJavaCookies(httpCookies);
+    allArgs.put(HttpHeaders.Names.COOKIE, cookies);
     args = Collections.unmodifiableMap(allArgs);
   }
 
