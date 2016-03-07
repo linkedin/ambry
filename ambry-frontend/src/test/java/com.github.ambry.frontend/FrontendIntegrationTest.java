@@ -21,6 +21,7 @@ import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -34,10 +35,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -161,12 +159,21 @@ public class FrontendIntegrationTest {
   /**
    * Discards all the content in {@code contents}.
    * @param contents the content to discard.
+   * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded. -1 if the number is
+   *                             irrelevant.
    */
-  private void discardContent(Queue<HttpObject> contents)
+  private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount)
       throws InterruptedException {
+    if (expectedDiscardCount != -1) {
+      assertEquals("Objects that will be discarded are more than expected", expectedDiscardCount, contents.size());
+    }
+    boolean endMarkerFound = false;
     for (HttpObject object : contents) {
+      assertFalse("There should have been only a single end marker", endMarkerFound);
+      endMarkerFound = object instanceof LastHttpContent;
       ReferenceCountUtil.release(object);
     }
+    assertTrue("There should have been an end marker", endMarkerFound);
   }
 
   // BeforeClass helpers
@@ -241,7 +248,7 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
-    discardContent(responseParts);
+    discardContent(responseParts, 1);
     assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.getStatus());
     assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
@@ -287,7 +294,7 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
-    discardContent(responseParts);
+    discardContent(responseParts, 1);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     checkCommonGetHeadHeaders(response.headers(), expectedHeaders);
     assertEquals("Content-Length does not match blob size",
@@ -370,7 +377,7 @@ public class FrontendIntegrationTest {
       throws ExecutionException, InterruptedException {
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
-    discardContent(responseParts);
+    discardContent(responseParts, 1);
     assertEquals("Unexpected response status", expectedStatusCode, response.getStatus());
     assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
   }
