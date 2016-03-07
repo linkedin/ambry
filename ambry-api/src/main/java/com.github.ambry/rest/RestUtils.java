@@ -94,6 +94,10 @@ public class RestUtils {
     protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
 
     protected final static String X_FORWARDED_FOR = "X-Forwarded-For";
+    /**
+     * Header to contain the Cookies
+     */
+    protected final static String COOKIE = "Cookie";
   }
 
   private static final int Crc_Size = 8;

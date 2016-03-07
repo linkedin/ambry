@@ -6,7 +6,8 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.CookieDecoder;
+import io.netty.handler.codec.http.Cookie;
+import io.netty.handler.codec.http.DefaultCookie;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpRequest;
@@ -16,14 +17,13 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.ServerCookieEncoder;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -93,48 +93,31 @@ public class NettyRequestTest {
 
     NettyRequest nettyRequest;
     String uri;
+    Set<Cookie> cookies = new HashSet<Cookie>();
+    Cookie httpCookie = new DefaultCookie("CookieKey1", "CookieValue1");
+    cookies.add(httpCookie);
+    headers.add(RestUtils.Headers.COOKIE, cookies);
 
     uri = "/GET" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.GET, uri, headers);
-    validateRequest(nettyRequest, RestMethod.GET, uri, headers, params);
+    validateRequest(nettyRequest, RestMethod.GET, uri, headers, params, cookies);
     closeRequestAndValidate(nettyRequest);
 
+    cookies.clear();
+    // cookies not supported for other type of requests apart from GET
     uri = "/POST" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.POST, uri, headers);
-    validateRequest(nettyRequest, RestMethod.POST, uri, headers, params);
+    validateRequest(nettyRequest, RestMethod.POST, uri, headers, params, cookies);
     closeRequestAndValidate(nettyRequest);
 
     uri = "/DELETE" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.DELETE, uri, headers);
-    validateRequest(nettyRequest, RestMethod.DELETE, uri, headers, params);
+    validateRequest(nettyRequest, RestMethod.DELETE, uri, headers, params, cookies);
     closeRequestAndValidate(nettyRequest);
 
     uri = "/HEAD" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.HEAD, uri, headers);
-    validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, params);
-    closeRequestAndValidate(nettyRequest);
-
-    // test cookies
-    headers.add(HttpHeaders.Names.COOKIE, ServerCookieEncoder.encode("CookieKey1", "CookieValue1"));
-
-    uri = "/GET" + uriAttachment;
-    nettyRequest = createNettyRequest(HttpMethod.GET, uri, headers);
-    validateRequest(nettyRequest, RestMethod.GET, uri, headers, params);
-    closeRequestAndValidate(nettyRequest);
-
-    uri = "/POST" + uriAttachment;
-    nettyRequest = createNettyRequest(HttpMethod.POST, uri, headers);
-    validateRequest(nettyRequest, RestMethod.POST, uri, headers, params);
-    closeRequestAndValidate(nettyRequest);
-
-    uri = "/DELETE" + uriAttachment;
-    nettyRequest = createNettyRequest(HttpMethod.DELETE, uri, headers);
-    validateRequest(nettyRequest, RestMethod.DELETE, uri, headers, params);
-    closeRequestAndValidate(nettyRequest);
-
-    uri = "/HEAD" + uriAttachment;
-    nettyRequest = createNettyRequest(HttpMethod.HEAD, uri, headers);
-    validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, params);
+    validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, params, cookies);
     closeRequestAndValidate(nettyRequest);
   }
 
@@ -598,9 +581,10 @@ public class NettyRequestTest {
    * @param uri the expected URI in {@code nettyRequest}.
    * @param headers the {@link HttpHeaders} passed with the request that need to be in {@link NettyRequest#getArgs()}.
    * @param params the parameters passed with the request that need to be in {@link NettyRequest#getArgs()}.
+   * @param httpCookies Set of {@link Cookie} set in the request
    */
   private void validateRequest(NettyRequest nettyRequest, RestMethod restMethod, String uri, HttpHeaders headers,
-      Map<String, List<String>> params) {
+      Map<String, List<String>> params, Set<Cookie> httpCookies) {
     long contentLength = headers.contains(HttpHeaders.Names.CONTENT_LENGTH) ? Long
         .parseLong(headers.get(HttpHeaders.Names.CONTENT_LENGTH)) : 0;
     assertTrue("Request channel is not open", nettyRequest.isOpen());
@@ -609,14 +593,11 @@ public class NettyRequestTest {
     assertEquals("Mismatch in path", uri.substring(0, uri.indexOf("?")), nettyRequest.getPath());
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
 
-    Set<javax.servlet.http.Cookie> expectedCookies =
-        getJavaCookiesFromHttpCookie(headers.get(HttpHeaders.Names.COOKIE));
-    headers.remove(HttpHeaders.Names.COOKIE);
     Set<javax.servlet.http.Cookie> actualCookies =
         (Set<javax.servlet.http.Cookie>) nettyRequest.getArgs().get(HttpHeaders.Names.COOKIE);
+    compareCookies(httpCookies, actualCookies);
 
-    compareCookies(expectedCookies, actualCookies);
-
+    headers.remove(HttpHeaders.Names.COOKIE);
     Map<String, List<String>> receivedArgs = new HashMap<String, List<String>>();
     for (Map.Entry<String, Object> e : nettyRequest.getArgs().entrySet()) {
       if (!e.getKey().equals(HttpHeaders.Names.COOKIE)) {
@@ -665,73 +646,20 @@ public class NettyRequestTest {
   }
 
   /**
-   * Generate Java Cookies from Http Cookie ({@link javax.servlet.http.Cookie}) Header
-   * @param value Http Cookie ({@link javax.servlet.http.Cookie}) header value
-   * @return List of {@link javax.servlet.http.Cookie}s equivalent to the http cookie ({@link javax.servlet.http.Cookie})
-   * header value passed in
-   */
-  private Set<javax.servlet.http.Cookie> getJavaCookiesFromHttpCookie(String value) {
-    Set<io.netty.handler.codec.http.Cookie> httpCookies;
-    if (value == null) {
-      httpCookies = Collections.emptySet();
-    } else {
-      httpCookies = CookieDecoder.decode(value);
-    }
-    return NettyUtils.convertHttpToJavaCookies(httpCookies);
-  }
-
-  /**
-   * Compares two Sets of {@link javax.servlet.http.Cookie}s for equality
-   * @param expected Set of {@link javax.servlet.http.Cookie}s to be compared with the {@code actual}
+   * Compares a set of HttpCookies {@link Cookie} with a set of Java Cookies {@link javax.servlet.http.Cookie} for
+   * equality in values
+   * @param expected Set of {@link Cookie}s to be compared with the {@code actual}
    * @param actual Set of {@link javax.servlet.http.Cookie}s to be compared with those of {@code expected}
    */
-  static void compareCookies(Set<javax.servlet.http.Cookie> expected, Set<javax.servlet.http.Cookie> actual) {
-    if (expected.size() != actual.size()) {
-      Assert.fail("Size of cookies didn't match");
-    } else {
-      HashMap<String, javax.servlet.http.Cookie> expectedHashMap = new HashMap<String, javax.servlet.http.Cookie>();
-      for (javax.servlet.http.Cookie cookie : expected) {
-        expectedHashMap.put(cookie.getName(), cookie);
-      }
-      HashMap<String, javax.servlet.http.Cookie> actualHashMap = new HashMap<String, javax.servlet.http.Cookie>();
-      for (javax.servlet.http.Cookie cookie : actual) {
-        actualHashMap.put(cookie.getName(), cookie);
-      }
-      for (String cookieName : expectedHashMap.keySet()) {
-        javax.servlet.http.Cookie cookie = expectedHashMap.get(cookieName);
-        compareCookie(cookie, actualHashMap.get(cookieName));
-        actualHashMap.remove(cookieName);
-      }
-      Assert.assertEquals("More Cookies found in NettyRequest ", 0, actualHashMap.size());
+  private void compareCookies(Set<Cookie> expected, Set<javax.servlet.http.Cookie> actual) {
+    Assert.assertEquals("Size didn't match", expected.size(), actual.size());
+    HashMap<String, Cookie> expectedHashMap = new HashMap<String, Cookie>();
+    for (Cookie cookie : expected) {
+      expectedHashMap.put(cookie.getName(), cookie);
     }
-  }
-
-  /**
-   * Compare two {@link javax.servlet.http.Cookie}
-   * @param expected {@link javax.servlet.http.Cookie} to be compared with {@code actual}
-   * @param actual {@link javax.servlet.http.Cookie} to be compared with {@code expected}
-   */
-  static void compareCookie(javax.servlet.http.Cookie expected, javax.servlet.http.Cookie actual) {
-    Assert.assertEquals("Value field didn't match ", expected.getValue(), actual.getValue());
-    Assert.assertEquals("Secure field didn't match ", expected.getSecure(), actual.getSecure());
-    Assert.assertEquals("Max Age field didn't match ", expected.getMaxAge(), actual.getMaxAge());
-    Assert.assertEquals("Max Age field didn't match ", expected.isHttpOnly(), actual.isHttpOnly());
-    Assert.assertEquals("Max Age field didn't match ", expected.getVersion(), actual.getVersion());
-    if (expected.getPath() != null) {
-      Assert.assertEquals("Path field didn't match ", expected.getPath(), actual.getPath());
-    } else {
-      Assert.assertTrue("Path field didn't match", (actual.getPath() == null));
-    }
-    if (expected.getComment() != null) {
-      Assert.assertEquals("Comment field didn't match ", expected.getComment(), actual.getComment());
-    } else {
-      Assert.assertTrue("Comment field didn't match ", (actual.getComment() == null));
-    }
-
-    if (expected.getDomain() != null) {
-      Assert.assertEquals("Domain field didn't match ", expected.getDomain(), actual.getDomain());
-    } else {
-      Assert.assertTrue("Domain field  didn't match ", (actual.getDomain() == null));
+    for (javax.servlet.http.Cookie cookie : actual) {
+      Assert.assertEquals("Value field didn't match ", expectedHashMap.get(cookie.getName()).getValue(),
+          cookie.getValue());
     }
   }
 
