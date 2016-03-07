@@ -685,7 +685,7 @@ public class NettyRequestTest {
    * @param expected Set of {@link javax.servlet.http.Cookie}s to be compared with the {@code actual}
    * @param actual Set of {@link javax.servlet.http.Cookie}s to be compared with those of {@code expected}
    */
-  private void compareCookies(Set<javax.servlet.http.Cookie> expected, Set<javax.servlet.http.Cookie> actual) {
+  static void compareCookies(Set<javax.servlet.http.Cookie> expected, Set<javax.servlet.http.Cookie> actual) {
     if (expected.size() != actual.size()) {
       Assert.fail("Size of cookies didn't match");
     } else {
@@ -711,7 +711,7 @@ public class NettyRequestTest {
    * @param expected {@link javax.servlet.http.Cookie} to be compared with {@code actual}
    * @param actual {@link javax.servlet.http.Cookie} to be compared with {@code expected}
    */
-  private void compareCookie(javax.servlet.http.Cookie expected, javax.servlet.http.Cookie actual) {
+  static void compareCookie(javax.servlet.http.Cookie expected, javax.servlet.http.Cookie actual) {
     Assert.assertEquals("Value field didn't match ", expected.getValue(), actual.getValue());
     Assert.assertEquals("Secure field didn't match ", expected.getSecure(), actual.getSecure());
     Assert.assertEquals("Max Age field didn't match ", expected.getMaxAge(), actual.getMaxAge());
