@@ -156,8 +156,8 @@ public class AdminIntegrationTest {
     HttpHeaders headers = new DefaultHttpHeaders();
     setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
     headers.set(HttpHeaders.Names.CONTENT_LENGTH, content.capacity());
-    headers.add(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
-    headers.add(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
 
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
@@ -386,7 +386,7 @@ public class AdminIntegrationTest {
       throws JSONException {
     for (Map.Entry<String, String> header : expectedHeaders) {
       String key = header.getKey();
-      if (key.startsWith(RestUtils.Headers.UserMetaData_Header_Prefix)) {
+      if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
         assertEquals("Value for " + key + "does not match in user metadata", header.getValue(),
             HttpHeaders.getHeader(response, key));
       }
