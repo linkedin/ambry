@@ -51,7 +51,7 @@ public class NettyUtilsTest {
    * @param httpCookies Set of {@link Cookie}s to be compared with the {@code javaCookies}
    * @param javaCookies Set of {@link javax.servlet.http.Cookie}s to be compared with those of {@code httpCookies}
    */
-  static void compareCookies(Set<Cookie> httpCookies, Set<javax.servlet.http.Cookie> javaCookies) {
+  private static void compareCookies(Set<Cookie> httpCookies, Set<javax.servlet.http.Cookie> javaCookies) {
     if (httpCookies.size() != javaCookies.size()) {
       org.junit.Assert.fail("Size of cookies didn't match");
     } else {
@@ -77,7 +77,7 @@ public class NettyUtilsTest {
    * @param httpCookie {@link javax.servlet.http.Cookie} to be compared with {@code javaCookie}
    * @param javaCookie {@link javax.servlet.http.Cookie} to be compared with {@code httpCookie}
    */
-  static void compareCookie(Cookie httpCookie, javax.servlet.http.Cookie javaCookie) {
+  private static void compareCookie(Cookie httpCookie, javax.servlet.http.Cookie javaCookie) {
     org.junit.Assert.assertEquals("Value field didn't match ", httpCookie.getValue(), javaCookie.getValue());
     org.junit.Assert.assertEquals("Secure field didn't match ", httpCookie.isSecure(), javaCookie.getSecure());
     org.junit.Assert.assertEquals("Max Age field didn't match ", httpCookie.getMaxAge(), javaCookie.getMaxAge());
