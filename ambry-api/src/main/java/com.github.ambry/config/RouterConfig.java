@@ -42,6 +42,13 @@ public class RouterConfig {
   public final int routerScalingUnitMaxConnectionsPerPortSsl;
 
   /**
+   * Timeout for checking out an available connection to a (datanode, port).
+   */
+  @Config("router.connection.checkout.timeout.ms")
+  @Default("1000")
+  public final int routerConnectionCheckoutTimeoutMs;
+
+  /**
    * The max chunk size to be used for put operations.
    */
   @Config("router.max.put.chunk.size.bytes")
@@ -60,6 +67,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.plain.text", 5, 1, 20);
     routerScalingUnitMaxConnectionsPerPortSsl =
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 20);
+    routerConnectionCheckoutTimeoutMs =
+        verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
     routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.put.chunk.size.bytes", 4 * 1024 * 1024);
   }
 }
