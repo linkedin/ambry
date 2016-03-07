@@ -103,8 +103,6 @@ public class NettyRequestTest {
     validateRequest(nettyRequest, RestMethod.GET, uri, headers, params, cookies);
     closeRequestAndValidate(nettyRequest);
 
-    cookies.clear();
-    // cookies not supported for other type of requests apart from GET
     uri = "/POST" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.POST, uri, headers);
     validateRequest(nettyRequest, RestMethod.POST, uri, headers, params, cookies);
@@ -597,7 +595,6 @@ public class NettyRequestTest {
         (Set<javax.servlet.http.Cookie>) nettyRequest.getArgs().get(HttpHeaders.Names.COOKIE);
     compareCookies(httpCookies, actualCookies);
 
-    headers.remove(HttpHeaders.Names.COOKIE);
     Map<String, List<String>> receivedArgs = new HashMap<String, List<String>>();
     for (Map.Entry<String, Object> e : nettyRequest.getArgs().entrySet()) {
       if (!e.getKey().equals(HttpHeaders.Names.COOKIE)) {
@@ -627,14 +624,16 @@ public class NettyRequestTest {
     }
 
     for (Map.Entry<String, String> e : headers) {
-      assertTrue("Did not find key: " + e.getKey(), receivedArgs.containsKey(e.getKey()));
-      if (!keyValueCount.containsKey(e.getKey())) {
-        keyValueCount.put(e.getKey(), 0);
-      }
-      if (headers.get(e.getKey()) != null) {
-        assertTrue("Did not find value '" + e.getValue() + "' expected for key: '" + e.getKey() + "'",
-            receivedArgs.get(e.getKey()).contains(e.getValue()));
-        keyValueCount.put(e.getKey(), keyValueCount.get(e.getKey()) + 1);
+      if (!e.getKey().equals(HttpHeaders.Names.COOKIE)) {
+        assertTrue("Did not find key: " + e.getKey(), receivedArgs.containsKey(e.getKey()));
+        if (!keyValueCount.containsKey(e.getKey())) {
+          keyValueCount.put(e.getKey(), 0);
+        }
+        if (headers.get(e.getKey()) != null) {
+          assertTrue("Did not find value '" + e.getValue() + "' expected for key: '" + e.getKey() + "'",
+              receivedArgs.get(e.getKey()).contains(e.getValue()));
+          keyValueCount.put(e.getKey(), keyValueCount.get(e.getKey()) + 1);
+        }
       }
     }
 
