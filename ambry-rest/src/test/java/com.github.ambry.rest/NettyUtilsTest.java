@@ -27,7 +27,22 @@ public class NettyUtilsTest {
     Set<Cookie> cookies = new HashSet<Cookie>();
     cookies.add(cookie);
     Set<javax.servlet.http.Cookie> javaCookies = NettyUtils.convertHttpToJavaCookies(cookies);
-    Assert.assertEquals("Size mistmatch ", 1, javaCookies.size());
+    Assert.assertEquals("Size mistmatch ", cookies.size(), javaCookies.size());
+    compareCookies(cookies, javaCookies);
+
+    cookie = new DefaultCookie("CookieKey2", "CookieValue2");
+    cookie.setVersion(1);
+    cookie.setHttpOnly(false);
+    cookie.setDomain("domain2");
+    cookie.setComment("comment2");
+    cookie.setCommentUrl("commentUrl2");
+    cookie.setPath("path1Dir2/path1File2");
+    maxAge = new Random().nextInt(10000);
+    cookie.setMaxAge(maxAge);
+    cookie.setDiscard(false);
+    cookies.add(cookie);
+    javaCookies = NettyUtils.convertHttpToJavaCookies(cookies);
+    Assert.assertEquals("Size mistmatch ", cookies.size(), javaCookies.size());
     compareCookies(cookies, javaCookies);
   }
 
