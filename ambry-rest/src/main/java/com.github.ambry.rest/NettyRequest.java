@@ -189,6 +189,12 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
+  public void prepare()
+      throws RestServiceException {
+    // no op.
+  }
+
+  @Override
   public boolean isOpen() {
     return channelOpen.get();
   }

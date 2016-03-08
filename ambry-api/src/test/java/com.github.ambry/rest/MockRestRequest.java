@@ -141,6 +141,11 @@ public class MockRestRequest implements RestRequest {
     return args;
   }
 
+  @Override
+  public void prepare() {
+    // no op.
+  }
+
   /**
    * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#BLOB_SIZE}. If there is
    * no such header, returns length in the "Content-Length" header. If there is no such header, returns 0.
