@@ -47,12 +47,11 @@ public class NettyRequestTest {
 
   /**
    * Tests conversion of {@link HttpRequest} to {@link NettyRequest} given good input.
-   * @throws IOException
    * @throws RestServiceException
    */
   @Test
   public void conversionWithGoodInputTest()
-      throws IOException, RestServiceException {
+      throws RestServiceException {
     // headers
     HttpHeaders headers = new DefaultHttpHeaders(false);
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextInt(Integer.MAX_VALUE));
@@ -142,7 +141,7 @@ public class NettyRequestTest {
       createNettyRequest(HttpMethod.TRACE, "/", null);
       fail("Unknown http method was supplied to NettyRequest. It should have failed to construct");
     } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", e.getErrorCode(), RestServiceErrorCode.UnsupportedHttpMethod);
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedHttpMethod, e.getErrorCode());
     }
   }
 
@@ -176,8 +175,8 @@ public class NettyRequestTest {
       byte[] content = getRandomBytes(1024);
       nettyRequest.addContent(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content)));
       fail("Request channel has been closed, so addContent() should have thrown ClosedChannelException");
-    } catch (ClosedChannelException e) {
-      // expected. nothing to do.
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestChannelClosed, e.getErrorCode());
     }
   }
 
@@ -385,12 +384,11 @@ public class NettyRequestTest {
   /**
    * Tests that {@link NettyRequest#close()} leaves any added {@link HttpContent} the way it was before it was added.
    * (i.e no reference count changes).
-   * @throws IOException
    * @throws RestServiceException
    */
   @Test
   public void closeTest()
-      throws IOException, RestServiceException {
+      throws RestServiceException {
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     Queue<HttpContent> httpContents = new LinkedBlockingQueue<HttpContent>();
     for (int i = 0; i < 5; i++) {
@@ -408,12 +406,11 @@ public class NettyRequestTest {
   /**
    * Tests different state transitions that can happen with {@link NettyRequest#addContent(HttpContent)} for GET
    * requests. Some transitions are valid and some should necessarily throw exceptions.
-   * @throws IOException
    * @throws RestServiceException
    */
   @Test
   public void addContentForGetTest()
-      throws IOException, RestServiceException {
+      throws RestServiceException {
     byte[] content = getRandomBytes(16);
     // adding non LastHttpContent to nettyRequest
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
@@ -443,8 +440,8 @@ public class NettyRequestTest {
     try {
       nettyRequest.addContent(new DefaultLastHttpContent());
       fail("Request channel has been closed, so addContent() should have thrown ClosedChannelException");
-    } catch (ClosedChannelException e) {
-      // expected. nothing to do.
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestChannelClosed, e.getErrorCode());
     }
   }
 
@@ -538,14 +535,12 @@ public class NettyRequestTest {
   }
 
   /**
-   * Closes the provided {@code restRequest} and validates that it is actually closed.
-   * @param restRequest the {@link RestRequest} that needs to be closed and validated.
-   * @throws IOException if there is an I/O error while closing the {@code restRequest}.
+   * Closes the provided {@code nettyRequest} and validates that it is actually closed.
+   * @param nettyRequest the {@link NettyRequest} that needs to be closed and validated.
    */
-  private void closeRequestAndValidate(RestRequest restRequest)
-      throws IOException {
-    restRequest.close();
-    assertFalse("Request channel is not closed", restRequest.isOpen());
+  private void closeRequestAndValidate(NettyRequest nettyRequest) {
+    nettyRequest.close();
+    assertFalse("Request channel is not closed", nettyRequest.isOpen());
   }
 
   /**

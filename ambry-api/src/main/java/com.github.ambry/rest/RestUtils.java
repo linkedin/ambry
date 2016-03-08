@@ -97,11 +97,15 @@ public class RestUtils {
      * prefix for old style user metadata that will be served as headers
      */
     protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
+  }
 
+  public static final class MultipartPost {
+    public final static String Blob_Part = "Blob";
   }
 
   private static final int Crc_Size = 8;
   private static final short UserMetadata_Version_V1 = 1;
+
   // Max size of a value for user metadata as key value pairs
   protected static final int Max_UserMetadata_Value_Size = 1024 * 8;
 

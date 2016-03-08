@@ -186,11 +186,17 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
     logger.trace("Reading on channel {}", ctx.channel());
     long currentTime = System.currentTimeMillis();
 
+    boolean recognized = false;
     if (obj instanceof HttpRequest) {
+      recognized = true;
       handleRequest((HttpRequest) obj);
-    } else if (obj instanceof HttpContent) {
+    }
+    // this is an if and not an else-if because a HttpObject can be both HttpRequest and HttpContent.
+    if (obj instanceof HttpContent) {
+      recognized = true;
       handleContent((HttpContent) obj);
-    } else {
+    }
+    if (!recognized) {
       logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
       nettyMetrics.unknownHttpObjectError.inc();
       if (responseChannel == null || responseChannel.isResponseComplete()) {
@@ -278,10 +284,6 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         } catch (IllegalStateException e) {
           nettyMetrics.contentAdditionError.inc();
           throw new RestServiceException(e, RestServiceErrorCode.InvalidRequestState);
-        } catch (ClosedChannelException e) {
-          nettyMetrics.contentAdditionError.inc();
-          throw new RestServiceException("The request has been closed and is not accepting content",
-              RestServiceErrorCode.RequestChannelClosed);
         }
       } finally {
         long chunkProcessingTime = System.currentTimeMillis() - processingStartTime;
