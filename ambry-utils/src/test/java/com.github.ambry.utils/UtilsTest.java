@@ -18,9 +18,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
-import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -314,6 +314,16 @@ public class UtilsTest {
       sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
     }
     return sb.toString();
+  }
+
+  public static int numThreadsByThisName(String name) {
+    int count = 0;
+    for (Thread t : Thread.getAllStackTraces().keySet()) {
+      if (t.getName().equals(name)) {
+        count++;
+      }
+    }
+    return count;
   }
 }
 

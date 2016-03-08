@@ -16,7 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.network.RequestInfo;
-import java.nio.ByteBuffer;
+import com.github.ambry.network.ResponseInfo;
 import java.util.List;
 
 
@@ -25,7 +25,7 @@ import java.util.List;
  * These methods have to be thread safe.
  */
 class GetManager {
-  GetManager(ClusterMap clusterMap) {
+  GetManager(NonBlockingRouter router) {
     //@todo
   }
 
@@ -43,7 +43,11 @@ class GetManager {
     //@todo
   }
 
-  void handleResponse(ByteBuffer response) {
+  void handleResponse(ResponseInfo responseInfo) {
+    // @todo
+  }
+
+  void close() {
     // @todo
   }
 }

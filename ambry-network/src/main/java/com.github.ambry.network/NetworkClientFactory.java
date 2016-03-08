@@ -22,9 +22,9 @@ import java.io.IOException;
  * A factory class used to get new instances of a {@link NetworkClient}
  */
 public class NetworkClientFactory {
-  private final NetworkMetrics networkMetrics;
-  private final NetworkConfig networkConfig;
-  private final SSLFactory sslFactory;
+  protected final NetworkMetrics networkMetrics;
+  protected final NetworkConfig networkConfig;
+  protected final SSLFactory sslFactory;
   private final int maxConnectionsPerPortPlainText;
   private final int maxConnectionsPerPortSsl;
   private final int connectionCheckoutTimeoutMs;

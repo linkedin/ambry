@@ -618,7 +618,7 @@ public class MessageFormatRecord {
    * |(2 bytes)|    (4 bytes)  |            |            |  ......  |
    * |         |               |            |            |          |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   *  version         - The version of the blob property record
+   *  version         - The version of the metadata content record
    *
    *  no of keys      - total number of keys
    *

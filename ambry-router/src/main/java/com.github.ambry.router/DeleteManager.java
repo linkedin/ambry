@@ -15,7 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.network.RequestInfo;
-import java.nio.ByteBuffer;
+import com.github.ambry.network.ResponseInfo;
 import java.util.List;
 
 
@@ -23,7 +23,7 @@ import java.util.List;
  * DeleteManager handles Delete operations. This is just a template for now.
  */
 class DeleteManager {
-  public DeleteManager(ClusterMap clusterMap) {
+  public DeleteManager(NonBlockingRouter router) {
     //@todo
   }
 
@@ -37,7 +37,11 @@ class DeleteManager {
     //@todo
   }
 
-  void handleResponse(ByteBuffer response) {
+  void handleResponse(ResponseInfo responseInfo) {
+    // @todo
+  }
+
+  void close() {
     // @todo
   }
 }
