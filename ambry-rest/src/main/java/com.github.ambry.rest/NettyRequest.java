@@ -3,6 +3,7 @@ package com.github.ambry.rest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import io.netty.handler.codec.http.CookieDecoder;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -15,14 +16,17 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.servlet.http.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,27 +99,56 @@ class NettyRequest implements RestRequest {
       }
       allArgs.put(e.getKey(), value);
     }
+
+    Set<io.netty.handler.codec.http.Cookie> nettyCookies = null;
     // headers.
     for (Map.Entry<String, String> e : request.headers()) {
       StringBuilder sb;
-      boolean valueNull = request.headers().get(e.getKey()) == null;
-      if (!valueNull && allArgs.get(e.getKey()) == null) {
-        sb = new StringBuilder(e.getValue());
-        allArgs.put(e.getKey(), sb);
-      } else if (!valueNull) {
-        sb = (StringBuilder) allArgs.get(e.getKey());
-        sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(e.getValue());
-      } else if (!allArgs.containsKey(e.getKey())) {
-        allArgs.put(e.getKey(), null);
+      if (e.getKey().equals(HttpHeaders.Names.COOKIE)) {
+        String value = e.getValue();
+        if (value != null) {
+          nettyCookies = CookieDecoder.decode(value);
+        }
+      } else {
+        boolean valueNull = request.headers().get(e.getKey()) == null;
+        if (!valueNull && allArgs.get(e.getKey()) == null) {
+          sb = new StringBuilder(e.getValue());
+          allArgs.put(e.getKey(), sb);
+        } else if (!valueNull) {
+          sb = (StringBuilder) allArgs.get(e.getKey());
+          sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(e.getValue());
+        } else if (!allArgs.containsKey(e.getKey())) {
+          allArgs.put(e.getKey(), null);
+        }
       }
     }
+
     // turn all StringBuilders into String
     for (Map.Entry<String, Object> e : allArgs.entrySet()) {
       if (allArgs.get(e.getKey()) != null) {
         allArgs.put(e.getKey(), (e.getValue()).toString());
       }
     }
+    // add cookies to the args as java cookies
+    if (nettyCookies != null) {
+      Set<javax.servlet.http.Cookie> cookies = convertHttpToJavaCookies(nettyCookies);
+      allArgs.put(RestUtils.Headers.COOKIE, cookies);
+    }
     args = Collections.unmodifiableMap(allArgs);
+  }
+
+  /**
+   * Converts the Set of {@link javax.servlet.http.Cookie}s to equivalent {@link javax.servlet.http.Cookie}s
+   * @param httpCookies Set of {@link javax.servlet.http.Cookie}s that needs to be converted
+   * @return Set of {@link javax.servlet.http.Cookie}s equivalent to the passed in {@link javax.servlet.http.Cookie}s
+   */
+  public Set<Cookie> convertHttpToJavaCookies(Set<io.netty.handler.codec.http.Cookie> httpCookies) {
+    Set<javax.servlet.http.Cookie> cookies = new HashSet<Cookie>();
+    for (io.netty.handler.codec.http.Cookie cookie : httpCookies) {
+      javax.servlet.http.Cookie javaCookie = new javax.servlet.http.Cookie(cookie.getName(), cookie.getValue());
+      cookies.add(javaCookie);
+    }
+    return cookies;
   }
 
   private StringBuilder combineVals(StringBuilder currValue, List<String> values) {
