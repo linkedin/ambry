@@ -100,7 +100,7 @@ class NettyRequest implements RestRequest {
       allArgs.put(e.getKey(), value);
     }
 
-    Set<io.netty.handler.codec.http.Cookie> nettyCookies = new HashSet<io.netty.handler.codec.http.Cookie>();
+    Set<io.netty.handler.codec.http.Cookie> nettyCookies = null;
     // headers.
     for (Map.Entry<String, String> e : request.headers()) {
       StringBuilder sb;
@@ -130,7 +130,7 @@ class NettyRequest implements RestRequest {
       }
     }
     // add cookies to the args as java cookies
-    if(nettyCookies.size() > 0) {
+    if(nettyCookies != null) {
       Set<javax.servlet.http.Cookie> cookies = convertHttpToJavaCookies(nettyCookies);
       allArgs.put(RestUtils.Headers.COOKIE, cookies);
     }

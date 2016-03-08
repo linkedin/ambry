@@ -92,7 +92,7 @@ public class RestUtils {
     /**
      * Header to contain the Cookies
      */
-    protected final static String COOKIE = "Cookie";
+    public final static String COOKIE = "Cookie";
     /**
      * prefix for old style user metadata that will be served as headers
      */
