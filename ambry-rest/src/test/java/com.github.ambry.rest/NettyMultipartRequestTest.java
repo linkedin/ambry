@@ -294,9 +294,12 @@ public class NettyMultipartRequestTest {
       closeRequestAndValidate(request);
     }
 
-    // non fileupload
+    // non fileupload (file attribute present)
     httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
-    encoder = createEncoder(httpRequest, null);
+    HttpHeaders.setHeader(httpRequest, RestUtils.Headers.BLOB_SIZE, 256);
+    files = new InMemoryFile[1];
+    files[0] = new InMemoryFile(RestUtils.MultipartPost.Blob_Part, ByteBuffer.wrap(getRandomBytes(256)));
+    encoder = createEncoder(httpRequest, files);
     encoder.addBodyAttribute("dummyKey", "dummyValue");
     request = new NettyMultipartRequest(encoder.finalizeRequest(), nettyMetrics);
     assertTrue("Request channel is not open", request.isOpen());
