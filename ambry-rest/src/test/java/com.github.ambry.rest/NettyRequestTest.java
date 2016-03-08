@@ -578,14 +578,14 @@ public class NettyRequestTest {
    * @return string representation of the set of cookies
    */
   private String getCookiesHeaderValue(Set<Cookie> cookies) {
-    String cookieStr = "";
+    StringBuilder cookieStr = new StringBuilder();
     for (Cookie cookie : cookies) {
       if (cookieStr.length() != 0) {
-        cookieStr += "; ";
+        cookieStr.append("; ");
       }
-      cookieStr += cookie.getName() + "=" + cookie.getValue();
+      cookieStr.append(cookie.getName() + "=" + cookie.getValue());
     }
-    return cookieStr;
+    return cookieStr.toString();
   }
 
   // conversionWithGoodInputTest() helpers
