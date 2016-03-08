@@ -159,14 +159,11 @@ public class FrontendIntegrationTest {
   /**
    * Discards all the content in {@code contents}.
    * @param contents the content to discard.
-   * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded. -1 if the number is
-   *                             irrelevant.
+   * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded.
    */
   private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount)
       throws InterruptedException {
-    if (expectedDiscardCount != -1) {
-      assertEquals("Objects that will be discarded are more than expected", expectedDiscardCount, contents.size());
-    }
+    assertEquals("Objects that will be discarded are more than expected", expectedDiscardCount, contents.size());
     boolean endMarkerFound = false;
     for (HttpObject object : contents) {
       assertFalse("There should have been only a single end marker", endMarkerFound);
