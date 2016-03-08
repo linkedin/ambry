@@ -211,28 +211,10 @@ public class NettyMultipartRequestTest {
   @Test
   public void prepareTest()
       throws Exception {
-    // idempotency test
-    HttpHeaders httpHeaders = new DefaultHttpHeaders();
-    httpHeaders.set(RestUtils.Headers.BLOB_SIZE, 256);
-    InMemoryFile[] files = new InMemoryFile[1];
-    files[0] = new InMemoryFile(RestUtils.MultipartPost.Blob_Part, ByteBuffer.wrap(getRandomBytes(256)));
-    NettyMultipartRequest request = createRequest(httpHeaders, files);
-    assertEquals("Request size does not match", 256, request.getSize());
-    request.prepare();
-    // ok to prepare again
-    request.prepare();
-    // verify BLOB_PART
-    CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel(256);
-    request.readInto(asyncWritableChannel, null).get();
-    closeRequestAndValidate(request);
-    byte[] readOutput = asyncWritableChannel.getData();
-    assertArrayEquals(RestUtils.MultipartPost.Blob_Part + " content does not match", files[0].content.array(),
-        readOutput);
-
     // prepare half baked data
     HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, null);
-    request = new NettyMultipartRequest(encoder.finalizeRequest(), nettyMetrics);
+    NettyMultipartRequest request = new NettyMultipartRequest(encoder.finalizeRequest(), nettyMetrics);
     assertTrue("Request channel is not open", request.isOpen());
     // insert random data
     HttpContent httpContent = new DefaultHttpContent(Unpooled.wrappedBuffer(getRandomBytes(10)));
@@ -248,9 +230,9 @@ public class NettyMultipartRequestTest {
     }
 
     // more than one blob part
-    httpHeaders = new DefaultHttpHeaders();
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
     httpHeaders.set(RestUtils.Headers.BLOB_SIZE, 256);
-    files = new InMemoryFile[2];
+    InMemoryFile[] files = new InMemoryFile[2];
     files[0] = new InMemoryFile(RestUtils.MultipartPost.Blob_Part, ByteBuffer.wrap(getRandomBytes(256)));
     files[1] = new InMemoryFile(RestUtils.MultipartPost.Blob_Part, ByteBuffer.wrap(getRandomBytes(256)));
     request = createRequest(httpHeaders, files);

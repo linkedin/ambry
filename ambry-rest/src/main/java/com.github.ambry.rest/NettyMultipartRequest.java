@@ -141,7 +141,8 @@ public class NettyMultipartRequest extends NettyRequest {
         HttpContent httpContent = rawRequestContents.poll();
         while (httpContent != null) {
           try {
-            // doing this check because HttpPostMultipartRequestDecoder adds request that is content automatically.
+            // if the request is also an instance of HttpContent, the HttpPostMultipartRequestDecoder does the offer
+            // automatically at the time of construction. We should not add it again.
             if (httpContent != request) {
               postRequestDecoder.offer(httpContent);
             }
