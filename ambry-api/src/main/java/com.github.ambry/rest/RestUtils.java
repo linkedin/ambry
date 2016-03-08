@@ -97,7 +97,6 @@ public class RestUtils {
      * prefix for old style user metadata that will be served as headers
      */
     protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
-
   }
 
   public static final class MultipartPost {
