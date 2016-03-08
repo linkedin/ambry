@@ -583,7 +583,7 @@ public class NettyRequestTest {
       if (cookieStr.length() != 0) {
         cookieStr.append("; ");
       }
-      cookieStr.append(cookie.getName() + "=" + cookie.getValue());
+      cookieStr.append(cookie.getName()).append("=").append(cookie.getValue());
     }
     return cookieStr.toString();
   }
