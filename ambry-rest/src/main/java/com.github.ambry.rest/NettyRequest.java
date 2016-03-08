@@ -130,7 +130,7 @@ class NettyRequest implements RestRequest {
       }
     }
     // add cookies to the args as java cookies
-    if(nettyCookies != null) {
+    if (nettyCookies != null) {
       Set<javax.servlet.http.Cookie> cookies = convertHttpToJavaCookies(nettyCookies);
       allArgs.put(RestUtils.Headers.COOKIE, cookies);
     }

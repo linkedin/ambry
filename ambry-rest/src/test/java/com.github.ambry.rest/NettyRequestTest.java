@@ -96,7 +96,9 @@ public class NettyRequestTest {
     Set<Cookie> cookies = new HashSet<Cookie>();
     Cookie httpCookie = new DefaultCookie("CookieKey1", "CookieValue1");
     cookies.add(httpCookie);
-    headers.add(RestUtils.Headers.COOKIE, cookies);
+    httpCookie = new DefaultCookie("CookieKey2", "CookieValue2");
+    cookies.add(httpCookie);
+    headers.add(RestUtils.Headers.COOKIE, getCookiesHeaderValue(cookies));
 
     uri = "/GET" + uriAttachment;
     nettyRequest = createNettyRequest(HttpMethod.GET, uri, headers);
@@ -568,6 +570,22 @@ public class NettyRequestTest {
       exception = (Exception) exception.getCause();
     }
     return exception;
+  }
+
+  /**
+   * Convert a set of {@link Cookie} to a string that could be used as header value in http request
+   * @param cookies that needs conversion
+   * @return string representation of the set of cookies
+   */
+  private String getCookiesHeaderValue(Set<Cookie> cookies) {
+    String cookieStr = "";
+    for (Cookie cookie : cookies) {
+      if (cookieStr.length() != 0) {
+        cookieStr += "; ";
+      }
+      cookieStr += cookie.getName() + "=" + cookie.getValue();
+    }
+    return cookieStr;
   }
 
   // conversionWithGoodInputTest() helpers
