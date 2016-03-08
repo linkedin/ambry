@@ -106,9 +106,7 @@ class NettyRequest implements RestRequest {
       StringBuilder sb;
       if (e.getKey().equals(HttpHeaders.Names.COOKIE)) {
         String value = e.getValue();
-        if (value == null) {
-          nettyCookies = Collections.emptySet();
-        } else {
+        if (value != null) {
           nettyCookies = CookieDecoder.decode(value);
         }
       } else {
@@ -132,8 +130,10 @@ class NettyRequest implements RestRequest {
       }
     }
     // add cookies to the args as java cookies
-    Set<javax.servlet.http.Cookie> cookies = convertHttpToJavaCookies(nettyCookies);
-    allArgs.put(RestUtils.Headers.COOKIE, cookies);
+    if(nettyCookies.size() > 0) {
+      Set<javax.servlet.http.Cookie> cookies = convertHttpToJavaCookies(nettyCookies);
+      allArgs.put(RestUtils.Headers.COOKIE, cookies);
+    }
     args = Collections.unmodifiableMap(allArgs);
   }
 

@@ -89,15 +89,15 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
-
-    // prefix for old style user metadata that will be served as headers
-    protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
-
-    protected final static String X_FORWARDED_FOR = "X-Forwarded-For";
     /**
      * Header to contain the Cookies
      */
     protected final static String COOKIE = "Cookie";
+    /**
+     * prefix for old style user metadata that will be served as headers
+     */
+    protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
+
   }
 
   private static final int Crc_Size = 8;
