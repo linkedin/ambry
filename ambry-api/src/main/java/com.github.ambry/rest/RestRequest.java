@@ -48,6 +48,16 @@ public interface RestRequest extends ReadableStreamChannel {
   public Map<String, Object> getArgs();
 
   /**
+   * Prepares the request for reading.
+   * <p/>
+   * Any CPU bound tasks (decoding, decryption) can be performed in this method as it is expected to be called in a CPU
+   * bound thread. Calling this from an I/O bound thread will impact throughput.
+   * @throws RestServiceException if request channel is closed or if the request could not be prepared for reading.
+   */
+  public void prepare()
+      throws RestServiceException;
+
+  /**
    * Closes this request channel and releases all of the resources associated with it. Also records some metrics via
    * the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
    * <p/>

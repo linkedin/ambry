@@ -122,11 +122,12 @@ public class NettyMultipartRequest extends NettyRequest {
   }
 
   /**
-   * Prepares the request for reading by decoding all the content added via {@link #addContent(HttpContent)}.
+   * {@inheritDoc}
    * <p/>
-   * This is a CPU bound task and should not be called in a I/O bound thread.
-   * @throws RestServiceException if request channel has been closed or if the request could not be decoded/processed.
+   * Prepares the request for reading by decoding all the content added via {@link #addContent(HttpContent)}.
+   * @throws RestServiceException if request channel is closed or if the request could not be decoded/prepared.
    */
+  @Override
   public void prepare()
       throws RestServiceException {
     if (!isOpen()) {
