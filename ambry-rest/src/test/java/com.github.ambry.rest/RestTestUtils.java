@@ -9,6 +9,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Random;
 
 
 /**
@@ -41,5 +42,16 @@ public class RestTestUtils {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     httpContent.content().readBytes(out, httpContent.content().readableBytes());
     return out.toString(StandardCharsets.UTF_8.name());
+  }
+
+  /**
+   * Gets a byte array of length {@code size} with random bytes.
+   * @param size the required length of the random byte array.
+   * @return a byte array of length {@code size} with random bytes.
+   */
+  public static byte[] getRandomBytes(int size) {
+    byte[] bytes = new byte[size];
+    new Random().nextBytes(bytes);
+    return bytes;
   }
 }

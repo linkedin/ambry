@@ -9,6 +9,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
+import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -149,7 +150,7 @@ public class AdminIntegrationTest {
   @Test
   public void postGetHeadDeleteTest()
       throws ExecutionException, InterruptedException, JSONException {
-    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(1024));
+    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
@@ -246,17 +247,6 @@ public class AdminIntegrationTest {
   }
 
   // postGetHeadDeleteTest() helpers
-
-  /**
-   * Gets a byte array of length {@code size} with random bytes.
-   * @param size the required length of the random byte array.
-   * @return a byte array of length {@code size} with random bytes.
-   */
-  private byte[] getRandomBytes(int size) {
-    byte[] bytes = new byte[size];
-    new Random().nextBytes(bytes);
-    return bytes;
-  }
 
   /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.

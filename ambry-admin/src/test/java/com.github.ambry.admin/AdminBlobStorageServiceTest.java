@@ -19,6 +19,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
@@ -30,6 +31,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
@@ -42,7 +44,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -229,7 +230,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void submitResponseTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.shutdown();
     // handleResponse of AdminTestResponseHandler throws exception because it has been shutdown.
     try {
@@ -320,7 +321,7 @@ public class AdminBlobStorageServiceTest {
   public void postGetHeadDeleteTest()
       throws Exception {
     final int CONTENT_LENGTH = 1024;
-    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(CONTENT_LENGTH));
+    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(CONTENT_LENGTH));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
@@ -485,7 +486,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void headForGetCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -552,7 +553,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void getCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -620,7 +621,7 @@ public class AdminBlobStorageServiceTest {
   public void postCallbackTest()
       throws Exception {
     BlobProperties blobProperties = new BlobProperties(0, "test-serviceId");
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -675,7 +676,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void deleteCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result null, exception null)
     // Exception is not null.
@@ -726,7 +727,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void headCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
@@ -808,17 +809,6 @@ public class AdminBlobStorageServiceTest {
       request.put(MockRestRequest.HEADERS_KEY, headers);
     }
     return new MockRestRequest(request, contents);
-  }
-
-  /**
-   * Gets a byte array of length {@code size} with random bytes.
-   * @param size the required length of the random byte array.
-   * @return a byte array of length {@code size} with random bytes.
-   */
-  private byte[] getRandomBytes(int size) {
-    byte[] bytes = new byte[size];
-    new Random().nextBytes(bytes);
-    return bytes;
   }
 
   /**
