@@ -6,13 +6,12 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import java.util.Iterator;
-import org.junit.Test;
-
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;

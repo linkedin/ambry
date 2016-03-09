@@ -1102,6 +1102,11 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
+  public void prepare() {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public boolean isOpen() {
     throw new IllegalStateException("Not implemented");
   }
