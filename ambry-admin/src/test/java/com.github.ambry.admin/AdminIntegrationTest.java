@@ -145,11 +145,10 @@ public class AdminIntegrationTest {
    * Tests blob POST, GET, HEAD and DELETE operations.
    * @throws ExecutionException
    * @throws InterruptedException
-   * @throws JSONException
    */
   @Test
   public void postGetHeadDeleteTest()
-      throws ExecutionException, InterruptedException, JSONException {
+      throws ExecutionException, InterruptedException {
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
@@ -200,8 +199,7 @@ public class AdminIntegrationTest {
    * @param contents the content of the response.
    * @return a {@link ByteBuffer} that contains all the data in {@code contents}.
    */
-  private ByteBuffer getContent(HttpResponse response, Queue<HttpObject> contents)
-      throws InterruptedException {
+  private ByteBuffer getContent(HttpResponse response, Queue<HttpObject> contents) {
     long contentLength = HttpHeaders.getContentLength(response, -1);
     if (contentLength == -1) {
       contentLength = HttpHeaders.getIntHeader(response, RestUtils.Headers.BLOB_SIZE, 0);
@@ -220,9 +218,8 @@ public class AdminIntegrationTest {
    * @param contents the content to discard.
    * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded.
    */
-  private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount)
-      throws InterruptedException {
-    assertEquals("Objects that will be discarded are more than expected", expectedDiscardCount, contents.size());
+  private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount) {
+    assertEquals("Objects that will be discarded differ from expected", expectedDiscardCount, contents.size());
     boolean endMarkerFound = false;
     for (HttpObject object : contents) {
       assertFalse("There should have been only a single end marker", endMarkerFound);
@@ -331,10 +328,9 @@ public class AdminIntegrationTest {
    * @param expectedHeaders the expected headers in the response.
    * @throws ExecutionException
    * @throws InterruptedException
-   * @throws JSONException
    */
   private void getHeadAndVerify(String blobId, HttpHeaders expectedHeaders)
-      throws ExecutionException, InterruptedException, JSONException {
+      throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
@@ -367,10 +363,8 @@ public class AdminIntegrationTest {
    * Verifies User metadata headers from output, to that sent in during input
    * @param expectedHeaders the expected headers in the response.
    * @param response the {@link HttpResponse} which contains the headers of the response.
-   * @throws JSONException
    */
-  private void verifyUserMetadataHeaders(HttpHeaders expectedHeaders, HttpResponse response)
-      throws JSONException {
+  private void verifyUserMetadataHeaders(HttpHeaders expectedHeaders, HttpResponse response) {
     for (Map.Entry<String, String> header : expectedHeaders) {
       String key = header.getKey();
       if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {

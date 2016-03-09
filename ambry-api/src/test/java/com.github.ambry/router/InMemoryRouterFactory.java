@@ -13,15 +13,17 @@ import com.github.ambry.notification.NotificationSystem;
  */
 public class InMemoryRouterFactory implements RouterFactory {
   private final VerifiableProperties verifiableProperties;
+  private final NotificationSystem notificationSystem;
 
   public InMemoryRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem) {
     this.verifiableProperties = verifiableProperties;
+    this.notificationSystem = notificationSystem;
   }
 
   @Override
   public Router getRouter()
       throws InstantiationException {
-    return new InMemoryRouter(verifiableProperties);
+    return new InMemoryRouter(verifiableProperties, notificationSystem);
   }
 }

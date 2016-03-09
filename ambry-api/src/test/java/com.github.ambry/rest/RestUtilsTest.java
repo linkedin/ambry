@@ -169,6 +169,23 @@ public class RestUtilsTest {
   }
 
   /**
+   * Tests building of User Metadata when the {@link RestRequest} contains an arg with name
+   * {@link RestUtils.MultipartPost#USER_METADATA_PART}.
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataWithUserMetadataArgTest()
+      throws Exception {
+    byte[] original = new byte[100];
+    RANDOM.nextBytes(original);
+    JSONObject headers = new JSONObject();
+    headers.put(RestUtils.MultipartPost.USER_METADATA_PART, ByteBuffer.wrap(original));
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] rcvd = RestUtils.buildUsermetadata(restRequest);
+    assertArrayEquals("Received user metadata does not match with original", original, rcvd);
+  }
+
+  /**
    * Tests building of User Metadata with unusual input
    * @throws Exception
    */

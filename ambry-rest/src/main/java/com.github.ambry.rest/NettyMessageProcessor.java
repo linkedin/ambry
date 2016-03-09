@@ -6,6 +6,7 @@ import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import java.nio.channels.ClosedChannelException;
@@ -238,14 +239,21 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         }
         // We need to maintain state about the request itself for the subsequent parts (if any) that come in. We will
         // attach content to the request as the content arrives.
-        request = new NettyRequest(httpRequest, nettyMetrics);
+        if (HttpPostRequestDecoder.isMultipart(httpRequest)) {
+          nettyMetrics.multipartPostRequestRate.mark();
+          request = new NettyMultipartRequest(httpRequest, nettyMetrics);
+        } else {
+          request = new NettyRequest(httpRequest, nettyMetrics);
+        }
         responseChannel.setRequest(request);
         logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
-        // We send POST for handling immediately since we expect valid content with it.
+        // We send POST that is not multipart for handling immediately since we expect valid content with it that will
+        // be streamed in. In the case of POST that is multipart, all the content has to be received for Netty's
+        // decoder and NettyMultipartRequest to work. So it is scheduled for handling when LastHttpContent is received.
         // With any other method that we support, we do not expect any valid content. LastHttpContent is a Netty thing.
         // So we wait for LastHttpContent (throw an error if we don't receive it or receive something else) and then
         // schedule the other methods for handling in handleContent().
-        if (request.getRestMethod().equals(RestMethod.POST)) {
+        if (request.getRestMethod().equals(RestMethod.POST) && !HttpPostRequestDecoder.isMultipart(httpRequest)) {
           requestHandler.handleRequest(request, responseChannel);
         }
       } finally {
@@ -290,7 +298,7 @@ class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
         request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(chunkProcessingTime);
       }
-      if (!request.getRestMethod().equals(RestMethod.POST)) {
+      if (!request.getRestMethod().equals(RestMethod.POST) || (request.isMultipart() && requestContentFullyReceived)) {
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {

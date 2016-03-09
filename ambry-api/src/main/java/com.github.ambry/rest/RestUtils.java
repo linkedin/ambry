@@ -96,11 +96,12 @@ public class RestUtils {
     /**
      * prefix for old style user metadata that will be served as headers
      */
-    protected final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
+    public final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
   }
 
   public static final class MultipartPost {
-    public final static String Blob_Part = "Blob";
+    public final static String BLOB_PART = "Blob";
+    public final static String USER_METADATA_PART = "UserMetadata";
   }
 
   private static final int Crc_Size = 8;
@@ -206,48 +207,52 @@ public class RestUtils {
    */
   public static byte[] buildUsermetadata(RestRequest restRequest)
       throws RestServiceException {
+    ByteBuffer userMetadata;
     Map<String, Object> args = restRequest.getArgs();
-    Map<String, String> userMetadataMap = new HashMap<String, String>();
-    int sizeToAllocate = 0;
-    for (Map.Entry<String, Object> entry : args.entrySet()) {
-      String key = entry.getKey();
-      if (key.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
-        // key size
-        sizeToAllocate += 4;
-        String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
-        sizeToAllocate += keyToStore.length();
-        String value = getHeader(args, key, true);
-        userMetadataMap.put(keyToStore, value);
-        // value size
-        sizeToAllocate += 4;
-        sizeToAllocate += value.getBytes().length;
-      }
-    }
-    ByteBuffer userMetadata = null;
-    if (sizeToAllocate == 0) {
-      userMetadata = ByteBuffer.allocate(0);
+    if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
+      userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
     } else {
-      // version
-      sizeToAllocate += 2;
-      // size excluding version and crc
-      sizeToAllocate += 4;
-      // total number of entries
-      sizeToAllocate += 4;
-      // crc size
-      sizeToAllocate += Crc_Size;
-      userMetadata = ByteBuffer.allocate(sizeToAllocate);
-      userMetadata.putShort(UserMetadata_Version_V1);
-      // total size = sizeToAllocate - version size - sizeToAllocate size - crc size
-      userMetadata.putInt(sizeToAllocate - 6 - Crc_Size);
-      userMetadata.putInt(userMetadataMap.size());
-      for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
+      Map<String, String> userMetadataMap = new HashMap<String, String>();
+      int sizeToAllocate = 0;
+      for (Map.Entry<String, Object> entry : args.entrySet()) {
         String key = entry.getKey();
-        Utils.serializeString(userMetadata, key, StandardCharsets.US_ASCII);
-        Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
+        if (key.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
+          // key size
+          sizeToAllocate += 4;
+          String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
+          sizeToAllocate += keyToStore.length();
+          String value = getHeader(args, key, true);
+          userMetadataMap.put(keyToStore, value);
+          // value size
+          sizeToAllocate += 4;
+          sizeToAllocate += value.getBytes().length;
+        }
       }
-      Crc32 crc = new Crc32();
-      crc.update(userMetadata.array(), 0, sizeToAllocate - Crc_Size);
-      userMetadata.putLong(crc.getValue());
+      if (sizeToAllocate == 0) {
+        userMetadata = ByteBuffer.allocate(0);
+      } else {
+        // version
+        sizeToAllocate += 2;
+        // size excluding version and crc
+        sizeToAllocate += 4;
+        // total number of entries
+        sizeToAllocate += 4;
+        // crc size
+        sizeToAllocate += Crc_Size;
+        userMetadata = ByteBuffer.allocate(sizeToAllocate);
+        userMetadata.putShort(UserMetadata_Version_V1);
+        // total size = sizeToAllocate - version size - sizeToAllocate size - crc size
+        userMetadata.putInt(sizeToAllocate - 6 - Crc_Size);
+        userMetadata.putInt(userMetadataMap.size());
+        for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
+          String key = entry.getKey();
+          Utils.serializeString(userMetadata, key, StandardCharsets.US_ASCII);
+          Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
+        }
+        Crc32 crc = new Crc32();
+        crc.update(userMetadata.array(), 0, sizeToAllocate - Crc_Size);
+        userMetadata.putLong(crc.getValue());
+      }
     }
     return userMetadata.array();
   }

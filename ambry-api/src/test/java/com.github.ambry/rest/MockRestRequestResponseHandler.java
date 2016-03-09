@@ -57,6 +57,7 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
       throws RestServiceException {
     if (shouldProceed(restRequest, restResponseChannel)) {
       RestMethod restMethod = restRequest.getRestMethod();
+      restRequest.prepare();
       switch (restMethod) {
         case GET:
           blobStorageService.handleGet(restRequest, restResponseChannel);
