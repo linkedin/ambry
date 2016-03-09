@@ -52,6 +52,7 @@ class GetReplicasForBlobIdHandler {
     try {
       String replicaStr = getReplicasForBlobId(restRequest, clusterMap, adminMetrics).toString();
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, replicaStr.length());
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;

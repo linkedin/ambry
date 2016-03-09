@@ -61,7 +61,7 @@ public class InMemoryRouter implements Router {
     BlobInfo operationResult = null;
     Exception exception = null;
     if (blobId == null || blobId.length() != BLOB_ID_SIZE) {
-      completeOperation(futureResult, callback, operationResult,
+      completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
     } else {
       try {
@@ -100,7 +100,6 @@ public class InMemoryRouter implements Router {
       try {
         if (deletedBlobs.contains(blobId)) {
           exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
-          ;
         } else if (!blobs.containsKey(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         } else {

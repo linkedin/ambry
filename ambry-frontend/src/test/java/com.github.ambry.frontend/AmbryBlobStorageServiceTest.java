@@ -17,6 +17,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
@@ -28,6 +29,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
@@ -40,7 +42,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -226,7 +227,7 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void submitResponseTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.shutdown();
     // handleResponse of FrontendTestResponseHandler throws exception because it has been shutdown.
     try {
@@ -317,7 +318,7 @@ public class AmbryBlobStorageServiceTest {
   public void postGetHeadDeleteTest()
       throws Exception {
     final int CONTENT_LENGTH = 1024;
-    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(CONTENT_LENGTH));
+    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(CONTENT_LENGTH));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
@@ -340,7 +341,7 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void headForGetCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -407,7 +408,7 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void getCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -475,7 +476,7 @@ public class AmbryBlobStorageServiceTest {
   public void postCallbackTest()
       throws Exception {
     BlobProperties blobProperties = new BlobProperties(0, "test-serviceId");
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -530,7 +531,7 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void deleteCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result null, exception null)
     // Exception is not null.
@@ -581,7 +582,7 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void headCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
@@ -666,17 +667,6 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Gets a byte array of length {@code size} with random bytes.
-   * @param size the required length of the random byte array.
-   * @return a byte array of length {@code size} with random bytes.
-   */
-  private byte[] getRandomBytes(int size) {
-    byte[] bytes = new byte[size];
-    new Random().nextBytes(bytes);
-    return bytes;
-  }
-
-  /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param headers the {@link JSONObject} where the headers should be set.
@@ -685,7 +675,7 @@ public class AmbryBlobStorageServiceTest {
    *                  expiry.
    * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
    * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header. Required.
-   * @param contentType sets the {@link RestUtils.Headers#CONTENT_TYPE} header. Required and has to be a valid MIME
+   * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header. Required and has to be a valid MIME
    *                    type.
    * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if

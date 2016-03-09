@@ -27,6 +27,7 @@ import io.netty.util.concurrent.GenericProgressiveFutureListener;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
@@ -325,6 +326,7 @@ class NettyResponseChannel implements RestResponseChannel {
         new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
     HttpHeaders.setContentLength(response, fullMsg.length());
+    HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setKeepAlive(response, false);
     return response;
   }
