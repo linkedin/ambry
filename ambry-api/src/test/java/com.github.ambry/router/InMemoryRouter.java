@@ -274,7 +274,7 @@ class InMemoryBlobPoster implements Runnable {
       } else {
         blobData.put(chunk);
       }
-      channel.resolveChunk(chunk, exception);
+      channel.resolveOldestChunk(exception);
       if (exception != null) {
         channel.close();
         throw exception;

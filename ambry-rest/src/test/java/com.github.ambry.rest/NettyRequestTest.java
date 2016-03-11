@@ -709,7 +709,7 @@ public class NettyRequestTest {
         assertEquals("Unexpected byte", content.get(), recvdContent.get());
         bytesRead++;
       }
-      writeChannel.resolveChunk(recvdContent, null);
+      writeChannel.resolveOldestChunk(null);
     }
   }
 }
