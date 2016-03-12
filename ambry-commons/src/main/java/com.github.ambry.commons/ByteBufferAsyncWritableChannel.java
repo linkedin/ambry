@@ -36,15 +36,9 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
     ChunkData chunkData = new ChunkData(src, callback);
-    lock.lock();
-    try {
-      if (!isOpen()) {
-        chunkData.resolveChunk(new ClosedChannelException());
-      } else {
-        chunks.add(chunkData);
-      }
-    } finally {
-      lock.unlock();
+    chunks.add(chunkData);
+    if (!isOpen()) {
+      resolveAllRemainingChunks(new ClosedChannelException());
     }
     return chunkData.future;
   }
@@ -61,13 +55,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
   @Override
   public void close() {
     if (channelOpen.compareAndSet(true, false)) {
-      lock.lock();
-      try {
-        resolveAllRemainingChunks(new ClosedChannelException());
-        chunks.add(new ChunkData(null, null));
-      } finally {
-        lock.unlock();
-      }
+      resolveAllRemainingChunks(new ClosedChannelException());
     }
   }
 
@@ -110,25 +98,14 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
   }
 
   /**
-   * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
-   * resolved, the data inside it is considered void.
-   * <p/>
-   * This function assumes that chunks are resolved in the same order that they were obtained.
-   * @param chunkBuf the {@link ByteBuffer} that represents the chunk that was handled.
+   * Resolves the oldest "checked-out" chunk and invokes the callback and future that accompanied the chunk. Once a
+   * chunk is resolved, the data inside it is considered void. If no chunks have been "checked-out" yet, does nothing.
    * @param exception any {@link Exception} that occurred during the handling that needs to be notified.
-   * @throws IllegalArgumentException if {@code chunk} is not a valid chunk that is eligible for resolution.
    */
-  public void resolveChunk(ByteBuffer chunkBuf, Exception exception) {
-    lock.lock();
-    try {
-      if (isOpen()) {
-        if (chunksAwaitingResolution.peek() == null || chunksAwaitingResolution.peek().buffer != chunkBuf) {
-          throw new IllegalArgumentException("Unrecognized chunk");
-        }
-        chunksAwaitingResolution.poll().resolveChunk(exception);
-      }
-    } finally {
-      lock.unlock();
+  public void resolveOldestChunk(Exception exception) {
+    ChunkData chunkData = chunksAwaitingResolution.poll();
+    if (chunkData != null) {
+      chunkData.resolveChunk(exception);
     }
   }
 
@@ -140,16 +117,11 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
   private ByteBuffer getChunkBuffer(ChunkData chunkData) {
     ByteBuffer chunkBuf = null;
     if (chunkData != null && chunkData.buffer != null) {
-      lock.lock();
-      try {
-        if (isOpen()) {
-          chunkBuf = chunkData.buffer;
-          chunksAwaitingResolution.add(chunkData);
-        } else {
-          chunkData.resolveChunk(new ClosedChannelException());
-        }
-      } finally {
-        lock.unlock();
+      chunkBuf = chunkData.buffer;
+      chunksAwaitingResolution.add(chunkData);
+      if (!isOpen()) {
+        chunkBuf = null;
+        resolveAllRemainingChunks(new ClosedChannelException());
       }
     }
     return chunkBuf;
@@ -160,57 +132,69 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * @param e the exception to use to resolve all the chunks.
    */
   private void resolveAllRemainingChunks(Exception e) {
-    while (chunksAwaitingResolution.peek() != null) {
-      chunksAwaitingResolution.poll().resolveChunk(e);
+    lock.lock();
+    try {
+      ChunkData chunkData = chunksAwaitingResolution.poll();
+      while (chunkData != null) {
+        chunkData.resolveChunk(e);
+        chunkData = chunksAwaitingResolution.poll();
+      }
+      chunkData = chunks.poll();
+      while (chunkData != null) {
+        chunkData.resolveChunk(e);
+        chunkData = chunks.poll();
+      }
+      chunks.add(new ChunkData(null, null));
+    } finally {
+      lock.unlock();
     }
-    while (chunks.peek() != null) {
-      chunks.poll().resolveChunk(e);
-    }
-  }
-}
-
-/**
- * Representation of all the data associated with a chunk i.e. the actual bytes and the future and callback that need to
- * be invoked on resolution.
- */
-class ChunkData {
-  /**
-   * The future that will be set on chunk resolution.
-   */
-  public final FutureResult<Long> future = new FutureResult<Long>();
-  /**
-   * The bytes associated with this chunk.
-   */
-  public final ByteBuffer buffer;
-
-  private final int startPos;
-  private final Callback<Long> callback;
-
-  /**
-   * Create a new instance of ChunkData with the given parameters.
-   * @param buffer the bytes of data associated with the chunk.
-   * @param callback the {@link Callback} that will be invoked on chunk resolution.
-   */
-  public ChunkData(ByteBuffer buffer, Callback<Long> callback) {
-    this.buffer = buffer;
-    if (buffer != null) {
-      startPos = buffer.position();
-    } else {
-      startPos = 0;
-    }
-    this.callback = callback;
   }
 
   /**
-   * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
-   * resolved, the data inside it is considered void.
-   * @param exception the reason for chunk handling failure.
+   * Representation of all the data associated with a chunk i.e. the actual bytes and the future and callback that need to
+   * be invoked on resolution.
    */
-  public void resolveChunk(Exception exception) {
-    long bytesWritten = buffer.position() - startPos;
-    future.done(bytesWritten, exception);
-    if (callback != null) {
-      callback.onCompletion(bytesWritten, exception);
+  private static class ChunkData {
+    /**
+     * The future that will be set on chunk resolution.
+     */
+    public final FutureResult<Long> future = new FutureResult<Long>();
+    /**
+     * The bytes associated with this chunk.
+     */
+    public final ByteBuffer buffer;
+
+    private final int startPos;
+    private final Callback<Long> callback;
+
+    /**
+     * Create a new instance of ChunkData with the given parameters.
+     * @param buffer the bytes of data associated with the chunk.
+     * @param callback the {@link Callback} that will be invoked on chunk resolution.
+     */
+    private ChunkData(ByteBuffer buffer, Callback<Long> callback) {
+      this.buffer = buffer;
+      if (buffer != null) {
+        startPos = buffer.position();
+      } else {
+        startPos = 0;
+      }
+      this.callback = callback;
+    }
+
+    /**
+     * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
+     * resolved, the data inside it is considered void.
+     * @param exception the reason for chunk handling failure.
+     */
+    private void resolveChunk(Exception exception) {
+      if (buffer != null) {
+        long bytesWritten = buffer.position() - startPos;
+        future.done(bytesWritten, exception);
+        if (callback != null) {
+          callback.onCompletion(bytesWritten, exception);
+        }
+      }
     }
   }
 }

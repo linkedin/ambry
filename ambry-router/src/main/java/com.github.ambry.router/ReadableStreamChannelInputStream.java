@@ -90,7 +90,7 @@ class ReadableStreamChannelInputStream extends InputStream {
       throws IOException {
     if (currentChunk == null || !currentChunk.hasRemaining()) {
       if (currentChunk != null) {
-        asyncWritableChannel.resolveChunk(currentChunk, null);
+        asyncWritableChannel.resolveOldestChunk(null);
       }
       try {
         currentChunk = asyncWritableChannel.getNextChunk();

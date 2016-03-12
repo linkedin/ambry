@@ -100,7 +100,7 @@ public class ByteBufferReadableStreamChannelTest {
     Future<Long> future = readableStreamChannel.readInto(writeChannel, callback);
     ByteBuffer chunk = writeChannel.getNextChunk(0);
     while (chunk != null) {
-      writeChannel.resolveChunk(chunk, null);
+      writeChannel.resolveOldestChunk(null);
       chunk = writeChannel.getNextChunk(0);
     }
     assertEquals("There should have no bytes to read (future)", 0, future.get().longValue());
@@ -181,7 +181,7 @@ public class ByteBufferReadableStreamChannelTest {
         assertTrue("Written content is more than original content", contentWrapper.hasRemaining());
         assertEquals("Unexpected byte", contentWrapper.get(), recvdContent.get());
       }
-      writeChannel.resolveChunk(recvdContent, null);
+      writeChannel.resolveOldestChunk(null);
     }
     assertNull("There should have been no more data in the channel", writeChannel.getNextChunk(0));
     writeChannel.close();
