@@ -34,7 +34,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   public HealthCheckHandler(RestServerState restServerState) {
     this.restServerState = restServerState;
     this.healthCheckUri = restServerState.getHealthCheckUri();
-    logger.info("Created HealthCheckHandler for HealthCheckUri=" + healthCheckUri);
+    logger.trace("Created HealthCheckHandler for HealthCheckUri=" + healthCheckUri);
   }
 
   @Override
