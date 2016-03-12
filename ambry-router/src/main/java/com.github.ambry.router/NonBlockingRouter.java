@@ -1,6 +1,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -9,11 +10,11 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -224,7 +225,7 @@ class NonBlockingRouter implements Router {
    * @param operationResult the result of the operation (if any).
    * @param exception {@link Exception} encountered while performing the operation (if any).
    */
-  private void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
+  static void completeOperation(FutureResult futureResult, Callback callback, Object operationResult,
       Exception exception) {
     try {
       futureResult.done(operationResult, exception);
@@ -264,9 +265,9 @@ class NonBlockingRouter implements Router {
     OperationController()
         throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
-      putManager = new PutManager(routerConfig.routerMaxPutChunkSizeBytes, routerConfig, clusterMap);
+      putManager = new PutManager(routerConfig, clusterMap, notificationSystem, time);
       getManager = new GetManager(clusterMap);
-      deleteManager = new DeleteManager(clusterMap);
+      deleteManager = new DeleteManager(routerConfig, clusterMap, notificationSystem, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
       requestResponseHandlerThread.start();
     }
@@ -313,7 +314,6 @@ class NonBlockingRouter implements Router {
      * @param futureResult A future that would contain information about whether the deletion succeeded or not,
      *                     eventually.
      * @param callback The {@link Callback} which will be invoked on the completion of a request.
-     * @return
      */
     private void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
       deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
@@ -340,14 +340,14 @@ class NonBlockingRouter implements Router {
      */
     private List<RequestInfo> pollForRequests() {
       // these are ids that were successfully put for an operation that eventually failed
-      List<String> idsToDelete = putManager.getIdsToDelete();
+      List<BlobId> idsToDelete = putManager.getIdsToDelete();
       if (idsToDelete != null) {
         // this is a best effort to delete ids for cleanup purposes (these may fail and we will
         // not do anything about it at this time).
-        for (String id : idsToDelete) {
+        for (BlobId blobId : idsToDelete) {
           // possibly add a batch api going forward.
-          deleteManager
-              .submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), id, new FutureResult<Void>(), null);
+          deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId.getID(),
+              new FutureResult<Void>(), null);
         }
       }
       List<RequestInfo> requests = new ArrayList<RequestInfo>();
@@ -363,30 +363,21 @@ class NonBlockingRouter implements Router {
      */
     private void onResponse(List<ResponseInfo> responseInfoList) {
       for (ResponseInfo responseInfo : responseInfoList) {
-        handleResponsePayload(responseInfo.getResponse());
-      }
-    }
-
-    /**
-     * Handle the response that was received from a data node based on the response type.
-     * @param response the response received.
-     */
-    private void handleResponsePayload(ByteBuffer response) {
-      RequestOrResponseType type = RequestOrResponseType.values()[response.getShort()];
-      response.rewind();
-      switch (type) {
-        case PutResponse:
-          putManager.handleResponse(response);
-          break;
-        case GetResponse:
-          getManager.handleResponse(response);
-          break;
-        case DeleteResponse:
-          deleteManager.handleResponse(response);
-          break;
-        default:
-          logger.error("Unexpected response type: " + type + " received, discarding");
-          // @todo add to a metric. We do not want to throw here.
+        RequestOrResponseType type = ((RequestOrResponse) responseInfo.getRequest()).getRequestType();
+        switch (type) {
+          case PutRequest:
+            putManager.handleResponse(responseInfo);
+            break;
+          case GetRequest:
+            getManager.handleResponse(responseInfo);
+            break;
+          case DeleteRequest:
+            deleteManager.handleResponse(responseInfo);
+            break;
+          default:
+            logger.error("Unexpected response type: " + type + " received, discarding");
+            // @todo add to a metric. We do not want to throw here.
+        }
       }
     }
 

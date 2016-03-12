@@ -3,7 +3,7 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.network.RequestInfo;
-import java.nio.ByteBuffer;
+import com.github.ambry.network.ResponseInfo;
 import java.util.List;
 
 
@@ -30,7 +30,7 @@ class GetManager {
     //@todo
   }
 
-  void handleResponse(ByteBuffer response) {
+  void handleResponse(ResponseInfo responseInfo) {
     // @todo
   }
 }

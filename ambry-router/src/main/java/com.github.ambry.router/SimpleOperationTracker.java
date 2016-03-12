@@ -51,7 +51,7 @@ class SimpleOperationTracker implements OperationTracker {
   private int totalReplicaCount = 0;
   private int inflightCount = 0;
   private int succeededCount = 0;
-  private int failedCount = 0;
+  public int failedCount = 0;
   private Iterator<ReplicaId> replicaIterator;
 
   /**
@@ -95,12 +95,12 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
-  public void onResponse(ReplicaId replicaId, Exception e) {
+  public void onResponse(ReplicaId replicaId, boolean isSuccessful) {
     inflightCount--;
-    if (e != null) {
-      failedCount++;
-    } else {
+    if (isSuccessful) {
       succeededCount++;
+    } else {
+      failedCount++;
     }
   }
 

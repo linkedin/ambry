@@ -13,7 +13,7 @@ import java.util.Iterator;
  * next replica to send a request.
  *
  * When an operation is progressing by receiving responses from replicas, its {@code OperationTracker}
- * needs to be informed by calling {@link #onResponse(ReplicaId, Exception)}.
+ * needs to be informed by calling {@link #onResponse(ReplicaId, boolean)}.
  */
 interface OperationTracker {
   /**
@@ -35,9 +35,9 @@ interface OperationTracker {
    * if a response or an exception is received.
    *
    * @param replicaId ReplicaId that returns a response or an excepton.
-   * @param e Exception returned by the replica. {@code null} if the response is successful.
+   * @param successful {@code true} if the response is successful, {@code false} otherwise.
    */
-  void onResponse(ReplicaId replicaId, Exception e);
+  void onResponse(ReplicaId replicaId, boolean successful);
 
   /**
    * Provide an iterator to the replicas to which requests may be sent. Each time when start to iterate

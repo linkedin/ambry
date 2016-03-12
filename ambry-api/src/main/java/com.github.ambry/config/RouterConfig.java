@@ -56,6 +56,41 @@ public class RouterConfig {
   public final int routerMaxPutChunkSizeBytes;
 
   /**
+   * The maximum number of parallel requests allowed for a single put operation.
+   */
+  @Config("router.delete.request.parallelism")
+  @Default("9")
+  public final int routerDeleteRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a put operation.
+   */
+  @Config("router.delete.success.target")
+  @Default("2")
+  public final int routerDeleteSuccessTarget;
+
+  /**
+   * The maximum number of parallel requests allowed for a single put operation.
+   */
+  @Config("router.put.request.parallelism")
+  @Default("3")
+  public final int routerPutRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a put operation.
+   */
+  @Config("router.put.success.target")
+  @Default("2")
+  public final int routerPutSuccessTarget;
+
+  /**
+   * Timeout for requests.
+   */
+  @Config("router.request.timeout.ms")
+  @Default("2000")
+  public final int routerRequestTimeoutMs;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -70,5 +105,12 @@ public class RouterConfig {
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
     routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.put.chunk.size.bytes", 4 * 1024 * 1024);
+    routerPutRequestParallelism = verifiableProperties.getInt("router.put.request.parallelism", 3);
+    routerPutSuccessTarget = verifiableProperties.getInt("router.put.success.target", 2);
+    // @todo Verify the numbers here. In coordinator the policy for delete operation is to issue requests to
+    // @todo all replicas. This also need to be hard coded to 12 if lsg is counted.
+    routerDeleteRequestParallelism = verifiableProperties.getInt("router.delete.request.parallelism", 9);
+    routerDeleteSuccessTarget = verifiableProperties.getInt("router.delete.success.target", 2);
+    routerRequestTimeoutMs = verifiableProperties.getInt("router.request.timeout.ms", 2000);
   }
 }
