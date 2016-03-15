@@ -10,16 +10,17 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,7 +39,7 @@ import org.slf4j.LoggerFactory;
 class NettyRequest implements RestRequest {
   protected final HttpRequest request;
   protected final NettyMetrics nettyMetrics;
-  protected final Map<String, Object> allArgs = new HashMap<String, Object>();
+  protected final Map<String, Object> allArgs = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
   protected final Queue<HttpContent> requestContents = new LinkedBlockingQueue<HttpContent>();
   protected final ReentrantLock contentLock = new ReentrantLock();
 
@@ -313,6 +314,14 @@ class NettyRequest implements RestRequest {
    */
   protected boolean isKeepAlive() {
     return HttpHeaders.isKeepAlive(request);
+  }
+
+  /**
+   * Provides info on whether this request is multipart or not.
+   * @return {@code true} if multipart. {@code false} otherwise.
+   */
+  protected boolean isMultipart() {
+    return HttpPostRequestDecoder.isMultipart(request);
   }
 
   /**

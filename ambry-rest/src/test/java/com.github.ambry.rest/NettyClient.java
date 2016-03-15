@@ -20,6 +20,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.Closeable;
@@ -70,7 +71,7 @@ public class NettyClient implements Closeable {
       @Override
       public void initChannel(SocketChannel ch)
           throws Exception {
-        ch.pipeline().addLast(new HttpClientCodec()).addLast(communicationHandler);
+        ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(communicationHandler);
       }
     });
     createChannel();
@@ -87,11 +88,9 @@ public class NettyClient implements Closeable {
    * @param content the content accompanying the request. Can be null.
    * @param callback the callback to invoke when the response is available. Can be null.
    * @return a {@link Future} that tracks the arrival of the response for this request.
-   * @throws InterruptedException
    */
   public Future<Queue<HttpObject>> sendRequest(HttpRequest request, ChunkedInput<HttpContent> content,
-      Callback<Queue<HttpObject>> callback)
-      throws InterruptedException {
+      Callback<Queue<HttpObject>> callback) {
     this.request = request;
     this.content = content;
     this.callback = callback;

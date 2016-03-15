@@ -10,6 +10,7 @@ import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
@@ -19,18 +20,24 @@ import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
+import io.netty.handler.codec.http.multipart.FileUpload;
+import io.netty.handler.codec.http.multipart.HttpDataFactory;
+import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
+import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
-import org.json.JSONException;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -86,11 +93,10 @@ public class FrontendIntegrationTest {
    * Tests blob POST, GET, HEAD and DELETE operations.
    * @throws ExecutionException
    * @throws InterruptedException
-   * @throws JSONException
    */
   @Test
   public void postGetHeadDeleteTest()
-      throws ExecutionException, InterruptedException, JSONException {
+      throws ExecutionException, InterruptedException {
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
@@ -103,11 +109,31 @@ public class FrontendIntegrationTest {
 
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
-    getHeadAndVerify(blobId, headers);
+    getHeadAndVerify(blobId, headers, null);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
     verifyOperationsAfterDelete(blobId);
+  }
+
+  /**
+   * Tests multipart POST and verifies it via GET operations.
+   * @throws Exception
+   */
+  @Test
+  public void multipartPostGetHeadTest()
+      throws Exception {
+    ByteBuffer blobContent = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
+    ByteBuffer usermetadata = ByteBuffer.wrap(UtilsTest.getRandomString(32).getBytes());
+    String serviceId = "postGetHeadDeleteServiceID";
+    String contentType = "application/octet-stream";
+    String ownerId = "postGetHeadDeleteOwnerID";
+    HttpHeaders headers = new DefaultHttpHeaders();
+    setAmbryHeaders(headers, blobContent.capacity(), 7200, false, serviceId, contentType, ownerId);
+
+    String blobId = multipartPostBlobAndVerify(headers, blobContent, usermetadata);
+    getBlobAndVerify(blobId, headers, blobContent);
+    getHeadAndVerify(blobId, headers, usermetadata);
   }
 
   // helpers
@@ -141,8 +167,7 @@ public class FrontendIntegrationTest {
    * @param contents the content of the response.
    * @return a {@link ByteBuffer} that contains all the data in {@code contents}.
    */
-  private ByteBuffer getContent(HttpResponse response, Queue<HttpObject> contents)
-      throws InterruptedException {
+  private ByteBuffer getContent(HttpResponse response, Queue<HttpObject> contents) {
     long contentLength = HttpHeaders.getContentLength(response, -1);
     if (contentLength == -1) {
       contentLength = HttpHeaders.getIntHeader(response, RestUtils.Headers.BLOB_SIZE, 0);
@@ -161,8 +186,7 @@ public class FrontendIntegrationTest {
    * @param contents the content to discard.
    * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded.
    */
-  private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount)
-      throws InterruptedException {
+  private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount) {
     assertEquals("Objects that will be discarded are more than expected", expectedDiscardCount, contents.size());
     boolean endMarkerFound = false;
     for (HttpObject object : contents) {
@@ -188,7 +212,7 @@ public class FrontendIntegrationTest {
     return new VerifiableProperties(properties);
   }
 
-  // postGetHeadDeleteTest() helpers
+  // postGetHeadDeleteTest() and multipartPostGetHeadTest() helpers
 
   /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
@@ -234,7 +258,6 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
-    discardContent(responseParts, 1);
     assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.getStatus());
     assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
@@ -245,6 +268,7 @@ public class FrontendIntegrationTest {
     if (blobId == null) {
       fail("postBlobAndVerify did not return a blob ID");
     }
+    discardContent(responseParts, 1);
     return blobId;
   }
 
@@ -271,16 +295,16 @@ public class FrontendIntegrationTest {
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
    * @param expectedHeaders the expected headers in the response.
+   * @param usermetadata if non-null, this is expected to come as headers prefixed with
+   *                      {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
    * @throws ExecutionException
    * @throws InterruptedException
-   * @throws JSONException
    */
-  private void getHeadAndVerify(String blobId, HttpHeaders expectedHeaders)
-      throws ExecutionException, InterruptedException, JSONException {
+  private void getHeadAndVerify(String blobId, HttpHeaders expectedHeaders, ByteBuffer usermetadata)
+      throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
-    discardContent(responseParts, 1);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     checkCommonGetHeadHeaders(response.headers(), expectedHeaders);
     assertEquals("Content-Length does not match blob size",
@@ -302,22 +326,52 @@ public class FrontendIntegrationTest {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match", expectedHeaders.get(RestUtils.Headers.OWNER_ID),
           HttpHeaders.getHeader(response, RestUtils.Headers.OWNER_ID));
     }
-    verifyUserMetadataHeaders(expectedHeaders, response);
+    verifyUserMetadataHeaders(expectedHeaders, response, usermetadata);
+    discardContent(responseParts, 1);
   }
 
   /**
    * Verifies User metadata headers from output, to that sent in during input
    * @param expectedHeaders the expected headers in the response.
    * @param response the {@link HttpResponse} which contains the headers of the response.
-   * @throws JSONException
+   * @param usermetadata if non-null, this is expected to come as headers prefixed with
+   *                      {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
    */
-  private void verifyUserMetadataHeaders(HttpHeaders expectedHeaders, HttpResponse response)
-      throws JSONException {
-    for (Map.Entry<String, String> header : expectedHeaders) {
-      String key = header.getKey();
-      if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
-        assertEquals("Value for " + key + "does not match in user metadata", header.getValue(),
-            HttpHeaders.getHeader(response, key));
+  private void verifyUserMetadataHeaders(HttpHeaders expectedHeaders, HttpResponse response, ByteBuffer usermetadata) {
+    if (usermetadata == null) {
+      for (Map.Entry<String, String> header : expectedHeaders) {
+        String key = header.getKey();
+        if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
+          assertEquals("Value for " + key + " does not match in user metadata", header.getValue(),
+              HttpHeaders.getHeader(response, key));
+        }
+      }
+      for (Map.Entry<String, String> header : response.headers()) {
+        String key = header.getKey();
+        if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
+          assertTrue("Key " + key + " does not exist in expected headers", expectedHeaders.contains(key));
+        }
+      }
+    } else {
+      int highestIndex = -1;
+      for (Map.Entry<String, String> header : response.headers()) {
+        String key = header.getKey();
+        if (key.startsWith(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX)) {
+          int index = Integer.parseInt(key.substring(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX.length()));
+          highestIndex = Math.max(index, highestIndex);
+        }
+      }
+      if (highestIndex == -1) {
+        fail("There should have been user metadata in the response");
+      } else {
+        for (int i = 0; i <= highestIndex; i++) {
+          String value = response.headers().get(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX + i);
+          for (byte b : value.getBytes()) {
+            assertTrue("Received user metadata should not be longer than the original", usermetadata.hasRemaining());
+            assertEquals("Byte of received user metadata does not match original", usermetadata.get(), b);
+          }
+        }
+        assertFalse("Some user metadata was not found in the response", usermetadata.hasRemaining());
       }
     }
   }
@@ -363,9 +417,9 @@ public class FrontendIntegrationTest {
       throws ExecutionException, InterruptedException {
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
-    discardContent(responseParts, 1);
     assertEquals("Unexpected response status", expectedStatusCode, response.getStatus());
     assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
+    discardContent(responseParts, 1);
   }
 
   /**
@@ -380,5 +434,58 @@ public class FrontendIntegrationTest {
     assertTrue("No Last-Modified header", receivedHeaders.get(HttpHeaders.Names.LAST_MODIFIED) != null);
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
         receivedHeaders.get(RestUtils.Headers.BLOB_SIZE));
+  }
+
+  /**
+   * Posts a blob with the given {@code headers} and {@code content}.
+   * @param headers the headers required.
+   * @param content the content of the blob.
+   * @param usermetadata the {@link ByteBuffer} that represents user metadata
+   * @return the blob ID of the blob.
+   * @throws Exception
+   */
+  private String multipartPostBlobAndVerify(HttpHeaders headers, ByteBuffer content, ByteBuffer usermetadata)
+      throws Exception {
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
+    HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, usermetadata);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.getStatus());
+    assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
+    assertTrue("No " + RestUtils.Headers.CREATION_TIME,
+        HttpHeaders.getHeader(response, RestUtils.Headers.CREATION_TIME, null) != null);
+    assertEquals("Content-Length is not 0", 0, HttpHeaders.getContentLength(response));
+    String blobId = HttpHeaders.getHeader(response, HttpHeaders.Names.LOCATION, null);
+
+    if (blobId == null) {
+      fail("postBlobAndVerify did not return a blob ID");
+    }
+    discardContent(responseParts, 1);
+    return blobId;
+  }
+
+  /**
+   * Creates a {@link HttpPostRequestEncoder} that encodes the given {@code request} and {@code blobContent}.
+   * @param request the {@link HttpRequest} containing headers and other metadata about the request.
+   * @param blobContent the {@link ByteBuffer} that represents the content of the blob.
+   * @param usermetadata the {@link ByteBuffer} that represents user metadata
+   * @return a {@link HttpPostRequestEncoder} that can encode the {@code request} and {@code blobContent}.
+   * @throws HttpPostRequestEncoder.ErrorDataEncoderException
+   * @throws IOException
+   */
+  private HttpPostRequestEncoder createEncoder(HttpRequest request, ByteBuffer blobContent, ByteBuffer usermetadata)
+      throws HttpPostRequestEncoder.ErrorDataEncoderException, IOException {
+    HttpDataFactory httpDataFactory = new DefaultHttpDataFactory(false);
+    HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(httpDataFactory, request, true);
+    FileUpload fileUpload = new MemoryFileUpload(RestUtils.MultipartPost.BLOB_PART, RestUtils.MultipartPost.BLOB_PART,
+        "application/octet-stream", "", Charset.forName("UTF-8"), blobContent.remaining());
+    fileUpload.setContent(Unpooled.wrappedBuffer(blobContent));
+    encoder.addBodyHttpData(fileUpload);
+    fileUpload =
+        new MemoryFileUpload(RestUtils.MultipartPost.USER_METADATA_PART, RestUtils.MultipartPost.USER_METADATA_PART,
+            "application/octet-stream", "", Charset.forName("UTF-8"), usermetadata.remaining());
+    fileUpload.setContent(Unpooled.wrappedBuffer(usermetadata));
+    encoder.addBodyHttpData(fileUpload);
+    return encoder;
   }
 }

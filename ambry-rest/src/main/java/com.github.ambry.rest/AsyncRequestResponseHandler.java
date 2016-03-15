@@ -397,8 +397,10 @@ class AsyncRequestWorker implements Runnable {
    * Processes the {@code asyncRequestInfo}. Discerns the type of {@link RestMethod} in the request and calls the right
    * function of the {@link BlobStorageService}.
    * @param asyncRequestInfo the currently dequeued {@link AsyncRequestInfo}.
+   * @throws RestServiceException if the request cannot be prepared for hand-off to the {@link BlobStorageService}.
    */
-  private void processRequest(AsyncRequestInfo asyncRequestInfo) {
+  private void processRequest(AsyncRequestInfo asyncRequestInfo)
+      throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     // needed to avoid double counting.
     long blobStorageProcessingTime = 0;
@@ -407,6 +409,7 @@ class AsyncRequestWorker implements Runnable {
       onRequestDequeue(asyncRequestInfo);
       RestResponseChannel restResponseChannel = asyncRequestInfo.restResponseChannel;
       RestMethod restMethod = restRequest.getRestMethod();
+      restRequest.prepare();
       logger.trace("Processing request {} with RestMethod {}", restRequest.getUri(), restMethod);
       long blobStorageProcessingStartTime = System.currentTimeMillis();
       switch (restMethod) {

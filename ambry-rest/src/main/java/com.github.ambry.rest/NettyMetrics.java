@@ -19,6 +19,7 @@ class NettyMetrics {
   public final Meter channelCreationRate;
   public final Meter channelDestructionRate;
   public final Meter requestArrivalRate;
+  public final Meter multipartPostRequestRate;
   // NettyResponseChannel
   public final Meter bytesWriteRate;
   public final Meter requestCompletionRate;
@@ -93,6 +94,8 @@ class NettyMetrics {
     channelDestructionRate =
         metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "ChannelDestructionRate"));
     requestArrivalRate = metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "RequestArrivalRate"));
+    multipartPostRequestRate =
+        metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "MultipartPostRequestRate"));
     // NettyResponseChannel
     bytesWriteRate = metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "BytesWriteRate"));
     requestCompletionRate =

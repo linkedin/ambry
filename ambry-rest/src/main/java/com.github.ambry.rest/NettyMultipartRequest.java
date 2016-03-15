@@ -1,9 +1,7 @@
 package com.github.ambry.rest;
 
-import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.ReadableStreamChannel;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpRequest;
@@ -180,11 +178,11 @@ public class NettyMultipartRequest extends NettyRequest {
       throws RestServiceException {
     if (part.getHttpDataType() == InterfaceHttpData.HttpDataType.FileUpload) {
       FileUpload fileUpload = (FileUpload) part;
-      if (fileUpload.getName().equals(RestUtils.MultipartPost.Blob_Part)) {
+      if (fileUpload.getName().equals(RestUtils.MultipartPost.BLOB_PART)) {
         // this is actual data.
         if (hasBlob) {
           nettyMetrics.repeatedPartsError.inc();
-          throw new RestServiceException("Request has more than one " + RestUtils.MultipartPost.Blob_Part,
+          throw new RestServiceException("Request has more than one " + RestUtils.MultipartPost.BLOB_PART,
               RestServiceErrorCode.BadRequest);
         } else {
           hasBlob = true;
@@ -221,8 +219,7 @@ public class NettyMultipartRequest extends NettyRequest {
           // TODO: will avoid the copy.
           fileUpload.content().readBytes(buffer);
           buffer.flip();
-          ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(buffer);
-          allArgs.put(name, channel);
+          allArgs.put(name, buffer);
         }
       }
     } else {

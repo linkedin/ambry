@@ -282,7 +282,7 @@ public class MockRestRequest implements RestRequest {
       Iterator<String> headerKeys = headers.keys();
       while (headerKeys.hasNext()) {
         String headerKey = headerKeys.next();
-        String headerValue = JSONObject.NULL.equals(headers.get(headerKey)) ? null : headers.getString(headerKey);
+        Object headerValue = JSONObject.NULL.equals(headers.get(headerKey)) ? null : headers.get(headerKey);
         addOrUpdateArg(headerKey, headerValue);
       }
     }
@@ -299,7 +299,8 @@ public class MockRestRequest implements RestRequest {
 
     // convert all StringBuilders to String
     for (Map.Entry<String, Object> e : args.entrySet()) {
-      if (e.getValue() != null) {
+      Object value = e.getValue();
+      if (value != null && value instanceof StringBuilder) {
         args.put(e.getKey(), (e.getValue()).toString());
       }
     }
@@ -312,21 +313,23 @@ public class MockRestRequest implements RestRequest {
    * @param value the value of the argument.
    * @throws UnsupportedEncodingException if {@code key} or {@code value} cannot be URL decoded.
    */
-  private void addOrUpdateArg(String key, String value)
+  private void addOrUpdateArg(String key, Object value)
       throws UnsupportedEncodingException {
     key = URLDecoder.decode(key, "UTF-8");
-    if (value != null) {
-      value = URLDecoder.decode(value, "UTF-8");
-    }
-    StringBuilder sb;
-    if (value != null && args.get(key) == null) {
-      sb = new StringBuilder(value);
-      args.put(key, sb);
-    } else if (value != null) {
-      sb = (StringBuilder) args.get(key);
-      sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(value);
-    } else if (!args.containsKey(key)) {
-      args.put(key, null);
+    if (value != null && value instanceof String) {
+      String valueStr = URLDecoder.decode((String) value, "UTF-8");
+      StringBuilder sb;
+      if (args.get(key) == null) {
+        sb = new StringBuilder(valueStr);
+        args.put(key, sb);
+      } else {
+        sb = (StringBuilder) args.get(key);
+        sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(value);
+      }
+    } else if (value != null && args.containsKey(key)) {
+      throw new IllegalStateException("Value of key [" + key + "] is not a string and it already exists in the args");
+    } else {
+      args.put(key, value);
     }
   }
 
