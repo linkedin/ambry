@@ -41,14 +41,6 @@ class NettyConfig {
   public final int nettyServerSoBacklog;
 
   /**
-   * Startup wait time (in seconds). If the netty server does not start up within this time, the startup is considered
-   * failed.
-   */
-  @Config("netty.server.startup.wait.seconds")
-  @Default("30")
-  public final long nettyServerStartupWaitSeconds;
-
-  /**
    * Number of netty worker threads.
    */
   @Config("netty.server.worker.thread.count")
@@ -60,7 +52,6 @@ class NettyConfig {
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
     nettyServerPort = verifiableProperties.getInt("netty.server.port", 1174);
     nettyServerSoBacklog = verifiableProperties.getInt("netty.server.sobacklog", 100);
-    nettyServerStartupWaitSeconds = verifiableProperties.getLong("netty.server.startup.wait.seconds", 30);
     nettyServerWorkerThreadCount = verifiableProperties.getInt("netty.server.worker.thread.count", 1);
   }
 }
