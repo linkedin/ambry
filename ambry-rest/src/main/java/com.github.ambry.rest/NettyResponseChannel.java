@@ -568,7 +568,7 @@ class NettyResponseChannel implements RestResponseChannel {
      */
     @Override
     public void operationProgressed(ChannelProgressiveFuture future, long progress, long total) {
-      logger.trace("{} bytes of response written on channel {}", ctx.channel());
+      logger.trace("{} bytes of response written on channel {}", progress, ctx.channel());
       while (chunksAwaitingCallback.peek() != null && progress >= chunksAwaitingCallback
           .peek().writeCompleteThreshold) {
         chunksAwaitingCallback.poll().resolveChunk(null);

@@ -22,7 +22,6 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -305,9 +304,55 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void getOperationOrBlobIdFromUriTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    String path = "expectedPath";
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/" + path, null, null);
-    assertEquals("Unexpected path", path, AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest));
+    // no operation
+    String[] noOpUris = {"", "/"};
+    for (String uri : noOpUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null, null);
+      assertEquals("Unexpected operation/blob id in " + uri, "",
+          AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest));
+    }
+
+    // valid operation
+    String expectedOperationOrBlobId = "expectedOp";
+    String[] validOpUris = {"/" + expectedOperationOrBlobId,
+        "/" + expectedOperationOrBlobId + "/random/extra", expectedOperationOrBlobId,
+        expectedOperationOrBlobId + "/random/extra"};
+    for (String uri : validOpUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null, null);
+      assertEquals("Unexpected operation/blob id in " + uri, expectedOperationOrBlobId,
+          AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest));
+    }
+  }
+
+  /**
+   * Tests {@link AmbryBlobStorageService#getBlobSubResource(RestRequest)}.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  @Test
+  public void getBlobSubResourceTest()
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    // sub resource null
+    String[] nullUris = {"/op", "/op/", "/op/invalid", "/op/invalid/", "op", "op/", "op/invalid", "op/invalid/"};
+    for (String uri : nullUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null, null);
+      assertNull("There was no sub-resource expected", AmbryBlobStorageService.getBlobSubResource(restRequest));
+    }
+
+    // valid sub resource
+    String[] nonNullUris = {"/op/", "/op/random/", "op/", "op/random/"};
+    for (String uri : nonNullUris) {
+      String fullUri = uri + RestUtils.SubResource.BlobInfo;
+      RestRequest restRequest = createRestRequest(RestMethod.GET, fullUri, null, null);
+      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.BlobInfo,
+          AmbryBlobStorageService.getBlobSubResource(restRequest));
+
+      fullUri = uri + RestUtils.SubResource.UserMetadata;
+      restRequest = createRestRequest(RestMethod.GET, fullUri, null, null);
+      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.UserMetadata,
+          AmbryBlobStorageService.getBlobSubResource(restRequest));
+    }
   }
 
   /**
@@ -330,8 +375,38 @@ public class AmbryBlobStorageServiceTest {
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
+    getUserMetadataAndVerify(blobId, headers);
+    getBlobInfoAndVerify(blobId, headers);
     getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
+  }
+
+  /**
+   * Tests how metadata that has not been POSTed in the form of headers is returned.
+   * @throws Exception
+   */
+  @Test
+  public void oldStyleUserMetadataTest()
+      throws Exception {
+    ByteBuffer content = ByteBuffer.allocate(0);
+    BlobProperties blobProperties = new BlobProperties(0, "userMetadataTestOldStyleServiceID");
+    byte[] usermetadata = RestTestUtils.getRandomBytes(25);
+    String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content)).get();
+
+    RestUtils.SubResource[] subResources = {RestUtils.SubResource.UserMetadata, RestUtils.SubResource.BlobInfo};
+    for (RestUtils.SubResource subResource : subResources) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, blobId + "/" + subResource, null, null);
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      doOperation(restRequest, restResponseChannel);
+      assertEquals("Unexpected response status for " + subResource, ResponseStatus.Ok,
+          restResponseChannel.getResponseStatus());
+      assertEquals("Unexpected Content-Type for " + subResource, "application/octet-stream",
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+      assertEquals("Unexpected Content-Length for " + subResource, usermetadata.length,
+          Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+      assertArrayEquals("Unexpected user metadata for " + subResource, usermetadata,
+          restResponseChannel.getResponseBody());
+    }
   }
 
   /**
@@ -349,7 +424,7 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     HeadForGetCallback callback =
-        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, 0);
+        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
@@ -362,7 +437,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, 0);
+    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
@@ -373,7 +448,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, 0);
+    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
         responseHandler.getException().getClass());
@@ -389,13 +464,13 @@ public class AmbryBlobStorageServiceTest {
     restRequest = new BadRestRequest();
     // there is an exception already.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, 0);
+    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
     // there is no exception and the exception thrown in the callback is the primary exception.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, 0);
+    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
     BlobInfo blobInfo = new BlobInfo(null, null);
     callback.onCompletion(blobInfo, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getException());
@@ -700,84 +775,37 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Does a {@link AmbryBlobStorageService#handleGet(RestRequest, RestResponseChannel)} and returns
-   * the result, if any. If an exception occurs during the operation, throws the exception.
+   * Does an operation in {@link AmbryBlobStorageService} as dictated by the {@link RestMethod} in {@code restRequest}
+   * and returns the result, if any. If an exception occurs during the operation, throws the exception.
    * @param restRequest the {@link RestRequest} that needs to be submitted to the {@link AmbryBlobStorageService}.
    * @param restResponseChannel the {@link RestResponseChannel} to use to return the response.
-   * @return the response as a {@link ReadableStreamChannel}.
    * @throws Exception
    */
-  private ReadableStreamChannel doGet(RestRequest restRequest, RestResponseChannel restResponseChannel)
+  private void doOperation(RestRequest restRequest, RestResponseChannel restResponseChannel)
       throws Exception {
     responseHandler.reset();
-    ambryBlobStorageService.handleGet(restRequest, restResponseChannel);
-    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
-      if (responseHandler.getException() != null) {
-        throw responseHandler.getException();
-      }
-    } else {
-      throw new IllegalStateException("handleGet() timed out");
+    switch (restRequest.getRestMethod()) {
+      case POST:
+        ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
+        break;
+      case GET:
+        ambryBlobStorageService.handleGet(restRequest, restResponseChannel);
+        break;
+      case DELETE:
+        ambryBlobStorageService.handleDelete(restRequest, restResponseChannel);
+        break;
+      case HEAD:
+        ambryBlobStorageService.handleHead(restRequest, restResponseChannel);
+        break;
+      default:
+        fail("RestMethod not supported: " + restRequest.getRestMethod());
     }
-    return responseHandler.getResponse();
-  }
-
-  /**
-   * Does a {@link AmbryBlobStorageService#handlePost(RestRequest, RestResponseChannel)}. If an exception occurs during
-   * the operation, throws the exception.
-   * @param restRequest the {@link RestRequest} that needs to be submitted to the {@link AmbryBlobStorageService}.
-   * @param restResponseChannel the {@link RestResponseChannel} to use to return the response.
-   * @throws Exception
-   */
-  private void doPost(RestRequest restRequest, RestResponseChannel restResponseChannel)
-      throws Exception {
-    responseHandler.reset();
-    ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
     if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
       if (responseHandler.getException() != null) {
         throw responseHandler.getException();
       }
     } else {
-      throw new IllegalStateException("handlePost() timed out");
-    }
-  }
-
-  /**
-   * Does a {@link AmbryBlobStorageService#handleDelete(RestRequest, RestResponseChannel)}. If an exception occurs
-   * during the operation, throws the exception.
-   * @param restRequest the {@link RestRequest} that needs to be submitted to the {@link AmbryBlobStorageService}.
-   * @param restResponseChannel the {@link RestResponseChannel} to use to return the response.
-   * @throws Exception
-   */
-  private void doDelete(RestRequest restRequest, RestResponseChannel restResponseChannel)
-      throws Exception {
-    responseHandler.reset();
-    ambryBlobStorageService.handleDelete(restRequest, restResponseChannel);
-    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
-      if (responseHandler.getException() != null) {
-        throw responseHandler.getException();
-      }
-    } else {
-      throw new IllegalStateException("handleDelete() timed out");
-    }
-  }
-
-  /**
-   * Does a {@link AmbryBlobStorageService#handleHead(RestRequest, RestResponseChannel)}. If an exception occurs during
-   * the operation, throws the exception.
-   * @param restRequest the {@link RestRequest} that needs to be submitted to the {@link AmbryBlobStorageService}.
-   * @param restResponseChannel the {@link RestResponseChannel} to use to return the response.
-   * @throws Exception
-   */
-  private void doHead(RestRequest restRequest, RestResponseChannel restResponseChannel)
-      throws Exception {
-    responseHandler.reset();
-    ambryBlobStorageService.handleHead(restRequest, restResponseChannel);
-    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
-      if (responseHandler.getException() != null) {
-        throw responseHandler.getException();
-      }
-    } else {
-      throw new IllegalStateException("handleHead() timed out");
+      throw new IllegalStateException("doOperation() timed out");
     }
   }
 
@@ -842,23 +870,17 @@ public class AmbryBlobStorageServiceTest {
     try {
       switch (restMethod) {
         case GET:
-          doGet(restRequest, restResponseChannel);
-          fail("GET should have detected a RestServiceException because of a bad router");
+        case DELETE:
+        case HEAD:
+          doOperation(restRequest, restResponseChannel);
+          fail(restMethod + " should have detected a RestServiceException because of a bad router");
           break;
         case POST:
           JSONObject headers = new JSONObject();
           setAmbryHeaders(headers, 0, Utils.Infinite_Time, false, "test-serviceID", "text/plain", "test-ownerId");
           restRequest = createRestRequest(restMethod, "/", headers, null);
-          doPost(restRequest, restResponseChannel);
+          doOperation(restRequest, restResponseChannel);
           fail("POST should have detected a RestServiceException because of a bad router");
-          break;
-        case DELETE:
-          doDelete(restRequest, restResponseChannel);
-          fail("DELETE should have detected a RestServiceException because of a bad router");
-          break;
-        case HEAD:
-          doHead(restRequest, restResponseChannel);
-          fail("HEAD should have detected a RestServiceException because of a bad router");
           break;
         default:
           throw new IllegalArgumentException("Unrecognized RestMethod: " + restMethod);
@@ -884,7 +906,7 @@ public class AmbryBlobStorageServiceTest {
     contents.add(null);
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    doPost(restRequest, restResponseChannel);
+    doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getResponseStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
@@ -908,12 +930,53 @@ public class AmbryBlobStorageServiceTest {
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    ReadableStreamChannel response = doGet(restRequest, restResponseChannel);
+    doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
-    checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
-    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel((int) response.getSize());
-    response.readInto(channel, null).get();
-    assertArrayEquals("GET content does not match original content", expectedContent.array(), channel.getData());
+    checkCommonGetHeadHeaders(restResponseChannel);
+    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
+        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+    assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertArrayEquals("GET content does not match original content", expectedContent.array(),
+        restResponseChannel.getResponseBody());
+  }
+
+  /**
+   * Gets the user metadata of the blob with blob ID {@code blobId} and verifies them against what is expected.
+   * @param blobId the blob ID of the blob to HEAD.
+   * @param expectedHeaders the expected headers in the response.
+   * @throws Exception
+   */
+  private void getUserMetadataAndVerify(String blobId, JSONObject expectedHeaders)
+      throws Exception {
+    RestRequest restRequest =
+        createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    checkCommonGetHeadHeaders(restResponseChannel);
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
+  }
+
+  /**
+   * Gets the blob info of the blob with blob ID {@code blobId} and verifies them against what is expected.
+   * @param blobId the blob ID of the blob to HEAD.
+   * @param expectedHeaders the expected headers in the response.
+   * @throws Exception
+   */
+  private void getBlobInfoAndVerify(String blobId, JSONObject expectedHeaders)
+      throws Exception {
+    RestRequest restRequest =
+        createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    checkCommonGetHeadHeaders(restResponseChannel);
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    verifyBlobProperties(expectedHeaders, restResponseChannel);
+    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
   }
 
   /**
@@ -926,11 +989,29 @@ public class AmbryBlobStorageServiceTest {
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    doHead(restRequest, restResponseChannel);
+    doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
-    checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
-    assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+    checkCommonGetHeadHeaders(restResponseChannel);
+    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match " + RestUtils.Headers.BLOB_SIZE,
+        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
+        expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    verifyBlobProperties(expectedHeaders, restResponseChannel);
+  }
+
+  /**
+   * Verifies blob properties from output, to that sent in during input
+   * @param expectedHeaders the expected headers in the response.
+   * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
+   * @throws JSONException
+   */
+  private void verifyBlobProperties(JSONObject expectedHeaders, MockRestResponseChannel restResponseChannel)
+      throws JSONException {
+    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
+        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
         expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
         restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
@@ -950,7 +1031,6 @@ public class AmbryBlobStorageServiceTest {
           expectedHeaders.getString(RestUtils.Headers.OWNER_ID),
           restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
     }
-    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
   }
 
   /**
@@ -966,7 +1046,7 @@ public class AmbryBlobStorageServiceTest {
       String key = (String) itr.next();
       if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
         String outValue = restResponseChannel.getHeader(key);
-        assertEquals("Value for " + key + "does not match in user metadata", expectedHeaders.getString(key), outValue);
+        assertEquals("Value for " + key + " does not match in user metadata", expectedHeaders.getString(key), outValue);
       }
     }
   }
@@ -980,7 +1060,7 @@ public class AmbryBlobStorageServiceTest {
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    doDelete(restRequest, restResponseChannel);
+    doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
@@ -989,18 +1069,10 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Checks headers that are common to HEAD and GET.
    * @param restResponseChannel the {@link RestResponseChannel} to check headers on.
-   * @param expectedHeaders the expected headers.
-   * @throws JSONException
    */
-  private void checkCommonGetHeadHeaders(MockRestResponseChannel restResponseChannel, JSONObject expectedHeaders)
-      throws JSONException {
-    assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+  private void checkCommonGetHeadHeaders(MockRestResponseChannel restResponseChannel) {
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertTrue("No Last-Modified header", restResponseChannel.getHeader("Last-Modified") != null);
-    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
-        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
-        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
   }
 }
 
@@ -1032,6 +1104,13 @@ class FrontendTestResponseHandler implements RestResponseHandler {
     if (serviceRunning) {
       this.response = response;
       this.exception = exception;
+      if (response != null && exception == null) {
+        try {
+          response.readInto(restResponseChannel, null).get();
+        } catch (Exception e) {
+          this.exception = e;
+        }
+      }
       restResponseChannel.onResponseComplete(exception);
       responseSubmitted.countDown();
     } else {

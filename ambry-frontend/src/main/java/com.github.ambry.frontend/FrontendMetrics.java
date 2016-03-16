@@ -20,7 +20,9 @@ class FrontendMetrics {
   // HEAD
   public final RestRequestMetrics headBlobMetrics;
   // GET
+  public final RestRequestMetrics getBlobInfoMetrics;
   public final RestRequestMetrics getBlobMetrics;
+  public final RestRequestMetrics getUserMetadataMetrics;
   // POST
   public final RestRequestMetrics postBlobMetrics;
 
@@ -80,7 +82,9 @@ class FrontendMetrics {
     // HEAD
     headBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "HeadBlob", metricRegistry);
     // GET
+    getBlobInfoMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlobInfo", metricRegistry);
     getBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlob", metricRegistry);
+    getUserMetadataMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetUserMetadata", metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
 
