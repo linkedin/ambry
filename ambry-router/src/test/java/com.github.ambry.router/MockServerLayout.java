@@ -40,9 +40,9 @@ class MockServerLayout {
 
   /**
    * Return all the {@link MockServer}s contained within this server layout.
-   * @return
+   * @return the list of {@link MockServer}s.
    */
-  public Collection<MockServer> getServers() {
+  public Collection<MockServer> getMockServers() {
     return mockServers.values();
   }
 }

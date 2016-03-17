@@ -44,8 +44,8 @@ interface OperationTracker {
   boolean isDone();
 
   /**
-   * Accounts for response from, or exception for a replica. must invoke this method
-   * if a response or an exception is received.
+   * Accounts for successful or failed response from a replica. Must invoke this method
+   * if a successful or failed response is received for a replica.
    *
    * @param replicaId ReplicaId associated with this response.
    * @param isSuccessful Whether the request to the replicaId is successful or not.

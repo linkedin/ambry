@@ -2,7 +2,8 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.MockTime;
@@ -93,21 +94,15 @@ public class ChunkFillTest {
   /**
    * Create a {@link PutOperation} and pass in a channel with the blobSize set by the caller; and test the chunk
    * filling flow for puts.
+   * Note that this test is for the chunk filling flow, not for the ChunkFiller thread (which never gets exercised,
+   * as we do not even instantiate the {@link PutManager})
    */
   private void fillChunksAndAssertSuccess()
       throws Exception {
     VerifiableProperties vProps = getNonBlockingRouterProperties();
     MockClusterMap mockClusterMap = new MockClusterMap();
-    // Create a router as the PutManager and the operations need a valid router reference.
-    NonBlockingRouter router =
-        (NonBlockingRouter) new NonBlockingRouterFactory(vProps, mockClusterMap, new LoggingNotificationSystem())
-            .getRouter();
-    compositeBuffers.clear();
-    // Create a PutManager as the PutOperations need a valid PutManager reference. The ChunkFiller thread within the
-    // PutManager is not going to find the operations going to be created in this test,
-    // as they are never added to the PutManager. Chunk filling is going to be tested separately. Note that the test
-    // is not for the ChunkFiller thread, but the Chunk filling flow.
-    PutManager putManager = new PutManager(router);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
     BlobProperties putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     Random random = new Random();
@@ -118,8 +113,8 @@ public class ChunkFillTest {
     final ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     FutureResult<String> futureResult = new FutureResult<String>();
     PutOperation op =
-        new PutOperation(putManager, 1, putBlobProperties, putUserMetadata, putChannel, futureResult, null,
-            new MockTime());
+        new PutOperation(routerConfig, mockClusterMap, responseHandler, 1, putBlobProperties, putUserMetadata,
+            putChannel, futureResult, null, new MockTime());
     numChunks = op.getNumDataChunks();
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);
 
@@ -147,8 +142,6 @@ public class ChunkFillTest {
       throw exception;
     }
     assertDataIdentity();
-    putManager.close();
-    router.close();
   }
 
   /**

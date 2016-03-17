@@ -3,7 +3,6 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.ConnectionTrackerWrapper;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
@@ -55,8 +54,7 @@ class MockNetworkClientFactory extends NetworkClientFactory {
   public NetworkClient getNetworkClient()
       throws IOException {
     MockSelector selector = new MockSelector(serverLayout, state, time);
-    ConnectionTrackerWrapper connectionTracker = new ConnectionTrackerWrapper(maxPortsPlainText, maxPortsSsl);
-    return new NetworkClient(selector, connectionTracker, networkConfig, checkoutTimeoutMs, time);
+    return new NetworkClient(selector, networkConfig, maxPortsPlainText, maxPortsSsl, checkoutTimeoutMs, time);
   }
 }
 
