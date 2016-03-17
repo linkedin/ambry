@@ -35,21 +35,21 @@ class NonBlockingRouter implements Router {
   private final NetworkClientFactory networkClientFactory;
   private final ArrayList<OperationController> ocList;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
-  private final AtomicInteger currentOperationsCount = new AtomicInteger(0);
+  // Shared with the operation managers.
+  private final RouterConfig routerConfig;
+  private final NotificationSystem notificationSystem;
+  private final ClusterMap clusterMap;
+  private final NonBlockingRouterMetrics routerMetrics;
+  private final ResponseHandler responseHandler;
+  private final Time time;
   private List<String> idsToDelete = new ArrayList<String>();
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   private static final AtomicLong operationIdGenerator = new AtomicLong(0);
+  private static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
 
-  // Shared with the operation managers.
-  final RouterConfig routerConfig;
-  final NotificationSystem notificationSystem;
-  final ClusterMap clusterMap;
-  final NonBlockingRouterMetrics routerMetrics;
-  // for failure detection.
-  final ResponseHandler responseHandler;
-  final Time time;
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
+  static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
 
   /**
    * Constructs a NonBlockingRouter.
@@ -271,7 +271,7 @@ class NonBlockingRouter implements Router {
    * @param exception {@link Exception} encountered while performing the operation (if any).
    * @param <T> the type of the operation result, which depends on the kind of operation.
    */
-  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
+  static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception) {
     try {
       futureResult.done(operationResult, exception);
@@ -310,9 +310,10 @@ class NonBlockingRouter implements Router {
     OperationController()
         throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
-      putManager = new PutManager(NonBlockingRouter.this);
-      getManager = new GetManager(NonBlockingRouter.this);
-      deleteManager = new DeleteManager(NonBlockingRouter.this);
+      putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, time);
+      getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, time);
+      deleteManager =
+          new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
       requestResponseHandlerThread.start();
     }
@@ -441,7 +442,7 @@ class NonBlockingRouter implements Router {
           onResponse(responseInfoList);
         }
       } catch (Exception e) {
-        logger.error("RequestResponseHandlerThread received exception: ", e);
+        logger.error("Aborting, as requestResponseHandlerThread received an exception: ", e);
       } finally {
         networkClient.close();
         shutDownLatch.countDown();

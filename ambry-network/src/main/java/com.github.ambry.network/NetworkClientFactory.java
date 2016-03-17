@@ -45,9 +45,8 @@ public class NetworkClientFactory {
   public NetworkClient getNetworkClient()
       throws IOException {
     Selector selector = new Selector(networkMetrics, time, sslFactory);
-    ConnectionTracker connectionTracker =
-        new ConnectionTracker(maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl);
-    return new NetworkClient(selector, connectionTracker, networkConfig, connectionCheckoutTimeoutMs, time);
+    return new NetworkClient(selector, networkConfig, maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl,
+        connectionCheckoutTimeoutMs, time);
   }
 }
 

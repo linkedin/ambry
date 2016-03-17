@@ -49,7 +49,7 @@ public class RouterConfig {
   public final int routerConnectionCheckoutTimeoutMs;
 
   /**
-   * Timeout for requests.
+   * Timeout for requests issued by the router to the network layer.
    */
   @Config("router.request.timeout.ms")
   @Default("2000")
@@ -63,7 +63,7 @@ public class RouterConfig {
   public final int routerMaxPutChunkSizeBytes;
 
   /**
-   * The maximum number of parallel requests allowed for a single put operation.
+   * The maximum number of parallel requests issued at a time by the put manager for a chunk.
    */
   @Config("router.put.request.parallelism")
   @Default("3")

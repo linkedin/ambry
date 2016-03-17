@@ -52,9 +52,11 @@ public class PutManagerTest {
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
   // whether to check source and destination data content at byte level.
-  // this is disabled for large blobs as it is too expensive to generate random data.
+  // this is disabled for large blobs as it is too expensive to generate random data and do byte by byte comparison.
   private boolean checkContentEquality = false;
   private int chunkSize;
+  private int requestParallelism;
+  private int successTarget;
   private final Random random = new Random();
 
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
@@ -69,6 +71,8 @@ public class PutManagerTest {
       throws Exception {
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
+    requestParallelism = 3;
+    successTarget = 2;
     checkContentEquality = true;
     requestAndResultsList.clear();
     mockSelectorState.set(MockSelectorState.Good);
@@ -239,7 +243,7 @@ public class PutManagerTest {
       String host = dataNodeIds.get(i).getHostname();
       int port = dataNodeIds.get(i).getPort();
       MockServer server = mockServerLayout.getMockServer(host, port);
-      server.setPutError(ServerErrorCode.Unknown_Error);
+      server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
     }
     submitPutsAndAssertFailure(true);
   }
@@ -265,7 +269,7 @@ public class PutManagerTest {
         String host = dataNodeIds.get(i).getHostname();
         int port = dataNodeIds.get(i).getPort();
         MockServer server = mockServerLayout.getMockServer(host, port);
-        server.setPutError(ServerErrorCode.Unknown_Error);
+        server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
       }
     }
     submitPutsAndAssertSuccess(true);
@@ -287,7 +291,7 @@ public class PutManagerTest {
         String host = dataNodeIds.get(i).getHostname();
         int port = dataNodeIds.get(i).getPort();
         MockServer server = mockServerLayout.getMockServer(host, port);
-        server.setPutError(ServerErrorCode.Unknown_Error);
+        server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
       }
     }
     submitPutsAndAssertFailure(true);
@@ -306,32 +310,17 @@ public class PutManagerTest {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize));
     List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
-    // Set the state of the mock servers so that they return an error for any sends issued. Then,
-    // set the state to make them block in a send just before returning the response. This allows this test to clear
-    // the error for future sends to that node.
+    // Set the state of the mock servers so that they return an error for the first send issued,
+    // but later ones succeed. With 3 nodes, for slipped puts, all partitions will come from the same nodes,
+    // so we set the errors in such a way that the first request received by every node fails.
+    List<ServerErrorCode> serverErrorList = new ArrayList<ServerErrorCode>();
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.No_Error);
     for (DataNodeId dataNodeId : dataNodeIds) {
       MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
-      server.setBlockUntilNotifiedState();
-      server.setPutError(ServerErrorCode.Unknown_Error);
+      server.setPutErrors(serverErrorList);
     }
-
-    CountDownLatch doneLatch = submitPut();
-
-    // At this time, all the first set of requests that are sent to the local nodes would have ended up in failures
-    // These failure responses are created at the mock server, but the response would not yet have been returned to
-    // the mock selector. When this test unblocks it below, since all those requests would have failed,
-    // the first attempt at putting the chunk would have failed. A second attempt will then be made by the since
-    // slipped puts are on by default with a value of 2. The second attempt should succeed,
-    // as the error state is cleared for all the servers below before the blocked sends are unblocked.
-    // Refer to MockServer implementation for details.
-    for (DataNodeId dataNodeId : dataNodeIds) {
-      MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
-      server.resetPutError();
-      server.resetBlockUntilNotifiedState();
-    }
-    doneLatch.await();
-    assertSuccess();
-    assertCloseCleanup();
+    submitPutsAndAssertSuccess(true);
   }
 
   /**
@@ -464,8 +453,8 @@ public class PutManagerTest {
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", "3");
-    properties.setProperty("router.put.success.target", "2");
+    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     return new VerifiableProperties(properties);
   }
 
@@ -549,7 +538,7 @@ public class PutManagerTest {
       Assert.assertNull("exception should be null", exception);
 
       HashMap<String, ByteBuffer> allChunks = new HashMap<String, ByteBuffer>();
-      for (MockServer mockServer : mockServerLayout.getServers()) {
+      for (MockServer mockServer : mockServerLayout.getMockServers()) {
         for (Map.Entry<String, ByteBuffer> blobEntry : mockServer.getBlobs().entrySet()) {
           ByteBuffer chunk = allChunks.get(blobEntry.getKey());
           if (chunk == null) {
@@ -745,11 +734,17 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
     }
   }
 
+  /**
+   * {@inheritDoc}
+   */
   @Override
   public long getSize() {
     return size;
   }
 
+  /**
+   * {@inheritDoc}
+   */
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     this.writableChannel = asyncWritableChannel;
@@ -758,11 +753,17 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
     return returnedFuture;
   }
 
+  /**
+   * {@inheritDoc}
+   */
   @Override
   public boolean isOpen() {
     return readSoFar < size;
   }
 
+  /**
+   * {@inheritDoc}
+   */
   @Override
   public void close()
       throws IOException {

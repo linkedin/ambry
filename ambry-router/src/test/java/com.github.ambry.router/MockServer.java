@@ -10,18 +10,18 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.ByteBufferChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
  * A class that mocks the server (data node) and provides methods for sending requests and setting error states.
  */
 class MockServer {
-  private ServerErrorCode putError = ServerErrorCode.No_Error;
-  private final AtomicBoolean blockResponses = new AtomicBoolean(false);
-  private final Object block = new Object();
+  private ServerErrorCode hardError = null;
+  private LinkedList<ServerErrorCode> putErrors = new LinkedList<ServerErrorCode>();
   private final Map<String, ByteBuffer> blobs = new ConcurrentHashMap<String, ByteBuffer>();
 
   /**
@@ -33,40 +33,32 @@ class MockServer {
    */
   public MockBoundedByteBufferReceive send(Send send)
       throws IOException {
-    try {
-      RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
-      switch (type) {
-        case PutRequest:
-          PutRequest putRequest = (PutRequest) send;
+    RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
+    switch (type) {
+      case PutRequest:
+        PutRequest putRequest = (PutRequest) send;
+        final ServerErrorCode putError =
+            hardError != null ? hardError : putErrors.size() > 0 ? putErrors.poll() : ServerErrorCode.No_Error;
+        if (putError == ServerErrorCode.No_Error) {
           updateBlobMap(putRequest);
-          return new MockBoundedByteBufferReceive(
-              new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), putError) {
-                ByteBuffer getPayload() {
-                  ByteBuffer buf;
-                  buf = ByteBuffer.allocate(2 + 2 + 4 + 4 + 2);
-                  buf.putShort((short) RequestOrResponseType.PutResponse.ordinal());
-                  buf.putShort(versionId);
-                  buf.putInt(correlationId);
-                  buf.putInt(0);
-                  buf.putShort((short) putError.ordinal());
-                  buf.flip();
-                  // ignore version for now
-                  return buf;
-                }
-              }.getPayload());
-        default:
-          throw new IOException("Unknown request type received");
-      }
-    } finally {
-      if (blockResponses.get()) {
-        try {
-          synchronized (block) {
-            block.wait();
-          }
-        } catch (InterruptedException e) {
-          throw new IllegalStateException("wait() should not have been interrupted");
         }
-      }
+        return new MockBoundedByteBufferReceive(
+            new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), putError) {
+              ByteBuffer getPayload() {
+                ByteBuffer buf;
+                buf = ByteBuffer.allocate(2 + 2 + 4 + 4 + 2);
+                buf.putShort((short) RequestOrResponseType.PutResponse.ordinal());
+                buf.putShort(versionId);
+                buf.putInt(correlationId);
+                buf.putInt(0);
+                buf.putShort((short) putError.ordinal());
+                buf.flip();
+                // ignore version for now
+                return buf;
+              }
+            }.getPayload());
+      default:
+        throw new IOException("Unknown request type received");
     }
   }
 
@@ -93,44 +85,35 @@ class MockServer {
   }
 
   /**
-   * Set the error that affects subsequent PutRequests sent to this node.
-   * @param putError the error that affects subsequent PutRequests.
+   * Set the error for each request from this point onwards that affects subsequent PutRequests sent to this node
+   * (until/unless the next set or reset error method is invoked).
+   * Each request from the list is used exactly once and in order. So, if the list contains {No_Error, Unknown_Error,
+   * Disk_Error}, then the first, second and third requests would receive No_Error,
+   * Unknown_Error and Disk_Error respectively. Once the errors are exhausted, the default No_Error is assumed for
+   * all further requests until the next call to this method.
+   * @param putErrors the list of errors that affects subsequent PutRequests.
    */
-  public void setPutError(ServerErrorCode putError) {
-    this.putError = putError;
+  public void setPutErrors(List<ServerErrorCode> putErrors) {
+    this.putErrors.clear();
+    this.putErrors.addAll(putErrors);
   }
 
   /**
-   * Clear the error for subsequent PutRequests.
+   * Set the error to be set in the responses for all requests from this point onwards (until/unless another set or
+   * reset method for errors is invoked).
+   * @param putError the error to set from this point onwards.
    */
-  public void resetPutError() {
-    this.putError = ServerErrorCode.No_Error;
+  public void setPutErrorForAllRequests(ServerErrorCode putError) {
+    this.hardError = putError;
   }
 
   /**
-   * Set state to make every send block until notified.
+   * Clear the error for subsequent PutRequests. That is all responses from this point onwards will be successful
+   * ({@link ServerErrorCode#No_Error}) until/unless another set error method is invoked.
    */
-  public void setBlockUntilNotifiedState() {
-    blockResponses.set(true);
-  }
-
-  /**
-   * Clear the set-until-notified state.
-   */
-  public void resetBlockUntilNotifiedState() {
-    blockResponses.set(false);
-    synchronized (block) {
-      block.notifyAll();
-    }
-  }
-
-  /**
-   * Unblock a send that is currently blocked.
-   */
-  public void unBlockOne() {
-    synchronized (block) {
-      block.notify();
-    }
+  public void resetPutErrors() {
+    this.putErrors.clear();
+    this.hardError = null;
   }
 }
 
