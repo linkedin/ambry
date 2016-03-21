@@ -71,7 +71,7 @@ public class NettyServerTest {
     try {
       nioServer.start();
       fail("NettyServer start() should have failed because of bad nettyServerPort value");
-    } catch (InstantiationException e) {
+    } catch (IllegalArgumentException e) {
       // nothing to do. expected.
     } finally {
       if (nioServer != null) {
