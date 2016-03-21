@@ -136,6 +136,24 @@ public class FrontendIntegrationTest {
     getHeadAndVerify(blobId, headers, usermetadata);
   }
 
+  /*
+   * Tests health check request
+   * @throws ExecutionException
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void healtCheckRequestTest()
+      throws ExecutionException, InterruptedException, IOException {
+    FullHttpRequest httpRequest =
+        new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/healthCheck", Unpooled.buffer(0));
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    ByteBuffer content = getContent(response, responseParts);
+    assertEquals("GET content does not match original content", "GOOD", new String(content.array()));
+  }
+
   // helpers
   // general
 
