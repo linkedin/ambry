@@ -1,11 +1,13 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -18,6 +20,7 @@ import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.Map;
@@ -31,6 +34,7 @@ import org.slf4j.LoggerFactory;
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
 class AmbryBlobStorageService implements BlobStorageService {
+  protected static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
   protected final FrontendMetrics frontendMetrics;
 
   private final ClusterMap clusterMap;
@@ -79,11 +83,24 @@ class AmbryBlobStorageService implements BlobStorageService {
       frontendMetrics.getBlobRate.mark();
       logger.trace("Handling GET request - {}", restRequest.getUri());
       String operationOrBlobId = getOperationOrBlobIdFromUri(restRequest);
-      restRequest.getMetricsTracker().injectMetrics(frontendMetrics.getBlobMetrics);
+      RestUtils.SubResource subresource = getBlobSubResource(restRequest);
+      RestRequestMetrics requestMetrics = frontendMetrics.getBlobMetrics;
+      if (subresource != null) {
+        logger.trace("Sub-resource requested: {}", subresource);
+        switch (subresource) {
+          case BlobInfo:
+            requestMetrics = frontendMetrics.getBlobInfoMetrics;
+            break;
+          case UserMetadata:
+            requestMetrics = frontendMetrics.getUserMetadataMetrics;
+            break;
+        }
+      }
+      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       logger.trace("Forwarding GET of {} to the router", operationOrBlobId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       HeadForGetCallback callback =
-          new HeadForGetCallback(this, restRequest, restResponseChannel, router, cacheValidityInSecs);
+          new HeadForGetCallback(this, restRequest, restResponseChannel, router, subresource, cacheValidityInSecs);
       router.getBlobInfo(operationOrBlobId, callback);
     } catch (Exception e) {
       frontendMetrics.operationError.inc();
@@ -229,7 +246,53 @@ class AmbryBlobStorageService implements BlobStorageService {
    */
   protected static String getOperationOrBlobIdFromUri(RestRequest restRequest) {
     String path = restRequest.getPath();
-    return (path.startsWith("/") ? path.substring(1, path.length()) : path);
+    int startIndex = path.startsWith("/") ? 1 : 0;
+    int endIndex = path.indexOf("/", startIndex);
+    endIndex = endIndex > 0 ? endIndex : path.length();
+    return path.substring(startIndex, endIndex);
+  }
+
+  /**
+   * Determines if URI is for a blob sub-resource, and if so, returns that sub-resource
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @return sub-resource if the URI includes one; null otherwise.
+   */
+  protected static RestUtils.SubResource getBlobSubResource(RestRequest restRequest) {
+    String path = restRequest.getPath();
+    final int minSegmentsRequired = path.startsWith("/") ? 3 : 2;
+    String[] segments = path.split("/");
+    RestUtils.SubResource subResource = null;
+    if (segments.length >= minSegmentsRequired) {
+      try {
+        subResource = RestUtils.SubResource.valueOf(segments[segments.length - 1]);
+      } catch (IllegalArgumentException e) {
+        // nothing to do.
+      }
+    }
+    return subResource;
+  }
+
+  /**
+   * Sets the blob properties in the headers of the response.
+   * @param blobProperties the {@link BlobProperties} that need to be set in the headers.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  protected static void setBlobPropertiesHeaders(BlobProperties blobProperties, RestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.SERVICE_ID, blobProperties.getServiceId());
+    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, blobProperties.isPrivate());
+    if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
+      restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
+    }
+    if (blobProperties.getContentType() != null) {
+      restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
+    }
+    if (blobProperties.getOwnerId() != null) {
+      restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
+    }
   }
 }
 
@@ -241,6 +304,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
   private final Router router;
+  private final RestUtils.SubResource subResource;
   private final long cacheValidityInSecs;
   private final long operationStartTime = System.currentTimeMillis();
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -251,20 +315,25 @@ class HeadForGetCallback implements Callback<BlobInfo> {
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
    * @param router the {@link Router} instance to use to make the GET call.
+   * @param subResource the sub-resource requested.
    * @param cacheValidityInSecs the period of validity of cache that needs to be sent to the client (in case of non
    *                            private blobs).
    */
   public HeadForGetCallback(AmbryBlobStorageService ambryBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, Router router, long cacheValidityInSecs) {
+      RestResponseChannel restResponseChannel, Router router, RestUtils.SubResource subResource,
+      long cacheValidityInSecs) {
     this.ambryBlobStorageService = ambryBlobStorageService;
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
     this.router = router;
+    this.subResource = subResource;
     this.cacheValidityInSecs = cacheValidityInSecs;
   }
 
   /**
-   * Sets headers and makes a GET call if the result was not null. Otherwise bails out.
+   * Sets headers received from the {@code result} (if non null). If the request is not for a sub resource, makes a GET
+   * call to the router. If the request is for a sub resource, responds immediately. If there was no result or if there
+   * was an exception, bails out.
    * @param result The result of the request i.e a {@link BlobInfo} object with the properties of the blob that is going
    *               to be scheduled for GET. This is non null if the request executed successfully.
    * @param exception The exception that was reported on execution of the request (if any).
@@ -272,6 +341,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
   @Override
   public void onCompletion(BlobInfo result, Exception exception) {
     long processingStartTime = System.currentTimeMillis();
+    ReadableStreamChannel response = null;
     try {
       long routerTime = processingStartTime - operationStartTime;
       ambryBlobStorageService.frontendMetrics.headForGetTimeInMs.update(routerTime);
@@ -281,10 +351,30 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       logger.trace("Callback received for HEAD before GET of {}", blobId);
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
-        logger.trace("Setting response headers for {}", blobId);
-        setResponseHeaders(result);
-        logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
-        router.getBlob(blobId, new GetCallback(ambryBlobStorageService, restRequest, restResponseChannel));
+        BlobProperties blobProperties = result.getBlobProperties();
+        restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
+        if (subResource == null) {
+          logger.trace("Setting response headers for {}", blobId);
+          setGetBlobResponseHeaders(result);
+          logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
+          router.getBlob(blobId, new GetCallback(ambryBlobStorageService, restRequest, restResponseChannel));
+        } else {
+          logger.trace("Handling setting headers for sub-resource: {}", subResource);
+          if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
+            AmbryBlobStorageService.setBlobPropertiesHeaders(blobProperties, restResponseChannel);
+          }
+          // TODO: if old style, make RestUtils.getUserMetadata() just return null.
+          Map<String, String> userMetadata = RestUtils.buildUserMetadata(result.getUserMetadata());
+          if (shouldSendMetadataAsContent(userMetadata)) {
+            restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+            restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, result.getUserMetadata().length);
+            response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(result.getUserMetadata()));
+          } else {
+            setUserMetadataHeaders(userMetadata, restResponseChannel);
+            restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+            response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
+          }
+        }
       } else if (exception == null) {
         exception = new IllegalStateException("Both response and exception are null for HeadForGetCallback");
       }
@@ -299,9 +389,11 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       long processingTime = System.currentTimeMillis() - processingStartTime;
       ambryBlobStorageService.frontendMetrics.headForGetCallbackProcessingTimeInMs.update(processingTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
-      if (exception != null) {
-        ambryBlobStorageService.frontendMetrics.operationError.inc();
-        ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null, exception);
+      if (response != null || exception != null) {
+        if (exception != null) {
+          ambryBlobStorageService.frontendMetrics.operationError.inc();
+        }
+        ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, response, exception);
       }
     }
   }
@@ -311,10 +403,9 @@ class HeadForGetCallback implements Callback<BlobInfo> {
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo)
+  private void setGetBlobResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
@@ -331,6 +422,38 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
           new Date(System.currentTimeMillis() + cacheValidityInSecs * Time.MsPerSec));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + cacheValidityInSecs);
+    }
+  }
+
+  /**
+   * Determines if user metadata should be sent as content by looking for any keys that are prefixed with
+   * {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
+   * @param userMetadata the user metadata that was constructed from the byte stream.
+   * @return {@code true} if any key is prefixed with {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
+   *         {@code false} otherwise.
+   */
+  private boolean shouldSendMetadataAsContent(Map<String, String> userMetadata) {
+    boolean shouldSendAsContent = false;
+    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
+      if (entry.getKey().startsWith(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX)) {
+        shouldSendAsContent = true;
+        break;
+      }
+    }
+    return shouldSendAsContent;
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadata the user metadata that need to be set in the headers.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  protected static void setUserMetadataHeaders(Map<String, String> userMetadata,
+      RestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
+      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
     }
   }
 }
@@ -623,26 +746,9 @@ class HeadCallback implements Callback<BlobInfo> {
     restResponseChannel.setStatus(ResponseStatus.Ok);
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
-
-    // Blob props
-    restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
-    restResponseChannel.setHeader(RestUtils.Headers.SERVICE_ID, blobProperties.getServiceId());
-    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, blobProperties.isPrivate());
-    if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
-      restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
-    }
     if (blobProperties.getContentType() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE, blobProperties.getContentType());
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
-    if (blobProperties.getOwnerId() != null) {
-      restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
-    }
-    byte[] userMetadataArray = blobInfo.getUserMetadata();
-    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
-    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
-      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
-    }
+    AmbryBlobStorageService.setBlobPropertiesHeaders(blobProperties, restResponseChannel);
   }
 }

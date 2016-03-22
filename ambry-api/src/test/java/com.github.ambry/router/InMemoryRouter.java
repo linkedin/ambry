@@ -305,18 +305,19 @@ class InMemoryBlobPoster implements Runnable {
     String operationResult = null;
     Exception exception = null;
     try {
-      operationResult = UUID.randomUUID().toString();
-      if (blobs.containsKey(operationResult)) {
+      String blobId = UUID.randomUUID().toString();
+      if (blobs.containsKey(blobId)) {
         exception =
             new RouterException("UUID is broken. Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }
       ByteBuffer blobData = readBlob(postData.getReadableStreamChannel());
       InMemoryRouter.InMemoryBlob blob =
           new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
-      blobs.put(operationResult, blob);
+      blobs.put(blobId, blob);
       if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(operationResult, postData.getBlobProperties(), postData.getUsermetadata());
+        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), postData.getUsermetadata());
       }
+      operationResult = blobId;
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {

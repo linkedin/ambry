@@ -89,14 +89,30 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
+
+    /**
+     *  prefix for old style user metadata that will be served as headers
+     */
+    public final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
+
     /**
      * Header to contain the Cookies
      */
     public final static String COOKIE = "Cookie";
+  }
+
+  /**
+   * Permitted sub-resources of a blob.
+   */
+  public enum SubResource {
     /**
-     * prefix for old style user metadata that will be served as headers
+     * User metadata and BlobProperties i.e., blob properties returned in headers and user metadata as content/headers.
      */
-    public final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
+    BlobInfo,
+    /**
+     * User metadata on its own i.e., no "blob properties" headers returned with response.
+     */
+    UserMetadata
   }
 
   public static final class MultipartPost {

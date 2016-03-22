@@ -109,7 +109,9 @@ public class FrontendIntegrationTest {
 
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
-    getHeadAndVerify(blobId, headers, null);
+    getUserMetadataAndVerify(blobId, headers, null);
+    getBlobInfoAndVerify(blobId, headers, null);
+    getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
@@ -133,7 +135,9 @@ public class FrontendIntegrationTest {
 
     String blobId = multipartPostBlobAndVerify(headers, blobContent, usermetadata);
     getBlobAndVerify(blobId, headers, blobContent);
-    getHeadAndVerify(blobId, headers, usermetadata);
+    getUserMetadataAndVerify(blobId, headers, usermetadata.array());
+    getBlobInfoAndVerify(blobId, headers, usermetadata.array());
+    getHeadAndVerify(blobId, headers);
   }
 
   /*
@@ -191,9 +195,12 @@ public class FrontendIntegrationTest {
       contentLength = HttpHeaders.getIntHeader(response, RestUtils.Headers.BLOB_SIZE, 0);
     }
     ByteBuffer buffer = ByteBuffer.allocate((int) contentLength);
+    boolean endMarkerFound = false;
     for (HttpObject object : contents) {
+      assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
       HttpContent content = (HttpContent) object;
       buffer.put(content.content().nioBuffer());
+      endMarkerFound = object instanceof LastHttpContent;
       ReferenceCountUtil.release(content);
     }
     return buffer;
@@ -205,10 +212,10 @@ public class FrontendIntegrationTest {
    * @param expectedDiscardCount the number of {@link HttpObject}s that are expected to discarded.
    */
   private void discardContent(Queue<HttpObject> contents, int expectedDiscardCount) {
-    assertEquals("Objects that will be discarded are more than expected", expectedDiscardCount, contents.size());
+    assertEquals("Objects that will be discarded differ from expected", expectedDiscardCount, contents.size());
     boolean endMarkerFound = false;
     for (HttpObject object : contents) {
-      assertFalse("There should have been only a single end marker", endMarkerFound);
+      assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
       endMarkerFound = object instanceof LastHttpContent;
       ReferenceCountUtil.release(object);
     }
@@ -304,29 +311,85 @@ public class FrontendIntegrationTest {
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-    checkCommonGetHeadHeaders(response.headers(), expectedHeaders);
+    checkCommonGetHeadHeaders(response.headers());
+    assertEquals("Content-Type does not match", expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
+        response.headers().get(HttpHeaders.Names.CONTENT_TYPE));
+    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
     ByteBuffer responseContent = getContent(response, responseParts);
     assertArrayEquals("GET content does not match original content", expectedContent.array(), responseContent.array());
+  }
+
+  /**
+   * Gets the user metadata of the blob with blob ID {@code blobId} and verifies them against what is expected.
+   * @param blobId the blob ID of the blob to HEAD.
+   * @param expectedHeaders the expected headers in the response.
+   * @param usermetadata if non-null, this is expected to come as the body.
+   * @throws ExecutionException
+   * @throws InterruptedException
+   */
+  private void getUserMetadataAndVerify(String blobId, HttpHeaders expectedHeaders, byte[] usermetadata)
+      throws ExecutionException, InterruptedException {
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    checkCommonGetHeadHeaders(response.headers());
+    verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts);
+  }
+
+  /**
+   * Gets the blob info of the blob with blob ID {@code blobId} and verifies them against what is expected.
+   * @param blobId the blob ID of the blob to HEAD.
+   * @param expectedHeaders the expected headers in the response.
+   * @param usermetadata if non-null, this is expected to come as the body.
+   * @throws ExecutionException
+   * @throws InterruptedException
+   */
+  private void getBlobInfoAndVerify(String blobId, HttpHeaders expectedHeaders, byte[] usermetadata)
+      throws ExecutionException, InterruptedException {
+    FullHttpRequest httpRequest =
+        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    checkCommonGetHeadHeaders(response.headers());
+    verifyBlobProperties(expectedHeaders, response);
+    verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts);
   }
 
   /**
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
    * @param expectedHeaders the expected headers in the response.
-   * @param usermetadata if non-null, this is expected to come as headers prefixed with
-   *                      {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getHeadAndVerify(String blobId, HttpHeaders expectedHeaders, ByteBuffer usermetadata)
+  private void getHeadAndVerify(String blobId, HttpHeaders expectedHeaders)
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-    checkCommonGetHeadHeaders(response.headers(), expectedHeaders);
-    assertEquals("Content-Length does not match blob size",
+    checkCommonGetHeadHeaders(response.headers());
+    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match " + RestUtils.Headers.BLOB_SIZE,
         Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)), HttpHeaders.getContentLength(response));
+    assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
+        expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
+        HttpHeaders.getHeader(response, HttpHeaders.Names.CONTENT_TYPE));
+    verifyBlobProperties(expectedHeaders, response);
+    discardContent(responseParts, 1);
+  }
+
+  /**
+   * Verifies blob properties from output, to that sent in during input
+   * @param expectedHeaders the expected headers in the response.
+   * @param response the {@link HttpResponse} that contains the headers.
+   */
+  private void verifyBlobProperties(HttpHeaders expectedHeaders, HttpResponse response) {
+    assertEquals("Blob size does not match", Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)),
+        Long.parseLong(HttpHeaders.getHeader(response, RestUtils.Headers.BLOB_SIZE)));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match", expectedHeaders.get(RestUtils.Headers.SERVICE_ID),
         HttpHeaders.getHeader(response, RestUtils.Headers.SERVICE_ID));
     assertEquals(RestUtils.Headers.PRIVATE + " does not match", expectedHeaders.get(RestUtils.Headers.PRIVATE),
@@ -344,19 +407,19 @@ public class FrontendIntegrationTest {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match", expectedHeaders.get(RestUtils.Headers.OWNER_ID),
           HttpHeaders.getHeader(response, RestUtils.Headers.OWNER_ID));
     }
-    verifyUserMetadataHeaders(expectedHeaders, response, usermetadata);
-    discardContent(responseParts, 1);
   }
 
   /**
    * Verifies User metadata headers from output, to that sent in during input
    * @param expectedHeaders the expected headers in the response.
    * @param response the {@link HttpResponse} which contains the headers of the response.
-   * @param usermetadata if non-null, this is expected to come as headers prefixed with
-   *                      {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
+   * @param usermetadata if non-null, this is expected to come as the body.
+   * @param content the content accompanying the response.
    */
-  private void verifyUserMetadataHeaders(HttpHeaders expectedHeaders, HttpResponse response, ByteBuffer usermetadata) {
+  private void verifyUserMetadata(HttpHeaders expectedHeaders, HttpResponse response, byte[] usermetadata,
+      Queue<HttpObject> content) {
     if (usermetadata == null) {
+      assertEquals("Content-Length is not 0", 0, HttpHeaders.getContentLength(response));
       for (Map.Entry<String, String> header : expectedHeaders) {
         String key = header.getKey();
         if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
@@ -370,27 +433,11 @@ public class FrontendIntegrationTest {
           assertTrue("Key " + key + " does not exist in expected headers", expectedHeaders.contains(key));
         }
       }
+      discardContent(content, 1);
     } else {
-      int highestIndex = -1;
-      for (Map.Entry<String, String> header : response.headers()) {
-        String key = header.getKey();
-        if (key.startsWith(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX)) {
-          int index = Integer.parseInt(key.substring(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX.length()));
-          highestIndex = Math.max(index, highestIndex);
-        }
-      }
-      if (highestIndex == -1) {
-        fail("There should have been user metadata in the response");
-      } else {
-        for (int i = 0; i <= highestIndex; i++) {
-          String value = response.headers().get(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX + i);
-          for (byte b : value.getBytes()) {
-            assertTrue("Received user metadata should not be longer than the original", usermetadata.hasRemaining());
-            assertEquals("Byte of received user metadata does not match original", usermetadata.get(), b);
-          }
-        }
-        assertFalse("Some user metadata was not found in the response", usermetadata.hasRemaining());
-      }
+      assertEquals("Content-Length is not as expected", usermetadata.length, HttpHeaders.getContentLength(response));
+      byte[] receivedMetadata = getContent(response, content).array();
+      assertArrayEquals("User metadata does not match original", usermetadata, receivedMetadata);
     }
   }
 
@@ -443,15 +490,10 @@ public class FrontendIntegrationTest {
   /**
    * Checks headers that are common to HEAD and GET.
    * @param receivedHeaders the {@link HttpHeaders} that were received.
-   * @param expectedHeaders the expected headers.
    */
-  private void checkCommonGetHeadHeaders(HttpHeaders receivedHeaders, HttpHeaders expectedHeaders) {
-    assertEquals("Content-Type does not match", expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
-        receivedHeaders.get(HttpHeaders.Names.CONTENT_TYPE));
+  private void checkCommonGetHeadHeaders(HttpHeaders receivedHeaders) {
     assertTrue("No Date header", receivedHeaders.get(HttpHeaders.Names.DATE) != null);
     assertTrue("No Last-Modified header", receivedHeaders.get(HttpHeaders.Names.LAST_MODIFIED) != null);
-    assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
-        receivedHeaders.get(RestUtils.Headers.BLOB_SIZE));
   }
 
   /**
