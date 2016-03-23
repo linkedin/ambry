@@ -34,6 +34,8 @@ import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
@@ -41,6 +43,8 @@ import java.util.concurrent.ExecutionException;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -48,6 +52,7 @@ import static org.junit.Assert.*;
 /**
  * Integration tests for Ambry frontend.
  */
+@RunWith(Parameterized.class)
 public class FrontendIntegrationTest {
   private static final int SERVER_PORT = 1174;
   private static final ClusterMap CLUSTER_MAP;
@@ -62,6 +67,15 @@ public class FrontendIntegrationTest {
 
   private static RestServer ambryRestServer = null;
   private static NettyClient nettyClient = null;
+
+  /**
+   * Running it many times so that keep-alive bugs are caught.
+   * @return an array representing the number of times to run.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[5][0]);
+  }
 
   /**
    * Sets up an Ambry frontend server.
@@ -138,6 +152,10 @@ public class FrontendIntegrationTest {
     getUserMetadataAndVerify(blobId, headers, usermetadata.array());
     getBlobInfoAndVerify(blobId, headers, usermetadata.array());
     getHeadAndVerify(blobId, headers);
+    deleteBlobAndVerify(blobId);
+
+    // check GET, HEAD and DELETE after delete.
+    verifyOperationsAfterDelete(blobId);
   }
 
   /*
