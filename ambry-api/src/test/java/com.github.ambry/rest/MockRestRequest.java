@@ -70,6 +70,8 @@ public class MockRestRequest implements RestRequest {
     public void onEventComplete(MockRestRequest mockRestRequest, Event event);
   }
 
+  public static JSONObject DUMMY_DATA = new JSONObject();
+
   // main fields
   public static String REST_METHOD_KEY = "restMethod";
   public static String URI_KEY = "uri";
@@ -91,6 +93,15 @@ public class MockRestRequest implements RestRequest {
   private volatile ReadIntoCallbackWrapper callbackWrapper = null;
 
   private static String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
+
+  static {
+    try {
+      DUMMY_DATA.put(REST_METHOD_KEY, RestMethod.GET);
+      DUMMY_DATA.put(URI_KEY, "/");
+    } catch (JSONException e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   /**
    * Create a MockRestRequest.

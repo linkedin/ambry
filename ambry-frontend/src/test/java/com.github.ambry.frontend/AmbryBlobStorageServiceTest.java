@@ -7,6 +7,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.IdConverter;
+import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -70,6 +72,9 @@ public class AmbryBlobStorageServiceTest {
   private final InMemoryRouter router;
   private final FrontendTestResponseHandler responseHandler;
   private final AmbryBlobStorageService ambryBlobStorageService;
+  private final IdConverterFactory idConverterFactory;
+  private final VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+  private final MetricRegistry metricRegistry = new MetricRegistry();
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -77,8 +82,9 @@ public class AmbryBlobStorageServiceTest {
    */
   public AmbryBlobStorageServiceTest()
       throws InstantiationException {
-    RestRequestMetricsTracker.setDefaults(new MetricRegistry());
-    router = new InMemoryRouter(new VerifiableProperties(new Properties()));
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
+    router = new InMemoryRouter(verifiableProperties);
     responseHandler = new FrontendTestResponseHandler();
     ambryBlobStorageService = getAmbryBlobStorageService();
     responseHandler.start();
@@ -132,10 +138,21 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void useServiceWithoutStartTest()
       throws Exception {
-    // simulating by shutting down first.
-    ambryBlobStorageService.shutdown();
-    // fine to use without start.
-    postGetHeadDeleteTest();
+    AmbryBlobStorageService notStartedService = getAmbryBlobStorageService();
+    // not fine to use without start.
+    responseHandler.reset();
+    notStartedService.handleGet(createRestRequest(RestMethod.GET, "/", null, null), new MockRestResponseChannel());
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
+      if (responseHandler.getException() != null) {
+        assertTrue("Unexpected exception", responseHandler.getException() instanceof RestServiceException);
+        RestServiceException e = (RestServiceException) responseHandler.getException();
+        assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ServiceUnavailable, e.getErrorCode());
+      } else {
+        fail("Should not have been able to use AmbryBlobStorageService without start");
+      }
+    } else {
+      throw new IllegalStateException("doOperation() timed out");
+    }
   }
 
   /**
@@ -552,6 +569,7 @@ public class AmbryBlobStorageServiceTest {
       throws Exception {
     BlobProperties blobProperties = new BlobProperties(0, "test-serviceId");
     String exceptionMsg = UtilsTest.getRandomString(10);
+    IdConverter idConverter = idConverterFactory.getIdConverter();
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -559,7 +577,8 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    PostCallback callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties);
+    PostCallback callback =
+        new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
@@ -572,7 +591,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties);
+    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
@@ -583,7 +602,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties);
+    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
         responseHandler.getException().getClass());
@@ -816,12 +835,10 @@ public class AmbryBlobStorageServiceTest {
    * @return an instance of {@link AmbryBlobStorageService}.
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() {
-    // dud properties. pick up defaults
-    Properties properties = new Properties();
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    FrontendMetrics frontendMetrics = new FrontendMetrics(new MetricRegistry());
-    return new AmbryBlobStorageService(frontendConfig, frontendMetrics, CLUSTER_MAP, responseHandler, router);
+    FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
+    return new AmbryBlobStorageService(frontendConfig, frontendMetrics, CLUSTER_MAP, responseHandler, router,
+        idConverterFactory);
   }
 
   // nullInputsForFunctionsTest() helpers
