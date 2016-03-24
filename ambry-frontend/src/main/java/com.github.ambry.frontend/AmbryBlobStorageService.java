@@ -82,8 +82,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       frontendMetrics.getBlobRate.mark();
       logger.trace("Handling GET request - {}", restRequest.getUri());
-      String operationOrBlobId = getOperationOrBlobIdFromUri(restRequest);
-      RestUtils.SubResource subresource = getBlobSubResource(restRequest);
+      String operationOrBlobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
+      RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
       RestRequestMetrics requestMetrics = frontendMetrics.getBlobMetrics;
       if (subresource != null) {
         logger.trace("Sub-resource requested: {}", subresource);
@@ -147,7 +147,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     restRequest.getMetricsTracker().injectMetrics(frontendMetrics.deleteBlobMetrics);
     try {
       logger.trace("Handling DELETE request - {}", restRequest.getUri());
-      String blobId = getOperationOrBlobIdFromUri(restRequest);
+      String blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Forwarding DELETE of {} to the router", blobId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       DeleteCallback callback = new DeleteCallback(this, restRequest, restResponseChannel);
@@ -169,7 +169,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     restRequest.getMetricsTracker().injectMetrics(frontendMetrics.headBlobMetrics);
     try {
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
-      String blobId = getOperationOrBlobIdFromUri(restRequest);
+      String blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Forwarding HEAD of {} to the router", blobId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       HeadCallback callback = new HeadCallback(this, restRequest, restResponseChannel);
@@ -236,40 +236,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       throw new IllegalArgumentException(errorMessage.toString());
     }
-  }
-
-  /**
-   * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
-   * performed on.
-   * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @return extracted operation type or blob ID from the uri.
-   */
-  protected static String getOperationOrBlobIdFromUri(RestRequest restRequest) {
-    String path = restRequest.getPath();
-    int startIndex = path.startsWith("/") ? 1 : 0;
-    int endIndex = path.indexOf("/", startIndex);
-    endIndex = endIndex > 0 ? endIndex : path.length();
-    return path.substring(startIndex, endIndex);
-  }
-
-  /**
-   * Determines if URI is for a blob sub-resource, and if so, returns that sub-resource
-   * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @return sub-resource if the URI includes one; null otherwise.
-   */
-  protected static RestUtils.SubResource getBlobSubResource(RestRequest restRequest) {
-    String path = restRequest.getPath();
-    final int minSegmentsRequired = path.startsWith("/") ? 3 : 2;
-    String[] segments = path.split("/");
-    RestUtils.SubResource subResource = null;
-    if (segments.length >= minSegmentsRequired) {
-      try {
-        subResource = RestUtils.SubResource.valueOf(segments[segments.length - 1]);
-      } catch (IllegalArgumentException e) {
-        // nothing to do.
-      }
-    }
-    return subResource;
   }
 
   /**
@@ -347,7 +313,7 @@ class HeadForGetCallback implements Callback<BlobInfo> {
       ambryBlobStorageService.frontendMetrics.headForGetTimeInMs.update(routerTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
-      String blobId = AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
+      String blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD before GET of {}", blobId);
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
@@ -495,7 +461,7 @@ class GetCallback implements Callback<ReadableStreamChannel> {
       ambryBlobStorageService.frontendMetrics.getTimeInMs.update(routerTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
-      String blobId = AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
+      String blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for GET of {}", blobId);
       if (exception == null && result != null) {
         logger.trace("Successful GET of {}", blobId);
@@ -642,7 +608,7 @@ class DeleteCallback implements Callback<Void> {
       ambryBlobStorageService.frontendMetrics.deleteTimeInMs.update(routerTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
-      String blobId = AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
+      String blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for DELETE of {}", blobId);
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null) {
@@ -708,7 +674,7 @@ class HeadCallback implements Callback<BlobInfo> {
       ambryBlobStorageService.frontendMetrics.headTimeInMs.update(routerTime);
       restRequest.getMetricsTracker().addToTotalCpuTime(routerTime);
 
-      String blobId = AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest);
+      String blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
       logger.trace("Callback received for HEAD of {}", blobId);
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {

@@ -374,4 +374,38 @@ public class RestUtils {
     }
     return value;
   }
+
+  /**
+   * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
+   * performed on.
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @return extracted operation type or blob ID from the uri.
+   */
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest) {
+    String path = restRequest.getPath();
+    int startIndex = path.startsWith("/") ? 1 : 0;
+    int endIndex = path.indexOf("/", startIndex);
+    endIndex = endIndex > 0 ? endIndex : path.length();
+    return path.substring(startIndex, endIndex);
+  }
+
+  /**
+   * Determines if URI is for a blob sub-resource, and if so, returns that sub-resource
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @return sub-resource if the URI includes one; null otherwise.
+   */
+  public static RestUtils.SubResource getBlobSubResource(RestRequest restRequest) {
+    String path = restRequest.getPath();
+    final int minSegmentsRequired = path.startsWith("/") ? 3 : 2;
+    String[] segments = path.split("/");
+    RestUtils.SubResource subResource = null;
+    if (segments.length >= minSegmentsRequired) {
+      try {
+        subResource = RestUtils.SubResource.valueOf(segments[segments.length - 1]);
+      } catch (IllegalArgumentException e) {
+        // nothing to do.
+      }
+    }
+    return subResource;
+  }
 }
