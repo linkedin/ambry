@@ -296,66 +296,6 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests {@link AmbryBlobStorageService#getOperationOrBlobIdFromUri(RestRequest)}.
-   * @throws JSONException
-   * @throws UnsupportedEncodingException
-   * @throws URISyntaxException
-   */
-  @Test
-  public void getOperationOrBlobIdFromUriTest()
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    // no operation
-    String[] noOpUris = {"", "/"};
-    for (String uri : noOpUris) {
-      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null, null);
-      assertEquals("Unexpected operation/blob id in " + uri, "",
-          AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest));
-    }
-
-    // valid operation
-    String expectedOperationOrBlobId = "expectedOp";
-    String[] validOpUris = {"/" + expectedOperationOrBlobId,
-        "/" + expectedOperationOrBlobId + "/random/extra", expectedOperationOrBlobId,
-        expectedOperationOrBlobId + "/random/extra"};
-    for (String uri : validOpUris) {
-      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null, null);
-      assertEquals("Unexpected operation/blob id in " + uri, expectedOperationOrBlobId,
-          AmbryBlobStorageService.getOperationOrBlobIdFromUri(restRequest));
-    }
-  }
-
-  /**
-   * Tests {@link AmbryBlobStorageService#getBlobSubResource(RestRequest)}.
-   * @throws JSONException
-   * @throws UnsupportedEncodingException
-   * @throws URISyntaxException
-   */
-  @Test
-  public void getBlobSubResourceTest()
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    // sub resource null
-    String[] nullUris = {"/op", "/op/", "/op/invalid", "/op/invalid/", "op", "op/", "op/invalid", "op/invalid/"};
-    for (String uri : nullUris) {
-      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null, null);
-      assertNull("There was no sub-resource expected", AmbryBlobStorageService.getBlobSubResource(restRequest));
-    }
-
-    // valid sub resource
-    String[] nonNullUris = {"/op/", "/op/random/", "op/", "op/random/"};
-    for (String uri : nonNullUris) {
-      String fullUri = uri + RestUtils.SubResource.BlobInfo;
-      RestRequest restRequest = createRestRequest(RestMethod.GET, fullUri, null, null);
-      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.BlobInfo,
-          AmbryBlobStorageService.getBlobSubResource(restRequest));
-
-      fullUri = uri + RestUtils.SubResource.UserMetadata;
-      restRequest = createRestRequest(RestMethod.GET, fullUri, null, null);
-      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.UserMetadata,
-          AmbryBlobStorageService.getBlobSubResource(restRequest));
-    }
-  }
-
-  /**
    * Tests blob POST, GET, HEAD and DELETE operations.
    * @throws Exception
    */

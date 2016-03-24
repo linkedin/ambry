@@ -15,10 +15,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -428,6 +425,65 @@ public class RestUtilsTest {
         userMetadataMap.get(key2));
   }
 
+  /**
+   * Tests {@link RestUtils#getOperationOrBlobIdFromUri(RestRequest)}.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  @Test
+  public void getOperationOrBlobIdFromUriTest()
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    // no operation
+    String[] noOpUris = {"", "/"};
+    for (String uri : noOpUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
+      assertEquals("Unexpected operation/blob id in " + uri, "", RestUtils.getOperationOrBlobIdFromUri(restRequest));
+    }
+
+    // valid operation
+    String expectedOperationOrBlobId = "expectedOp";
+    String[] validOpUris = {"/" + expectedOperationOrBlobId,
+        "/" + expectedOperationOrBlobId + "/random/extra", expectedOperationOrBlobId,
+        expectedOperationOrBlobId + "/random/extra"};
+    for (String uri : validOpUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
+      assertEquals("Unexpected operation/blob id in " + uri, expectedOperationOrBlobId,
+          RestUtils.getOperationOrBlobIdFromUri(restRequest));
+    }
+  }
+
+  /**
+   * Tests {@link RestUtils#getBlobSubResource(RestRequest)}.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  @Test
+  public void getBlobSubResourceTest()
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    // sub resource null
+    String[] nullUris = {"/op", "/op/", "/op/invalid", "/op/invalid/", "op", "op/", "op/invalid", "op/invalid/"};
+    for (String uri : nullUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
+      assertNull("There was no sub-resource expected", RestUtils.getBlobSubResource(restRequest));
+    }
+
+    // valid sub resource
+    String[] nonNullUris = {"/op/", "/op/random/", "op/", "op/random/"};
+    for (String uri : nonNullUris) {
+      String fullUri = uri + RestUtils.SubResource.BlobInfo;
+      RestRequest restRequest = createRestRequest(RestMethod.GET, fullUri, null);
+      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.BlobInfo,
+          RestUtils.getBlobSubResource(restRequest));
+
+      fullUri = uri + RestUtils.SubResource.UserMetadata;
+      restRequest = createRestRequest(RestMethod.GET, fullUri, null);
+      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.UserMetadata,
+          RestUtils.getBlobSubResource(restRequest));
+    }
+  }
+
   // helpers.
   // general.
 
@@ -536,7 +592,7 @@ public class RestUtilsTest {
       boolean keyFromInputMap = inputUserMetadata.containsKey(key);
       assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
       assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
-              + ", and output map value " + userMetadataMap.get(key),
+          + ", and output map value " + userMetadataMap.get(key),
           inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
     }
   }
