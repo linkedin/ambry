@@ -51,6 +51,10 @@ public enum RestServiceErrorCode {
    */
   MissingArgs,
   /**
+   * Client has sent a request that cannot be processed due to authorization failure.
+   */
+  Unauthorized,
+  /**
    * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
    * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
    */

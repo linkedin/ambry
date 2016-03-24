@@ -352,6 +352,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.badRequestCount.inc();
         status = HttpResponseStatus.BAD_REQUEST;
         break;
+      case Unauthorized:
+        nettyMetrics.unauthorizedCount.inc();
+        status = HttpResponseStatus.UNAUTHORIZED;
+        break;
       case NotFound:
         nettyMetrics.notFoundCount.inc();
         status = HttpResponseStatus.NOT_FOUND;

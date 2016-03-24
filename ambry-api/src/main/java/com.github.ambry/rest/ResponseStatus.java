@@ -24,6 +24,10 @@ public enum ResponseStatus {
    */
   BadRequest,
   /**
+   * 401 - Request Unauthorized
+   */
+  Unauthorized,
+  /**
    * 404 Not Found - Resource was not found.
    */
   NotFound,
@@ -58,6 +62,8 @@ public enum ResponseStatus {
       case UnsupportedHttpMethod:
       case UnsupportedOperation:
         return ResponseStatus.BadRequest;
+      case Unauthorized:
+        return ResponseStatus.Unauthorized;
       case InternalServerError:
       case InternalObjectCreationError:
       case RequestChannelClosed:

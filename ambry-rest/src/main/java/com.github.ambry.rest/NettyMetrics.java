@@ -73,6 +73,7 @@ class NettyMetrics {
   public final Counter processorExceptionCaughtCount;
   // NettyResponseChannel
   public final Counter badRequestCount;
+  public final Counter unauthorizedCount;
   public final Counter goneCount;
   public final Counter internalServerErrorCount;
   public final Counter notFoundCount;
@@ -175,6 +176,7 @@ class NettyMetrics {
     contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
     // NettyResponseChannel
     badRequestCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount"));
+    unauthorizedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnauthorizedCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "GoneCount"));
     internalServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount"));
