@@ -25,11 +25,12 @@ import org.slf4j.LoggerFactory;
 public class HealthCheckHandler extends ChannelDuplexHandler {
   private final String healthCheckUri;
   private final RestServerState restServerState;
-  private HttpRequest request;
-  private FullHttpResponse response;
   private final byte[] goodBytes = "GOOD".getBytes();
   private final byte[] badBytes = "BAD".getBytes();
   private final Logger logger = LoggerFactory.getLogger(getClass());
+
+  private HttpRequest request;
+  private FullHttpResponse response;
 
   public HealthCheckHandler(RestServerState restServerState) {
     this.restServerState = restServerState;
@@ -71,11 +72,12 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
           future.addListener(ChannelFutureListener.CLOSE);
         }
         request = null;
+        response = null;
       } else {
         // request was not for health check uri
         forwardObj = true;
       }
-    } else {
+    } else if (request == null) {
       // http Content which is not LastHttpContent is not intended for this handler
       forwardObj = true;
     }
