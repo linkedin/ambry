@@ -5,6 +5,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.StoreConfig;
@@ -502,6 +503,7 @@ public final class ReplicationManager {
       numberOfReplicaThreads = replicasToReplicate.size();
     }
 
+    ResponseHandler responseHandler = new ResponseHandler(clusterMap);
     int numberOfNodesPerThread = replicasToReplicate.size() / numberOfReplicaThreads;
     int remainingNodes = replicasToReplicate.size() % numberOfReplicaThreads;
 
@@ -526,7 +528,7 @@ public final class ReplicationManager {
       ReplicaThread replicaThread =
           new ReplicaThread("Replica Thread-" + threadIdentity + "-" + i, replicasForThread, factory, clusterMap,
               correlationIdGenerator, dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification,
-              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry);
+              storeKeyFactory, replicationConfig.replicationValidateMessageStream, metricRegistry, responseHandler);
       replicaThreadList.add(replicaThread);
     }
   }
