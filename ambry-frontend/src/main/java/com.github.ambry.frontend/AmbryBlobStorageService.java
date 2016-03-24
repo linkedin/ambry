@@ -5,6 +5,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.rest.IdConverter;
+import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -40,8 +42,12 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final ClusterMap clusterMap;
   private final RestResponseHandler responseHandler;
   private final Router router;
+  private final IdConverterFactory idConverterFactory;
   private final long cacheValidityInSecs;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
+
+  private IdConverter idConverter = null;
+  private boolean isUp = false;
 
   /**
    * Create a new instance of AmbryBlobStorageService by supplying it with config, metrics, cluster map, a
@@ -52,13 +58,15 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
    *                        out.
    * @param router the {@link Router} instance to use to perform blob operations.
+   * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter}.
    */
   public AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router) {
+      RestResponseHandler responseHandler, Router router, IdConverterFactory idConverterFactory) {
     this.frontendMetrics = frontendMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.router = router;
+    this.idConverterFactory = idConverterFactory;
     cacheValidityInSecs = frontendConfig.frontendCacheValiditySeconds;
     logger.trace("Instantiated AmbryBlobStorageService");
   }
@@ -66,11 +74,21 @@ class AmbryBlobStorageService implements BlobStorageService {
   @Override
   public void start()
       throws InstantiationException {
+    idConverter = idConverterFactory.getIdConverter();
+    isUp = true;
     logger.info("AmbryBlobStorageService has started");
   }
 
   @Override
   public void shutdown() {
+    isUp = false;
+    try {
+      if (idConverter != null) {
+        idConverter.close();
+      }
+    } catch (IOException e) {
+      logger.error("IdConverter close failed");
+    }
     logger.info("AmbryBlobStorageService shutdown complete");
   }
 
@@ -82,7 +100,9 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       frontendMetrics.getBlobRate.mark();
       logger.trace("Handling GET request - {}", restRequest.getUri());
-      String operationOrBlobId = getOperationOrBlobIdFromUri(restRequest);
+      checkAvailable();
+      String receivedId = getOperationOrBlobIdFromUri(restRequest);
+      String convertedId = idConverter.convert(restRequest, receivedId);
       RestUtils.SubResource subresource = getBlobSubResource(restRequest);
       RestRequestMetrics requestMetrics = frontendMetrics.getBlobMetrics;
       if (subresource != null) {
@@ -97,11 +117,11 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       }
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      logger.trace("Forwarding GET of {} to the router", operationOrBlobId);
+      logger.trace("Forwarding GET of {} -> {} to the router", receivedId, convertedId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       HeadForGetCallback callback =
           new HeadForGetCallback(this, restRequest, restResponseChannel, router, subresource, cacheValidityInSecs);
-      router.getBlobInfo(operationOrBlobId, callback);
+      router.getBlobInfo(convertedId, callback);
     } catch (Exception e) {
       frontendMetrics.operationError.inc();
       submitResponse(restRequest, restResponseChannel, null, e);
@@ -120,6 +140,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobMetrics);
     try {
       logger.trace("Handling POST request - {}", restRequest.getUri());
+      checkAvailable();
       long propsBuildStartTime = System.currentTimeMillis();
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest);
       byte[] usermetadata = RestUtils.buildUsermetadata(restRequest);
@@ -127,7 +148,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Blob properties of blob being POSTed - {}", blobProperties);
       logger.trace("Forwarding POST to the router");
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
-      PostCallback callback = new PostCallback(this, restRequest, restResponseChannel, blobProperties);
+      PostCallback callback = new PostCallback(this, restRequest, restResponseChannel, blobProperties, idConverter);
       router.putBlob(blobProperties, usermetadata, restRequest, callback);
     } catch (Exception e) {
       frontendMetrics.operationError.inc();
@@ -147,11 +168,13 @@ class AmbryBlobStorageService implements BlobStorageService {
     restRequest.getMetricsTracker().injectMetrics(frontendMetrics.deleteBlobMetrics);
     try {
       logger.trace("Handling DELETE request - {}", restRequest.getUri());
-      String blobId = getOperationOrBlobIdFromUri(restRequest);
-      logger.trace("Forwarding DELETE of {} to the router", blobId);
+      checkAvailable();
+      String receivedId = getOperationOrBlobIdFromUri(restRequest);
+      String convertedId = idConverter.convert(restRequest, receivedId);
+      logger.trace("Forwarding DELETE of {} -> to the router", receivedId, convertedId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       DeleteCallback callback = new DeleteCallback(this, restRequest, restResponseChannel);
-      router.deleteBlob(blobId, callback);
+      router.deleteBlob(convertedId, callback);
     } catch (Exception e) {
       frontendMetrics.operationError.inc();
       submitResponse(restRequest, restResponseChannel, null, e);
@@ -169,11 +192,13 @@ class AmbryBlobStorageService implements BlobStorageService {
     restRequest.getMetricsTracker().injectMetrics(frontendMetrics.headBlobMetrics);
     try {
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
-      String blobId = getOperationOrBlobIdFromUri(restRequest);
-      logger.trace("Forwarding HEAD of {} to the router", blobId);
+      checkAvailable();
+      String receivedId = getOperationOrBlobIdFromUri(restRequest);
+      String convertedId = idConverter.convert(restRequest, receivedId);
+      logger.trace("Forwarding HEAD of {} -> {} to the router", receivedId, convertedId);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       HeadCallback callback = new HeadCallback(this, restRequest, restResponseChannel);
-      router.getBlobInfo(blobId, callback);
+      router.getBlobInfo(convertedId, callback);
     } catch (Exception e) {
       frontendMetrics.operationError.inc();
       submitResponse(restRequest, restResponseChannel, null, e);
@@ -235,6 +260,17 @@ class AmbryBlobStorageService implements BlobStorageService {
         errorMessage.append(" [RestResponseChannel] ");
       }
       throw new IllegalArgumentException(errorMessage.toString());
+    }
+  }
+
+  /**
+   * Checks if {@link AmbryBlobStorageService} is available to serve requests.
+   * @throws RestServiceException if {@link AmbryBlobStorageService} is not available to serve requests.
+   */
+  private void checkAvailable()
+      throws RestServiceException {
+    if (!isUp) {
+      throw new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     }
   }
 
@@ -531,6 +567,7 @@ class PostCallback implements Callback<String> {
   private final RestRequest restRequest;
   private final RestResponseChannel restResponseChannel;
   private final BlobProperties blobProperties;
+  private final IdConverter idConverter;
   private final long operationStartTime = System.currentTimeMillis();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -540,13 +577,15 @@ class PostCallback implements Callback<String> {
    * @param restRequest the {@link RestRequest} for whose response this is a callback.
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    * @param createdBlobProperties the {@link BlobProperties} of the blob that was asked to be POSTed.
+   * @param idConverter the {@link IdConverter} to use to convert IDs returned from the {@link Router}.
    */
   public PostCallback(AmbryBlobStorageService ambryBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, BlobProperties createdBlobProperties) {
+      RestResponseChannel restResponseChannel, BlobProperties createdBlobProperties, IdConverter idConverter) {
     this.ambryBlobStorageService = ambryBlobStorageService;
     this.restRequest = restRequest;
     this.restResponseChannel = restResponseChannel;
     this.blobProperties = createdBlobProperties;
+    this.idConverter = idConverter;
   }
 
   /**
@@ -598,7 +637,7 @@ class PostCallback implements Callback<String> {
   private void setResponseHeaders(String location)
       throws RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Created);
-    restResponseChannel.setHeader(RestUtils.Headers.LOCATION, location);
+    restResponseChannel.setHeader(RestUtils.Headers.LOCATION, idConverter.convert(restRequest, location));
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
     restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
   }
