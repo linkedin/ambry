@@ -45,8 +45,6 @@ class PutOperation {
   private final RouterConfig routerConfig;
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
-  // currently no use for an operationId.
-  private final long operationId;
   private final BlobProperties blobProperties;
   private final byte[] userMetadata;
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
@@ -67,13 +65,13 @@ class PutOperation {
   // total bytes of this object that has been filled so far by the ChunkFillerThread.
   private long bytesFilledSoFar;
   // the reference to the chunk in putChunks that was most recently filled or became eligible for getting filled.
-  private PutChunk latestFillerChunk;
+  private PutChunk chunkToFill;
   // counter for tracking the chunks being filled.
   private int chunkCounter;
   // the current ByteBuffer/position in the chunkFillerChannel.
   private ByteBuffer channelReadBuffer;
   // denotes whether chunk filling is complete.
-  private boolean chunkFillComplete = false;
+  private boolean chunkFillingCompleted = false;
   // the metadata chunk for this operation. If this operation results in only one chunk,
   // then there will be no metadata chunk and this will be null.
   private final MetadataPutChunk metadataPutChunk;
@@ -116,7 +114,7 @@ class PutOperation {
     if (channel.getSize() != blobSize) {
       throw new RouterException(
           "Channel size: " + channel.getSize() + " different from size in BlobProperties: " + blobProperties
-              .getBlobSize(), RouterErrorCode.BadChannel);
+              .getBlobSize(), RouterErrorCode.BadInputChannel);
     }
     // Set numDataChunks
     // the max blob size that can be supported is technically limited by the max chunk size configured.
@@ -129,7 +127,6 @@ class PutOperation {
     this.routerConfig = routerConfig;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
-    this.operationId = operationId;
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
     this.futureResult = futureResult;
@@ -151,58 +148,67 @@ class PutOperation {
       public void onCompletion(Long result, Exception exception) {
         if (exception != null) {
           setOperationException(exception);
+        } else if (result != blobSize) {
+          setOperationException(new RouterException("Incorrect number of bytes: " + result +
+              " read in from the channel, expected: " + blobSize, RouterErrorCode.BadInputChannel));
         }
       }
     });
   }
 
   /**
+   * returns whether the operation has completed.
+   * @return whether the operation has completed.
+   */
+  boolean isOperationComplete() {
+    return operationCompleted;
+  }
+
+  /**
    * For this operation, create and populate put requests for chunks (in the form of {@link RequestInfo}) to
-   * send out. If the operation is found to have comp
+   * send out.
    * @param requestRegistrationCallback the {@link PutRequestRegistrationCallback} to call for every request that gets created
    *                                    as part of this poll operation.
-   * @return true, if the operation has completed, false otherwise.
    */
-  boolean poll(PutRequestRegistrationCallback requestRegistrationCallback) {
+  void poll(PutRequestRegistrationCallback requestRegistrationCallback) {
     if (operationCompleted) {
-      return true;
+      return;
     }
     if (metadataPutChunk != null && metadataPutChunk.isReady()) {
-      if (metadataPutChunk.poll(requestRegistrationCallback)) {
+      metadataPutChunk.poll(requestRegistrationCallback);
+      if (metadataPutChunk.isComplete()) {
         onChunkOperationComplete(metadataPutChunk);
         if (operationCompleted) {
-          return true;
+          return;
         }
       }
     } else {
       for (PutChunk chunk : putChunks) {
         if (chunk.isReady()) {
-          if (chunk.poll(requestRegistrationCallback)) {
+          chunk.poll(requestRegistrationCallback);
+          if (chunk.isComplete()) {
             onChunkOperationComplete(chunk);
             // After each chunk is processed, check whether the operation itself has completed
             if (operationCompleted) {
-              return true;
+              return;
             }
           }
         }
       }
     }
-    return operationCompleted;
   }
 
   /**
    * Handle the given {@link ResponseInfo} by handing it over to the correct {@link PutChunk} that issued the request.
    * @param responseInfo the {@link ResponseInfo} to be handled.
-   * @return true if the operation has completed (due to this response or otherwise); false if the operation is not
-   *         yet complete.
    */
-  boolean handleResponse(ResponseInfo responseInfo) {
+  void handleResponse(ResponseInfo responseInfo) {
     PutChunk putChunk =
         correlationIdToPutChunk.remove(((RequestOrResponse) responseInfo.getRequest()).getCorrelationId());
-    if (putChunk.handleResponse(responseInfo)) {
+    putChunk.handleResponse(responseInfo);
+    if (putChunk.isComplete()) {
       onChunkOperationComplete(putChunk);
     }
-    return operationCompleted;
   }
 
   /**
@@ -236,55 +242,51 @@ class PutOperation {
   }
 
   /**
+   * Returns whether chunk filling is complete.
+   * @return true if chunk filling is complete, false otherwise.
+   */
+  boolean isChunkFillComplete() {
+    return chunkFillingCompleted || operationCompleted;
+  }
+
+  /**
    * This method runs in the context of the ChunkFiller thread. As long as there are chunks available to
    * be written to, it gets the chunk that is to be filled and keeps filling it with the data from the
    * chunkFillerChannel, if there is any.
-   * @return true if this method does not need to be called for this operation again. In other words,
-   *         returns true if the chunk filling has completed, or the operation itself has completed.
    */
-  boolean fillChunks() {
+  void fillChunks() {
     PutChunk chunkToFill;
-    if (chunkFillComplete || operationCompleted) {
-      return true;
-    }
-    do {
-      // Attempt to fill a chunk
-      if (channelReadBuffer == null) {
-        try {
-          channelReadBuffer = chunkFillerChannel.getNextChunk(0);
-        } catch (InterruptedException e) {
-          throw new IllegalStateException(
-              "Received InterruptedException from a call that is expected to be non-blocking.");
-        }
-      }
-      if (channelReadBuffer != null) {
-        chunkToFill = getChunkToFill();
-        if (chunkToFill == null) {
-          // no chunks are free to be filled yet.
-          break;
-        }
-        bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
-        if (chunkToFill.isFull() || bytesFilledSoFar == blobSize) {
-          // There is no more data to be filled into this chunk.
-          chunkToFill.onFillComplete();
-        }
-        if (!channelReadBuffer.hasRemaining()) {
-          chunkFillerChannel.resolveOldestChunk(null);
+    if (!chunkFillingCompleted && !operationCompleted) {
+      do {
+        // Attempt to fill a chunk
+        if (channelReadBuffer == null) {
           try {
             channelReadBuffer = chunkFillerChannel.getNextChunk(0);
           } catch (InterruptedException e) {
-
+            throw new IllegalStateException(
+                "Received InterruptedException from a call that is expected to be non-blocking.");
           }
         }
-      } else {
-        // channel does not have more data yet.
-        break;
+        if (channelReadBuffer != null) {
+          chunkToFill = getChunkToFill();
+          if (chunkToFill == null) {
+            // no chunks are free to be filled yet.
+            break;
+          }
+          bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+          if (!channelReadBuffer.hasRemaining()) {
+            chunkFillerChannel.resolveOldestChunk(null);
+            channelReadBuffer = null;
+          }
+        } else {
+          // channel does not have more data yet.
+          break;
+        }
+      } while (bytesFilledSoFar < blobSize);
+      if (bytesFilledSoFar == blobSize) {
+        chunkFillingCompleted = true;
       }
-    } while (bytesFilledSoFar < blobSize);
-    if (bytesFilledSoFar == blobSize) {
-      chunkFillComplete = true;
     }
-    return chunkFillComplete;
   }
 
   /**
@@ -294,14 +296,14 @@ class PutOperation {
    * @return the chunk to fill, or null if there are no chunks eligible for filling.
    */
   private PutChunk getChunkToFill() {
-    if (latestFillerChunk != null && latestFillerChunk.isBuilding()) {
-      return latestFillerChunk;
+    if (chunkToFill != null && chunkToFill.isBuilding()) {
+      return chunkToFill;
     } else {
       for (PutChunk chunk : putChunks) {
         if (chunk.isFree()) {
           chunkCounter++;
           chunk.prepareForBuilding(chunkCounter, getSizeOfChunkAt(chunkCounter));
-          latestFillerChunk = chunk;
+          chunkToFill = chunk;
           return chunk;
         }
       }
@@ -440,6 +442,7 @@ class PutOperation {
       failedAttempts = 0;
       partitionId = null;
       correlationIdToChunkPutRequest.clear();
+      attemptedPartitionIds.clear();
     }
 
     /**
@@ -485,6 +488,13 @@ class PutOperation {
     }
 
     /**
+     * @return true if the operation on the current chunk is complete.
+     */
+    boolean isComplete() {
+      return state == ChunkState.Complete;
+    }
+
+    /**
      * Prepare this chunk for building, that is, for being filled with data from the channel.
      * @param chunkIndex the position in the overall blob that this chunk is going to  be in.
      * @param size size to allocate memory for the buffer that will hold the data for this chunk.
@@ -497,6 +507,7 @@ class PutOperation {
         buf = ByteBuffer.allocate(size);
       } else {
         buf.clear();
+        buf.limit(size);
       }
       state = ChunkState.Building;
     }
@@ -530,14 +541,7 @@ class PutOperation {
     }
 
     /**
-     * @return true if the buffer associated with this chunk is filled to its maximum capacity.
-     */
-    boolean isFull() {
-      return buf.position() == buf.capacity();
-    }
-
-    /**
-     * Fill the buffer of the current chunk with the data in the given {@link ByteBuffer}.
+     * Fill the buffer of the current chunk with the data from the given {@link ByteBuffer}.
      * @param channelReadBuffer the {@link ByteBuffer} from which to read data.
      * @return the number of bytes transferred in this operation.
      */
@@ -552,14 +556,16 @@ class PutOperation {
       } else {
         buf.put(channelReadBuffer);
       }
+      if (!buf.hasRemaining()) {
+        onFillComplete();
+      }
       return toWrite;
     }
 
     /**
      * Check if the operation on the chunk is eligible for completion, if so complete it.
-     * @return true if the operation on the chunk is completed.
      */
-    boolean completeIfDone() {
+    void checkAndMaybeComplete() {
       boolean done = false;
       // Now, check if this chunk is done.
       if (operationTracker.isDone()) {
@@ -580,7 +586,9 @@ class PutOperation {
           done = true;
         }
       }
-      return done;
+      if (done) {
+        state = ChunkState.Complete;
+      }
     }
 
     /**
@@ -592,9 +600,8 @@ class PutOperation {
      * or the chunk operation is completed.
      * @param requestFillCallback the {@link PutRequestRegistrationCallback} to call for every request that gets created as
      *                            part of this poll operation.
-     * @return true, if the operation on the chunk is complete; false otherwise.
      */
-    boolean poll(PutRequestRegistrationCallback requestFillCallback) {
+    void poll(PutRequestRegistrationCallback requestFillCallback) {
       //First, check if any of the existing requests have timed out.
       Iterator<Map.Entry<Integer, ChunkPutRequest>> inFlightRequestsIterator =
           correlationIdToChunkPutRequest.entrySet().iterator();
@@ -610,8 +617,9 @@ class PutOperation {
         }
       }
 
-      if (completeIfDone()) {
-        return true;
+      checkAndMaybeComplete();
+      if (isComplete()) {
+        return;
       }
 
       Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
@@ -630,7 +638,6 @@ class PutOperation {
         requestFillCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
       }
-      return false;
     }
 
     /**
@@ -654,9 +661,7 @@ class PutOperation {
         throws RouterException {
       // getWritablePartitions creates and returns a new list, so it is safe to manipulate it.
       List<PartitionId> partitions = clusterMap.getWritablePartitionIds();
-      for (PartitionId partitionIdToExclude : partitionIdsToExclude) {
-        partitions.remove(partitionIdToExclude);
-      }
+      partitions.removeAll(partitionIdsToExclude);
       if (partitions.isEmpty()) {
         throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
       }
@@ -670,9 +675,8 @@ class PutOperation {
      * Finally, a check is done to determine whether the operation on the chunk is eligible for completion,
      * if so the operation is completed right away.
      * @param responseInfo the response received for a request sent out on behalf of this chunk.
-     * @return true if the operation is complete; false otherwise.
      */
-    boolean handleResponse(ResponseInfo responseInfo) {
+    void handleResponse(ResponseInfo responseInfo) {
       int correlationId = ((PutRequest) responseInfo.getRequest()).getCorrelationId();
       ChunkPutRequest request = correlationIdToChunkPutRequest.remove(correlationId);
       if (request == null) {
@@ -681,11 +685,10 @@ class PutOperation {
         // - the response is for an earlier attempt of this chunk (slipped put scenario). And the map was cleared
         // before attempting the slipped put.
         // - the response is for an earlier chunk held by this PutChunk.
-        return false;
+        return;
       }
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
-        // Currently, do not differentiate between different errors.
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
         responseHandler.onRequestResponseException(request.replicaId, new IOException("NetworkClient error"));
         isSuccessful = false;
@@ -703,7 +706,8 @@ class PutOperation {
             // @todo: metric
             logger.error("The correlation id in the PutResponse " + putResponse.getCorrelationId()
                 + " is not the same as the correlation id in the associated PutRequest: " + correlationId);
-            setChunkException(new RouterException("Operation timed out", RouterErrorCode.UnexpectedInternalError));
+            setChunkException(
+                new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
             isSuccessful = false;
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
@@ -722,13 +726,13 @@ class PutOperation {
           // @todo: metric.
           // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
           // detection.
-          setChunkException(new RouterException("Response deserialization received an unexpected error",
+          setChunkException(new RouterException("Response deserialization received an unexpected error", e,
               RouterErrorCode.UnexpectedInternalError));
           isSuccessful = false;
         }
       }
       operationTracker.onResponse(request.replicaId, isSuccessful);
-      return completeIfDone();
+      checkAndMaybeComplete();
     }
 
     /**
@@ -755,7 +759,7 @@ class PutOperation {
       // BlobId_Already_Exists are outliers (should not really happen) that those should really
       // result in Ambry_Unavailable or UnexpectedInternalError.
       // However, for metrics, we will need to distinguish them here.
-      setChunkException(new RouterException("Operation timed out", RouterErrorCode.AmbryUnavailable));
+      setChunkException(new RouterException("Could not complete operation", RouterErrorCode.AmbryUnavailable));
     }
 
     /**
@@ -840,4 +844,8 @@ enum ChunkState {
    * The Chunk is ready to be sent out.
    */
   Ready,
+  /**
+   * The Chunk is complete.
+   */
+  Complete,
 }

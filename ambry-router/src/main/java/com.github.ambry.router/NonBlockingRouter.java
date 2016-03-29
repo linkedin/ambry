@@ -55,7 +55,7 @@ class NonBlockingRouter implements Router {
   private final NonBlockingRouterMetrics routerMetrics;
   private final ResponseHandler responseHandler;
   private final Time time;
-  private List<String> idsToDelete = new ArrayList<String>();
+  private final List<String> idsToDelete = new ArrayList<String>();
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   private static final AtomicLong operationIdGenerator = new AtomicLong(0);
