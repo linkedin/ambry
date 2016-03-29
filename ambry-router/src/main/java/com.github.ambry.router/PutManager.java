@@ -47,7 +47,7 @@ class PutManager {
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
 
-  private final class PutRequestRegistrationCallbackImpl implements PutRequestRegistrationCallback {
+  private class PutRequestRegistrationCallbackImpl implements PutRequestRegistrationCallback {
     private List<RequestInfo> requestListToFill;
 
     @Override
@@ -55,9 +55,7 @@ class PutManager {
       requestListToFill.add(requestInfo);
       correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
     }
-  }
-
-  ;
+  };
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to the PutOperations, every time.
   private final PutRequestRegistrationCallbackImpl requestRegistrationCallback =
@@ -82,7 +80,7 @@ class PutManager {
     this.time = time;
     putOperations = Collections.newSetFromMap(new ConcurrentHashMap<PutOperation, Boolean>());
     correlationIdToPutOperation = new HashMap<Integer, PutOperation>();
-    chunkFillerThread = Utils.newThread("ChunkFillerThread", new ChunkFiller(), false);
+    chunkFillerThread = Utils.newThread("ChunkFillerThread", new ChunkFiller(), true);
     chunkFillerThread.start();
   }
 
@@ -96,14 +94,13 @@ class PutManager {
    * @param callback the {@link Callback} object to be called on completion of the operation.
    */
   void submitPutBlobOperation(long operationId, BlobProperties blobProperties, byte[] userMetaData,
-      final ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback) {
+      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback) {
     try {
       PutOperation putOperation =
           new PutOperation(routerConfig, clusterMap, responseHandler, operationId, blobProperties, userMetaData,
               channel, futureResult, callback, time);
       putOperations.add(putOperation);
     } catch (RouterException e) {
-      logger.error("Error creating PutOperation with the given operation parameters", e);
       NonBlockingRouter.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -115,14 +112,14 @@ class PutManager {
    * response is received for a put operation), any error handling or operation completion and cleanup also usually
    * gets done in the context of this method.
    * @param requestListToFill list to be filled with the requests created
-   * @throws RouterException if an error is encountered during the creation of new requests.
    */
   void poll(List<RequestInfo> requestListToFill) {
     Iterator<PutOperation> putOperationIterator = putOperations.iterator();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     while (putOperationIterator.hasNext()) {
       PutOperation op = putOperationIterator.next();
-      if (op.poll(requestRegistrationCallback)) {
+      op.poll(requestRegistrationCallback);
+      if (op.isOperationComplete()) {
         // Operation is done.
         putOperationIterator.remove();
         onComplete(op);
@@ -140,12 +137,11 @@ class PutManager {
     PutOperation putOperation = correlationIdToPutOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (putOperations.contains(putOperation)) {
-      if (putOperation.handleResponse(responseInfo)) {
+      putOperation.handleResponse(responseInfo);
+      if (putOperation.isOperationComplete()) {
         putOperations.remove(putOperation);
         onComplete(putOperation);
       }
-    } else {
-      // Ignore. the operation has completed.
     }
   }
 
@@ -207,7 +203,8 @@ class PutManager {
         Iterator<PutOperation> iter = putOperations.iterator();
         while (iter.hasNext()) {
           PutOperation op = iter.next();
-          if (!op.fillChunks()) {
+          if (!op.isChunkFillComplete()) {
+            op.fillChunks();
             allChunksFillComplete = false;
           }
         }

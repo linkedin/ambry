@@ -118,9 +118,8 @@ public class ChunkFillTest {
     numChunks = op.getNumDataChunks();
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);
 
-    boolean chunkFillComplete;
     do {
-      chunkFillComplete = op.fillChunks();
+      op.fillChunks();
       // All existing chunks must have been filled if no work was done in the last call,
       // since the channel is ByteBuffer based.
       for (PutOperation.PutChunk putChunk : op.putChunks) {
@@ -133,7 +132,7 @@ public class ChunkFillTest {
         compositeBuffers.put(putChunk.getChunkIndex(), ByteBuffer.allocate(buf.remaining()).put(buf));
         putChunk.clear();
       }
-    } while (!chunkFillComplete);
+    } while (!op.isChunkFillComplete());
 
     Assert.assertEquals("total size written out should match the blob size", blobSize, totalSizeWritten);
 
