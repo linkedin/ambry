@@ -42,8 +42,8 @@ public class AmbrySecurityServiceTest {
 
   public AmbrySecurityServiceTest()
       throws InstantiationException {
-    securityService = new AmbrySecurityServiceFactory()
-        .getSecurityService(new VerifiableProperties(new Properties()), new MetricRegistry());
+    securityService = new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry())
+        .getSecurityService();
   }
 
   /**

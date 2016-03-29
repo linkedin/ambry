@@ -25,9 +25,11 @@ class AmbrySecurityService implements SecurityService {
 
   private boolean isOpen;
   private final long cacheValidityInSecs;
+  private final FrontendMetrics frontendMetrics;
 
-  public AmbrySecurityService(FrontendConfig frontendConfig) {
+  public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics) {
     cacheValidityInSecs = frontendConfig.frontendCacheValiditySeconds;
+    this.frontendMetrics = frontendMetrics;
     isOpen = true;
   }
 
