@@ -12,6 +12,8 @@ import com.github.ambry.router.RouterErrorCode;
  * {@link ResponseStatus#NotFound}
  * {@link ResponseStatus#BadRequest}
  * {@link ResponseStatus#InternalServerError}
+ * {@link ResponseStatus#Forbidden}
+ * {@link ResponseStatus#ProxyAuthenticationRequired}
  * <p/>
  * About logging:
  * Generally, error codes not belonging to the group {@link #InternalServerError} are logged at DEBUG level.
@@ -31,6 +33,14 @@ public enum RestServiceErrorCode {
    * Generic BadRequest error code when a client provides a request that is not fit for processing.
    */
   BadRequest,
+  /**
+   * Resource scan still in progress and result not yet available
+   */
+  ResourceScanInProgress,
+  /**
+   * Resource scan has deducted that the resource is not safe for serving
+   */
+  ResourceDirty,
   /**
    * Client has sent arguments (whether in the URI or in the headers) that are not in the format that is expected or if
    * the number of values for an argument expected by the server does not match what the client sent.

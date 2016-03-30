@@ -28,9 +28,17 @@ public enum ResponseStatus {
    */
   Unauthorized,
   /**
+   * 403 - Request forbidden
+   */
+  Forbidden,
+  /**
    * 404 Not Found - Resource was not found.
    */
   NotFound,
+  /**
+   * 407 - Proxy authentication required
+   */
+  ProxyAuthenticationRequired,
   /**
    * 410 Gone - Resource has been deleted or has expired.
    */
@@ -62,8 +70,12 @@ public enum ResponseStatus {
       case UnsupportedHttpMethod:
       case UnsupportedOperation:
         return ResponseStatus.BadRequest;
+      case ResourceDirty:
+        return ResponseStatus.Forbidden;
       case Unauthorized:
         return ResponseStatus.Unauthorized;
+      case ResourceScanInProgress:
+        return ResponseStatus.ProxyAuthenticationRequired;
       case InternalServerError:
       case InternalObjectCreationError:
       case RequestChannelClosed:
