@@ -364,6 +364,14 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.goneCount.inc();
         status = HttpResponseStatus.GONE;
         break;
+      case Forbidden:
+        nettyMetrics.forbiddenCount.inc();
+        status = HttpResponseStatus.FORBIDDEN;
+        break;
+      case ProxyAuthenticationRequired:
+        nettyMetrics.proxyAuthRequiredCount.inc();
+        status = HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED;
+        break;
       case InternalServerError:
         nettyMetrics.internalServerErrorCount.inc();
         status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
