@@ -326,7 +326,7 @@ class PutOperation {
    * Return the number of data chunks that this operation will result in.
    * @return the number of data chunks that this operation will result in.
    */
-  long getNumDataChunks() {
+  int getNumDataChunks() {
     return numDataChunks;
   }
 
@@ -759,7 +759,8 @@ class PutOperation {
       // BlobId_Already_Exists are outliers (should not really happen) that those should really
       // result in Ambry_Unavailable or UnexpectedInternalError.
       // However, for metrics, we will need to distinguish them here.
-      setChunkException(new RouterException("Could not complete operation", RouterErrorCode.AmbryUnavailable));
+      setChunkException(new RouterException("Could not complete operation, server returned: " + error,
+          RouterErrorCode.AmbryUnavailable));
     }
 
     /**

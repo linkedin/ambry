@@ -13,7 +13,6 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -28,7 +27,7 @@ class MockSelector extends Selector {
   private List<NetworkSend> sends = new ArrayList<NetworkSend>();
   private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
   private final Time time;
-  private final AtomicReference<MockSelectorState> state;
+  private final MockSelectorState state;
   private final MockServerLayout serverLayout;
 
   /**
@@ -40,13 +39,13 @@ class MockSelector extends Selector {
    * @param time the Time instance to use.
    * @throws IOException if {@link Selector} throws.
    */
-  MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time)
+  MockSelector(MockServerLayout serverLayout, MockSelectorState state, Time time)
       throws IOException {
     super(new NetworkMetrics(new MetricRegistry()), time, null);
     // we don't need the actual selector, close it.
     super.close();
     this.serverLayout = serverLayout;
-    this.state = state == null ? new AtomicReference<MockSelectorState>(MockSelectorState.Good) : state;
+    this.state = state == null ? MockSelectorState.Good : state;
     this.time = time;
   }
 
@@ -62,7 +61,7 @@ class MockSelector extends Selector {
   @Override
   public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize, PortType portType)
       throws IOException {
-    if (state.get() == MockSelectorState.ThrowExceptionOnConnect) {
+    if (state == MockSelectorState.ThrowExceptionOnConnect) {
       throw new IOException("Mock connect exception");
     }
     String host = address.getHostString();
@@ -88,10 +87,10 @@ class MockSelector extends Selector {
     this.sends = sends;
     if (sends != null) {
       for (NetworkSend send : sends) {
-        if (state.get() == MockSelectorState.ThrowExceptionOnPoll) {
+        if (state == MockSelectorState.ThrowExceptionOnPoll) {
           throw new IOException("Mock exception on poll");
         }
-        if (state.get() == MockSelectorState.DisconnectOnSend) {
+        if (state == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
         } else {
           MockServer server = connIdToServer.get(send.getConnectionId());

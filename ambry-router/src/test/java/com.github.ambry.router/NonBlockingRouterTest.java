@@ -8,8 +8,8 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.nio.ByteBuffer;
 import java.util.Properties;
 import java.util.Random;
@@ -100,7 +100,7 @@ public class NonBlockingRouterTest {
   }
 
   /**
-   * Test that multiple scaling units can be instantiated, closed, and that closing one will close the router.
+   * Test that multiple scaling units can be instantiated, exercised and closed.
    */
   @Test
   public void testMultipleScalingUnit()
@@ -150,9 +150,9 @@ public class NonBlockingRouterTest {
 
   private void assertExpectedThreadCounts(int expectedCount) {
     Assert.assertEquals("Number of chunkFiller threads running should be as expected", expectedCount,
-        UtilsTest.numThreadsByThisName("ChunkFillerThread"));
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("Number of RequestResponseHandler threads running should be as expected", expectedCount,
-        UtilsTest.numThreadsByThisName("RequestResponseHandlerThread"));
+        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     if (expectedCount == 0) {
       Assert.assertFalse("Router should be closed if there are no worker threads running", router.isOpen());
       Assert
