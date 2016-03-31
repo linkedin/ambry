@@ -2,6 +2,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
@@ -14,6 +15,7 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.concurrent.Future;
 
 
@@ -63,8 +65,12 @@ class AmbrySecurityService implements SecurityService {
         throw new IllegalArgumentException("One of the required params is null");
       }
       try {
+        responseChannel.setStatus(ResponseStatus.Ok);
+        responseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+        responseChannel
+            .setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
         if (restRequest.getRestMethod() == RestMethod.HEAD) {
-          setResponseHeaders(blobInfo, responseChannel);
+          setHeadResponseHeaders(blobInfo, responseChannel);
         } else if (restRequest.getRestMethod() == RestMethod.GET) {
           RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
           if (subResource == null) {
@@ -90,11 +96,11 @@ class AmbrySecurityService implements SecurityService {
   }
 
   /**
-   * Sets the required headers in the response.
+   * Sets the required headers in the HEAD response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo, RestResponseChannel restResponseChannel)
+  private void setHeadResponseHeaders(BlobInfo blobInfo, RestResponseChannel restResponseChannel)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));

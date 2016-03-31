@@ -8,7 +8,6 @@ import com.github.ambry.rest.MockRestRequestResponseHandler;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
-import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -25,11 +24,11 @@ public class AmbryBlobStorageServiceFactoryTest {
   /**
    * Tests the instantiation of an {@link AmbryBlobStorageService} instance through the
    * {@link AmbryBlobStorageServiceFactory}.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void getAmbryBlobStorageServiceTest()
-      throws IOException {
+      throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -45,11 +44,11 @@ public class AmbryBlobStorageServiceFactoryTest {
 
   /**
    * Tests instantiation of {@link AmbryBlobStorageServiceFactory} with bad input.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void getAmbryBlobStorageServiceFactoryWithBadInputTest()
-      throws IOException {
+      throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);

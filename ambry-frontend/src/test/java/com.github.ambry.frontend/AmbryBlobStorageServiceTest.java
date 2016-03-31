@@ -7,6 +7,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.IdConverter;
+import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -20,8 +22,11 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
+import com.github.ambry.rest.SecurityService;
+import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -35,6 +40,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -67,9 +73,13 @@ public class AmbryBlobStorageServiceTest {
     }
   }
 
-  private final InMemoryRouter router;
-  private final FrontendTestResponseHandler responseHandler;
-  private final AmbryBlobStorageService ambryBlobStorageService;
+  private final MetricRegistry metricRegistry = new MetricRegistry();
+  private final FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
+  private AmbryBlobStorageService ambryBlobStorageService;
+  private IdConverterFactory idConverterFactory;
+  private SecurityServiceFactory securityServiceFactory;
+  private FrontendTestResponseHandler responseHandler;
+  private InMemoryRouter router;
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -77,8 +87,11 @@ public class AmbryBlobStorageServiceTest {
    */
   public AmbryBlobStorageServiceTest()
       throws InstantiationException {
-    RestRequestMetricsTracker.setDefaults(new MetricRegistry());
-    router = new InMemoryRouter(new VerifiableProperties(new Properties()));
+    VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
+    securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry);
+    router = new InMemoryRouter(verifiableProperties);
     responseHandler = new FrontendTestResponseHandler();
     ambryBlobStorageService = getAmbryBlobStorageService();
     responseHandler.start();
@@ -132,10 +145,14 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void useServiceWithoutStartTest()
       throws Exception {
-    // simulating by shutting down first.
-    ambryBlobStorageService.shutdown();
-    // fine to use without start.
-    postGetHeadDeleteTest();
+    ambryBlobStorageService = getAmbryBlobStorageService();
+    // not fine to use without start.
+    try {
+      doOperation(createRestRequest(RestMethod.GET, "/", null, null), new MockRestResponseChannel());
+      fail("Should not have been able to use AmbryBlobStorageService without start");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ServiceUnavailable, e.getErrorCode());
+    }
   }
 
   /**
@@ -200,20 +217,23 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
-    // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
+    // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
+    Exception e = restResponseChannel.getException();
+    assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
 
     responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     ambryBlobStorageService.handleDelete(restRequest, restResponseChannel);
-    // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
+    // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
+    e = restResponseChannel.getException();
+    assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
 
     responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
     ambryBlobStorageService.handleHead(restRequest, restResponseChannel);
-    // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
+    // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
+    e = restResponseChannel.getException();
+    assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
   }
 
   /**
@@ -350,6 +370,62 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
+   * Tests for cases where the {@link IdConverter} misbehaves and throws {@link RuntimeException}.
+   * @throws InstantiationException
+   * @throws JSONException
+   */
+  @Test
+  public void misbehavingIdConverterTest()
+      throws InstantiationException, JSONException {
+    FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
+    String exceptionMsg = UtilsTest.getRandomString(10);
+    converterFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
+    doIdConverterExceptionTest(converterFactory, exceptionMsg);
+  }
+
+  /**
+   * Tests for cases where the {@link IdConverter} returns valid exceptions.
+   * @throws InstantiationException
+   * @throws JSONException
+   */
+  @Test
+  public void idConverterExceptionPipelineTest()
+      throws InstantiationException, JSONException {
+    FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
+    String exceptionMsg = UtilsTest.getRandomString(10);
+    converterFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
+    doIdConverterExceptionTest(converterFactory, exceptionMsg);
+  }
+
+  /**
+   * Tests for cases where the {@link SecurityService} misbehaves and throws {@link RuntimeException}.
+   * @throws InstantiationException
+   * @throws JSONException
+   */
+  @Test
+  public void misbehavingSecurityServiceTest()
+      throws InstantiationException, JSONException {
+    FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
+    String exceptionMsg = UtilsTest.getRandomString(10);
+    securityFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
+    doSecurityServiceExceptionTest(securityFactory, exceptionMsg);
+  }
+
+  /**
+   * Tests for cases where the {@link SecurityService} returns valid exceptions.
+   * @throws InstantiationException
+   * @throws JSONException
+   */
+  @Test
+  public void securityServiceExceptionPipelineTest()
+      throws InstantiationException, JSONException {
+    FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
+    String exceptionMsg = UtilsTest.getRandomString(10);
+    securityFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
+    doSecurityServiceExceptionTest(securityFactory, exceptionMsg);
+  }
+
+  /**
    * Tests for non common case scenarios for {@link HeadForGetCallback}.
    * @throws Exception
    */
@@ -357,6 +433,7 @@ public class AmbryBlobStorageServiceTest {
   public void headForGetCallbackTest()
       throws Exception {
     String exceptionMsg = UtilsTest.getRandomString(10);
+    SecurityService securityService = securityServiceFactory.getSecurityService();
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -364,7 +441,8 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     HeadForGetCallback callback =
-        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
+        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
+            null);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
@@ -377,7 +455,9 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
+    callback =
+        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
+            null);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
@@ -388,7 +468,9 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
+    callback =
+        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
+            null);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
         responseHandler.getException().getClass());
@@ -404,13 +486,17 @@ public class AmbryBlobStorageServiceTest {
     restRequest = new BadRestRequest();
     // there is an exception already.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
+    callback =
+        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
+            null);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
     // there is no exception and the exception thrown in the callback is the primary exception.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, null, 0);
+    callback =
+        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
+            null);
     BlobInfo blobInfo = new BlobInfo(null, null);
     callback.onCompletion(blobInfo, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getException());
@@ -492,6 +578,7 @@ public class AmbryBlobStorageServiceTest {
       throws Exception {
     BlobProperties blobProperties = new BlobProperties(0, "test-serviceId");
     String exceptionMsg = UtilsTest.getRandomString(10);
+    IdConverter idConverter = idConverterFactory.getIdConverter();
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -499,7 +586,8 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    PostCallback callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties);
+    PostCallback callback =
+        new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
@@ -512,7 +600,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties);
+    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
@@ -523,7 +611,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.POST, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties);
+    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
         responseHandler.getException().getClass());
@@ -598,12 +686,14 @@ public class AmbryBlobStorageServiceTest {
   public void headCallbackTest()
       throws Exception {
     String exceptionMsg = UtilsTest.getRandomString(10);
+    SecurityService securityService = securityServiceFactory.getSecurityService();
     responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    HeadCallback callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel);
+    HeadCallback callback =
+        new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
     callback.onCompletion(null, null);
     // there should be an exception
     assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
@@ -616,7 +706,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel);
+    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
     // Nothing should be closed.
@@ -627,7 +717,7 @@ public class AmbryBlobStorageServiceTest {
     responseHandler.reset();
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel);
+    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
     callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
     assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
         responseHandler.getException().getClass());
@@ -643,13 +733,13 @@ public class AmbryBlobStorageServiceTest {
     restRequest = new BadRestRequest();
     // there is an exception already.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel);
+    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
     callback.onCompletion(null, new RuntimeException(exceptionMsg));
     assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
     // there is no exception and exception thrown in the callback.
     restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel);
+    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
     BlobInfo blobInfo = new BlobInfo(new BlobProperties(0, "test-serviceId"), new byte[0]);
     callback.onCompletion(blobInfo, null);
     assertNotNull("There is no cause of failure", restResponseChannel.getException());
@@ -756,12 +846,8 @@ public class AmbryBlobStorageServiceTest {
    * @return an instance of {@link AmbryBlobStorageService}.
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() {
-    // dud properties. pick up defaults
-    Properties properties = new Properties();
-    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    FrontendMetrics frontendMetrics = new FrontendMetrics(new MetricRegistry());
-    return new AmbryBlobStorageService(frontendConfig, frontendMetrics, CLUSTER_MAP, responseHandler, router);
+    return new AmbryBlobStorageService(frontendMetrics, CLUSTER_MAP, responseHandler, router, idConverterFactory,
+        securityServiceFactory);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1014,6 +1100,81 @@ public class AmbryBlobStorageServiceTest {
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertTrue("No Last-Modified header", restResponseChannel.getHeader("Last-Modified") != null);
   }
+
+  // IdConverter and SecurityService exception testing helpers.
+
+  /**
+   * Does the exception pipelining test for {@link IdConverter}.
+   * @param converterFactory the {@link IdConverterFactory} to use to while creating {@link AmbryBlobStorageService}.
+   * @param expectedExceptionMsg the expected exception message.
+   * @throws InstantiationException
+   * @throws JSONException
+   */
+  private void doIdConverterExceptionTest(FrontendTestIdConverterFactory converterFactory, String expectedExceptionMsg)
+      throws InstantiationException, JSONException {
+    ambryBlobStorageService =
+        new AmbryBlobStorageService(frontendMetrics, CLUSTER_MAP, responseHandler, router, converterFactory,
+            securityServiceFactory);
+    ambryBlobStorageService.start();
+    doExternalServicesBadInputTest(RestMethod.values(), expectedExceptionMsg);
+  }
+
+  /**
+   * Does the exception pipelining test for {@link SecurityService}.
+   * @param securityFactory the {@link SecurityServiceFactory} to use to while creating {@link AmbryBlobStorageService}.
+   * @param exceptionMsg the expected exception message.
+   * @throws InstantiationException
+   * @throws JSONException
+   */
+  private void doSecurityServiceExceptionTest(FrontendTestSecurityServiceFactory securityFactory, String exceptionMsg)
+      throws InstantiationException, JSONException {
+    for (FrontendTestSecurityServiceFactory.Mode mode : FrontendTestSecurityServiceFactory.Mode.values()) {
+      securityFactory.mode = mode;
+      RestMethod[] restMethods;
+      if (mode.equals(FrontendTestSecurityServiceFactory.Mode.Request)) {
+        restMethods = RestMethod.values();
+      } else {
+        restMethods = new RestMethod[2];
+        restMethods[0] = RestMethod.GET;
+        restMethods[1] = RestMethod.HEAD;
+      }
+      ambryBlobStorageService =
+          new AmbryBlobStorageService(frontendMetrics, CLUSTER_MAP, responseHandler, new FrontendTestRouter(),
+              idConverterFactory, securityFactory);
+      ambryBlobStorageService.start();
+      doExternalServicesBadInputTest(restMethods, exceptionMsg);
+    }
+  }
+
+  /**
+   * Does the tests to check for exception pipelining for exceptions returned/thrown by external services.
+   * @param restMethods the {@link RestMethod} types for which the test has to be run.
+   * @param expectedExceptionMsg the expected exception message.
+   * @throws JSONException
+   */
+  private void doExternalServicesBadInputTest(RestMethod[] restMethods, String expectedExceptionMsg)
+      throws JSONException {
+    for (RestMethod restMethod : restMethods) {
+      if (restMethod.equals(RestMethod.UNKNOWN)) {
+        continue;
+      }
+      JSONObject headers = new JSONObject();
+      List<ByteBuffer> contents = null;
+      if (restMethod.equals(RestMethod.POST)) {
+        setAmbryHeaders(headers, 0, 7200, false, "doExternalServicesBadInputTest", "application/octet-stream",
+            "doExternalServicesBadInputTest");
+        contents = new ArrayList<ByteBuffer>(1);
+        contents.add(null);
+      }
+      try {
+        doOperation(createRestRequest(restMethod, "/", headers, contents), new MockRestResponseChannel());
+        fail("Operation " + restMethod
+            + " should have failed because an external service would have thrown an exception");
+      } catch (Exception e) {
+        assertEquals("Unexpected exception message", expectedExceptionMsg, e.getMessage());
+      }
+    }
+  }
 }
 
 /**
@@ -1022,7 +1183,7 @@ public class AmbryBlobStorageServiceTest {
  * {@link #reset()}.
  */
 class FrontendTestResponseHandler implements RestResponseHandler {
-  private final CountDownLatch responseSubmitted = new CountDownLatch(1);
+  private volatile CountDownLatch responseSubmitted = new CountDownLatch(1);
   private volatile ReadableStreamChannel response = null;
   private volatile Exception exception = null;
   private volatile boolean serviceRunning = false;
@@ -1092,6 +1253,135 @@ class FrontendTestResponseHandler implements RestResponseHandler {
   public void reset() {
     response = null;
     exception = null;
+    responseSubmitted = new CountDownLatch(1);
+  }
+}
+
+/**
+ * Implementation of {@link SecurityServiceFactory} that returns exceptions.
+ */
+class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
+  /**
+   * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
+   */
+  protected enum Mode {
+    /**
+     * Works in {@link SecurityService#processRequest(RestRequest, Callback)}.
+     */
+    Request,
+    /**
+     * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
+     */
+    Response
+  }
+
+  /**
+   * The exception to return via future/callback.
+   */
+  public Exception exceptionToReturn = null;
+  /**
+   * The exception to throw on function invocation.
+   */
+  public RuntimeException exceptionToThrow = null;
+  /**
+   * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
+   */
+  public Mode mode = Mode.Request;
+
+  @Override
+  public SecurityService getSecurityService() {
+    return new TestSecurityService();
+  }
+
+  private class TestSecurityService implements SecurityService {
+    private boolean isOpen = true;
+
+    @Override
+    public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback) {
+      if (!isOpen) {
+        throw new IllegalStateException("SecurityService closed");
+      }
+      return completeOperation(callback, mode == null || mode == Mode.Request);
+    }
+
+    @Override
+    public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
+        Callback<Void> callback) {
+      if (!isOpen) {
+        throw new IllegalStateException("SecurityService closed");
+      }
+      return completeOperation(callback, mode == Mode.Response);
+    }
+
+    @Override
+    public void close() {
+      isOpen = false;
+    }
+
+    /**
+     * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
+     * @param callback the {@link Callback} to invoke. Can be null.
+     * @param misbehaveIfRequired whether to exhibit misbehavior or not.
+     * @return the created {@link Future}.
+     */
+    private Future<Void> completeOperation(Callback<Void> callback, boolean misbehaveIfRequired) {
+      if (misbehaveIfRequired && exceptionToThrow != null) {
+        throw exceptionToThrow;
+      }
+      FutureResult<Void> futureResult = new FutureResult<Void>();
+      futureResult.done(null, misbehaveIfRequired ? exceptionToReturn : null);
+      if (callback != null) {
+        callback.onCompletion(null, misbehaveIfRequired ? exceptionToReturn : null);
+      }
+      return futureResult;
+    }
+  }
+}
+
+/**
+ * Implementation of {@link IdConverterFactory} that returns exceptions.
+ */
+class FrontendTestIdConverterFactory implements IdConverterFactory {
+  public Exception exceptionToReturn = null;
+  public RuntimeException exceptionToThrow = null;
+
+  @Override
+  public IdConverter getIdConverter() {
+    return new TestIdConverter();
+  }
+
+  private class TestIdConverter implements IdConverter {
+    private boolean isOpen = true;
+
+    @Override
+    public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
+      if (!isOpen) {
+        throw new IllegalStateException("IdConverter closed");
+      }
+      return completeOperation(callback);
+    }
+
+    @Override
+    public void close() {
+      isOpen = false;
+    }
+
+    /**
+     * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
+     * @param callback the {@link Callback} to invoke. Can be null.
+     * @return the created {@link Future}.
+     */
+    private Future<String> completeOperation(Callback<String> callback) {
+      if (exceptionToThrow != null) {
+        throw exceptionToThrow;
+      }
+      FutureResult<String> futureResult = new FutureResult<String>();
+      futureResult.done(null, exceptionToReturn);
+      if (callback != null) {
+        callback.onCompletion(null, exceptionToReturn);
+      }
+      return futureResult;
+    }
   }
 }
 
@@ -1176,5 +1466,77 @@ class BadRSC implements ReadableStreamChannel {
   public void close()
       throws IOException {
     throw new IOException("Not implemented");
+  }
+}
+
+/**
+ * Implementation of {@link Router} that does nothing except respond immediately.
+ */
+class FrontendTestRouter implements Router {
+  private boolean isOpen = true;
+
+  @Override
+  public Future<BlobInfo> getBlobInfo(String blobId) {
+    return getBlobInfo(blobId, null);
+  }
+
+  @Override
+  public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
+    return completeOperation(new BlobInfo(new BlobProperties(0, "FrontendTestRouter"), new byte[0]), callback);
+  }
+
+  @Override
+  public Future<ReadableStreamChannel> getBlob(String blobId) {
+    return getBlob(blobId, null);
+  }
+
+  @Override
+  public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
+    return completeOperation(new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), callback);
+  }
+
+  @Override
+  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
+    return putBlob(blobProperties, usermetadata, channel, null);
+  }
+
+  @Override
+  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+      Callback<String> callback) {
+    return completeOperation(UtilsTest.getRandomString(10), callback);
+  }
+
+  @Override
+  public Future<Void> deleteBlob(String blobId) {
+    return deleteBlob(blobId, null);
+  }
+
+  @Override
+  public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
+    return completeOperation(null, callback);
+  }
+
+  @Override
+  public void close() {
+    isOpen = false;
+  }
+
+  /**
+   * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
+   * @param result the result to return.
+   * @param callback the {@link Callback} to invoke. Can be null.
+   * @param <T> the type of future/callback.
+   * @return the created {@link Future}.
+   */
+  private <T> Future<T> completeOperation(T result, Callback<T> callback) {
+    if (!isOpen) {
+      throw new IllegalStateException("Router not open");
+    }
+    FutureResult<T> futureResult = new FutureResult<T>();
+    futureResult.done(result, null);
+    if (callback != null) {
+      callback.onCompletion(result, null);
+    }
+    return futureResult;
   }
 }
