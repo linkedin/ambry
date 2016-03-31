@@ -279,11 +279,9 @@ class NonBlockingRouter implements Router {
         callback.onCompletion(operationResult, exception);
       }
     } catch (Exception e) {
-      //@todo add metric.
       logger.error("Exception caught during future and callback completion", e);
     } finally {
       currentOperationsCount.decrementAndGet();
-      //@todo add metric.
     }
   }
 
@@ -424,7 +422,6 @@ class NonBlockingRouter implements Router {
             break;
           default:
             logger.error("Unexpected response type: " + type + " received, discarding");
-            // @todo add to a metric. We do not want to throw here.
         }
       }
     }
