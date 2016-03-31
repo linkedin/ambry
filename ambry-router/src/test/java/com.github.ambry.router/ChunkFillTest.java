@@ -10,10 +10,8 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
 import junit.framework.Assert;
 import org.junit.Before;
@@ -25,9 +23,9 @@ import org.junit.Test;
  * ensure that chunks are filled correctly, and continue filling in as chunks get consumed.
  */
 public class ChunkFillTest {
-  private final Map<Integer, ByteBuffer> compositeBuffers = new TreeMap<Integer, ByteBuffer>();
+  private ByteBuffer[] compositeBuffers;
   private int totalSizeWritten = 0;
-  private long numChunks = 0;
+  private int numChunks = 0;
   private byte[] putContent;
   private int blobSize;
   private int chunkSize;
@@ -35,8 +33,8 @@ public class ChunkFillTest {
 
   @Before
   public void setChunkSize() {
-    // a random non-zero chunkSize in the range [1, 1024]
-    chunkSize = random.nextInt(1024) + 1;
+    // a random non-zero chunkSize in the range [2, 1024]
+    chunkSize = random.nextInt(1023) + 2;
   }
 
   /**
@@ -65,7 +63,7 @@ public class ChunkFillTest {
   @Test
   public void testChunkFillingBlobSizeMultipleOfChunkSize()
       throws Exception {
-    blobSize = chunkSize * random.nextInt(10) + 1;
+    blobSize = chunkSize * (random.nextInt(10) + 1);
     fillChunksAndAssertSuccess();
   }
 
@@ -116,6 +114,7 @@ public class ChunkFillTest {
         new PutOperation(routerConfig, mockClusterMap, responseHandler, 1, putBlobProperties, putUserMetadata,
             putChannel, futureResult, null, new MockTime());
     numChunks = op.getNumDataChunks();
+    compositeBuffers = new ByteBuffer[numChunks];
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);
 
     do {
@@ -129,7 +128,7 @@ public class ChunkFillTest {
         Assert.assertEquals("Chunk should be ready.", ChunkState.Ready, putChunk.getState());
         ByteBuffer buf = putChunk.buf;
         totalSizeWritten += buf.remaining();
-        compositeBuffers.put(putChunk.getChunkIndex(), ByteBuffer.allocate(buf.remaining()).put(buf));
+        compositeBuffers[putChunk.getChunkIndex()] = ByteBuffer.allocate(buf.remaining()).put(buf);
         putChunk.clear();
       }
     } while (!op.isChunkFillComplete());
@@ -147,14 +146,9 @@ public class ChunkFillTest {
    * Ensure that the data filled in is exactly identical to the original content.
    */
   private void assertDataIdentity() {
-    Assert.assertEquals("Number of chunks should match", numChunks, compositeBuffers.size());
-    int i = 0;
     ByteBuffer dest = ByteBuffer.allocate(totalSizeWritten);
-    for (Map.Entry<Integer, ByteBuffer> entry : compositeBuffers.entrySet()) {
-      int j = entry.getKey();
-      Assert.assertEquals("All chunks should have come in", i, j);
-      i++;
-      ByteBuffer buf = entry.getValue();
+    for (ByteBuffer buf : compositeBuffers) {
+      Assert.assertNotNull("All chunks should have come in", buf);
       buf.flip();
       dest.put(buf);
     }

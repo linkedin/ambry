@@ -16,8 +16,8 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -31,10 +31,8 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 
@@ -42,12 +40,11 @@ import org.junit.Test;
  * A class to test the Put implementation of the {@link NonBlockingRouter}.
  */
 public class PutManagerTest {
-  private MockServerLayout mockServerLayout;
-  private MockTime mockTime = new MockTime();
-  private MockClusterMap mockClusterMap;
-  // this is a reference to the sate used by the mockSelector. just allows tests to manipulate the state.
-  private final AtomicReference<MockSelectorState> mockSelectorState =
-      new AtomicReference<MockSelectorState>(MockSelectorState.Good);
+  private final MockServerLayout mockServerLayout;
+  private final MockTime mockTime = new MockTime();
+  private final MockClusterMap mockClusterMap;
+  // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
+  private MockSelectorState mockSelectorState;
   private NonBlockingRouter router;
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
@@ -66,16 +63,14 @@ public class PutManagerTest {
   /**
    * Pre-initialization common to all tests.
    */
-  @Before
-  public void preInitialize()
+  public PutManagerTest()
       throws Exception {
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
     successTarget = 2;
     checkContentEquality = true;
-    requestAndResultsList.clear();
-    mockSelectorState.set(MockSelectorState.Good);
+    mockSelectorState = MockSelectorState.Good;
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
   }
@@ -170,8 +165,9 @@ public class PutManagerTest {
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
-    mockSelectorState.set(MockSelectorState.ThrowExceptionOnConnect);
-    submitPutsAndAssertFailure(false);
+    mockSelectorState = MockSelectorState.ThrowExceptionOnConnect;
+    Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
+    submitPutsAndAssertFailure(expectedException, false, true);
     // this should not close the router.
     Assert.assertTrue("Router should not be closed", router.isOpen());
     assertCloseCleanup();
@@ -185,8 +181,9 @@ public class PutManagerTest {
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
-    mockSelectorState.set(MockSelectorState.DisconnectOnSend);
-    submitPutsAndAssertFailure(false);
+    mockSelectorState = MockSelectorState.DisconnectOnSend;
+    Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
+    submitPutsAndAssertFailure(expectedException, false, false);
     // this should not have closed the router.
     Assert.assertTrue("Router should not be closed", router.isOpen());
     assertCloseCleanup();
@@ -200,14 +197,17 @@ public class PutManagerTest {
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
-    mockSelectorState.set(MockSelectorState.ThrowExceptionOnPoll);
-    submitPutsAndAssertFailure(false);
+    mockSelectorState = MockSelectorState.ThrowExceptionOnPoll;
+    // In the case of an error in poll, the router gets closed, and all the ongoing operations are finished off with
+    // RouterClosed error.
+    Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
+    submitPutsAndAssertFailure(expectedException, false, false);
     // router should get closed automatically
     Assert.assertFalse("Router should be closed", router.isOpen());
     Assert.assertEquals("No ChunkFiller threads should be running after the router is closed", 0,
-        UtilsTest.numThreadsByThisName("ChunkFillerThread"));
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler threads should be running after the router is closed", 0,
-        UtilsTest.numThreadsByThisName("RequestResponseHandlerThread"));
+        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
@@ -231,7 +231,7 @@ public class PutManagerTest {
   }
 
   /**
-   * Test ensures request failure when all server nodes always return an error.
+   * Test ensures failure when all server nodes encounter an error.
    */
   @Test
   public void testPutWithAllNodesFailure()
@@ -245,7 +245,8 @@ public class PutManagerTest {
       MockServer server = mockServerLayout.getMockServer(host, port);
       server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
     }
-    submitPutsAndAssertFailure(true);
+    Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
+    submitPutsAndAssertFailure(expectedException, true, false);
   }
 
   /**
@@ -294,7 +295,8 @@ public class PutManagerTest {
         server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
       }
     }
-    submitPutsAndAssertFailure(true);
+    Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
+    submitPutsAndAssertFailure(expectedException, true, false);
   }
 
   /**
@@ -313,6 +315,7 @@ public class PutManagerTest {
     // Set the state of the mock servers so that they return an error for the first send issued,
     // but later ones succeed. With 3 nodes, for slipped puts, all partitions will come from the same nodes,
     // so we set the errors in such a way that the first request received by every node fails.
+    // Note: The assumption is that there are 3 nodes per DC.
     List<ServerErrorCode> serverErrorList = new ArrayList<ServerErrorCode>();
     serverErrorList.add(ServerErrorCode.Unknown_Error);
     serverErrorList.add(ServerErrorCode.No_Error);
@@ -321,6 +324,33 @@ public class PutManagerTest {
       server.setPutErrors(serverErrorList);
     }
     submitPutsAndAssertSuccess(true);
+  }
+
+  /**
+   * Tests a case where some chunks succeed and a later chunk fails and ensures that the operation fails in
+   * such a scenario.
+   */
+  @Test
+  public void testLaterChunkFailure()
+      throws Exception {
+    // choose a blob with two chunks, first one will succeed and second will fail.
+    requestAndResultsList.clear();
+    requestAndResultsList.add(new RequestAndResult(chunkSize * 2));
+    List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
+    // Set the state of the mock servers so that they return success for the first send issued,
+    // but later ones fail. With 3 nodes, all partitions will come from the same nodes,
+    // so we set the errors in such a way that the first request received by every node succeeds and later ones fail.
+    List<ServerErrorCode> serverErrorList = new ArrayList<ServerErrorCode>();
+    serverErrorList.add(ServerErrorCode.No_Error);
+    for (int i = 0; i < 5; i++) {
+      serverErrorList.add(ServerErrorCode.Unknown_Error);
+    }
+    for (DataNodeId dataNodeId : dataNodeIds) {
+      MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
+      server.setPutErrors(serverErrorList);
+    }
+    Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
+    submitPutsAndAssertFailure(expectedException, true, false);
   }
 
   /**
@@ -337,7 +367,6 @@ public class PutManagerTest {
     int blobSize = chunkSize * random.nextInt(10) + 1;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
-    // change the actual content size to a lower number.
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
     FutureResult<String> future = (FutureResult<String>) router
         .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
@@ -372,7 +401,6 @@ public class PutManagerTest {
     int blobSize = chunkSize * random.nextInt(10) + 1;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
-    // change the actual content size to a lower number.
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
     FutureResult<String> future = (FutureResult<String>) router
         .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
@@ -392,7 +420,8 @@ public class PutManagerTest {
     }
     future.await();
     requestAndResult.result = future;
-    assertFailure();
+    Exception expectedException = new Exception("Channel encountered an error");
+    assertFailure(expectedException);
     assertCloseCleanup();
   }
 
@@ -408,7 +437,8 @@ public class PutManagerTest {
     // Change the actual content size.
     requestAndResult.putContent = new byte[blobSize + 1];
     requestAndResultsList.add(requestAndResult);
-    submitPutsAndAssertFailure(true);
+    Exception expectedException = new RouterException("", RouterErrorCode.BadInputChannel);
+    submitPutsAndAssertFailure(expectedException, true, false);
   }
 
   /**
@@ -439,7 +469,8 @@ public class PutManagerTest {
         .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
     future.await();
     requestAndResult.result = future;
-    assertFailure();
+    Exception expectedException = new RouterException("", RouterErrorCode.BlobTooLarge);
+    assertFailure(expectedException);
     assertCloseCleanup();
   }
 
@@ -475,16 +506,27 @@ public class PutManagerTest {
   /**
    * Submits put blob operations that are expected to fail, and asserts that the operations are indeed
    * failures.
+   * The incrementTimer option is provided for testing timeout related failures that kick in only if the time has
+   * elapsed. For other tests, we want to isolate the failures and not let the timeouts kick in,
+   * and those tests will call this method with this flag set to false.
+   * @param expectedException the expected Exception
    * @param shouldCloseRouterAfter whether the router should be closed after the operation.
+   * @param incrementTimer whether mock time should be incremented in CHECKOUT_TIMEOUT_MS increments while waiting
+   *                       for the operation to complete.
    */
-  private void submitPutsAndAssertFailure(boolean shouldCloseRouterAfter)
+  private void submitPutsAndAssertFailure(Exception expectedException, boolean shouldCloseRouterAfter,
+      boolean incrementTimer)
       throws Exception {
     CountDownLatch doneLatch = submitPut();
-    do {
-      // increment mock time so failures (like connection checkout) can be induced.
-      mockTime.sleep(CHECKOUT_TIMEOUT_MS + 1);
-    } while (!doneLatch.await(1, TimeUnit.MILLISECONDS));
-    assertFailure();
+    if (incrementTimer) {
+      do {
+        // increment mock time so failures (like connection checkout) can be induced.
+        mockTime.sleep(CHECKOUT_TIMEOUT_MS + 1);
+      } while (!doneLatch.await(1, TimeUnit.MILLISECONDS));
+    } else {
+      doneLatch.await();
+    }
+    assertFailure(expectedException);
     if (shouldCloseRouterAfter) {
       assertCloseCleanup();
     }
@@ -492,7 +534,7 @@ public class PutManagerTest {
 
   /**
    * Submits put operations. This is called by {@link #submitPutsAndAssertSuccess(boolean)} and
-   * {@link #submitPutsAndAssertFailure(boolean)} methods.
+   * {@link #submitPutsAndAssertFailure(Exception, boolean, boolean)} methods.
    * @return a {@link CountDownLatch} to await on for operation completion.
    */
   private CountDownLatch submitPut()
@@ -521,7 +563,7 @@ public class PutManagerTest {
                     }
                   });
         }
-      }, false).start();
+      }, true).start();
     }
     return doneLatch;
   }
@@ -628,13 +670,28 @@ public class PutManagerTest {
 
   /**
    * Go through all the requests and ensure all of them have failed.
+   * @param expectedException expected exception
    */
-  private void assertFailure() {
+  private void assertFailure(Exception expectedException) {
     for (RequestAndResult requestAndResult : requestAndResultsList) {
       String blobId = requestAndResult.result.result();
       Exception exception = requestAndResult.result.error();
       Assert.assertNull("blobId should be null", blobId);
       Assert.assertNotNull("exception should not be null", exception);
+      Assert.assertTrue("Exception received should be the expected Exception",
+          exceptionsAreEqual(expectedException, exception));
+    }
+  }
+
+  /**
+   * Check if the given two exceptions are equal.
+   * @return true if the exceptions are equal.
+   */
+  private boolean exceptionsAreEqual(Exception a, Exception b) {
+    if (a instanceof RouterException) {
+      return a.equals(b);
+    } else {
+      return a.getClass() == b.getClass() && a.getMessage().equals(b.getMessage());
     }
   }
 
@@ -644,14 +701,14 @@ public class PutManagerTest {
    */
   private void assertCloseCleanup() {
     Assert.assertEquals("Exactly one chunkFiller thread should be running before the router is closed", 1,
-        UtilsTest.numThreadsByThisName("ChunkFillerThread"));
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("Exactly one RequestResponseHandler thread should be running before the router is closed", 1,
-        UtilsTest.numThreadsByThisName("RequestResponseHandlerThread"));
+        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     router.close();
     Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
-        UtilsTest.numThreadsByThisName("ChunkFillerThread"));
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
-        UtilsTest.numThreadsByThisName("RequestResponseHandlerThread"));
+        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 

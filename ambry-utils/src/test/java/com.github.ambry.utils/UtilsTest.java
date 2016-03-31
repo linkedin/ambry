@@ -315,16 +315,6 @@ public class UtilsTest {
     }
     return sb.toString();
   }
-
-  public static int numThreadsByThisName(String name) {
-    int count = 0;
-    for (Thread t : Thread.getAllStackTraces().keySet()) {
-      if (t.getName().equals(name)) {
-        count++;
-      }
-    }
-    return count;
-  }
 }
 
 class MockClassForTesting {
