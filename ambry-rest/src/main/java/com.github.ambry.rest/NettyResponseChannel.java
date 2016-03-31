@@ -155,6 +155,9 @@ class NettyResponseChannel implements RestResponseChannel {
             chunkedWriteHandler.resumeTransfer();
           }
         } else {
+          if (request != null) {
+            request.getMetricsTracker().markFailure();
+          }
           // need to set writeFuture as failed in case writes have started or chunks have been queued.
           if (!writeFuture.isDone()) {
             writeFuture.setFailure(exception);

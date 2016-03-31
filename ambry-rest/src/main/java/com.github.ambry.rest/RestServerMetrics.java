@@ -49,9 +49,6 @@ public class RestServerMetrics {
   // AsyncRequestResponseHandler
   public final Histogram requestWorkerSelectionTimeInMs;
 
-  // RestServer state
-  public Gauge<Boolean> restServerStatus;
-
   // Errors
   // AsyncRequestWorker
   public final Counter requestProcessingError;
@@ -193,10 +190,10 @@ public class RestServerMetrics {
         metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
     routerCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
 
-    restServerStatus = new Gauge<Boolean>() {
+    Gauge<Integer> restServerStatus = new Gauge<Integer>() {
       @Override
-      public Boolean getValue() {
-        return restServerState.isServiceUp();
+      public Integer getValue() {
+        return restServerState.isServiceUp() ? 1 : 0;
       }
     };
     metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);

@@ -198,6 +198,10 @@ public class RestRequestMetricsTracker {
     return totalCpuTimeInMs.addAndGet(delta);
   }
 
+  public void markFailure() {
+    metrics.operationError.inc();
+  }
+
   /**
    * Injects a {@link RestRequestMetrics} that can be used to track the metrics of the {@link RestRequest} that this
    * instance of RestRequestMetricsTracker is attached to.
@@ -207,6 +211,7 @@ public class RestRequestMetricsTracker {
   public void injectMetrics(RestRequestMetrics restRequestMetrics) {
     if (restRequestMetrics != null) {
       metrics = restRequestMetrics;
+      metrics.operationRate.mark();
     } else {
       throw new IllegalArgumentException("RestRequestMetrics provided cannot be null");
     }
@@ -232,6 +237,10 @@ public class RestRequestMetricsTracker {
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
 
         metrics.totalCpuTimeInMs.update(totalCpuTimeInMs.get());
+        if (metrics == defaultMetrics) {
+          // track unknown requests rate.
+          metrics.operationRate.mark();
+        }
       }
     } else {
       throw new IllegalStateException("Could not record metrics because there is no metrics tracker");

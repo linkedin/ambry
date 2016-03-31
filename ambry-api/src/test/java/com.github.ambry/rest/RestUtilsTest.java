@@ -605,7 +605,7 @@ public class RestUtilsTest {
       boolean keyFromInputMap = inputUserMetadata.containsKey(key);
       assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
       assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
-          + ", and output map value " + userMetadataMap.get(key),
+              + ", and output map value " + userMetadataMap.get(key),
           inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
     }
   }

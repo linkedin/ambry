@@ -78,7 +78,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       if (callback != null) {
         callback.onCompletion(convertedId, exception);
       }
-      frontendMetrics.idConverterRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
+      frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       return futureResult;
     }
   }
