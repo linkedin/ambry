@@ -30,7 +30,7 @@ import static org.junit.Assert.fail;
  * Unit test for {@link DeleteManager} and {@link DeleteOperation}.
  */
 public class DeleteManagerTest {
-  private CountDownLatch latch;
+  private CountDownLatch operationCompletedlatch;
   private Time mockTime;
   private AtomicReference<MockSelectorState> mockSelectorState;
   private MockServerLayout serverLayout;
@@ -59,7 +59,7 @@ public class DeleteManagerTest {
    */
   private void initialize(boolean serverNoResponse, String deleteParallelism)
       throws Exception {
-    latch = new CountDownLatch(1);
+    operationCompletedlatch = new CountDownLatch(1);
     mockTime = new MockTime();
     mockSelectorState = new AtomicReference<MockSelectorState>(MockSelectorState.Good);
     VerifiableProperties vProps = new VerifiableProperties(getNonBlockingRouterProperties(deleteParallelism));
@@ -246,17 +246,10 @@ public class DeleteManagerTest {
     blobRecordVerification(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new UserCallback());
     do {
-      if (future.isDone()) {
-        try {
-          future.get();
-          fail();
-        } catch (Exception e) {
-          assertEquals(RouterErrorCode.OperationTimedOut, ((RouterException) exception).getErrorCode());
-        }
-      }
-      // increment mock time so failures (like connection checkout) can be induced.
+      // increment mock time
       mockTime.sleep(CHECKOUT_TIMEOUT_MS + 1);
-    } while (!latch.await(10, TimeUnit.MILLISECONDS));
+    } while (!operationCompletedlatch.await(10, TimeUnit.MILLISECONDS));
+    assertEquals(RouterErrorCode.OperationTimedOut, ((RouterException) exception).getErrorCode());
   }
 
   /**
@@ -270,23 +263,37 @@ public class DeleteManagerTest {
         {ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error};
     initialize(false, "9");
     for (MockSelectorState state : MockSelectorState.values()) {
+      if(state == MockSelectorState.Good) {
+        continue;
+      }
       mockSelectorState.set(state);
       writeBlobRecordToServers(serverErrorCodes);
       blobRecordVerification(serverErrorCodes);
       future = router.deleteBlob(blobIdString, new UserCallback());
       do {
-        if (future.isDone()) {
-          try {
-            future.get();
-            fail();
-          } catch (Exception e) {
-            assertEquals(RouterErrorCode.OperationTimedOut, ((RouterException) exception).getErrorCode());
-          }
-        }
-        // increment mock time so failures (like connection checkout) can be induced.
+        // increment mock time
         mockTime.sleep(CHECKOUT_TIMEOUT_MS + 1);
-      } while (!latch.await(10, TimeUnit.MILLISECONDS));
+        //System.out.println(operationCompletedlatch.getCount());
+      } while (!operationCompletedlatch.await(10, TimeUnit.MILLISECONDS));
+      assertEquals(RouterErrorCode.OperationTimedOut, ((RouterException) exception).getErrorCode());
     }
+  }
+
+  /**
+   * Test the case when a router is closed.
+   * @throws Exception
+   */
+  @Test
+  public void testCloseRouter()
+      throws Exception {
+    ServerErrorCode[] serverErrorCodes =
+        {ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error, ServerErrorCode.No_Error};
+    initialize(true, "9");
+    writeBlobRecordToServers(serverErrorCodes);
+    blobRecordVerification(serverErrorCodes);
+    future = router.deleteBlob(blobIdString, new UserCallback());
+    router.close();
+    assertEquals(RouterErrorCode.RouterClosed, ((RouterException) exception).getErrorCode());
   }
 
   private void writeBlobRecordToServers(ServerErrorCode[] serverErrorCodes) {
@@ -312,7 +319,7 @@ public class DeleteManagerTest {
     @Override
     public void onCompletion(Void t, Exception e) {
       exception = e;
-      latch.countDown();
+      operationCompletedlatch.countDown();
     }
   }
 }

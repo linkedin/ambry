@@ -56,14 +56,14 @@ public class RouterConfig {
   public final int routerMaxPutChunkSizeBytes;
 
   /**
-   * The maximum number of parallel requests allowed for a single put operation.
+   * The maximum number of parallel requests allowed for a single delete operation.
    */
   @Config("router.delete.request.parallelism")
   @Default("9")
   public final int routerDeleteRequestParallelism;
 
   /**
-   * The minimum number of successful responses required for a put operation.
+   * The minimum number of successful responses required for a delete operation.
    */
   @Config("router.delete.success.target")
   @Default("2")
