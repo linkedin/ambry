@@ -220,17 +220,15 @@ class PutOperation {
   void onChunkOperationComplete(PutChunk chunk) {
     if (chunk.getChunkBlobId() == null) {
       // the overall operation has failed if any of the chunk fails.
-      // @todo: metric.
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
       operationCompleted = true;
     } else if (numDataChunks == 1 || chunk == metadataPutChunk) {
       blobId = chunk.getChunkBlobId();
       // the overall operation has succeeded.
       if (chunk.failedAttempts > 0) {
-        // @todo: metric.
-        logger.info("Slipped put succeeded for blob: " + chunk.getChunkBlobId());
+        logger.trace("Slipped put succeeded for chunk: " + chunk.getChunkBlobId());
       } else {
-        logger.trace("Successfully put blob: " + chunk.getChunkBlobId());
+        logger.trace("Successfully put chunk: " + chunk.getChunkBlobId());
       }
       operationCompleted = true;
     } else {
@@ -417,11 +415,6 @@ class PutOperation {
     // map of correlation id to the request metadata for every request issued for the current chunk.
     private final Map<Integer, ChunkPutRequest> correlationIdToChunkPutRequest =
         new TreeMap<Integer, ChunkPutRequest>();
-
-    // this is the maximum number of times we will retry a put with a different partitions,
-    // before failing the chunk put operation (which will also fail the entire operation).
-    // @todo: should this be a config?
-    private static final int MAX_SLIPPED_PUTS = 1;
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
 
     /**
@@ -501,8 +494,6 @@ class PutOperation {
      */
     private void prepareForBuilding(int chunkIndex, int size) {
       this.chunkIndex = chunkIndex;
-      // @todo use the Buffer pool eventually.
-      // The current implementation does not allow for reuse of the same buffer, and uses locks. This needs discussion.
       if (buf == null) {
         buf = ByteBuffer.allocate(size);
       } else {
@@ -571,9 +562,8 @@ class PutOperation {
       if (operationTracker.isDone()) {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
-          if (failedAttempts <= MAX_SLIPPED_PUTS) {
+          if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts) {
             logger.trace("Attempt to put chunk with id: " + chunkBlobId + " failed, attempting slipped put");
-            // @todo: add metric.
             prepareForSending();
           } else {
             // this chunk could not be successfully put. The whole operation has to fail.
@@ -626,9 +616,6 @@ class PutOperation {
       while (replicaIterator.hasNext()) {
         ReplicaId replicaId = replicaIterator.next();
         String hostname = replicaId.getDataNodeId().getHostname();
-        // @todo: getPortToConnectTo() in the ClusterMap interface should simply return the correct port without
-        // taking any parameters. Rather than make the change to plug in sslEnabledDataCenters into
-        // the NonBlockingRouter only to change later, we will hard code it here for now.
         Port port = new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
         PutRequest putRequest = createPutRequest();
         RequestInfo request = new RequestInfo(hostname, port, putRequest);
@@ -694,8 +681,6 @@ class PutOperation {
         isSuccessful = false;
       } else {
         try {
-          // @todo: PutResponse takes an InputStream, which could be changed to take a ByteBuffer to avoid new object
-          // creations.
           PutResponse putResponse =
               PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
           if (putResponse.getCorrelationId() != correlationId) {
@@ -703,7 +688,6 @@ class PutOperation {
             // out over a connection id, and the response received on a connection id must be for the latest request
             // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
             // There is no other way to handle it.
-            // @todo: metric
             logger.error("The correlation id in the PutResponse " + putResponse.getCorrelationId()
                 + " is not the same as the correlation id in the associated PutRequest: " + correlationId);
             setChunkException(
@@ -723,7 +707,6 @@ class PutOperation {
             }
           }
         } catch (IOException e) {
-          // @todo: metric.
           // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
           // detection.
           setChunkException(new RouterException("Response deserialization received an unexpected error", e,
@@ -742,10 +725,6 @@ class PutOperation {
      * @param exception the exception that may be set as the chunkException.
      */
     private void setChunkException(RouterException exception) {
-      // @todo: set the most relevant error. An exception being set does not necessarily mean that the operation on
-      // the chunk will fail, so this method could get called multiple times and the operation could still succeed.
-      // If the operation fails, then the most relevant exception this method was called with must be the exception
-      // returned to the caller.
       chunkException = exception;
     }
 

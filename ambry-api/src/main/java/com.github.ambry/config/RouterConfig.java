@@ -90,6 +90,13 @@ public class RouterConfig {
   public final int routerPutSuccessTarget;
 
   /**
+   * The maximum number of times to retry putting any chunk of a put operation
+   */
+  @Config("router.max.slipped.put.attempts")
+  @Default("1")
+  public final int routerMaxSlippedPutAttempts;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -107,5 +114,6 @@ public class RouterConfig {
     routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.put.chunk.size.bytes", 4 * 1024 * 1024);
     routerPutRequestParallelism = verifiableProperties.getInt("router.put.request.parallelism", 3);
     routerPutSuccessTarget = verifiableProperties.getInt("router.put.success.target", 2);
+    routerMaxSlippedPutAttempts = verifiableProperties.getInt("router.max.slipped.put.attempts", 1);
   }
 }
