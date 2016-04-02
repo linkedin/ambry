@@ -8,6 +8,8 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.ByteBufferChannel;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
@@ -44,17 +46,16 @@ class MockServer {
         }
         return new MockBoundedByteBufferReceive(
             new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), putError) {
-              ByteBuffer getPayload() {
-                ByteBuffer buf;
-                buf = ByteBuffer.allocate(2 + 2 + 4 + 4 + 2);
-                buf.putShort((short) RequestOrResponseType.PutResponse.ordinal());
-                buf.putShort(versionId);
-                buf.putInt(correlationId);
-                buf.putInt(0);
-                buf.putShort((short) putError.ordinal());
-                buf.flip();
-                // ignore version for now
-                return buf;
+              ByteBuffer getPayload()
+                  throws IOException {
+                ByteArrayOutputStream bStream = new ByteArrayOutputStream();
+                DataOutputStream dStream = new DataOutputStream(bStream);
+                dStream.writeShort((short) RequestOrResponseType.PutResponse.ordinal());
+                dStream.writeShort(versionId);
+                dStream.writeInt(correlationId);
+                dStream.writeInt(0); // avoiding adding clientId
+                dStream.writeShort((short) putError.ordinal());
+                return ByteBuffer.wrap(bStream.toByteArray());
               }
             }.getPayload());
       default:

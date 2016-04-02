@@ -28,6 +28,12 @@ public class NonBlockingRouterTest {
   private final Random random = new Random();
   private NonBlockingRouter router;
 
+  // Request params;
+  BlobProperties putBlobProperties;
+  byte[] putUserMetadata;
+  byte[] putContent;
+  ReadableStreamChannel putChannel;
+
   /**
    * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
    * the {@link NonBlockingRouter}.
@@ -38,6 +44,15 @@ public class NonBlockingRouterTest {
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
     return properties;
+  }
+
+  private void setOperationParams() {
+    putBlobProperties = new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    putUserMetadata = new byte[10];
+    random.nextBytes(putUserMetadata);
+    putContent = new byte[100];
+    random.nextBytes(putContent);
+    putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
   }
 
   /**
@@ -74,13 +89,7 @@ public class NonBlockingRouterTest {
 
     assertExpectedThreadCounts(1);
 
-    BlobProperties putBlobProperties =
-        new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    byte[] putUserMetadata = new byte[10];
-    random.nextBytes(putUserMetadata);
-    byte[] putContent = new byte[100];
-    random.nextBytes(putContent);
-    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+    setOperationParams();
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
@@ -121,27 +130,14 @@ public class NonBlockingRouterTest {
 
     // Submit a few jobs so that all the scaling units get exercised.
     for (int i = 0; i < SCALING_UNITS * 10; i++) {
-      BlobProperties putBlobProperties =
-          new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-      byte[] putUserMetadata = new byte[10];
-      random.nextBytes(putUserMetadata);
-      byte[] putContent = new byte[100];
-      random.nextBytes(putContent);
-      ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-
+      setOperationParams();
       router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     }
     router.close();
     assertExpectedThreadCounts(0);
 
     //submission after closing should return a future that is already done.
-    BlobProperties putBlobProperties =
-        new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    byte[] putUserMetadata = new byte[10];
-    random.nextBytes(putUserMetadata);
-    byte[] putContent = new byte[100];
-    random.nextBytes(putContent);
-    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+    setOperationParams();
     Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
     Assert.assertTrue(future.isDone());
     RouterException e = (RouterException) ((FutureResult<String>) future).error();
