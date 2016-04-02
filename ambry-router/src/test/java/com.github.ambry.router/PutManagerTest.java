@@ -260,7 +260,7 @@ public class PutManagerTest {
     List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
     // Now, fail every third node in every DC and ensure operation success.
     // Note 1: The assumption here is that there are 3 nodes per DC. However, cross DC is not applicable for puts.
-    // Note 2: Although nodes are chosen for failure deterministically herer, the order in which replicas are chosen
+    // Note 2: Although nodes are chosen for failure deterministically here, the order in which replicas are chosen
     // for puts is random, so the responses that fail could come in any order. What this and similar tests below
     // test is that as long as there are enough good responses, the operations should succeed,
     // and as long as that is not the case, operations should fail.
@@ -359,11 +359,7 @@ public class PutManagerTest {
   @Test
   public void testDelayedChannelPutSuccess()
       throws Exception {
-    VerifiableProperties vProps = getNonBlockingRouterProperties();
-    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
-        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-        mockTime);
+    router = getNonBlockingRouter();
     int blobSize = chunkSize * random.nextInt(10) + 1;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
@@ -393,11 +389,7 @@ public class PutManagerTest {
   @Test
   public void testBadChannelPutFailure()
       throws Exception {
-    VerifiableProperties vProps = getNonBlockingRouterProperties();
-    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
-        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-        mockTime);
+    router = getNonBlockingRouter();
     int blobSize = chunkSize * random.nextInt(10) + 1;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
@@ -454,12 +446,7 @@ public class PutManagerTest {
     long blobSize = 4 * 1024 * 1024 * 1024L;
     chunkSize = 1;
 
-    VerifiableProperties vProps = getNonBlockingRouterProperties();
-    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
-        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-        mockTime);
-
+    router = getNonBlockingRouter();
     RequestAndResult requestAndResult = new RequestAndResult(0);
     requestAndResultsList.add(requestAndResult);
     requestAndResult.putBlobProperties =
@@ -477,21 +464,26 @@ public class PutManagerTest {
   // Methods used by the tests
 
   /**
-   * @return Get the default {@link VerifiableProperties} for the {@link NonBlockingRouter}
+   * @return Return a {@link NonBlockingRouter} created with default {@link VerifiableProperties}
    */
-  private VerifiableProperties getNonBlockingRouterProperties() {
+  private NonBlockingRouter getNonBlockingRouter()
+      throws IOException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    return new VerifiableProperties(properties);
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
+        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
+        mockTime);
+    return router;
   }
 
   /**
-   * Submits put blob operations that are expected to succeed, and asserts that the operations are indeed
-   * successful.
+   * Submits put blob operations that are expected to succeed, waits for completion, and asserts success.
    * @param shouldCloseRouterAfter whether the router should be closed after the operation.
    */
   private void submitPutsAndAssertSuccess(boolean shouldCloseRouterAfter)
@@ -504,8 +496,7 @@ public class PutManagerTest {
   }
 
   /**
-   * Submits put blob operations that are expected to fail, and asserts that the operations are indeed
-   * failures.
+   * Submits put blob operations that are expected to fail, waits for completion, and asserts failure.
    * The incrementTimer option is provided for testing timeout related failures that kick in only if the time has
    * elapsed. For other tests, we want to isolate the failures and not let the timeouts kick in,
    * and those tests will call this method with this flag set to false.
@@ -542,11 +533,7 @@ public class PutManagerTest {
     final CountDownLatch doneLatch = new CountDownLatch(requestAndResultsList.size());
     // This check is here for certain tests (like testConcurrentPuts) that require using the same router.
     if (router == null || !router.isOpen()) {
-      VerifiableProperties vProps = getNonBlockingRouterProperties();
-      router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
-          new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-              CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-          mockTime);
+      router = getNonBlockingRouter();
     }
     for (final RequestAndResult requestAndResult : requestAndResultsList) {
       Utils.newThread(new Runnable() {
@@ -573,26 +560,29 @@ public class PutManagerTest {
    */
   private void assertSuccess()
       throws Exception {
+    // Go through all the requests received by all the servers and ensure that all requests for the same blob id are
+    // identical. In the process also fill in the map of blobId to serializedPutRequests.
+    HashMap<String, ByteBuffer> allChunks = new HashMap<String, ByteBuffer>();
+    for (MockServer mockServer : mockServerLayout.getMockServers()) {
+      for (Map.Entry<String, ByteBuffer> blobEntry : mockServer.getBlobs().entrySet()) {
+        ByteBuffer chunk = allChunks.get(blobEntry.getKey());
+        if (chunk == null) {
+          allChunks.put(blobEntry.getKey(), blobEntry.getValue());
+        } else {
+          if (checkContentEquality) {
+            Assert.assertTrue("All requests for the same blob id must be identical except for correlation id",
+                areIdenticalPutRequests(chunk.array(), blobEntry.getValue().array()));
+          }
+        }
+      }
+    }
+
+    // Go through each request, and ensure all of them have succeeded.
     for (RequestAndResult requestAndResult : requestAndResultsList) {
       String blobId = requestAndResult.result.result();
       Exception exception = requestAndResult.result.error();
       Assert.assertNotNull("blobId should not be null", blobId);
       Assert.assertNull("exception should be null", exception);
-
-      HashMap<String, ByteBuffer> allChunks = new HashMap<String, ByteBuffer>();
-      for (MockServer mockServer : mockServerLayout.getMockServers()) {
-        for (Map.Entry<String, ByteBuffer> blobEntry : mockServer.getBlobs().entrySet()) {
-          ByteBuffer chunk = allChunks.get(blobEntry.getKey());
-          if (chunk == null) {
-            allChunks.put(blobEntry.getKey(), blobEntry.getValue());
-          } else {
-            if (checkContentEquality) {
-              Assert.assertTrue("All requests for the same blob id must be identical except for correlation id",
-                  areIdenticalPutRequests(chunk.array(), blobEntry.getValue().array()));
-            }
-          }
-        }
-      }
       verifyBlob(blobId, requestAndResult.putContent, allChunks);
     }
   }

@@ -41,12 +41,12 @@ class GetManager {
     //@todo
   }
 
-  void submitGetBlobOperation(long operationId, String blobId, FutureResult<ReadableStreamChannel> futureResult,
+  void submitGetBlobOperation(String blobId, FutureResult<ReadableStreamChannel> futureResult,
       Callback<ReadableStreamChannel> callback) {
     //@todo
   }
 
-  void submitGetBlobInfoOperation(long operationId, String blobId, FutureResult<BlobInfo> futureResult,
+  void submitGetBlobInfoOperation(String blobId, FutureResult<BlobInfo> futureResult,
       Callback<BlobInfo> callback) {
     //@todo
   }

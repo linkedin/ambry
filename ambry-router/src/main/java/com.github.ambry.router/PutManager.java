@@ -68,7 +68,9 @@ class PutManager {
       requestListToFill.add(requestInfo);
       correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
     }
-  };
+  }
+
+  ;
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to the PutOperations, every time.
   private final PutRequestRegistrationCallbackImpl requestRegistrationCallback =
@@ -99,19 +101,18 @@ class PutManager {
 
   /**
    * Submit a put blob operation to be processed asynchronously.
-   * @param operationId the operation id for the put operation.
    * @param blobProperties the blobProperties associated with the blob being put.
    * @param userMetaData the userMetaData associated with the blob being put.
    * @param channel the {@link ReadableStreamChannel} containing the blob content.
    * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
    * @param callback the {@link Callback} object to be called on completion of the operation.
    */
-  void submitPutBlobOperation(long operationId, BlobProperties blobProperties, byte[] userMetaData,
-      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback) {
+  void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
+      FutureResult<String> futureResult, Callback<String> callback) {
     try {
       PutOperation putOperation =
-          new PutOperation(routerConfig, clusterMap, responseHandler, operationId, blobProperties, userMetaData,
-              channel, futureResult, callback, time);
+          new PutOperation(routerConfig, clusterMap, responseHandler, blobProperties, userMetaData, channel,
+              futureResult, callback, time);
       putOperations.add(putOperation);
     } catch (RouterException e) {
       NonBlockingRouter.completeOperation(futureResult, callback, null, e);
@@ -211,25 +212,24 @@ class PutManager {
     private final int sleepTimeWhenIdleMs = 10;
 
     public void run() {
-      while (isOpen.get()) {
-        boolean allChunksFillComplete = true;
-        Iterator<PutOperation> iter = putOperations.iterator();
-        while (iter.hasNext()) {
-          PutOperation op = iter.next();
-          if (!op.isChunkFillComplete()) {
-            op.fillChunks();
-            allChunksFillComplete = false;
+      try {
+        while (isOpen.get()) {
+          boolean allChunksFilled = true;
+          Iterator<PutOperation> iter = putOperations.iterator();
+          while (iter.hasNext()) {
+            PutOperation op = iter.next();
+            if (!op.isChunkFillComplete()) {
+              op.fillChunks();
+              allChunksFilled = false;
+            }
           }
-        }
-        if (allChunksFillComplete) {
-          try {
+          if (allChunksFilled) {
             Thread.sleep(sleepTimeWhenIdleMs);
-          } catch (InterruptedException e) {
-            logger.info("Caught interrupted exception while sleeping", e);
-            Thread.currentThread().interrupt();
-            break;
           }
         }
+      } catch (InterruptedException e) {
+        logger.info("Caught interrupted exception while sleeping", e);
+        Thread.currentThread().interrupt();
       }
     }
   }

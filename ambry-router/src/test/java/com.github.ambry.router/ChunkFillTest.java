@@ -111,8 +111,8 @@ public class ChunkFillTest {
     final ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     FutureResult<String> futureResult = new FutureResult<String>();
     PutOperation op =
-        new PutOperation(routerConfig, mockClusterMap, responseHandler, 1, putBlobProperties, putUserMetadata,
-            putChannel, futureResult, null, new MockTime());
+        new PutOperation(routerConfig, mockClusterMap, responseHandler, putBlobProperties, putUserMetadata, putChannel,
+            futureResult, null, new MockTime());
     numChunks = op.getNumDataChunks();
     compositeBuffers = new ByteBuffer[numChunks];
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);

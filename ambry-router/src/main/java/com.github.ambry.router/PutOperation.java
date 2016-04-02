@@ -39,6 +39,23 @@ import org.slf4j.LoggerFactory;
 
 /**
  * PutOperation class is responsible for maintaining the state associated with a put operation, and completing it.
+ * The associated object of a put operation ends up as one or more chunks, depending on its size. If the size is less
+ * than max put chunk size, then the operation will involve a single chunk. Those that are larger are split into
+ * multiple chunks and distributed across partitions individually. Each chunk will be a blob at the server and will
+ * have its own blob id. For such composite blobs, an associated metadata chunk will be created that consists of
+ * the blob ids of every data chunk; and the blob id of this metadata chunk will become the blob id of the overall
+ * object.
+ *
+ * For simple blobs (blobs that are under the max put chunk size), only a single chunk is created and held
+ * within a single PutChunk object which is used to complete the whole operation. No metadata chunks are created. The
+ * blob id of the single data chunk will be the blob id of the blob.
+ *
+ * For composite blobs, a PutOperation consists of a fixed number of PutChunk objects and a MetadataPutChunk object.
+ * Each PutChunk holds one of the chunks of the object at any time and attempts to put the chunk successfully, and then
+ * possibly moves on to hold another chunk of the object. This is repeated until either the operation fails or until all
+ * the chunks are put successfully. If all the chunks are put successfully, the MetadataPutChunk is created to put
+ * the metadata chunk consisting of the blob ids of all the data chunks, and the successful put of the metadata
+ * chunk successfully completes the operation.
  */
 class PutOperation {
   // Operation arguments.
@@ -97,7 +114,6 @@ class PutOperation {
    * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param operationId the operation id of the put operation.
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param userMetadata the userMetadata associated with the put operation.
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
@@ -106,7 +122,7 @@ class PutOperation {
    * @param time the Time instance to use.
    * @throws {@link RouterException} if there is an error in constructing the PutOperation with the given parameters.
    */
-  PutOperation(RouterConfig routerConfig, ClusterMap clusterMap, ResponseHandler responseHandler, long operationId,
+  PutOperation(RouterConfig routerConfig, ClusterMap clusterMap, ResponseHandler responseHandler,
       BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       FutureResult<String> futureResult, Callback<String> callback, Time time)
       throws RouterException {
@@ -251,19 +267,16 @@ class PutOperation {
    * This method runs in the context of the ChunkFiller thread. As long as there are chunks available to
    * be written to, it gets the chunk that is to be filled and keeps filling it with the data from the
    * chunkFillerChannel, if there is any.
+   * @throws InterruptedException if the call to get a chunk from the chunkFillerChannel is interrupted.
    */
-  void fillChunks() {
+  void fillChunks()
+      throws InterruptedException {
     PutChunk chunkToFill;
     if (!chunkFillingCompleted && !operationCompleted) {
       do {
         // Attempt to fill a chunk
         if (channelReadBuffer == null) {
-          try {
-            channelReadBuffer = chunkFillerChannel.getNextChunk(0);
-          } catch (InterruptedException e) {
-            throw new IllegalStateException(
-                "Received InterruptedException from a call that is expected to be non-blocking.");
-          }
+          channelReadBuffer = chunkFillerChannel.getNextChunk(0);
         }
         if (channelReadBuffer != null) {
           chunkToFill = getChunkToFill();
@@ -296,18 +309,17 @@ class PutOperation {
   private PutChunk getChunkToFill() {
     if (chunkToFill != null && chunkToFill.isBuilding()) {
       return chunkToFill;
-    } else {
-      for (PutChunk chunk : putChunks) {
-        if (chunk.isFree()) {
-          chunkCounter++;
-          chunk.prepareForBuilding(chunkCounter, getSizeOfChunkAt(chunkCounter));
-          chunkToFill = chunk;
-          return chunk;
-        }
+    }
+    chunkToFill = null;
+    for (PutChunk chunk : putChunks) {
+      if (chunk.isFree()) {
+        chunkCounter++;
+        chunk.prepareForBuilding(chunkCounter, getSizeOfChunkAt(chunkCounter));
+        chunkToFill = chunk;
+        break;
       }
     }
-    // No free or building chunks.
-    return null;
+    return chunkToFill;
   }
 
   /**
@@ -413,8 +425,8 @@ class PutOperation {
     // the list of partitions already attempted for this chunk.
     private List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // map of correlation id to the request metadata for every request issued for the current chunk.
-    private final Map<Integer, ChunkPutRequest> correlationIdToChunkPutRequest =
-        new TreeMap<Integer, ChunkPutRequest>();
+    private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo =
+        new TreeMap<Integer, ChunkPutRequestInfo>();
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
 
     /**
@@ -434,7 +446,7 @@ class PutOperation {
       state = ChunkState.Free;
       failedAttempts = 0;
       partitionId = null;
-      correlationIdToChunkPutRequest.clear();
+      correlationIdToChunkPutRequestInfo.clear();
       attemptedPartitionIds.clear();
     }
 
@@ -516,7 +528,7 @@ class PutOperation {
         chunkBlobId = new BlobId(partitionId);
         operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false,
             routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
-        correlationIdToChunkPutRequest.clear();
+        correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
         setOperationException(e);
@@ -593,10 +605,10 @@ class PutOperation {
      */
     void poll(PutRequestRegistrationCallback requestFillCallback) {
       //First, check if any of the existing requests have timed out.
-      Iterator<Map.Entry<Integer, ChunkPutRequest>> inFlightRequestsIterator =
-          correlationIdToChunkPutRequest.entrySet().iterator();
+      Iterator<Map.Entry<Integer, ChunkPutRequestInfo>> inFlightRequestsIterator =
+          correlationIdToChunkPutRequestInfo.entrySet().iterator();
       while (inFlightRequestsIterator.hasNext()) {
-        Map.Entry<Integer, ChunkPutRequest> entry = inFlightRequestsIterator.next();
+        Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
           operationTracker.onResponse(entry.getValue().replicaId, false);
           chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
@@ -620,7 +632,7 @@ class PutOperation {
         PutRequest putRequest = createPutRequest();
         RequestInfo request = new RequestInfo(hostname, port, putRequest);
         int correlationId = putRequest.getCorrelationId();
-        correlationIdToChunkPutRequest.put(correlationId, new ChunkPutRequest(replicaId, time.milliseconds()));
+        correlationIdToChunkPutRequestInfo.put(correlationId, new ChunkPutRequestInfo(replicaId, time.milliseconds()));
         correlationIdToPutChunk.put(correlationId, this);
         requestFillCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
@@ -665,8 +677,8 @@ class PutOperation {
      */
     void handleResponse(ResponseInfo responseInfo) {
       int correlationId = ((PutRequest) responseInfo.getRequest()).getCorrelationId();
-      ChunkPutRequest request = correlationIdToChunkPutRequest.remove(correlationId);
-      if (request == null) {
+      ChunkPutRequestInfo chunkPutRequestInfo = correlationIdToChunkPutRequestInfo.remove(correlationId);
+      if (chunkPutRequestInfo == null) {
         // Ignore right away. This could mean:
         // - the response is valid for this chunk, but was timed out and removed from the map.
         // - the response is for an earlier attempt of this chunk (slipped put scenario). And the map was cleared
@@ -677,7 +689,7 @@ class PutOperation {
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
-        responseHandler.onRequestResponseException(request.replicaId, new IOException("NetworkClient error"));
+        responseHandler.onRequestResponseException(chunkPutRequestInfo.replicaId, new IOException("NetworkClient error"));
         isSuccessful = false;
       } else {
         try {
@@ -696,7 +708,7 @@ class PutOperation {
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             ServerErrorCode putError = putResponse.getError();
-            responseHandler.onRequestResponseError(request.replicaId, putError);
+            responseHandler.onRequestResponseError(chunkPutRequestInfo.replicaId, putError);
             if (putError == ServerErrorCode.No_Error) {
               logger.trace("The putRequest was successful");
               isSuccessful = true;
@@ -714,7 +726,7 @@ class PutOperation {
           isSuccessful = false;
         }
       }
-      operationTracker.onResponse(request.replicaId, isSuccessful);
+      operationTracker.onResponse(chunkPutRequestInfo.replicaId, isSuccessful);
       checkAndMaybeComplete();
     }
 
@@ -745,16 +757,16 @@ class PutOperation {
     /**
      * A class that holds information about requests sent out by this PutChunk.
      */
-    private class ChunkPutRequest {
+    private class ChunkPutRequestInfo {
       private ReplicaId replicaId;
       private long startTimeMs;
 
       /**
-       * Construct a ChunkPutRequest
+       * Construct a ChunkPutRequestInfo
        * @param replicaId the replica to which this request is being sent.
        * @param startTimeMs the time at which this request was created.
        */
-      ChunkPutRequest(ReplicaId replicaId, long startTimeMs) {
+      ChunkPutRequestInfo(ReplicaId replicaId, long startTimeMs) {
         this.replicaId = replicaId;
         this.startTimeMs = startTimeMs;
       }
