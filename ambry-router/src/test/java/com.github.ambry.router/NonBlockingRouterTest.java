@@ -102,10 +102,7 @@ public class NonBlockingRouterTest {
     assertExpectedThreadCounts(0);
 
     //submission after closing should return a future that is already done.
-    Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
-    Assert.assertTrue(future.isDone());
-    RouterException e = (RouterException) ((FutureResult<String>) future).error();
-    Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
+    assertClosed();
   }
 
   /**
@@ -138,12 +135,13 @@ public class NonBlockingRouterTest {
 
     //submission after closing should return a future that is already done.
     setOperationParams();
-    Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
-    Assert.assertTrue(future.isDone());
-    RouterException e = (RouterException) ((FutureResult<String>) future).error();
-    Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
+    assertClosed();
   }
 
+  /**
+   * Assert that the number of ChunkFiller and RequestResponseHandler threads running are as expected.
+   * @param expectedCount the expected number of ChunkFiller and RequestResponseHandler threads.
+   */
   private void assertExpectedThreadCounts(int expectedCount) {
     Assert.assertEquals("Number of chunkFiller threads running should be as expected", expectedCount,
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
@@ -154,5 +152,16 @@ public class NonBlockingRouterTest {
       Assert
           .assertEquals("All operations should have completed if the router is closed", 0, router.getOperationsCount());
     }
+  }
+
+  /**
+   * Assert that submission after closing the router returns a future that is already done and an appropriate
+   * exception.
+   */
+  private void assertClosed() {
+    Future<String> future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    Assert.assertTrue(future.isDone());
+    RouterException e = (RouterException) ((FutureResult<String>) future).error();
+    Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
   }
 }
