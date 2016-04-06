@@ -62,6 +62,10 @@ public enum RouterErrorCode {
    */
   BlobTooLarge,
   /**
+   * Unexpected error reading from the input channel for puts.
+   */
+  BadInputChannel,
+  /**
    * Insufficient capacity available in Ambry for object to be stored.
    */
   InsufficientCapacity,

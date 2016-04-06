@@ -22,7 +22,7 @@ package com.github.ambry.config;
 public class RouterConfig {
 
   /**
-   * Number of background threads to perform coordinator operations in CoordinatorBackedRouter.
+   * Number of independent scaling units for the router.
    */
   @Config("router.scaling.unit.count")
   @Default("1")
@@ -62,11 +62,39 @@ public class RouterConfig {
   public final int routerConnectionCheckoutTimeoutMs;
 
   /**
+   * Timeout for requests issued by the router to the network layer.
+   */
+  @Config("router.request.timeout.ms")
+  @Default("2000")
+  public final int routerRequestTimeoutMs;
+
+  /**
    * The max chunk size to be used for put operations.
    */
   @Config("router.max.put.chunk.size.bytes")
   @Default("4*1024*1024")
   public final int routerMaxPutChunkSizeBytes;
+
+  /**
+   * The maximum number of parallel requests issued at a time by the put manager for a chunk.
+   */
+  @Config("router.put.request.parallelism")
+  @Default("3")
+  public final int routerPutRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a put operation.
+   */
+  @Config("router.put.success.target")
+  @Default("2")
+  public final int routerPutSuccessTarget;
+
+  /**
+   * The maximum number of times to retry putting any chunk of a put operation
+   */
+  @Config("router.max.slipped.put.attempts")
+  @Default("1")
+  public final int routerMaxSlippedPutAttempts;
 
   /**
    * Create a RouterConfig instance.
@@ -82,6 +110,10 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 20);
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
+    routerRequestTimeoutMs = verifiableProperties.getInt("router.request.timeout.ms", 2000);
     routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.put.chunk.size.bytes", 4 * 1024 * 1024);
+    routerPutRequestParallelism = verifiableProperties.getInt("router.put.request.parallelism", 3);
+    routerPutSuccessTarget = verifiableProperties.getInt("router.put.success.target", 2);
+    routerMaxSlippedPutAttempts = verifiableProperties.getInt("router.max.slipped.put.attempts", 1);
   }
 }

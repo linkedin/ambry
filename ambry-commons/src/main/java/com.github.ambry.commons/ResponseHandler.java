@@ -16,15 +16,14 @@ package com.github.ambry.commons;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
-
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import java.io.IOException;
 import java.net.SocketException;
 
 
 /**
- * ResponseHandler can be used by components like the Coordinator whenever an operation encounters an error or
- * an exception to delegate the responsibility of conveying appropriate replica related errors to the cluster map.
+ * ResponseHandler can be used by components whenever an operation encounters an error or an exception, to delegate
+ * the responsibility of conveying appropriate replica related errors to the cluster map.
  * It can also be used to convey the information that a replica related operation was successful.
  * The cluster map uses this information to set soft states and dynamically handle failures.
  */

@@ -34,14 +34,14 @@ class ConnectionTracker {
   /**
    * Instantiates a ConnectionTracker
    * @param maxConnectionsPerPortPlainText the connection pool limit for plain text connections to a (host, port)
-   * @param maxConnectionsPerPortPlainSsl the connection pool limit for ssl connections to a (host, port)
+   * @param maxConnectionsPerPortSsl the connection pool limit for ssl connections to a (host, port)
    */
-  ConnectionTracker(int maxConnectionsPerPortPlainText, int maxConnectionsPerPortPlainSsl) {
+  ConnectionTracker(int maxConnectionsPerPortPlainText, int maxConnectionsPerPortSsl) {
     hostPortToPoolManager = new HashMap<String, HostPortPoolManager>();
     connectionIdToPoolManager = new HashMap<String, HostPortPoolManager>();
     totalManagedConnectionsCount = 0;
     this.maxConnectionsPerPortPlainText = maxConnectionsPerPortPlainText;
-    this.maxConnectionsPerPortSsl = maxConnectionsPerPortPlainSsl;
+    this.maxConnectionsPerPortSsl = maxConnectionsPerPortSsl;
   }
 
   /**
