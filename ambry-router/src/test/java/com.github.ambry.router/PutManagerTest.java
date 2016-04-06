@@ -204,14 +204,14 @@ public class PutManagerTest {
   }
 
   /**
-   * Tests a failure scenario where selector poll throws an exception.
+   * Tests a failure scenario where selector poll throws an exception when there is anything to send.
    */
   @Test
-  public void testFailureOnAllPoll()
+  public void testFailureOnAllSend()
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
-    mockSelectorState.set(MockSelectorState.ThrowExceptionOnPoll);
+    mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     // In the case of an error in poll, the router gets closed, and all the ongoing operations are finished off with
     // RouterClosed error.
     Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
@@ -539,9 +539,7 @@ public class PutManagerTest {
           .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
     }
 
-    mockSelectorState.set(MockSelectorState.SleepOnPoll);
-    Thread requestResponseHandlerThread = TestUtils.getThreadByThisName("RequestResponseHandlerThread");
-    requestResponseHandlerThread.interrupt();
+    mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
 
     // Now wait till the thread dies
     while (TestUtils.numThreadsByThisName("RequestResponseHandlerThread") > 0) {

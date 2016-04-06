@@ -101,8 +101,8 @@ class MockSelector extends Selector {
     this.sends = sends;
     if (sends != null) {
       for (NetworkSend send : sends) {
-        if (state.get() == MockSelectorState.ThrowExceptionOnPoll) {
-          throw new IOException("Mock exception on poll");
+        if (state.get() == MockSelectorState.ThrowExceptionOnSend) {
+          throw new IOException("Mock exception on send");
         }
         if (state.get() == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
@@ -113,12 +113,8 @@ class MockSelector extends Selector {
         }
       }
     }
-    if (state.get() == MockSelectorState.SleepOnPoll) {
-      try {
-        Thread.sleep(0);
-      } catch (InterruptedException e) {
-        throw new IOException("Caught interrupted exception");
-      }
+    if (state.get() == MockSelectorState.ThrowExceptionOnAllPoll) {
+      throw new IOException("Mock exception on poll");
     }
   }
 
@@ -201,12 +197,13 @@ enum MockSelectorState {
    */
   DisconnectOnSend,
   /**
-   * A state that causes all poll calls to throw an IOException.
+   * A state that causes all poll calls to throw an IOException if there is anything to send.
    */
-  ThrowExceptionOnPoll,
+  ThrowExceptionOnSend,
   /**
-   * A state that causes the selector to sleep for a fixed duration (mocking the actual select()).
+   * A state that causes all poll calls to throw an IOException regardless of whethere there are sends to perform or
+   * not.
    */
-  SleepOnPoll,
+  ThrowExceptionOnAllPoll,
 }
 
