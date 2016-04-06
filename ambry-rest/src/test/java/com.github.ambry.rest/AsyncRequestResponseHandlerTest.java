@@ -144,7 +144,8 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void edgeCaseWorkerCountsTest()
       throws Exception {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    RestServerMetrics serverMetrics =
+        new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
     AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
     noRequestHandlersTest(requestResponseHandler);
 
@@ -154,7 +155,8 @@ public class AsyncRequestResponseHandlerTest {
 
   @Test
   public void setFunctionsBadArgumentsTest() {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    RestServerMetrics serverMetrics =
+        new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
     AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
 
     // set request workers < 0
@@ -595,7 +597,8 @@ public class AsyncRequestResponseHandlerTest {
    */
   private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers)
       throws IOException {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    RestServerMetrics serverMetrics =
+        new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
     AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
     if (requestWorkers > 0) {
       if (blobStorageService == null) {

@@ -1,5 +1,6 @@
 package com.github.ambry.rest;
 
+import com.codahale.metrics.MetricRegistry;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
@@ -257,7 +258,9 @@ public class PublicAccessLogRequestHandlerTest {
    * nad {@link EchoMethodHandler}.
    */
   private EmbeddedChannel createChannel() {
-    return new EmbeddedChannel(new PublicAccessLogRequestHandler(publicAccessLogger), new EchoMethodHandler());
+    return new EmbeddedChannel(
+        new PublicAccessLogRequestHandler(publicAccessLogger, new NettyMetrics(new MetricRegistry())),
+        new EchoMethodHandler());
   }
 
   /**

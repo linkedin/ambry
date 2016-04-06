@@ -81,9 +81,9 @@ class NettyServer implements NioServer {
               // to go here.
               .addLast("codec", new HttpServerCodec())
                   // for health check request handling
-              .addLast("HealthCheckHandler", new HealthCheckHandler(restServerState))
+              .addLast("HealthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
                   // for public access logging
-              .addLast("PublicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger))
+              .addLast("PublicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger, nettyMetrics))
                   // for detecting connections that have been idle too long - probably because of an error.
               .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
                   // for safe writing of chunks for responses

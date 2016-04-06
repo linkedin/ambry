@@ -1,5 +1,6 @@
 package com.github.ambry.rest;
 
+import com.codahale.metrics.MetricRegistry;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -123,6 +124,7 @@ public class HealthCheckHandlerTest {
    * and {@link EchoMethodHandler}.
    */
   private EmbeddedChannel createChannel() {
-    return new EmbeddedChannel(new HealthCheckHandler(restServerState), new EchoMethodHandler());
+    return new EmbeddedChannel(new HealthCheckHandler(restServerState, new NettyMetrics(new MetricRegistry())),
+        new EchoMethodHandler());
   }
 }

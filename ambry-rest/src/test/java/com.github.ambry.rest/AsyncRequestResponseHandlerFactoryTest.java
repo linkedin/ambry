@@ -16,7 +16,8 @@ import static org.junit.Assert.fail;
  * Tests functionality of {@link AsyncRequestResponseHandlerFactory}.
  */
 public class AsyncRequestResponseHandlerFactoryTest {
-  private static final RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
+  private static final RestServerMetrics restServerMetrics =
+      new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
 
   /**
    * Tests the instantiation of an {@link AsyncRequestResponseHandler} instance through the
@@ -127,7 +128,8 @@ public class AsyncRequestResponseHandlerFactoryTest {
     // Different instances of RestServerMetrics during construction of different instances of the factory.
     new AsyncRequestResponseHandlerFactory(1, restServerMetrics);
     try {
-      new AsyncRequestResponseHandlerFactory(1, new RestServerMetrics(new MetricRegistry()), blobStorageService);
+      new AsyncRequestResponseHandlerFactory(1,
+          new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri")), blobStorageService);
       fail("Instantiation should have failed because different instances of RestServerMetrics was provided");
     } catch (IllegalStateException e) {
       // expected. nothing to do.

@@ -79,7 +79,8 @@ public class RestServer {
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
     RestRequestMetricsTracker.setDefaults(clusterMap.getMetricRegistry());
-    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
+    restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
+    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry(), restServerState);
     try {
       RouterFactory routerFactory =
           Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
@@ -101,7 +102,6 @@ public class RestServer {
       restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
       publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
           restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
-      restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
       NioServerFactory nioServerFactory = Utils
           .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
               restRequestHandler, publicAccessLogger, restServerState);

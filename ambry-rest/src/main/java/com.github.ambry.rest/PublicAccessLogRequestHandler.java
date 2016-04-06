@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
  */
 public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private final PublicAccessLogger publicAccessLogger;
+  private final NettyMetrics nettyMetrics;
   private long requestArrivalTimeInMs;
   private long requestLastChunkArrivalTimeInMs;
   private long responseFirstChunkStartTimeInMs;
@@ -28,8 +29,9 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private static final long INIT_TIME = -1;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public PublicAccessLogRequestHandler(PublicAccessLogger publicAccessLogger) {
+  public PublicAccessLogRequestHandler(PublicAccessLogger publicAccessLogger, NettyMetrics nettyMetrics) {
     this.publicAccessLogger = publicAccessLogger;
+    this.nettyMetrics = nettyMetrics;
     reset();
   }
 
@@ -37,6 +39,8 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   public void channelRead(ChannelHandlerContext ctx, Object obj)
       throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
+    nettyMetrics.publicAccessLogRequestRate.mark();
+    long startTimeInMs = System.currentTimeMillis();
     if (obj instanceof HttpRequest) {
       if (request != null) {
         logDurations();
@@ -59,12 +63,14 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
           "Request is of type " + obj.getClass() + ". " +
           "No action being taken other than logging this unexpected state.");
     }
+    nettyMetrics.publicAccessLogRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
     super.channelRead(ctx, obj);
   }
 
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
+    long startTimeInMs = System.currentTimeMillis();
     if (request != null) {
       boolean recognized = false;
       if (msg instanceof HttpResponse) {
@@ -95,6 +101,7 @@ public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
           "Sending response to " + ctx.channel().remoteAddress() + ". " +
           "No action being taken other than logging this unexpected state.");
     }
+    nettyMetrics.publicAccessLogResponseProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
     super.write(ctx, msg, promise);
   }
 
