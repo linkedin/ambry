@@ -702,7 +702,8 @@ class PutOperation {
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
-        responseHandler.onRequestResponseException(chunkPutRequestInfo.replicaId, new IOException("NetworkClient error"));
+        responseHandler
+            .onRequestResponseException(chunkPutRequestInfo.replicaId, new IOException("NetworkClient error"));
         isSuccessful = false;
       } else {
         try {

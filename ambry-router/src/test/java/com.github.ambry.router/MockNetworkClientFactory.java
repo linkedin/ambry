@@ -46,9 +46,8 @@ class MockNetworkClientFactory extends NetworkClientFactory {
    * @param serverLayout the {@link MockServerLayout} used to get the {@link MockServer} given a host and port.
    * @param time the Time instance to use.
    */
-  MockNetworkClientFactory(VerifiableProperties vProps, AtomicReference<MockSelectorState> state,
-      int maxPortsPlainText, int maxPortsSsl,
-      int checkoutTimeoutMs, MockServerLayout serverLayout, Time time) {
+  MockNetworkClientFactory(VerifiableProperties vProps, AtomicReference<MockSelectorState> state, int maxPortsPlainText,
+      int maxPortsSsl, int checkoutTimeoutMs, MockServerLayout serverLayout, Time time) {
     super(new NetworkMetrics(new MetricRegistry()), new NetworkConfig(vProps), null, maxPortsPlainText, maxPortsSsl,
         checkoutTimeoutMs, time);
     this.state = state;
