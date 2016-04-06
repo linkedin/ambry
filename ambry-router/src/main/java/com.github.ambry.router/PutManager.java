@@ -184,7 +184,6 @@ class PutManager {
   }
 
   /**
-   <<<<<<< HEAD
    * Check if the PutManager is open.
    */
   boolean isOpen() {
@@ -192,8 +191,6 @@ class PutManager {
   }
 
   /**
-   =======
-   >>>>>>> f7f015651e3f124a6f46be7734f98671764da14b
    * Close the PutManager.
    */
   void close() {
