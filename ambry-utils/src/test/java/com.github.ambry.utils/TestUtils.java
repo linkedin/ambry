@@ -18,4 +18,20 @@ public class TestUtils {
     }
     return count;
   }
+
+  /**
+   * Return the thread with the given name. If there are multiple such threads, return the first thread by this name.
+   * @param name the name to compare
+   * @return the first thread with the given name.
+   */
+  public static Thread getThreadByThisName(String name) {
+    Thread thread = null;
+    for (Thread t : Thread.getAllStackTraces().keySet()) {
+      if (t.getName().equals(name)) {
+        thread = t;
+        break;
+      }
+    }
+    return thread;
+  }
 }

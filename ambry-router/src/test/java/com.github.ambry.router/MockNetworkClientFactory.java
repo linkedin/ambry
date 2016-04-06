@@ -8,6 +8,7 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -16,7 +17,7 @@ import java.io.IOException;
  */
 class MockNetworkClientFactory extends NetworkClientFactory {
   private final Time time;
-  private MockSelectorState state;
+  private AtomicReference<MockSelectorState> state;
   private MockServerLayout serverLayout;
   private int maxPortsPlainText;
   private int maxPortsSsl;
@@ -32,7 +33,8 @@ class MockNetworkClientFactory extends NetworkClientFactory {
    * @param serverLayout the {@link MockServerLayout} used to get the {@link MockServer} given a host and port.
    * @param time the Time instance to use.
    */
-  MockNetworkClientFactory(VerifiableProperties vProps, MockSelectorState state, int maxPortsPlainText, int maxPortsSsl,
+  MockNetworkClientFactory(VerifiableProperties vProps, AtomicReference<MockSelectorState> state,
+      int maxPortsPlainText, int maxPortsSsl,
       int checkoutTimeoutMs, MockServerLayout serverLayout, Time time) {
     super(new NetworkMetrics(new MetricRegistry()), new NetworkConfig(vProps), null, maxPortsPlainText, maxPortsSsl,
         checkoutTimeoutMs, time);

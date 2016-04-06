@@ -184,6 +184,13 @@ class PutManager {
   }
 
   /**
+   * Check if the PutManager is open.
+   */
+  boolean isOpen() {
+    return isOpen.get();
+  }
+
+  /**
    * Close the PutManager.
    */
   void close() {
@@ -227,9 +234,10 @@ class PutManager {
             Thread.sleep(sleepTimeWhenIdleMs);
           }
         }
-      } catch (InterruptedException e) {
-        logger.info("Caught interrupted exception while sleeping", e);
-        Thread.currentThread().interrupt();
+      } catch (Exception e) {
+        logger.error("Aborting, as ChunkFillerThread received an exception: ", e);
+      } finally {
+        isOpen.set(false);
       }
     }
   }

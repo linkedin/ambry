@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
@@ -31,6 +44,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -44,7 +58,7 @@ public class PutManagerTest {
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
-  private MockSelectorState mockSelectorState;
+  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private NonBlockingRouter router;
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
@@ -70,7 +84,7 @@ public class PutManagerTest {
     requestParallelism = 3;
     successTarget = 2;
     checkContentEquality = true;
-    mockSelectorState = MockSelectorState.Good;
+    mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
   }
@@ -165,7 +179,7 @@ public class PutManagerTest {
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
-    mockSelectorState = MockSelectorState.ThrowExceptionOnConnect;
+    mockSelectorState.set(MockSelectorState.ThrowExceptionOnConnect);
     Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
     submitPutsAndAssertFailure(expectedException, false, true);
     // this should not close the router.
@@ -181,7 +195,7 @@ public class PutManagerTest {
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
-    mockSelectorState = MockSelectorState.DisconnectOnSend;
+    mockSelectorState.set(MockSelectorState.DisconnectOnSend);
     Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
     submitPutsAndAssertFailure(expectedException, false, false);
     // this should not have closed the router.
@@ -197,7 +211,7 @@ public class PutManagerTest {
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
-    mockSelectorState = MockSelectorState.ThrowExceptionOnPoll;
+    mockSelectorState.set(MockSelectorState.ThrowExceptionOnPoll);
     // In the case of an error in poll, the router gets closed, and all the ongoing operations are finished off with
     // RouterClosed error.
     Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
@@ -459,6 +473,94 @@ public class PutManagerTest {
     Exception expectedException = new RouterException("", RouterErrorCode.BlobTooLarge);
     assertFailure(expectedException);
     assertCloseCleanup();
+  }
+
+  /**
+   * Test ChunkFillerThread exit flow. If the ChunkFillerThread exits on its own (due to an exception),
+   * then the router gets closed along with the completion of all the operations when the next put request comes in
+   * (this is to keep the whole close flow simple).
+   */
+  @Test
+  public void testRouterClosingOnChunkFillerThreadException()
+      throws Exception {
+    router = getNonBlockingRouter();
+    int blobSize = chunkSize * random.nextInt(10) + 1;
+    for (int i = 0; i < 2; i++) {
+      RequestAndResult requestAndResult = new RequestAndResult(blobSize);
+      requestAndResultsList.add(requestAndResult);
+    }
+    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+    requestAndResultsList.get(0).result = (FutureResult<String>) router
+        .putBlob(requestAndResultsList.get(0).putBlobProperties, requestAndResultsList.get(0).putUserMetadata,
+            putChannel, null);
+    Thread chunkFillerThread = TestUtils.getThreadByThisName("ChunkFillerThread");
+    chunkFillerThread.interrupt();
+
+    // Now wait till the chunk filler thread dies
+    while (TestUtils.numThreadsByThisName("ChunkFillerThread") > 0) {
+      Thread.yield();
+    }
+
+    // Now submit another job and ensure that both that job and the previously submitted jobs complete and with
+    // failure.
+    requestAndResultsList.get(1).result = (FutureResult<String>) router
+        .putBlob(requestAndResultsList.get(1).putBlobProperties, requestAndResultsList.get(1).putUserMetadata, null,
+            null);
+
+    // Now wait until both operations complete.
+    for (RequestAndResult requestAndResult : requestAndResultsList) {
+      requestAndResult.result.await();
+    }
+
+    // Ensure that both operations failed and with the right exceptions.
+    Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
+    assertFailure(expectedException);
+    Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
+    Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
+        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  /**
+   * Test RequestResponseHandler thread exit flow. If the RequestResponseHandlerThread exits on its own (due to an
+   * exception), then the router gets closed immediately along with the completion of all the operations.
+   */
+  @Test
+  public void testRouterClosingOnRequestResponseHandlerThreadException()
+      throws Exception {
+    router = getNonBlockingRouter();
+    int blobSize = chunkSize * random.nextInt(10) + 1;
+    for (int i = 0; i < 2; i++) {
+      RequestAndResult requestAndResult = new RequestAndResult(blobSize);
+      requestAndResultsList.add(requestAndResult);
+      MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+      requestAndResult.result = (FutureResult<String>) router
+          .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    }
+
+    mockSelectorState.set(MockSelectorState.SleepOnPoll);
+    Thread requestResponseHandlerThread = TestUtils.getThreadByThisName("RequestResponseHandlerThread");
+    requestResponseHandlerThread.interrupt();
+
+    // Now wait till the thread dies
+    while (TestUtils.numThreadsByThisName("RequestResponseHandlerThread") > 0) {
+      Thread.yield();
+    }
+
+    // Now wait until both operations complete.
+    for (RequestAndResult requestAndResult : requestAndResultsList) {
+      requestAndResult.result.await();
+    }
+
+    // Ensure that both operations failed and with the right exceptions.
+    Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
+    assertFailure(expectedException);
+    Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
+    Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
+        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   // Methods used by the tests

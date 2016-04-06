@@ -13,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -27,7 +28,7 @@ class MockSelector extends Selector {
   private List<NetworkSend> sends = new ArrayList<NetworkSend>();
   private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
   private final Time time;
-  private final MockSelectorState state;
+  private final AtomicReference<MockSelectorState> state;
   private final MockServerLayout serverLayout;
 
   /**
@@ -39,13 +40,13 @@ class MockSelector extends Selector {
    * @param time the Time instance to use.
    * @throws IOException if {@link Selector} throws.
    */
-  MockSelector(MockServerLayout serverLayout, MockSelectorState state, Time time)
+  MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time)
       throws IOException {
     super(new NetworkMetrics(new MetricRegistry()), time, null);
     // we don't need the actual selector, close it.
     super.close();
     this.serverLayout = serverLayout;
-    this.state = state == null ? MockSelectorState.Good : state;
+    this.state = state == null ? new AtomicReference(MockSelectorState.Good) : state;
     this.time = time;
   }
 
@@ -61,7 +62,7 @@ class MockSelector extends Selector {
   @Override
   public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize, PortType portType)
       throws IOException {
-    if (state == MockSelectorState.ThrowExceptionOnConnect) {
+    if (state.get() == MockSelectorState.ThrowExceptionOnConnect) {
       throw new IOException("Mock connect exception");
     }
     String host = address.getHostString();
@@ -87,16 +88,23 @@ class MockSelector extends Selector {
     this.sends = sends;
     if (sends != null) {
       for (NetworkSend send : sends) {
-        if (state == MockSelectorState.ThrowExceptionOnPoll) {
+        if (state.get() == MockSelectorState.ThrowExceptionOnPoll) {
           throw new IOException("Mock exception on poll");
         }
-        if (state == MockSelectorState.DisconnectOnSend) {
+        if (state.get() == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
         } else {
           MockServer server = connIdToServer.get(send.getConnectionId());
           BoundedByteBufferReceive receive = server.send(send.getPayload());
           receives.add(new NetworkReceive(send.getConnectionId(), receive, time));
         }
+      }
+    }
+    if (state.get() == MockSelectorState.SleepOnPoll) {
+      try {
+        Thread.sleep(0);
+      } catch (InterruptedException e) {
+        throw new IOException("Caught interrupted exception");
       }
     }
   }
@@ -183,5 +191,9 @@ enum MockSelectorState {
    * A state that causes all poll calls to throw an IOException.
    */
   ThrowExceptionOnPoll,
+  /**
+   * A state that causes the selector to sleep for a fixed duration (mocking the actual select()).
+   */
+  SleepOnPoll,
 }
 

@@ -36,7 +36,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -368,8 +367,14 @@ class NonBlockingRouter implements Router {
      */
     private void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
-      putManager.submitPutBlobOperation(blobProperties, userMetadata, channel,
-          futureResult, callback);
+      if (!putManager.isOpen()) {
+        NonBlockingRouter.completeOperation(futureResult, callback, null,
+            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+        // Close so that any existing operations are also disposed off.
+        close();
+      } else {
+        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, futureResult, callback);
+      }
     }
 
     /**
@@ -413,8 +418,7 @@ class NonBlockingRouter implements Router {
       // not do anything about it at this time).
       for (String blobId : idsToDelete) {
         // possibly add a batch api going forward.
-        deleteManager
-            .submitDeleteBlobOperation(blobId, new FutureResult<Void>(), null);
+        deleteManager.submitDeleteBlobOperation(blobId, new FutureResult<Void>(), null);
       }
       List<RequestInfo> requests = new ArrayList<RequestInfo>();
       putManager.poll(requests);
