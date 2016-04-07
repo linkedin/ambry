@@ -45,6 +45,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
 
   private HttpRequest request;
   private FullHttpResponse response;
+  private long startTimeInMs;
 
   public HealthCheckHandler(RestServerState restServerState, NettyMetrics nettyMetrics) {
     this.restServerState = restServerState;
@@ -57,13 +58,12 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   public void channelRead(ChannelHandlerContext ctx, Object obj)
       throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
-    long startTimeInMs = -1;
-    nettyMetrics.healthCheckRequestRate.mark();
     boolean forwardObj = false;
     if (obj instanceof HttpRequest) {
       if (request == null && ((HttpRequest) obj).getUri().equals(healthCheckUri)) {
-        logger.trace("Handling health check request while in state " + restServerState.isServiceUp());
+        nettyMetrics.healthCheckRequestRate.mark();
         startTimeInMs = System.currentTimeMillis();
+        logger.trace("Handling health check request while in state " + restServerState.isServiceUp());
         request = (HttpRequest) obj;
         if (restServerState.isServiceUp()) {
           response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
@@ -76,6 +76,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
           HttpHeaders.setKeepAlive(response, false);
           HttpHeaders.setContentLength(response, badBytes.length);
         }
+        nettyMetrics.healthCheckRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       } else {
         // Rest server could be down even if not for health check request. We intentionally don't take any action in this
         // handler for such cases and leave it to the downstream handlers to handle it
@@ -91,7 +92,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
         }
         request = null;
         response = null;
-        nettyMetrics.healthCheckRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
+        nettyMetrics.healthCheckRequestRoundTripTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       } else {
         // request was not for health check uri
         forwardObj = true;

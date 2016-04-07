@@ -59,6 +59,7 @@ class NettyMetrics {
   public final Histogram publicAccessLogResponseProcessingTimeInMs;
   // HealthCheckRequestHandler
   public final Histogram healthCheckRequestProcessingTimeInMs;
+  public final Histogram healthCheckRequestRoundTripTimeInMs;
 
   // Errors
   // NettyMessageProcessor
@@ -158,10 +159,12 @@ class NettyMetrics {
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "WriteProcessingTimeInMs"));
     publicAccessLogRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(PublicAccessLogRequestHandler.class, "RequestProcessingTimeInMs"));
-    publicAccessLogResponseProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(PublicAccessLogRequestHandler.class, "ResponseProcessingTimeInMs"));
+    publicAccessLogResponseProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(PublicAccessLogRequestHandler.class, "ResponseProcessingTimeInMs"));
     healthCheckRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "RequestProcessingTimeInMs"));
+    healthCheckRequestRoundTripTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "RequestRoundTripTimeInMs"));
 
     // Errors
     // NettyMessageProcessor
@@ -201,10 +204,10 @@ class NettyMetrics {
     // NettyServer
     nettyServerShutdownError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "ShutdownError"));
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));
-    publicAccessLogRequestDisconnectWhileInProgressCount =
-        metricRegistry.counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelDisconnectWhileRequestInProgressCount"));
-    publicAccessLogRequestCloseWhileRequestInProgressCount =
-        metricRegistry.counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseWhileRequestInProgressCount"));
+    publicAccessLogRequestDisconnectWhileInProgressCount = metricRegistry
+        .counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelDisconnectWhileRequestInProgressCount"));
+    publicAccessLogRequestCloseWhileRequestInProgressCount = metricRegistry
+        .counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseWhileRequestInProgressCount"));
     healthCheckHandlerChannelCloseOnWriteCount =
         metricRegistry.counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseOnWriteCount"));
 

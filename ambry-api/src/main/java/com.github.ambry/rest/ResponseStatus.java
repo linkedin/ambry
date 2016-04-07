@@ -89,6 +89,7 @@ public enum ResponseStatus {
         return ResponseStatus.Unauthorized;
       case ResourceScanInProgress:
         return ResponseStatus.ProxyAuthenticationRequired;
+      case IdConverterServiceError:
       case InternalServerError:
       case InternalObjectCreationError:
       case RequestChannelClosed:

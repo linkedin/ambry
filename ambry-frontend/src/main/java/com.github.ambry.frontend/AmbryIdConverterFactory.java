@@ -45,7 +45,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private boolean isOpen = true;
     private final FrontendMetrics frontendMetrics;
 
-    AmbryIdConverter(FrontendMetrics frontendMetrics){
+    AmbryIdConverter(FrontendMetrics frontendMetrics) {
       this.frontendMetrics = frontendMetrics;
     }
 
@@ -67,8 +67,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       FutureResult<String> futureResult = new FutureResult<String>();
       String convertedId = null;
       Exception exception = null;
-      long startTimeInMs = System.currentTimeMillis();
       frontendMetrics.idConverterRequestRate.mark();
+      long startTimeInMs = System.currentTimeMillis();
       if (!isOpen) {
         exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
       } else {

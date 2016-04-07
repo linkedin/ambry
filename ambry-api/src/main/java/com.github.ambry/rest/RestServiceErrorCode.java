@@ -92,6 +92,10 @@ public enum RestServiceErrorCode {
   UnsupportedOperation,
 
   /**
+   * Indicates that {@link IdConverter} encountered some exception during ID conversion
+   */
+  IdConverterServiceError,
+  /**
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
    * there is nothing that a client can do about it.
    */
