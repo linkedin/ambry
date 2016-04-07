@@ -132,6 +132,7 @@ public enum RestServiceErrorCode {
       case BlobTooLarge:
       case InvalidBlobId:
       case InvalidPutArgument:
+      case BadInputChannel:
         return BadRequest;
       case BlobDeleted:
       case BlobExpired:

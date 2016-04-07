@@ -54,16 +54,17 @@ public class NetworkClient implements Closeable {
   /**
    * Instantiates a NetworkClient.
    * @param selector the {@link Selector} for this NetworkClient
-   * @param connectionTracker the {@link ConnectionTracker} for this NetworkClient
+   * @param maxConnectionsPerPortPlainText the maximum number of connections per node per plain text port
+   * @param maxConnectionsPerPortSsl the maximum number of connections per node per ssl port
    * @param networkConfig the {@link NetworkConfig} for this NetworkClient
    * @param checkoutTimeoutMs the maximum time a request should remain in this NetworkClient's pending queue waiting
    *                          for an available connection to its destination.
    * @param time The Time instance to use.
    */
-  public NetworkClient(Selector selector, ConnectionTracker connectionTracker, NetworkConfig networkConfig,
-      int checkoutTimeoutMs, Time time) {
+  public NetworkClient(Selector selector, NetworkConfig networkConfig, int maxConnectionsPerPortPlainText,
+      int maxConnectionsPerPortSsl, int checkoutTimeoutMs, Time time) {
     this.selector = selector;
-    this.connectionTracker = connectionTracker;
+    this.connectionTracker = new ConnectionTracker(maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl);
     this.networkConfig = networkConfig;
     this.checkoutTimeoutMs = checkoutTimeoutMs;
     this.time = time;

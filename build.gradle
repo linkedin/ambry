@@ -222,6 +222,7 @@ project(':ambry-router') {
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile project(':ambry-network').sourceSets.test.output
     }
 }
 

@@ -74,6 +74,7 @@ public class RouterFactoryTest {
       Router router = routerFactory.getRouter();
       Assert.assertEquals("Did not receive expected Router instance", factoryAndRouter.routerStr,
           router.getClass().getCanonicalName());
+      router.close();
     }
   }
 }
