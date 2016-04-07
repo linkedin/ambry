@@ -51,8 +51,10 @@ class AmbrySecurityService implements SecurityService {
   @Override
   public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback) {
     Exception exception = null;
+    frontendMetrics.securityServiceProcessRequestRate.mark();
+    long startTimeMs = System.currentTimeMillis();
     if (!isOpen) {
-      exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
+      exception = new RestServiceException("Security service is closed", RestServiceErrorCode.ServiceUnavailable);
     } else {
       if (restRequest == null) {
         throw new IllegalArgumentException("RestRequest is null");
@@ -63,6 +65,7 @@ class AmbrySecurityService implements SecurityService {
       callback.onCompletion(null, exception);
     }
     futureResult.done(null, exception);
+    frontendMetrics.securityServiceProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     return futureResult;
   }
 
@@ -70,6 +73,8 @@ class AmbrySecurityService implements SecurityService {
   public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
       Callback<Void> callback) {
     Exception exception = null;
+    frontendMetrics.securityServiceProcessResponseRate.mark();
+    long startTimeMs = System.currentTimeMillis();
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!isOpen) {
       exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
@@ -100,6 +105,7 @@ class AmbrySecurityService implements SecurityService {
     if (callback != null) {
       callback.onCompletion(null, exception);
     }
+    frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     return futureResult;
   }
 

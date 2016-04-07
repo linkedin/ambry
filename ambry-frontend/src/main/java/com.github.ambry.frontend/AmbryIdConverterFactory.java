@@ -30,17 +30,24 @@ import java.util.concurrent.Future;
  */
 public class AmbryIdConverterFactory implements IdConverterFactory {
 
+  private final FrontendMetrics frontendMetrics;
+
   public AmbryIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
-    // nothing to do.
+    frontendMetrics = new FrontendMetrics(metricRegistry);
   }
 
   @Override
   public IdConverter getIdConverter() {
-    return new AmbryIdConverter();
+    return new AmbryIdConverter(frontendMetrics);
   }
 
   private static class AmbryIdConverter implements IdConverter {
     private boolean isOpen = true;
+    private final FrontendMetrics frontendMetrics;
+
+    AmbryIdConverter(FrontendMetrics frontendMetrics) {
+      this.frontendMetrics = frontendMetrics;
+    }
 
     @Override
     public void close() {
@@ -60,6 +67,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       FutureResult<String> futureResult = new FutureResult<String>();
       String convertedId = null;
       Exception exception = null;
+      frontendMetrics.idConverterRequestRate.mark();
+      long startTimeInMs = System.currentTimeMillis();
       if (!isOpen) {
         exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
       } else {
@@ -69,6 +78,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       if (callback != null) {
         callback.onCompletion(convertedId, exception);
       }
+      frontendMetrics.idConverterRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       return futureResult;
     }
   }

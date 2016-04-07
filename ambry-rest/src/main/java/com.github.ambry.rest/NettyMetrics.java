@@ -36,6 +36,10 @@ class NettyMetrics {
   // NettyResponseChannel
   public final Meter bytesWriteRate;
   public final Meter requestCompletionRate;
+  // PublicAccessLogRequestHandler
+  public final Meter publicAccessLogRequestRate;
+  // HealthCheckRequestHandler
+  public final Meter healthCheckRequestRate;
 
   // Latencies
   // NettyMessageProcessor
@@ -50,6 +54,12 @@ class NettyMetrics {
   public final Histogram responseFinishProcessingTimeInMs;
   public final Histogram responseMetadataProcessingTimeInMs;
   public final Histogram writeProcessingTimeInMs;
+  // PublicAccessLogRequestHandler
+  public final Histogram publicAccessLogRequestProcessingTimeInMs;
+  public final Histogram publicAccessLogResponseProcessingTimeInMs;
+  // HealthCheckRequestHandler
+  public final Histogram healthCheckRequestProcessingTimeInMs;
+  public final Histogram healthCheckRequestRoundTripTimeInMs;
 
   // Errors
   // NettyMessageProcessor
@@ -97,6 +107,11 @@ class NettyMetrics {
   // NettyServer
   public final Histogram nettyServerShutdownTimeInMs;
   public final Histogram nettyServerStartTimeInMs;
+  // PublicAccessLogRequestHandler
+  public final Counter publicAccessLogRequestDisconnectWhileInProgressCount;
+  public final Counter publicAccessLogRequestCloseWhileRequestInProgressCount;
+  // HealthCheckRequestHandler
+  public final Counter healthCheckHandlerChannelCloseOnWriteCount;
 
   /**
    * Creates an instance of NettyMetrics using the given {@code metricRegistry}.
@@ -116,6 +131,9 @@ class NettyMetrics {
     bytesWriteRate = metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "BytesWriteRate"));
     requestCompletionRate =
         metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "RequestCompletionRate"));
+    publicAccessLogRequestRate =
+        metricRegistry.meter(MetricRegistry.name(PublicAccessLogRequestHandler.class, "RequestArrivalRate"));
+    healthCheckRequestRate = metricRegistry.meter(MetricRegistry.name(HealthCheckHandler.class, "RequestArrivalRate"));
 
     // Latencies
     // NettyMessageProcessor
@@ -139,6 +157,14 @@ class NettyMetrics {
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ResponseMetadataProcessingTimeInMs"));
     writeProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "WriteProcessingTimeInMs"));
+    publicAccessLogRequestProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(PublicAccessLogRequestHandler.class, "RequestProcessingTimeInMs"));
+    publicAccessLogResponseProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(PublicAccessLogRequestHandler.class, "ResponseProcessingTimeInMs"));
+    healthCheckRequestProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "RequestProcessingTimeInMs"));
+    healthCheckRequestRoundTripTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "RequestRoundTripTimeInMs"));
 
     // Errors
     // NettyMessageProcessor
@@ -178,6 +204,12 @@ class NettyMetrics {
     // NettyServer
     nettyServerShutdownError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "ShutdownError"));
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));
+    publicAccessLogRequestDisconnectWhileInProgressCount = metricRegistry
+        .counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelDisconnectWhileRequestInProgressCount"));
+    publicAccessLogRequestCloseWhileRequestInProgressCount = metricRegistry
+        .counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseWhileRequestInProgressCount"));
+    healthCheckHandlerChannelCloseOnWriteCount =
+        metricRegistry.counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseOnWriteCount"));
 
     // Other
     // NettyMessageProcessor

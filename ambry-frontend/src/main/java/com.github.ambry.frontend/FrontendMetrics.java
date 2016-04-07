@@ -49,6 +49,11 @@ class FrontendMetrics {
   public final Meter getBlobRate;
   // POST
   public final Meter postBlobRate;
+  // security service
+  public final Meter securityServiceProcessRequestRate;
+  public final Meter securityServiceProcessResponseRate;
+  // Id converter
+  public final Meter idConverterRequestRate;
 
   // Latencies
   // AmbryBlobStorageService
@@ -76,6 +81,11 @@ class FrontendMetrics {
   // PostCallback
   public final Histogram postCallbackProcessingTimeInMs;
   public final Histogram postTimeInMs;
+  // security service
+  public final Histogram securityServiceProcessRequestTimeInMs;
+  public final Histogram securityServiceProcessResponseTimeInMs;
+  // Id converter
+  public final Histogram idConverterRequestProcessingTimeInMs;
 
   // Errors
   // AmbryBlobStorageService
@@ -111,6 +121,14 @@ class FrontendMetrics {
     getBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "GetBlobRate"));
     // POST
     postBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "PostBlobRate"));
+    // security service
+    securityServiceProcessRequestRate =
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "SecurityServiceProcessRequestRate"));
+    securityServiceProcessResponseRate =
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "SecurityServiceProcessResponseRate"));
+    // Id converter
+    idConverterRequestRate =
+        metricRegistry.meter(MetricRegistry.name(AmbryIdConverterFactory.class, "IdConverterRequestRate"));
 
     // Latencies
     // AmbryBlobStorageService
@@ -148,6 +166,14 @@ class FrontendMetrics {
     postCallbackProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(PostCallback.class, "ProcessingTimeInMs"));
     postTimeInMs = metricRegistry.histogram(MetricRegistry.name(PostCallback.class, "ResultTimeInMs"));
+    // security service
+    securityServiceProcessRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ProcessingTimeInMs"));
+    securityServiceProcessResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ProcessingTimeInMs"));
+    // Id converter
+    idConverterRequestProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
 
     // Errors
     // AmbryBlobStorageService
