@@ -501,16 +501,18 @@ public class PutManagerTest {
       Thread.yield();
     }
 
-    // Now submit another job and ensure that both that job and the previously submitted jobs complete and with
-    // failure.
+    // Ensure that the existing operation was completed.
+    requestAndResultsList.get(0).result.await();
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    Assert.assertTrue("Router should still be open", router.isOpen());
+
+    // Now submit another job and ensure that the router gets closed.
     requestAndResultsList.get(1).result = (FutureResult<String>) router
         .putBlob(requestAndResultsList.get(1).putBlobProperties, requestAndResultsList.get(1).putUserMetadata, null,
             null);
 
-    // Now wait until both operations complete.
-    for (RequestAndResult requestAndResult : requestAndResultsList) {
-      requestAndResult.result.await();
-    }
+    // Wait for operation completion.
+    requestAndResultsList.get(1).result.await();
 
     // Ensure that both operations failed and with the right exceptions.
     Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);

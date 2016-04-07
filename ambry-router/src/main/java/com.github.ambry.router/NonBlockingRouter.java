@@ -462,8 +462,8 @@ class NonBlockingRouter implements Router {
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList);
           onResponse(responseInfoList);
         }
-      } catch (Exception e) {
-        logger.error("Aborting, as requestResponseHandlerThread received an exception: ", e);
+      } catch (Throwable e) {
+        logger.error("Aborting, as requestResponseHandlerThread received an unexpected error: ", e);
       } finally {
         networkClient.close();
         shutDownLatch.countDown();

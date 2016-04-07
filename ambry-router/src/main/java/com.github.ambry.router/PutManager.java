@@ -192,15 +192,27 @@ class PutManager {
 
   /**
    * Close the PutManager.
+   * First notify the chunkFillerThread about closing and wait for it to exit. Then, complete all existing operations.
    */
   void close() {
-    isOpen.set(false);
-    try {
-      chunkFillerThread.join(NonBlockingRouter.SHUTDOWN_WAIT_MS);
-    } catch (InterruptedException e) {
-      logger.error("Caught interrupted exception while waiting for chunkFillerThread to finish");
-      Thread.currentThread().interrupt();
+    if (isOpen.compareAndSet(true, false)) {
+      try {
+        chunkFillerThread.join(NonBlockingRouter.SHUTDOWN_WAIT_MS);
+      } catch (InterruptedException e) {
+        logger.error("Caught interrupted exception while waiting for chunkFillerThread to finish");
+        Thread.currentThread().interrupt();
+      }
+      doClose();
     }
+  }
+
+  /**
+   * Complete all existing operations.
+   * This can get called two ways:
+   * 1. As part of {@link #close()} when it is called in the context of the router. This is the normal case.
+   * 2. By the {@link ChunkFiller} thread when it exits abnormally.
+   */
+  void doClose() {
     Iterator<PutOperation> iter = putOperations.iterator();
     while (iter.hasNext()) {
       PutOperation op = iter.next();
@@ -234,10 +246,11 @@ class PutManager {
             Thread.sleep(sleepTimeWhenIdleMs);
           }
         }
-      } catch (Exception e) {
-        logger.error("Aborting, as ChunkFillerThread received an exception: ", e);
-      } finally {
-        isOpen.set(false);
+      } catch (Throwable e) {
+        logger.error("ChunkFillerThread received an unexpected error: ", e);
+        if (isOpen.compareAndSet(true, false)) {
+          doClose();
+        }
       }
     }
   }
