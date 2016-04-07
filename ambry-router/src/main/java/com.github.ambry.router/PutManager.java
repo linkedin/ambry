@@ -202,7 +202,7 @@ class PutManager {
         logger.error("Caught interrupted exception while waiting for chunkFillerThread to finish");
         Thread.currentThread().interrupt();
       }
-      doClose();
+      completePendingOperations();
     }
   }
 
@@ -212,7 +212,7 @@ class PutManager {
    * 1. As part of {@link #close()} when it is called in the context of the router. This is the normal case.
    * 2. By the {@link ChunkFiller} thread when it exits abnormally.
    */
-  void doClose() {
+  void completePendingOperations() {
     Iterator<PutOperation> iter = putOperations.iterator();
     while (iter.hasNext()) {
       PutOperation op = iter.next();
@@ -249,7 +249,7 @@ class PutManager {
       } catch (Throwable e) {
         logger.error("ChunkFillerThread received an unexpected error: ", e);
         if (isOpen.compareAndSet(true, false)) {
-          doClose();
+          completePendingOperations();
         }
       }
     }
