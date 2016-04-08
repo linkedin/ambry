@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
@@ -231,7 +244,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
       Logger logger = LoggerFactory.getLogger("MessageHeader_Format_V1");
       logger.trace("serializing header : version {} size {} blobpropertiesrecordrelativeoffset {} " +
-          "deleterecordrelativeoffset {} " + "usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
+              "deleterecordrelativeoffset {} " + "usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
           Message_Header_Version_V1, totalSize, blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset,
           userMetadataRecordRelativeOffset, blobPropertiesRecordRelativeOffset, crc.getValue());
     }
@@ -605,7 +618,7 @@ public class MessageFormatRecord {
    * |(2 bytes)|    (4 bytes)  |            |            |  ......  |
    * |         |               |            |            |          |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   *  version         - The version of the blob property record
+   *  version         - The version of the metadata content record
    *
    *  no of keys      - total number of keys
    *

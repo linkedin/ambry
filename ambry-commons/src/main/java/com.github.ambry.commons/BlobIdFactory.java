@@ -3,9 +3,8 @@ package com.github.ambry.commons;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-
-import java.io.IOException;
 import java.io.DataInputStream;
+import java.io.IOException;
 
 
 /**

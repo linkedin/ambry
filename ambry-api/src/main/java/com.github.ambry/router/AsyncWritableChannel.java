@@ -25,6 +25,7 @@ public interface AsyncWritableChannel extends Channel {
    * <p/>
    * {@code src} can be reused only after the {@code callback} is invoked (or after {@code future.get()} returns).
    * <p/>
+   * Concurrent write calls may result in unexpected behavior.
    * @param src the data that needs to be written to the channel.
    * @param callback the {@link Callback} that will be invoked once the write succeeds/fails. This can be null.
    * @return a {@link Future} that will eventually contain the result of the write operation (the number of bytes

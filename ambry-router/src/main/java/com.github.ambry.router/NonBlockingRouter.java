@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
@@ -23,7 +36,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +57,6 @@ class NonBlockingRouter implements Router {
   private final List<String> idsToDelete = new ArrayList<String>();
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
-  private static final AtomicLong operationIdGenerator = new AtomicLong(0);
   private static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
 
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
@@ -222,7 +233,15 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public void close() {
-    cleanup();
+    doClose();
+    // wait for all the threads to actually exit
+    waitForResponseHandlerThreadExit();
+  }
+
+  /**
+   * Wait for all the threads to finish up.
+   */
+  private void waitForResponseHandlerThreadExit() {
     for (OperationController oc : ocList) {
       try {
         oc.requestResponseHandlerThread.join(SHUTDOWN_WAIT_MS);
@@ -233,11 +252,11 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Do the cleanup to be done as part of close. This method can get executed in the context of both the calling
-   * thread of the {@link #close()} method, as well as in the context of a RequestResponseHandler thread of any of the
+   * Initiate the shutdown of all the RequestResponseHandler threads. This method can get executed in the context of
+   * both the calling thread of the {@link #close()} method, and the RequestResponseHandler thread of any of the
    * Operation Controllers.
    */
-  private void cleanup() {
+  private void doClose() {
     if (isOpen.compareAndSet(true, false)) {
       logger.info("Closing the router");
       for (OperationController oc : ocList) {
@@ -279,11 +298,9 @@ class NonBlockingRouter implements Router {
         callback.onCompletion(operationResult, exception);
       }
     } catch (Exception e) {
-      //@todo add metric.
       logger.error("Exception caught during future and callback completion", e);
     } finally {
       currentOperationsCount.decrementAndGet();
-      //@todo add metric.
     }
   }
 
@@ -325,7 +342,7 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of the request.
      */
     private void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
-      getManager.submitGetBlobInfoOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
+      getManager.submitGetBlobInfoOperation(blobId, futureResult, callback);
     }
 
     /**
@@ -337,7 +354,7 @@ class NonBlockingRouter implements Router {
      */
     private void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
         Callback<ReadableStreamChannel> callback) {
-      getManager.submitGetBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
+      getManager.submitGetBlobOperation(blobId, futureResult, callback);
     }
 
     /**
@@ -350,8 +367,14 @@ class NonBlockingRouter implements Router {
      */
     private void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
-      putManager.submitPutBlobOperation(operationIdGenerator.incrementAndGet(), blobProperties, userMetadata, channel,
-          futureResult, callback);
+      if (!putManager.isOpen()) {
+        NonBlockingRouter.completeOperation(futureResult, callback, null,
+            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+        // Close so that any existing operations are also disposed off.
+        close();
+      } else {
+        putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, futureResult, callback);
+      }
     }
 
     /**
@@ -362,7 +385,7 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of a request.
      */
     private void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
-      deleteManager.submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, futureResult, callback);
+      deleteManager.submitDeleteBlobOperation(blobId, futureResult, callback);
     }
 
     /**
@@ -395,8 +418,7 @@ class NonBlockingRouter implements Router {
       // not do anything about it at this time).
       for (String blobId : idsToDelete) {
         // possibly add a batch api going forward.
-        deleteManager
-            .submitDeleteBlobOperation(operationIdGenerator.incrementAndGet(), blobId, new FutureResult<Void>(), null);
+        deleteManager.submitDeleteBlobOperation(blobId, new FutureResult<Void>(), null);
       }
       List<RequestInfo> requests = new ArrayList<RequestInfo>();
       putManager.poll(requests);
@@ -424,7 +446,6 @@ class NonBlockingRouter implements Router {
             break;
           default:
             logger.error("Unexpected response type: " + type + " received, discarding");
-            // @todo add to a metric. We do not want to throw here.
         }
       }
     }
@@ -447,7 +468,7 @@ class NonBlockingRouter implements Router {
         networkClient.close();
         shutDownLatch.countDown();
         // Close the router.
-        cleanup();
+        doClose();
       }
     }
   }

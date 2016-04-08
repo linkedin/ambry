@@ -31,13 +31,13 @@ interface OperationTracker {
   boolean isDone();
 
   /**
-   * Accounts for response from, or exception for a replica. must invoke this method
-   * if a response or an exception is received.
+   * Accounts for successful or failed response from a replica. Must invoke this method
+   * if a successful or failed response is received for a replica.
    *
-   * @param replicaId ReplicaId that returns a response or an excepton.
-   * @param successful {@code true} if the response is successful, {@code false} otherwise.
+   * @param replicaId ReplicaId associated with this response.
+   * @param isSuccessful Whether the request to the replicaId is successful or not.
    */
-  void onResponse(ReplicaId replicaId, boolean successful);
+  void onResponse(ReplicaId replicaId, boolean isSuccessful);
 
   /**
    * Provide an iterator to the replicas to which requests may be sent. Each time when start to iterate

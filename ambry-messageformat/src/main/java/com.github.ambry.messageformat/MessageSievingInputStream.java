@@ -39,7 +39,7 @@ public class MessageSievingInputStream extends InputStream {
    * @param messageInfoList List of MessageInfo which contains details about the messages in the stream
    * @param storeKeyFactory factory which is used to read the key from the stream
    * @param metricRegistry Metric register to register metrics
-   * @throws java.io.IOException
+   * @throws IOException
    */
   public MessageSievingInputStream(InputStream stream, List<MessageInfo> messageInfoList,
       StoreKeyFactory storeKeyFactory, MetricRegistry metricRegistry)

@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
@@ -10,11 +23,13 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.Time;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,14 +47,13 @@ class DeleteManager {
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
-
-  final ClusterMap clusterMap;
-  final RouterConfig routerConfig;
+  private final ClusterMap clusterMap;
+  private final RouterConfig routerConfig;
 
   private static final Logger logger = LoggerFactory.getLogger(DeleteManager.class);
 
   /**
-   * Initialize a {@code DeleteManager}.
+   * Initialize a {@link DeleteManager}.
    */
   public DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
@@ -49,23 +63,21 @@ class DeleteManager {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.time = time;
-    deleteOperations = new HashSet<DeleteOperation>();
+    deleteOperations = Collections.newSetFromMap(new ConcurrentHashMap<DeleteOperation, Boolean>());
     correlationIdToDeleteOperation = new HashMap<Integer, DeleteOperation>();
   }
 
   /**
-   * Submit a {@link DeleteOperation} to this {@code DeleteManager}.
-   * @param operationId A unique id that is associated with the {@code DeleteOperation} to be generated.
+   * Submits a {@link DeleteOperation} to this {@code DeleteManager}.
    * @param blobIdString The blobId string to be deleted.
-   * @param futureResult The {@link java.util.concurrent.Future} that was returned to the caller.
-   * @param callback The {@link Callback} that was supplied by the caller.
+   * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
+   * @param callback The {@link Callback} that will be called on completion of the request.
    */
-  void submitDeleteBlobOperation(long operationId, String blobIdString, FutureResult<Void> futureResult,
-      Callback<Void> callback) {
+  void submitDeleteBlobOperation(String blobIdString, FutureResult<Void> futureResult, Callback<Void> callback) {
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
-          new DeleteOperation(routerConfig, operationId, blobId, clusterMap, futureResult, callback,
+          new DeleteOperation(routerConfig, blobId, clusterMap, responseHandler, futureResult, callback,
               new DeleteRequestRegistrationCallback(), time);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
@@ -74,7 +86,8 @@ class DeleteManager {
   }
 
   /**
-   * Poll among all {@link DeleteOperation}, and generate request for each of them.
+   * Poll among all {@link DeleteOperation}"s". For each polled {@link DeleteOperation}, its {@code fetch()} method
+   * will generate a number of {@link RequestInfo}"s" for actual sending.
    * @param requestInfos the list of {@link RequestInfo} to fill.
    */
   public void poll(List<RequestInfo> requestInfos) {
@@ -82,7 +95,7 @@ class DeleteManager {
     while (iter.hasNext()) {
       DeleteOperation deleteOperation = iter.next();
       deleteOperation.fetchRequest(requestInfos);
-      if(deleteOperation.isOperationCompleted()){
+      if (deleteOperation.isOperationCompleted()) {
         onOperationComplete(deleteOperation);
       }
     }
@@ -105,8 +118,9 @@ class DeleteManager {
   }
 
   /**
-   * Complete a {@link DeleteOperation}.
-   * @param deleteOperation The {@lilnk DeleteOperation} to be completed.
+   * Called when the operation is completed. The {@code DeleteManager} also finishes the operation by performing
+   * the callback and notification.
+   * @param deleteOperation The {@lilnk DeleteOperation} that has completed.
    */
   void onOperationComplete(DeleteOperation deleteOperation) {
     if (deleteOperation.getOperationException() == null) {
@@ -118,7 +132,8 @@ class DeleteManager {
   }
 
   /**
-   * Close the {@code DeleteManager}.
+   * Close the {@code DeleteManager}. A {@code DeleteManager} can be closed for only once. Any further close action
+   * will have no effect.
    */
   void close() {
     if (isOpen.compareAndSet(true, false)) {
@@ -133,7 +148,7 @@ class DeleteManager {
   }
 
   /**
-   * Used by a {@link DeleteOperation} to associate a {@code oCorrelationId} to a {@link DeleteOperation}.
+   * Used by a {@link DeleteOperation} to associate a {@code CorrelationId} to a {@link DeleteOperation}.
    */
   private class DeleteRequestRegistrationCallback implements RequestRegistrationCallback {
     @Override

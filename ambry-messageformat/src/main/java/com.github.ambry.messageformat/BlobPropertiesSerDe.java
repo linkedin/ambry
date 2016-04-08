@@ -1,7 +1,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;

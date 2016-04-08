@@ -1,12 +1,11 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.CrcInputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
