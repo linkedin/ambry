@@ -62,9 +62,6 @@ public class PutManagerTest {
   private NonBlockingRouter router;
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
-  // whether to check source and destination data content at byte level.
-  // this is disabled for large blobs as it is too expensive to generate random data and do byte by byte comparison.
-  private boolean checkContentEquality = false;
   private int chunkSize;
   private int requestParallelism;
   private int successTarget;
@@ -83,7 +80,6 @@ public class PutManagerTest {
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
     successTarget = 2;
-    checkContentEquality = true;
     mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
@@ -152,22 +148,6 @@ public class PutManagerTest {
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(0));
-    submitPutsAndAssertSuccess(true);
-  }
-
-  /**
-   * Tests put of a sufficiently large blob.
-   */
-  @Test
-  public void testLargeBlobPutSuccess()
-      throws Exception {
-    // little heavy on the memory, we can forgo this test later if it is too expensive.
-    // 1 MB chunkSize
-    chunkSize = 1024 * 1024;
-    checkContentEquality = false;
-    // 100 MB blob.
-    requestAndResultsList.clear();
-    requestAndResultsList.add(new RequestAndResult(100 * chunkSize));
     submitPutsAndAssertSuccess(true);
   }
 
@@ -671,10 +651,8 @@ public class PutManagerTest {
         if (chunk == null) {
           allChunks.put(blobEntry.getKey(), blobEntry.getValue());
         } else {
-          if (checkContentEquality) {
-            Assert.assertTrue("All requests for the same blob id must be identical except for correlation id",
-                areIdenticalPutRequests(chunk.array(), blobEntry.getValue().array()));
-          }
+          Assert.assertTrue("All requests for the same blob id must be identical except for correlation id",
+              areIdenticalPutRequests(chunk.array(), blobEntry.getValue().array()));
         }
       }
     }
@@ -712,12 +690,7 @@ public class PutManagerTest {
             (int) dataBlobPutRequest.getBlobSize());
         offset += (int) dataBlobPutRequest.getBlobSize();
       }
-      if (checkContentEquality) {
-        Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
-      } else {
-        Assert.assertEquals("Input blob and written blob should be of the same length", originalPutContent.length,
-            content.length);
-      }
+      Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
     } else {
       byte[] content = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
@@ -816,10 +789,8 @@ public class PutManagerTest {
       putUserMetadata = new byte[10];
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];
-      if (checkContentEquality) {
-        random.nextBytes(putContent);
-      }
-      // future result after the operation is complete.
+      random.nextBytes(putContent);
+      // future result set after the operation is complete.
     }
   }
 }
