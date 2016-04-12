@@ -63,3 +63,4 @@ class GetManager {
     // @todo
   }
 }
+

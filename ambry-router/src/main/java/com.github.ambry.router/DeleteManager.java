@@ -25,7 +25,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.Time;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -36,8 +35,8 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * DeleteManager that handles {@link DeleteOperation}. A {@code DeleteManager} keeps track of all the {@link
- * DeleteOperation} that are assigned to it, and manages their life cycles.
+ * DeleteManager that handles {@link DeleteOperation}. A {@code DeleteManager} keeps track of all the delete
+ * operations that are assigned to it, and manages their states and life cycles.
  */
 class DeleteManager {
   private final Set<DeleteOperation> deleteOperations;
@@ -78,7 +77,7 @@ class DeleteManager {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
           new DeleteOperation(routerConfig, blobId, clusterMap, responseHandler, futureResult, callback,
-              new DeleteRequestRegistrationCallback(), time);
+              new DeleteRequestRegistrationCallbackImpl(), time);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       NonBlockingRouter.completeOperation(futureResult, callback, null, e);
@@ -86,8 +85,8 @@ class DeleteManager {
   }
 
   /**
-   * Poll among all {@link DeleteOperation}"s". For each polled {@link DeleteOperation}, its {@code fetch()} method
-   * will generate a number of {@link RequestInfo}"s" for actual sending.
+   * Poll among all delete operations. For each polled {@link DeleteOperation}, its generates a number of
+   * {@link RequestInfo} for actual sending.
    * @param requestInfos the list of {@link RequestInfo} to fill.
    */
   public void poll(List<RequestInfo> requestInfos) {
@@ -102,7 +101,7 @@ class DeleteManager {
   }
 
   /**
-   * Handle responses received for each of the {@link DeleteOperation} within this manager.
+   * Handle responses received for each of the {@link DeleteOperation} within this delete manager.
    * @param responseInfo A response from {@link com.github.ambry.network.NetworkClient}
    */
   void handleResponse(ResponseInfo responseInfo) {
@@ -112,14 +111,14 @@ class DeleteManager {
       deleteOperation.handleResponse(responseInfo);
     } else {
       // This will happen if the DeleteOperation has already been finished by getting enough responses
-      // or failed by some ServerError.
+      // or failed by some server error.
       logger.trace("Received response for a request of an operation that has completed.");
     }
   }
 
   /**
-   * Called when the operation is completed. The {@code DeleteManager} also finishes the operation by performing
-   * the callback and notification.
+   * Called when the delete operation is completed. The {@code DeleteManager} also finishes the delete operation
+   * by performing the callback and notification.
    * @param deleteOperation The {@lilnk DeleteOperation} that has completed.
    */
   void onOperationComplete(DeleteOperation deleteOperation) {
@@ -150,7 +149,7 @@ class DeleteManager {
   /**
    * Used by a {@link DeleteOperation} to associate a {@code CorrelationId} to a {@link DeleteOperation}.
    */
-  private class DeleteRequestRegistrationCallback implements RequestRegistrationCallback {
+  private class DeleteRequestRegistrationCallbackImpl implements DeleteRequestRegistrationCallback {
     @Override
     public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo requestInfo) {
       correlationIdToDeleteOperation

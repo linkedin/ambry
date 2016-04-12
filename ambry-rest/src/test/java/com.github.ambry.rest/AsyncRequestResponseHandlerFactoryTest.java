@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
@@ -16,7 +29,8 @@ import static org.junit.Assert.fail;
  * Tests functionality of {@link AsyncRequestResponseHandlerFactory}.
  */
 public class AsyncRequestResponseHandlerFactoryTest {
-  private static final RestServerMetrics restServerMetrics = new RestServerMetrics(new MetricRegistry());
+  private static final RestServerMetrics restServerMetrics =
+      new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
 
   /**
    * Tests the instantiation of an {@link AsyncRequestResponseHandler} instance through the
@@ -127,7 +141,8 @@ public class AsyncRequestResponseHandlerFactoryTest {
     // Different instances of RestServerMetrics during construction of different instances of the factory.
     new AsyncRequestResponseHandlerFactory(1, restServerMetrics);
     try {
-      new AsyncRequestResponseHandlerFactory(1, new RestServerMetrics(new MetricRegistry()), blobStorageService);
+      new AsyncRequestResponseHandlerFactory(1,
+          new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri")), blobStorageService);
       fail("Instantiation should have failed because different instances of RestServerMetrics was provided");
     } catch (IllegalStateException e) {
       // expected. nothing to do.

@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.config.VerifiableProperties;
@@ -152,19 +165,20 @@ public class MockBlobStorageService implements BlobStorageService {
     boolean shouldProceed = canHonorRequest(restRequest, restResponseChannel);
     if (shouldProceed) {
       String uri = restRequest.getUri();
-      // most testing Uri result in shouldProceed = false.
-      shouldProceed = false;
       ReadableStreamChannel response = null;
       Exception exception = null;
       if (uri.startsWith(ECHO_REST_METHOD)) {
         String responseStr = restRequest.getRestMethod().toString() + uri.substring(ECHO_REST_METHOD.length());
         ByteBuffer buffer = ByteBuffer.wrap(responseStr.getBytes());
         response = new ByteBufferRSC(buffer);
+        shouldProceed = false;
       } else if (THROW_RUNTIME_EXCEPTION.equals(uri)) {
         throw new RuntimeException(THROW_RUNTIME_EXCEPTION);
       } else if (SEND_RESPONSE_RUNTIME_EXCEPTION.equals(uri)) {
+        shouldProceed = false;
         exception = new RuntimeException(SEND_RESPONSE_RUNTIME_EXCEPTION);
       } else if (SEND_RESPONSE_REST_SERVICE_EXCEPTION.equals(uri)) {
+        shouldProceed = false;
         RestServiceErrorCode errorCode = RestServiceErrorCode.InternalServerError;
         try {
           errorCode = RestServiceErrorCode.valueOf(verifiableProperties.getString(REST_ERROR_CODE));
@@ -173,14 +187,16 @@ public class MockBlobStorageService implements BlobStorageService {
         }
         exception = new RestServiceException(SEND_RESPONSE_REST_SERVICE_EXCEPTION, errorCode);
       }
-      try {
-        if (exception == null) {
-          restResponseChannel.setStatus(ResponseStatus.Ok);
+      if (!shouldProceed) {
+        try {
+          if (exception == null) {
+            restResponseChannel.setStatus(ResponseStatus.Ok);
+          }
+        } catch (RestServiceException e) {
+          exception = e;
+        } finally {
+          handleResponse(restRequest, restResponseChannel, response, exception);
         }
-      } catch (RestServiceException e) {
-        throw new IllegalStateException(e);
-      } finally {
-        handleResponse(restRequest, restResponseChannel, response, exception);
       }
     }
     return shouldProceed;

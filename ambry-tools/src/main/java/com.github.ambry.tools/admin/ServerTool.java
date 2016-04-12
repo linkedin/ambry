@@ -1,8 +1,22 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.tools.admin;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -46,12 +60,14 @@ import joptsimple.OptionSpec;
  * Steps:
  * 1. For each file, generate the blob id with the given partition
  * 2. Generate Blob props, usermetadata and blob content
- * 3. PutRequest is made to every replica in the datacenter
+ * 3. PutRequest is made to every replica in the specified partition and datacenter,
+ *    or a single replica if a hostname and port is specified
  * 4. Write the output to out file
  */
 public class ServerTool {
   private ConnectionPool connectionPool;
   private PartitionId partitionId;
+  private DataNodeId dataNodeId = null;
 
   public ServerTool()
       throws Exception {
@@ -61,7 +77,7 @@ public class ServerTool {
     connectionPool.start();
   }
 
-  public void setPartitionId(ClusterMap clusterMap, String partitionStr, boolean enableVerboseLogging) {
+  private void setPartitionId(ClusterMap clusterMap, String partitionStr, boolean enableVerboseLogging) {
     for (PartitionId writablePartition : clusterMap.getWritablePartitionIds()) {
       if (writablePartition.toString().equalsIgnoreCase(partitionStr)) {
         partitionId = writablePartition;
@@ -74,6 +90,35 @@ public class ServerTool {
 
     if (enableVerboseLogging) {
       System.out.println("Chosen partition " + partitionId);
+    }
+  }
+
+  /**
+   * Specify a data node to write to by hostname and port.  If this is specified, only this node will be written to.
+   * This node must be in the defined partition and data center.
+   *
+   * @param clusterMap used to find data node corresponding to hostname and port
+   * @param hostname the hostname of the data node
+   * @param port the port number of the data node
+   * @param enableVerboseLogging true to emit verbose log messages
+   */
+  private void setDataNodeId(ClusterMap clusterMap, String hostname, int port, boolean enableVerboseLogging) {
+    dataNodeId = clusterMap.getDataNodeId(hostname, port);
+    if (dataNodeId == null) {
+      throw new IllegalArgumentException("Node at " + hostname + ":" + port + " not found");
+    }
+    boolean inPartition = false;
+    for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+      if (replicaId.getDataNodeId().equals(dataNodeId)) {
+        inPartition = true;
+        break;
+      }
+    }
+    if (!inPartition) {
+      throw new IllegalArgumentException("Node at " + hostname + ":" + port + " not in partition " + partitionId);
+    }
+    if (enableVerboseLogging) {
+      System.out.println("Chosen node " + dataNodeId);
     }
   }
 
@@ -103,6 +148,10 @@ public class ServerTool {
           List<ReplicaId> failureList = new ArrayList<ReplicaId>();
           for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
             if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
+              // If a node was specified, only write to that node instead of all nodes of a partition
+              if (dataNodeId != null && !dataNodeId.equals(replicaId.getDataNodeId())) {
+                continue;
+              }
               replicaCount += 1;
               try {
                 stream = new FileInputStream(f);
@@ -253,6 +302,15 @@ public class ServerTool {
           parser.accepts("outFile", "The file to which output should be redirected").withRequiredArg()
               .describedAs("outFile").ofType(String.class);
 
+      // Optional arguments for defining a specific node to write to.
+      ArgumentAcceptingOptionSpec<String> nodeHostnameOpt =
+          parser.accepts("nodeHostname", "The hostname of the node to put to (if specifying single node)")
+              .withOptionalArg().describedAs("nodeHostname").ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<Integer> nodePortOpt =
+          parser.accepts("nodePort", "The port of the node to put to (if specifying single node)")
+              .withOptionalArg().describedAs("nodePort").ofType(Integer.class);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -297,6 +355,14 @@ public class ServerTool {
       if (enableVerboseLogging) {
         System.out.println("Parsed datacenter " + datacenter);
       }
+      String nodeHostname = options.valueOf(nodeHostnameOpt);
+      if (enableVerboseLogging && nodeHostname != null) {
+        System.out.println("Parsed node hostname " + nodeHostname);
+      }
+      Integer nodePort = options.valueOf(nodePortOpt);
+      if (enableVerboseLogging && nodePort != null) {
+        System.out.println("Parsed node port " + nodePort);
+      }
       String outFile = options.valueOf(outFileOpt);
       if (enableVerboseLogging) {
         System.out.println("Parsed outFile " + outFile);
@@ -308,6 +374,9 @@ public class ServerTool {
       writer = new FileWriter(logFile);
       ServerTool serverTool = new ServerTool();
       serverTool.setPartitionId(map, partition, enableVerboseLogging);
+      if (nodeHostname != null && nodePort != null) {
+        serverTool.setDataNodeId(map, nodeHostname, nodePort, enableVerboseLogging);
+      }
       serverTool.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, enableVerboseLogging);
     } catch (Exception e) {
       System.err.println("Error on exit " + e);

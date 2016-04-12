@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
 import java.nio.ByteBuffer;
@@ -33,15 +46,9 @@ public class ByteBufferAWC implements AsyncWritableChannel {
       throw new IllegalArgumentException("Source buffer cannot be null");
     }
     ChunkData chunkData = new ChunkData(src, callback);
-    lock.lock();
-    try {
-      if (!isOpen()) {
-        chunkData.resolveChunk(new ClosedChannelException());
-      } else {
-        chunks.add(chunkData);
-      }
-    } finally {
-      lock.unlock();
+    chunks.add(chunkData);
+    if (!isOpen()) {
+      resolveAllRemainingChunks(new ClosedChannelException());
     }
     return chunkData.future;
   }
@@ -58,13 +65,7 @@ public class ByteBufferAWC implements AsyncWritableChannel {
   @Override
   public void close() {
     if (channelOpen.compareAndSet(true, false)) {
-      lock.lock();
-      try {
-        resolveAllRemainingChunks(new ClosedChannelException());
-        chunks.add(new ChunkData(null, null));
-      } finally {
-        lock.unlock();
-      }
+      resolveAllRemainingChunks(new ClosedChannelException());
     }
   }
 
@@ -79,24 +80,11 @@ public class ByteBufferAWC implements AsyncWritableChannel {
    */
   public ByteBuffer getNextChunk()
       throws InterruptedException {
-    ByteBuffer chunk = null;
+    ByteBuffer chunkBuf = null;
     if (isOpen()) {
-      ChunkData chunkData = chunks.take();
-      if (chunkData.buffer != null) {
-        lock.lock();
-        try {
-          if (isOpen()) {
-            chunk = chunkData.buffer;
-            chunksAwaitingResolution.add(chunkData);
-          } else {
-            chunkData.resolveChunk(new ClosedChannelException());
-          }
-        } finally {
-          lock.unlock();
-        }
-      }
+      chunkBuf = getChunkBuffer(chunks.take());
     }
-    return chunk;
+    return chunkBuf;
   }
 
   /**
@@ -112,47 +100,41 @@ public class ByteBufferAWC implements AsyncWritableChannel {
    */
   public ByteBuffer getNextChunk(long timeoutInMs)
       throws InterruptedException {
-    ByteBuffer chunk = null;
+    ByteBuffer chunkBuf = null;
     if (isOpen()) {
-      ChunkData chunkData = chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS);
-      if (chunkData != null && chunkData.buffer != null) {
-        lock.lock();
-        try {
-          if (isOpen()) {
-            chunk = chunkData.buffer;
-            chunksAwaitingResolution.add(chunkData);
-          } else {
-            chunkData.resolveChunk(new ClosedChannelException());
-          }
-        } finally {
-          lock.unlock();
-        }
-      }
+      chunkBuf = getChunkBuffer(chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS));
     }
-    return chunk;
+    return chunkBuf;
   }
 
   /**
-   * Marks a chunk as handled and invokes the callback and future that accompanied this chunk of data. Once a chunk is
-   * resolved, the data inside it is considered void.
-   * <p/>
-   * This function assumes that chunks are resolved in the same order that they were obtained.
-   * @param chunk the {@link ByteBuffer} that represents the chunk that was handled.
+   * Resolves the oldest "checked-out" chunk and invokes the callback and future that accompanied the chunk. Once a
+   * chunk is resolved, the data inside it is considered void. If no chunks have been "checked-out" yet, does nothing.
    * @param exception any {@link Exception} that occurred during the handling that needs to be notified.
-   * @throws IllegalArgumentException if {@code chunk} is not a valid chunk that is eligible for resolution.
    */
-  public void resolveChunk(ByteBuffer chunk, Exception exception) {
-    lock.lock();
-    try {
-      if (isOpen()) {
-        if (chunksAwaitingResolution.peek() == null || chunksAwaitingResolution.peek().buffer != chunk) {
-          throw new IllegalArgumentException("Unrecognized chunk");
-        }
-        chunksAwaitingResolution.poll().resolveChunk(exception);
-      }
-    } finally {
-      lock.unlock();
+  public void resolveOldestChunk(Exception exception) {
+    ChunkData chunkData = chunksAwaitingResolution.poll();
+    if (chunkData != null) {
+      chunkData.resolveChunk(exception);
     }
+  }
+
+  /**
+   * Gets the buffer associated with the chunk if there is one. Also updates internal state.
+   * @param chunkData the data associated with the chunk whose buffer needs to be returned.
+   * @return the buffer inside {@code chunkData} if there is one.
+   */
+  private ByteBuffer getChunkBuffer(ChunkData chunkData) {
+    ByteBuffer chunkBuf = null;
+    if (chunkData != null && chunkData.buffer != null) {
+      chunkBuf = chunkData.buffer;
+      chunksAwaitingResolution.add(chunkData);
+      if (!isOpen()) {
+        chunkBuf = null;
+        resolveAllRemainingChunks(new ClosedChannelException());
+      }
+    }
+    return chunkBuf;
   }
 
   /**
@@ -160,17 +142,27 @@ public class ByteBufferAWC implements AsyncWritableChannel {
    * @param e the exception to use to resolve all the chunks.
    */
   private void resolveAllRemainingChunks(Exception e) {
-    while (chunksAwaitingResolution.peek() != null) {
-      chunksAwaitingResolution.poll().resolveChunk(e);
-    }
-    while (chunks.peek() != null) {
-      chunks.poll().resolveChunk(e);
+    lock.lock();
+    try {
+      ChunkData chunkData = chunksAwaitingResolution.poll();
+      while (chunkData != null) {
+        chunkData.resolveChunk(e);
+        chunkData = chunksAwaitingResolution.poll();
+      }
+      chunkData = chunks.poll();
+      while (chunkData != null) {
+        chunkData.resolveChunk(e);
+        chunkData = chunks.poll();
+      }
+      chunks.add(new ChunkData(null, null));
+    } finally {
+      lock.unlock();
     }
   }
 
   /**
-   * Representation of all the data associated with a chunk i.e. the actual bytes and the future and callback that need
-   * to be invoked on resolution.
+   * Representation of all the data associated with a chunk i.e. the actual bytes and the future and callback that need to
+   * be invoked on resolution.
    */
   private static class ChunkData {
     /**
@@ -181,6 +173,7 @@ public class ByteBufferAWC implements AsyncWritableChannel {
      * The bytes associated with this chunk.
      */
     public final ByteBuffer buffer;
+
     private final int startPos;
     private final Callback<Long> callback;
 
@@ -205,10 +198,12 @@ public class ByteBufferAWC implements AsyncWritableChannel {
      * @param exception the reason for chunk handling failure.
      */
     public void resolveChunk(Exception exception) {
-      long bytesWritten = buffer.position() - startPos;
-      future.done(bytesWritten, exception);
-      if (callback != null) {
-        callback.onCompletion(bytesWritten, exception);
+      if (buffer != null) {
+        long bytesWritten = buffer.position() - startPos;
+        future.done(bytesWritten, exception);
+        if (callback != null) {
+          callback.onCompletion(bytesWritten, exception);
+        }
       }
     }
   }

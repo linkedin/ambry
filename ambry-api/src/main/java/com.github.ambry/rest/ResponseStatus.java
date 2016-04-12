@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 /**
@@ -24,9 +37,21 @@ public enum ResponseStatus {
    */
   BadRequest,
   /**
+   * 401 - Request Unauthorized
+   */
+  Unauthorized,
+  /**
+   * 403 - Request forbidden
+   */
+  Forbidden,
+  /**
    * 404 Not Found - Resource was not found.
    */
   NotFound,
+  /**
+   * 407 - Proxy authentication required
+   */
+  ProxyAuthenticationRequired,
   /**
    * 410 Gone - Resource has been deleted or has expired.
    */
@@ -58,6 +83,13 @@ public enum ResponseStatus {
       case UnsupportedHttpMethod:
       case UnsupportedOperation:
         return ResponseStatus.BadRequest;
+      case ResourceDirty:
+        return ResponseStatus.Forbidden;
+      case Unauthorized:
+        return ResponseStatus.Unauthorized;
+      case ResourceScanInProgress:
+        return ResponseStatus.ProxyAuthenticationRequired;
+      case IdConverterServiceError:
       case InternalServerError:
       case InternalObjectCreationError:
       case RequestChannelClosed:

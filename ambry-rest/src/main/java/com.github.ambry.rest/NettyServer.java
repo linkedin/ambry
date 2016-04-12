@@ -1,7 +1,19 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -13,7 +25,6 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,8 +46,11 @@ import org.slf4j.LoggerFactory;
 class NettyServer implements NioServer {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final NettyServerDeployer nettyServerDeployer;
-  private final Thread nettyServerDeployerThread;
+  private final EventLoopGroup bossGroup;
+  private final EventLoopGroup workerGroup;
+  private final RestRequestHandler requestHandler;
+  private final PublicAccessLogger publicAccessLogger;
+  private final RestServerState restServerState;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -44,92 +58,26 @@ class NettyServer implements NioServer {
    * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
+   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
+   *                              to respond to health check requests
    */
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler,
       PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    nettyServerDeployer =
-        new NettyServerDeployer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger, restServerState);
-    nettyServerDeployerThread = new Thread(nettyServerDeployer);
+    this.requestHandler = requestHandler;
+    this.publicAccessLogger = publicAccessLogger;
+    this.restServerState = restServerState;
+    bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
+    workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
     logger.trace("Instantiated NettyServer");
   }
 
   @Override
   public void start()
       throws InstantiationException {
-    if (!nettyServerDeployerThread.isAlive()) {
-      logger.info("Starting NettyServer");
-      long startupBeginTime = System.currentTimeMillis();
-      try {
-        nettyServerDeployerThread.start();
-        if (!(nettyServerDeployer.awaitStartup(nettyConfig.nettyServerStartupWaitSeconds, TimeUnit.SECONDS))) {
-          nettyMetrics.nettyServerStartError.inc();
-          throw new InstantiationException("Netty server start timed out");
-        } else if (nettyServerDeployer.getException() != null) {
-          logger.error("Exception during deployment of NettyServer", nettyServerDeployer.getException());
-          nettyMetrics.nettyServerStartError.inc();
-          throw new InstantiationException(
-              "NettyServer start failed - " + nettyServerDeployer.getException().getLocalizedMessage());
-        }
-      } catch (InterruptedException e) {
-        logger.error("NettyServer start await was interrupted. It might not have started", e);
-        nettyMetrics.nettyServerStartError.inc();
-        throw new InstantiationException("Netty server start might have failed - " + e.getLocalizedMessage());
-      } finally {
-        long startupTime = System.currentTimeMillis() - startupBeginTime;
-        logger.info("NettyServer start took {} ms", startupTime);
-        nettyMetrics.nettyServerStartTimeInMs.update(startupTime);
-      }
-    }
-  }
-
-  @Override
-  public void shutdown() {
-    if (nettyServerDeployerThread.isAlive()) {
-      nettyServerDeployer.shutdown();
-    }
-  }
-}
-
-/**
- * Deploys netty HTTP server in a separate thread so that the main thread is unblocked.
- */
-class NettyServerDeployer implements Runnable {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final CountDownLatch startupDone = new CountDownLatch(1);
-  private final EventLoopGroup bossGroup;
-  private final EventLoopGroup workerGroup;
-  private final NettyConfig nettyConfig;
-  private final NettyMetrics nettyMetrics;
-  private final RestRequestHandler requestHandler;
-  private final PublicAccessLogger publicAccessLogger;
-  private final RestServerState restServerState;
-  private Exception exception = null;
-
-  /**
-   * Create a new instance of NettyServerDeployer.
-   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
-   * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
-   * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
-   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
-   *                              to respond to health check requests
-   */
-  public NettyServerDeployer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler,
-      PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
-    this.nettyConfig = nettyConfig;
-    this.nettyMetrics = nettyMetrics;
-    this.requestHandler = requestHandler;
-    bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
-    workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
-    this.publicAccessLogger = publicAccessLogger;
-    this.restServerState = restServerState;
-    logger.trace("Instantiated NettyServerDeployer");
-  }
-
-  @Override
-  public void run() {
+    long startupBeginTime = System.currentTimeMillis();
     try {
       logger.trace("Starting NettyServer deployment");
       ServerBootstrap b = new ServerBootstrap();
@@ -146,9 +94,9 @@ class NettyServerDeployer implements Runnable {
               // to go here.
               .addLast("codec", new HttpServerCodec())
                   // for health check request handling
-              .addLast("HealthCheckHandler", new HealthCheckHandler(restServerState))
+              .addLast("HealthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
                   // for public access logging
-              .addLast("PublicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger))
+              .addLast("PublicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger, nettyMetrics))
                   // for detecting connections that have been idle too long - probably because of an error.
               .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
                   // for safe writing of chunks for responses
@@ -157,41 +105,21 @@ class NettyServerDeployer implements Runnable {
               .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
         }
       });
-      ChannelFuture f = b.bind(nettyConfig.nettyServerPort).sync();
+      b.bind(nettyConfig.nettyServerPort).sync();
       logger.info("NettyServer now listening on port {}", nettyConfig.nettyServerPort);
-      // let the parent know that startup is complete and so that it can proceed.
-      startupDone.countDown();
-      // this is blocking
-      f.channel().closeFuture().sync();
-    } catch (Exception e) {
-      exception = e;
-      startupDone.countDown();
+    } catch (InterruptedException e) {
+      logger.error("NettyServer start await was interrupted", e);
+      nettyMetrics.nettyServerStartError.inc();
+      throw new InstantiationException(
+          "Netty server bind to port [" + nettyConfig.nettyServerPort + "] was interrupted");
+    } finally {
+      long startupTime = System.currentTimeMillis() - startupBeginTime;
+      logger.info("NettyServer start took {} ms", startupTime);
+      nettyMetrics.nettyServerStartTimeInMs.update(startupTime);
     }
   }
 
-  /**
-   * Wait for the specified time for the startup to complete.
-   * @param timeout time to wait for startup.
-   * @param timeUnit unit of {@code timeout}.
-   * @return {@code true} if startup was completed within the {@code timeout}, {@code false} otherwise.
-   * @throws InterruptedException if the wait for startup is interrupted.
-   */
-  public boolean awaitStartup(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
-    return startupDone.await(timeout, timeUnit);
-  }
-
-  /**
-   * Gets exceptions that occurred during startup if any.
-   * @return null if no {@link Exception} occurred during startup, the exception that occurred otherwise.
-   */
-  public Exception getException() {
-    return exception;
-  }
-
-  /**
-   * Shuts down the NettyServerDeployer.
-   */
+  @Override
   public void shutdown() {
     if (!bossGroup.isTerminated() || !workerGroup.isTerminated()) {
       logger.info("Shutting down NettyServer");

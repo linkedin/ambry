@@ -1,9 +1,20 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
-import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.ReadableStreamChannel;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpRequest;
@@ -122,11 +133,12 @@ public class NettyMultipartRequest extends NettyRequest {
   }
 
   /**
-   * Prepares the request for reading by decoding all the content added via {@link #addContent(HttpContent)}.
+   * {@inheritDoc}
    * <p/>
-   * This is a CPU bound task and should not be called in a I/O bound thread.
-   * @throws RestServiceException if request channel has been closed or if the request could not be decoded/processed.
+   * Prepares the request for reading by decoding all the content added via {@link #addContent(HttpContent)}.
+   * @throws RestServiceException if request channel is closed or if the request could not be decoded/prepared.
    */
+  @Override
   public void prepare()
       throws RestServiceException {
     if (!isOpen()) {
@@ -179,11 +191,11 @@ public class NettyMultipartRequest extends NettyRequest {
       throws RestServiceException {
     if (part.getHttpDataType() == InterfaceHttpData.HttpDataType.FileUpload) {
       FileUpload fileUpload = (FileUpload) part;
-      if (fileUpload.getName().equals(RestUtils.MultipartPost.Blob_Part)) {
+      if (fileUpload.getName().equals(RestUtils.MultipartPost.BLOB_PART)) {
         // this is actual data.
         if (hasBlob) {
           nettyMetrics.repeatedPartsError.inc();
-          throw new RestServiceException("Request has more than one " + RestUtils.MultipartPost.Blob_Part,
+          throw new RestServiceException("Request has more than one " + RestUtils.MultipartPost.BLOB_PART,
               RestServiceErrorCode.BadRequest);
         } else {
           hasBlob = true;
@@ -220,8 +232,7 @@ public class NettyMultipartRequest extends NettyRequest {
           // TODO: will avoid the copy.
           fileUpload.content().readBytes(buffer);
           buffer.flip();
-          ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(buffer);
-          allArgs.put(name, channel);
+          allArgs.put(name, buffer);
         }
       }
     } else {

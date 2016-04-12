@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
@@ -15,10 +28,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -166,6 +176,23 @@ public class RestUtilsTest {
     setUserMetadataHeaders(headers, userMetadata);
     verifyBlobPropertiesConstructionSuccess(headers);
     verifyUserMetadataConstructionSuccess(headers, userMetadata);
+  }
+
+  /**
+   * Tests building of User Metadata when the {@link RestRequest} contains an arg with name
+   * {@link RestUtils.MultipartPost#USER_METADATA_PART}.
+   * @throws Exception
+   */
+  @Test
+  public void getUserMetadataWithUserMetadataArgTest()
+      throws Exception {
+    byte[] original = new byte[100];
+    RANDOM.nextBytes(original);
+    JSONObject headers = new JSONObject();
+    headers.put(RestUtils.MultipartPost.USER_METADATA_PART, ByteBuffer.wrap(original));
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    byte[] rcvd = RestUtils.buildUsermetadata(restRequest);
+    assertArrayEquals("Received user metadata does not match with original", original, rcvd);
   }
 
   /**
@@ -411,6 +438,65 @@ public class RestUtilsTest {
         userMetadataMap.get(key2));
   }
 
+  /**
+   * Tests {@link RestUtils#getOperationOrBlobIdFromUri(RestRequest)}.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  @Test
+  public void getOperationOrBlobIdFromUriTest()
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    // no operation
+    String[] noOpUris = {"", "/"};
+    for (String uri : noOpUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
+      assertEquals("Unexpected operation/blob id in " + uri, "", RestUtils.getOperationOrBlobIdFromUri(restRequest));
+    }
+
+    // valid operation
+    String expectedOperationOrBlobId = "expectedOp";
+    String[] validOpUris = {"/" + expectedOperationOrBlobId,
+        "/" + expectedOperationOrBlobId + "/random/extra", expectedOperationOrBlobId,
+        expectedOperationOrBlobId + "/random/extra"};
+    for (String uri : validOpUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
+      assertEquals("Unexpected operation/blob id in " + uri, expectedOperationOrBlobId,
+          RestUtils.getOperationOrBlobIdFromUri(restRequest));
+    }
+  }
+
+  /**
+   * Tests {@link RestUtils#getBlobSubResource(RestRequest)}.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  @Test
+  public void getBlobSubResourceTest()
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    // sub resource null
+    String[] nullUris = {"/op", "/op/", "/op/invalid", "/op/invalid/", "op", "op/", "op/invalid", "op/invalid/"};
+    for (String uri : nullUris) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
+      assertNull("There was no sub-resource expected", RestUtils.getBlobSubResource(restRequest));
+    }
+
+    // valid sub resource
+    String[] nonNullUris = {"/op/", "/op/random/", "op/", "op/random/"};
+    for (String uri : nonNullUris) {
+      String fullUri = uri + RestUtils.SubResource.BlobInfo;
+      RestRequest restRequest = createRestRequest(RestMethod.GET, fullUri, null);
+      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.BlobInfo,
+          RestUtils.getBlobSubResource(restRequest));
+
+      fullUri = uri + RestUtils.SubResource.UserMetadata;
+      restRequest = createRestRequest(RestMethod.GET, fullUri, null);
+      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.UserMetadata,
+          RestUtils.getBlobSubResource(restRequest));
+    }
+  }
+
   // helpers.
   // general.
 
@@ -519,7 +605,7 @@ public class RestUtilsTest {
       boolean keyFromInputMap = inputUserMetadata.containsKey(key);
       assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
       assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
-              + ", and output map value " + userMetadataMap.get(key),
+          + ", and output map value " + userMetadataMap.get(key),
           inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
     }
   }

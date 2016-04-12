@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
@@ -271,6 +284,32 @@ public class NettyResponseChannelTest {
     assertFalse("Channel not closed on the server", channel.isActive());
   }
 
+  /**
+   * Tests setting of different available {@link ResponseStatus} codes and sees that they are recognized and converted
+   * in {@link NettyResponseChannel}.
+   * <p/>
+   * If this test fails, a case for conversion probably needs to be added in {@link NettyResponseChannel}.
+   */
+  @Test
+  public void setStatusTest() {
+    // ask for every status to be set
+    for (ResponseStatus expectedResponseStatus : ResponseStatus.values()) {
+      HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetStatus.toString());
+      HttpHeaders.setHeader(request, MockNettyMessageProcessor.STATUS_HEADER_NAME, expectedResponseStatus);
+      HttpHeaders.setKeepAlive(request, false);
+      EmbeddedChannel channel = createEmbeddedChannel();
+      channel.writeInbound(request);
+
+      // pull but discard response
+      channel.readOutbound();
+      assertFalse("Channel not closed on the server", channel.isActive());
+    }
+    // check if all the ResponseStatus codes were recognized.
+    String metricName = MetricRegistry.name(NettyResponseChannel.class, "UnknownResponseStatusCount");
+    long metricCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(metricName).getCount();
+    assertEquals("Some of the ResponseStatus codes were not recognized", 0, metricCount);
+  }
+
   // helpers
   // general
 
@@ -495,6 +534,10 @@ enum TestingUri {
    */
   SetRequestTest,
   /**
+   * Requests a certain status to be set.
+   */
+  SetStatus,
+  /**
    * When this request is received, the {@link NettyResponseChannel} is closed and then a write operation is attempted.
    */
   WriteAfterClose,
@@ -527,7 +570,9 @@ enum TestingUri {
  * Exposes some URI strings through which a predefined flow can be executed and verified.
  */
 class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
+  public static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
   public static final String CUSTOM_HEADER_NAME = "customHeader";
+  public static final String STATUS_HEADER_NAME = "status";
 
   private ChannelHandlerContext ctx;
   private NettyRequest request;
@@ -537,9 +582,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
     this.ctx = ctx;
-    MetricRegistry metricRegistry = new MetricRegistry();
-    nettyMetrics = new NettyMetrics(metricRegistry);
-    RestRequestMetricsTracker.setDefaults(metricRegistry);
+    nettyMetrics = new NettyMetrics(METRIC_REGISTRY);
+    RestRequestMetricsTracker.setDefaults(METRIC_REGISTRY);
   }
 
   @Override
@@ -637,6 +681,11 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         break;
       case SetRequestTest:
         setRequestTest();
+        break;
+      case SetStatus:
+        restResponseChannel.setStatus(ResponseStatus.valueOf(HttpHeaders.getHeader(httpRequest, STATUS_HEADER_NAME)));
+        restResponseChannel.onResponseComplete(null);
+        assertFalse("Request channel is not closed", request.isOpen());
         break;
       case WriteAfterClose:
         restResponseChannel.close();

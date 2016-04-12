@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import io.netty.buffer.Unpooled;
@@ -25,16 +38,20 @@ import org.slf4j.LoggerFactory;
 public class HealthCheckHandler extends ChannelDuplexHandler {
   private final String healthCheckUri;
   private final RestServerState restServerState;
-  private HttpRequest request;
-  private FullHttpResponse response;
+  private final NettyMetrics nettyMetrics;
   private final byte[] goodBytes = "GOOD".getBytes();
   private final byte[] badBytes = "BAD".getBytes();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public HealthCheckHandler(RestServerState restServerState) {
+  private HttpRequest request;
+  private FullHttpResponse response;
+  private long startTimeInMs;
+
+  public HealthCheckHandler(RestServerState restServerState, NettyMetrics nettyMetrics) {
     this.restServerState = restServerState;
     this.healthCheckUri = restServerState.getHealthCheckUri();
-    logger.info("Created HealthCheckHandler for HealthCheckUri=" + healthCheckUri);
+    this.nettyMetrics = nettyMetrics;
+    logger.trace("Created HealthCheckHandler for HealthCheckUri=" + healthCheckUri);
   }
 
   @Override
@@ -44,6 +61,8 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     boolean forwardObj = false;
     if (obj instanceof HttpRequest) {
       if (request == null && ((HttpRequest) obj).getUri().equals(healthCheckUri)) {
+        nettyMetrics.healthCheckRequestRate.mark();
+        startTimeInMs = System.currentTimeMillis();
         logger.trace("Handling health check request while in state " + restServerState.isServiceUp());
         request = (HttpRequest) obj;
         if (restServerState.isServiceUp()) {
@@ -57,6 +76,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
           HttpHeaders.setKeepAlive(response, false);
           HttpHeaders.setContentLength(response, badBytes.length);
         }
+        nettyMetrics.healthCheckRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       } else {
         // Rest server could be down even if not for health check request. We intentionally don't take any action in this
         // handler for such cases and leave it to the downstream handlers to handle it
@@ -71,11 +91,13 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
           future.addListener(ChannelFutureListener.CLOSE);
         }
         request = null;
+        response = null;
+        nettyMetrics.healthCheckRequestRoundTripTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       } else {
         // request was not for health check uri
         forwardObj = true;
       }
-    } else {
+    } else if (request == null) {
       // http Content which is not LastHttpContent is not intended for this handler
       forwardObj = true;
     }
@@ -94,6 +116,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
         // Start closing client channels after we've completed writing to them (even if they are keep-alive)
         logger.info("Health check request handler closing connection " + ctx.channel() + " since in shutdown mode.");
         promise.addListener(ChannelFutureListener.CLOSE);
+        nettyMetrics.healthCheckHandlerChannelCloseOnWriteCount.inc();
       }
     }
     super.write(ctx, msg, promise);

@@ -233,7 +233,7 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public void close() {
-    doClose();
+    shutDownOperationControllers();
     // wait for all the threads to actually exit
     waitForResponseHandlerThreadExit();
   }
@@ -252,11 +252,11 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Initiate the shutdown of all the RequestResponseHandler threads. This method can get executed in the context of
+   * Initiate the shutdown of all the OperationControllers. This method can get executed in the context of
    * both the calling thread of the {@link #close()} method, and the RequestResponseHandler thread of any of the
    * Operation Controllers.
    */
-  private void doClose() {
+  private void shutDownOperationControllers() {
     if (isOpen.compareAndSet(true, false)) {
       logger.info("Closing the router");
       for (OperationController oc : ocList) {
@@ -462,13 +462,13 @@ class NonBlockingRouter implements Router {
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList);
           onResponse(responseInfoList);
         }
-      } catch (Exception e) {
-        logger.error("Aborting, as requestResponseHandlerThread received an exception: ", e);
+      } catch (Throwable e) {
+        logger.error("Aborting, as requestResponseHandlerThread received an unexpected error: ", e);
       } finally {
         networkClient.close();
         shutDownLatch.countDown();
         // Close the router.
-        doClose();
+        shutDownOperationControllers();
       }
     }
   }

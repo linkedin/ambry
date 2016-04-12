@@ -1,7 +1,20 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.config;
 
 /**
- * Configuration parameters required by a Router.
+ * Configuration parameters required by a {@link com.github.ambry.router.Router}.
  * <p/>
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
  * required for a Router and presents them for retrieval through defined APIs.
@@ -63,21 +76,7 @@ public class RouterConfig {
   public final int routerMaxPutChunkSizeBytes;
 
   /**
-   * The maximum number of parallel requests allowed for a single delete operation.
-   */
-  @Config("router.delete.request.parallelism")
-  @Default("9")
-  public final int routerDeleteRequestParallelism;
-
-  /**
-   * The minimum number of successful responses required for a delete operation.
-   */
-  @Config("router.delete.success.target")
-  @Default("2")
-  public final int routerDeleteSuccessTarget;
-
-  /**
-   * The maximum number of parallel requests allowed for a single put operation.
+   * The maximum number of parallel requests issued at a time by the put manager for a chunk.
    */
   @Config("router.put.request.parallelism")
   @Default("3")
@@ -96,6 +95,20 @@ public class RouterConfig {
   @Config("router.max.slipped.put.attempts")
   @Default("1")
   public final int routerMaxSlippedPutAttempts;
+
+  /**
+   * The maximum number of parallel requests allowed for a delete operation.
+   */
+  @Config("router.delete.request.parallelism")
+  @Default("9")
+  public final int routerDeleteRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a delete operation.
+   */
+  @Config("router.delete.success.target")
+  @Default("2")
+  public final int routerDeleteSuccessTarget;
 
   /**
    * Create a RouterConfig instance.

@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
@@ -172,7 +185,7 @@ public class NettyRequestTest {
     }
 
     try {
-      byte[] content = getRandomBytes(1024);
+      byte[] content = RestTestUtils.getRandomBytes(1024);
       nettyRequest.addContent(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content)));
       fail("Request channel has been closed, so addContent() should have thrown ClosedChannelException");
     } catch (RestServiceException e) {
@@ -392,7 +405,7 @@ public class NettyRequestTest {
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
     Queue<HttpContent> httpContents = new LinkedBlockingQueue<HttpContent>();
     for (int i = 0; i < 5; i++) {
-      ByteBuffer content = ByteBuffer.wrap(getRandomBytes(1024));
+      ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
       HttpContent httpContent = new DefaultHttpContent(Unpooled.wrappedBuffer(content));
       nettyRequest.addContent(httpContent);
       httpContents.add(httpContent);
@@ -411,7 +424,7 @@ public class NettyRequestTest {
   @Test
   public void addContentForGetTest()
       throws RestServiceException {
-    byte[] content = getRandomBytes(16);
+    byte[] content = RestTestUtils.getRandomBytes(16);
     // adding non LastHttpContent to nettyRequest
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
     try {
@@ -544,17 +557,6 @@ public class NettyRequestTest {
   }
 
   /**
-   * Gets random bytes of length {@code size}
-   * @param size the length of random bytes required.
-   * @return a byte array of length {@code size} with random bytes.
-   */
-  private byte[] getRandomBytes(int size) {
-    byte[] bytes = new byte[size];
-    new Random().nextBytes(bytes);
-    return bytes;
-  }
-
-  /**
    * Gets the root cause for {@code e}.
    * @param e the {@link Exception} whose root cause is required.
    * @return the root cause for {@code e}.
@@ -683,7 +685,7 @@ public class NettyRequestTest {
    * @return the whole content as a {@link ByteBuffer} - serves as a source of truth.
    */
   private ByteBuffer generateContent(List<HttpContent> httpContents) {
-    byte[] contentBytes = getRandomBytes(10240);
+    byte[] contentBytes = RestTestUtils.getRandomBytes(10240);
     for (int addedContentCount = 0; addedContentCount < 9; addedContentCount++) {
       HttpContent httpContent =
           new DefaultHttpContent(Unpooled.wrappedBuffer(contentBytes, addedContentCount * 1024, 1024));
@@ -720,7 +722,7 @@ public class NettyRequestTest {
         assertEquals("Unexpected byte", content.get(), recvdContent.get());
         bytesRead++;
       }
-      writeChannel.resolveChunk(recvdContent, null);
+      writeChannel.resolveOldestChunk(null);
     }
   }
 }

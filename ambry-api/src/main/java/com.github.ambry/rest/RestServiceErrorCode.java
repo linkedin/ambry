@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.router.RouterErrorCode;
@@ -12,6 +25,8 @@ import com.github.ambry.router.RouterErrorCode;
  * {@link ResponseStatus#NotFound}
  * {@link ResponseStatus#BadRequest}
  * {@link ResponseStatus#InternalServerError}
+ * {@link ResponseStatus#Forbidden}
+ * {@link ResponseStatus#ProxyAuthenticationRequired}
  * <p/>
  * About logging:
  * Generally, error codes not belonging to the group {@link #InternalServerError} are logged at DEBUG level.
@@ -32,6 +47,14 @@ public enum RestServiceErrorCode {
    */
   BadRequest,
   /**
+   * Resource scan still in progress and result not yet available
+   */
+  ResourceScanInProgress,
+  /**
+   * Resource scan has deducted that the resource is not safe for serving
+   */
+  ResourceDirty,
+  /**
    * Client has sent arguments (whether in the URI or in the headers) that are not in the format that is expected or if
    * the number of values for an argument expected by the server does not match what the client sent.
    */
@@ -51,6 +74,10 @@ public enum RestServiceErrorCode {
    */
   MissingArgs,
   /**
+   * Client has sent a request that cannot be processed due to authorization failure.
+   */
+  Unauthorized,
+  /**
    * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
    * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
    */
@@ -64,6 +91,10 @@ public enum RestServiceErrorCode {
    */
   UnsupportedOperation,
 
+  /**
+   * Indicates that {@link IdConverter} encountered some exception during ID conversion
+   */
+  IdConverterServiceError,
   /**
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
    * there is nothing that a client can do about it.
@@ -105,6 +136,7 @@ public enum RestServiceErrorCode {
       case BlobTooLarge:
       case InvalidBlobId:
       case InvalidPutArgument:
+      case BadInputChannel:
         return BadRequest;
       case BlobDeleted:
       case BlobExpired:

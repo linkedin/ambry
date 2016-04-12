@@ -1,10 +1,27 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.notification.NotificationSystem;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -31,6 +48,7 @@ public class InMemoryRouter implements Router {
   private final AtomicBoolean routerOpen = new AtomicBoolean(true);
   private final ExecutorService operationPool;
   private VerifiableProperties verifiableProperties;
+  private final NotificationSystem notificationSystem;
 
   /**
    * Changes the {@link VerifiableProperties} instance with the router so that the behaviour can be changed on the fly.
@@ -43,10 +61,47 @@ public class InMemoryRouter implements Router {
   /**
    * Creates an instance of InMemoryRouter.
    * @param verifiableProperties properties map that defines the behavior of this instance.
+   * @param notificationSystem the notification system to use to notify creation/deletion of blobs.
    */
-  public InMemoryRouter(VerifiableProperties verifiableProperties) {
+  public InMemoryRouter(VerifiableProperties verifiableProperties, NotificationSystem notificationSystem) {
     setVerifiableProperties(verifiableProperties);
     operationPool = Executors.newFixedThreadPool(1);
+    this.notificationSystem = notificationSystem;
+  }
+
+  /**
+   * Creates an instance of InMemoryRouter.
+   * @param verifiableProperties properties map that defines the behavior of this instance.
+   */
+  public InMemoryRouter(VerifiableProperties verifiableProperties) {
+    this(verifiableProperties, null);
+  }
+
+  /**
+   * Representation of a blob in memory. Contains blob properties, user metadata and blob data.
+   */
+  public static class InMemoryBlob {
+    private final BlobProperties blobProperties;
+    private final byte[] userMetadata;
+    private final ByteBuffer blob;
+
+    public InMemoryBlob(BlobProperties blobProperties, byte[] userMetadata, ByteBuffer blob) {
+      this.blobProperties = blobProperties;
+      this.userMetadata = userMetadata;
+      this.blob = blob;
+    }
+
+    public BlobProperties getBlobProperties() {
+      return blobProperties;
+    }
+
+    public byte[] getUserMetadata() {
+      return userMetadata;
+    }
+
+    public ByteBuffer getBlob() {
+      return ByteBuffer.wrap(blob.array());
+    }
   }
 
   @Override
@@ -61,7 +116,7 @@ public class InMemoryRouter implements Router {
     BlobInfo operationResult = null;
     Exception exception = null;
     if (blobId == null || blobId.length() != BLOB_ID_SIZE) {
-      completeOperation(futureResult, callback, operationResult,
+      completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
     } else {
       try {
@@ -100,7 +155,6 @@ public class InMemoryRouter implements Router {
       try {
         if (deletedBlobs.contains(blobId)) {
           exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
-          ;
         } else if (!blobs.containsKey(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         } else {
@@ -127,7 +181,7 @@ public class InMemoryRouter implements Router {
     FutureResult<String> futureResult = new FutureResult<String>();
     handlePrechecks(futureResult, callback);
     PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, callback);
-    operationPool.submit(new InMemoryBlobPoster(postData, blobs));
+    operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem));
     return futureResult;
   }
 
@@ -149,6 +203,9 @@ public class InMemoryRouter implements Router {
         if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
           deletedBlobs.add(blobId);
           blobs.remove(blobId);
+          if (notificationSystem != null) {
+            notificationSystem.onBlobDeleted(blobId);
+          }
         } else if (!deletedBlobs.contains(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         }
@@ -174,6 +231,22 @@ public class InMemoryRouter implements Router {
     } catch (InterruptedException e) {
       // too bad.
     }
+  }
+
+  /**
+   * Gets all the blobs that are "active" (not deleted).
+   * @return a map of all blobs that are active.
+   */
+  public Map<String, InMemoryBlob> getActiveBlobs() {
+    return Collections.unmodifiableMap(blobs);
+  }
+
+  /**
+   * Gets the set of ids of blobs that have been deleted.
+   * @return the set of ids of blobs that have been deleted.
+   */
+  public Set<String> getDeletedBlobs() {
+    return Collections.unmodifiableSet(deletedBlobs);
   }
 
   /**
@@ -224,16 +297,20 @@ public class InMemoryRouter implements Router {
  */
 class InMemoryBlobPoster implements Runnable {
   private final PostData postData;
-  private final ConcurrentHashMap<String, InMemoryBlob> blobs;
+  private final ConcurrentHashMap<String, InMemoryRouter.InMemoryBlob> blobs;
+  private final NotificationSystem notificationSystem;
 
   /**
    * Create a new instance.
    * @param postData the data that came with the POST request as {@link PostData}.
    * @param blobs the list of blobs in memory.
+   * @param notificationSystem the notification system to use to notify creation/deletion of blobs.
    */
-  public InMemoryBlobPoster(PostData postData, ConcurrentHashMap<String, InMemoryBlob> blobs) {
+  public InMemoryBlobPoster(PostData postData, ConcurrentHashMap<String, InMemoryRouter.InMemoryBlob> blobs,
+      NotificationSystem notificationSystem) {
     this.postData = postData;
     this.blobs = blobs;
+    this.notificationSystem = notificationSystem;
   }
 
   @Override
@@ -241,14 +318,19 @@ class InMemoryBlobPoster implements Runnable {
     String operationResult = null;
     Exception exception = null;
     try {
-      operationResult = UUID.randomUUID().toString();
-      if (blobs.containsKey(operationResult)) {
+      String blobId = UUID.randomUUID().toString();
+      if (blobs.containsKey(blobId)) {
         exception =
             new RouterException("UUID is broken. Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }
       ByteBuffer blobData = readBlob(postData.getReadableStreamChannel());
-      InMemoryBlob blob = new InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
-      blobs.put(operationResult, blob);
+      InMemoryRouter.InMemoryBlob blob =
+          new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
+      blobs.put(blobId, blob);
+      if (notificationSystem != null) {
+        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), postData.getUsermetadata());
+      }
+      operationResult = blobId;
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
@@ -275,7 +357,7 @@ class InMemoryBlobPoster implements Runnable {
       } else {
         blobData.put(chunk);
       }
-      channel.resolveChunk(chunk, exception);
+      channel.resolveOldestChunk(exception);
       if (exception != null) {
         channel.close();
         throw exception;
@@ -326,33 +408,6 @@ class PostData {
     this.readableStreamChannel = readableStreamChannel;
     this.future = future;
     this.callback = callback;
-  }
-}
-
-/**
- * Representation of a blob in memory. Contains blob properties, user metadata and blob data.
- */
-class InMemoryBlob {
-  private final BlobProperties blobProperties;
-  private final byte[] userMetadata;
-  private final ByteBuffer blob;
-
-  public InMemoryBlob(BlobProperties blobProperties, byte[] userMetadata, ByteBuffer blob) {
-    this.blobProperties = blobProperties;
-    this.userMetadata = userMetadata;
-    this.blob = blob;
-  }
-
-  public BlobProperties getBlobProperties() {
-    return blobProperties;
-  }
-
-  public byte[] getUserMetadata() {
-    return userMetadata;
-  }
-
-  public ByteBuffer getBlob() {
-    return ByteBuffer.wrap(blob.array());
   }
 }
 

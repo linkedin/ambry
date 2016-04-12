@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.router.Callback;
@@ -27,6 +40,7 @@ import io.netty.util.concurrent.GenericProgressiveFutureListener;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
@@ -325,6 +339,7 @@ class NettyResponseChannel implements RestResponseChannel {
         new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
     HttpHeaders.setContentLength(response, fullMsg.length());
+    HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setKeepAlive(response, false);
     return response;
   }
@@ -350,6 +365,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.badRequestCount.inc();
         status = HttpResponseStatus.BAD_REQUEST;
         break;
+      case Unauthorized:
+        nettyMetrics.unauthorizedCount.inc();
+        status = HttpResponseStatus.UNAUTHORIZED;
+        break;
       case NotFound:
         nettyMetrics.notFoundCount.inc();
         status = HttpResponseStatus.NOT_FOUND;
@@ -357,6 +376,14 @@ class NettyResponseChannel implements RestResponseChannel {
       case Gone:
         nettyMetrics.goneCount.inc();
         status = HttpResponseStatus.GONE;
+        break;
+      case Forbidden:
+        nettyMetrics.forbiddenCount.inc();
+        status = HttpResponseStatus.FORBIDDEN;
+        break;
+      case ProxyAuthenticationRequired:
+        nettyMetrics.proxyAuthRequiredCount.inc();
+        status = HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED;
         break;
       case InternalServerError:
         nettyMetrics.internalServerErrorCount.inc();
@@ -566,7 +593,7 @@ class NettyResponseChannel implements RestResponseChannel {
      */
     @Override
     public void operationProgressed(ChannelProgressiveFuture future, long progress, long total) {
-      logger.trace("{} bytes of response written on channel {}", ctx.channel());
+      logger.trace("{} bytes of response written on channel {}", progress, ctx.channel());
       while (chunksAwaitingCallback.peek() != null && progress >= chunksAwaitingCallback
           .peek().writeCompleteThreshold) {
         chunksAwaitingCallback.poll().resolveChunk(null);

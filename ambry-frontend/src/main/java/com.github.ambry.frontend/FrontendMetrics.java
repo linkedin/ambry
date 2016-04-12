@@ -1,3 +1,16 @@
+/**
+ * Copyright 2015 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.Counter;
@@ -20,7 +33,9 @@ class FrontendMetrics {
   // HEAD
   public final RestRequestMetrics headBlobMetrics;
   // GET
+  public final RestRequestMetrics getBlobInfoMetrics;
   public final RestRequestMetrics getBlobMetrics;
+  public final RestRequestMetrics getUserMetadataMetrics;
   // POST
   public final RestRequestMetrics postBlobMetrics;
 
@@ -34,6 +49,11 @@ class FrontendMetrics {
   public final Meter getBlobRate;
   // POST
   public final Meter postBlobRate;
+  // security service
+  public final Meter securityServiceProcessRequestRate;
+  public final Meter securityServiceProcessResponseRate;
+  // Id converter
+  public final Meter idConverterRequestRate;
 
   // Latencies
   // AmbryBlobStorageService
@@ -61,6 +81,11 @@ class FrontendMetrics {
   // PostCallback
   public final Histogram postCallbackProcessingTimeInMs;
   public final Histogram postTimeInMs;
+  // security service
+  public final Histogram securityServiceProcessRequestTimeInMs;
+  public final Histogram securityServiceProcessResponseTimeInMs;
+  // Id converter
+  public final Histogram idConverterRequestProcessingTimeInMs;
 
   // Errors
   // AmbryBlobStorageService
@@ -80,7 +105,9 @@ class FrontendMetrics {
     // HEAD
     headBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "HeadBlob", metricRegistry);
     // GET
+    getBlobInfoMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlobInfo", metricRegistry);
     getBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlob", metricRegistry);
+    getUserMetadataMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetUserMetadata", metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
 
@@ -94,6 +121,14 @@ class FrontendMetrics {
     getBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "GetBlobRate"));
     // POST
     postBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "PostBlobRate"));
+    // security service
+    securityServiceProcessRequestRate =
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "SecurityServiceProcessRequestRate"));
+    securityServiceProcessResponseRate =
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "SecurityServiceProcessResponseRate"));
+    // Id converter
+    idConverterRequestRate =
+        metricRegistry.meter(MetricRegistry.name(AmbryIdConverterFactory.class, "IdConverterRequestRate"));
 
     // Latencies
     // AmbryBlobStorageService
@@ -131,6 +166,14 @@ class FrontendMetrics {
     postCallbackProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(PostCallback.class, "ProcessingTimeInMs"));
     postTimeInMs = metricRegistry.histogram(MetricRegistry.name(PostCallback.class, "ResultTimeInMs"));
+    // security service
+    securityServiceProcessRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ProcessingTimeInMs"));
+    securityServiceProcessResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ProcessingTimeInMs"));
+    // Id converter
+    idConverterRequestProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
 
     // Errors
     // AmbryBlobStorageService

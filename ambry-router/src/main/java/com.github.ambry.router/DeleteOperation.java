@@ -25,6 +25,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
@@ -44,9 +45,9 @@ import org.slf4j.LoggerFactory;
  *   {@link DeleteOperation}: the highest level of a "request" to delete a blob based on its blob id.
  *                            This virtual request comprises a number of physical requests (i.e.,
  *                            {@link RequestInfo}).
- *   {@link RequestInfo}:     a wrapper of an actual request that is sent to a specific replica.
+ *   {@link RequestInfo}:     a wrapper of a request that is sent to a specific replica.
  *   {@link DeleteRequest}:   the actual request sent to a replica. It is a destination-agnostic, router-server
- *                            protocol that asks a server store to make a deletion.
+ *                            protocol that requests a store server to make a deletion.
  *   {@link ResponseInfo}:    a wrapper of a response that is received for the {@code DeleteOperation}. A
  *                            {@link DeleteOperation} can be completed after a number of responses have been
  *                            received. ResponseInfo is one-to-one mapped to a RequestInfo.
@@ -59,10 +60,11 @@ class DeleteOperation {
   private final ResponseHandler responseHandler;
   private final BlobId blobId;
   private final FutureResult<Void> futureResult;
-  private final RequestRegistrationCallback deleteRequestRegistrationCallback;
+  private final DeleteRequestRegistrationCallback deleteRequestRegistrationCallback;
   private final Callback<Void> callback;
   private final Void operationResult = null;
   private final RouterConfig routerConfig;
+
   private RouterException operationException = null;
   private RouterErrorCode resolvedRouterErrorCode;
   private int blobNotFound = 0;
@@ -86,8 +88,8 @@ class DeleteOperation {
    * @param time A {@link Time} reference.
    */
   DeleteOperation(RouterConfig routerConfig, BlobId blobId, ClusterMap clusterMap, ResponseHandler responsehandler,
-      FutureResult<Void> futureResult, Callback<Void> callback, RequestRegistrationCallback requestRegistrationCallback,
-      Time time) {
+      FutureResult<Void> futureResult, Callback<Void> callback,
+      DeleteRequestRegistrationCallback requestRegistrationCallback, Time time) {
     this.routerConfig = routerConfig;
     this.blobId = blobId;
     this.clusterMap = clusterMap;
@@ -104,9 +106,9 @@ class DeleteOperation {
 
   /**
    * The predefined precedence levels among different {@link RouterErrorCode}. This will help resolve
-   * {@link RouterErrorCode} if different {@link RouterErrorCode}  are returned by multiple replicas. For example,
-   * if one replica returns {@link RouterErrorCode.BlobExpired}, another replica returns {@link RouterErrorCode.AmbryUnavailable},
-   * the final RouterErrorCode should be {@link RouterErrorCode.BlobExpired}.
+   * {@link RouterErrorCode} if different {@link RouterErrorCode} are returned by multiple replicas. For
+   * example, if one replica causes {@link RouterErrorCode.BlobExpired}, and another replica causes
+   * {@link RouterErrorCode.AmbryUnavailable}, the final RouterErrorCode should be {@link RouterErrorCode.BlobExpired}.
    */
   static {
     precedenceLevels.put(RouterErrorCode.BlobDeleted, 1);
@@ -156,11 +158,10 @@ class DeleteOperation {
 
   /**
    * Handle a response received from the {@link com.github.ambry.network.NetworkClient}. There
-   * can be various cases during handling a response.
+   * can be different cases during handling a response.
    * 1. Only one response of {@code ServerErrorCode.Blob_Deleted} will be sufficient to complete
    *    the {@code DeleteOperation}, with {@link RouterErrorCode} = {@code BlobDeleted}. However,
-   *    if this is the last received response, the {code DeleteOperation} will be completed before
-   *    the last response received due to the decision of the {@code OperationTracker}.
+   *    this response will not be used if it is received after the operation is completed.
    * 2. If different {@link ServerErrorCode} received from multiple responses, these error codes
    *    needs to be used together to resolve a reasonable {@link RouterErrorCode}.
    * @param responseInfo The response to be handled.
@@ -201,6 +202,9 @@ class DeleteOperation {
         } catch (IOException e) {
           // @todo: Even this should really not happen. But we need a metric.
           logger.error("Unable to recover a deleteResponse from received stream.");
+          updateRouterError(replica, RouterErrorCode.UnexpectedInternalError);
+        } catch (IllegalArgumentException e) {
+          logger.error("Incompatible response is received for " + RequestOrResponseType.DeleteRequest);
           updateRouterError(replica, RouterErrorCode.UnexpectedInternalError);
         }
       }
@@ -258,7 +262,7 @@ class DeleteOperation {
           logger.trace("Blob has already been deleted.");
           operationException = new RouterException("Blob has already been deleted.", RouterErrorCode.BlobDeleted);
           operationCompleted = true;
-          return;
+          break;
         case Blob_Not_Found:
           blobNotFound++;
           resolveRouterError(RouterErrorCode.BlobDoesNotExist);
@@ -292,7 +296,7 @@ class DeleteOperation {
     } else {
       // This should not happen. If falls in this block, it is an illegal state.
       logger.error("Both Replica and ServerErrorCode cannot be null to handle.");
-      throw new IllegalStateException("Replica or server error code is null when processing server error code.");
+      updateRouterError(replica, RouterErrorCode.UnexpectedInternalError);
     }
   }
 
@@ -309,6 +313,7 @@ class DeleteOperation {
       operationTracker.onResponse(replica, false);
     } else {
       logger.error("Either replica or routerErrorCode is null when updating router error code.");
+      updateRouterError(replica, RouterErrorCode.UnexpectedInternalError);
     }
   }
 
