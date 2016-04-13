@@ -1,0 +1,243 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+package com.github.ambry.router;
+
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.network.RequestInfo;
+import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Time;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.TreeMap;
+
+
+/**
+ * GetBlobInfoOperation class is responsible for maintaining the state associated with a getBlobInfo operation,
+ * and completing it. A GetBlobInfo operation only needs to make requests for a single chunk to get the BlobInfo -
+ * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
+ */
+class GetBlobInfoOperation extends GetOperation<BlobInfo> {
+  private BlobInfo blobInfo;
+  private final SimpleOperationTracker operationTracker;
+  // map of correlation id to the request metadata for every request issued for this operation.
+  protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
+
+  /**
+   * Construct a GetBlobInfoOperation
+   * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
+   * @param clusterMap the {@link ClusterMap} of the cluster
+   * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
+   * @param blobIdStr the blob id associated with the operation in string form.
+   * @param futureResult the future that will contain the result of the operation.
+   * @param callback the callback that is to be called when the operation completes.
+   * @param time the Time instance to use.
+   * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
+   */
+  GetBlobInfoOperation(RouterConfig routerConfig, ClusterMap clusterMap, ResponseHandler responseHandler,
+      String blobIdStr, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback, Time time)
+      throws RouterException {
+    super(routerConfig, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
+    operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true,
+        routerConfig.routerGetSuccessTarget, routerConfig.routerGetRequestParallelism);
+  }
+
+  /**
+   * Return the {@link MessageFormatFlags} to associate with a getBlobInfo operation.
+   * @return {@link MessageFormatFlags#BlobInfo}
+   */
+  @Override
+  MessageFormatFlags getOperationFlag() {
+    return MessageFormatFlags.BlobInfo;
+  }
+
+  /**
+   * For this operation, create and populate get requests (in the form of {@link RequestInfo}) to send out.
+   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
+   *                                    created as part of this poll operation.
+   */
+  @Override
+  void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
+    //First, check if any of the existing requests have timed out.
+    Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
+        correlationIdToGetRequestInfo.entrySet().iterator();
+    while (inFlightRequestsIterator.hasNext()) {
+      Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
+      if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
+        operationTracker.onResponse(entry.getValue().replicaId, false);
+        setOperationException(
+            new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut));
+        inFlightRequestsIterator.remove();
+      } else {
+        // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
+        break;
+      }
+    }
+
+    checkAndMaybeComplete();
+    if (isOperationComplete()) {
+      return;
+    }
+
+    Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
+    while (replicaIterator.hasNext()) {
+      ReplicaId replicaId = replicaIterator.next();
+      String hostname = replicaId.getDataNodeId().getHostname();
+      Port port = new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
+      GetRequest getRequest = createGetRequest(blobId, getOperationFlag());
+      RequestInfo request = new RequestInfo(hostname, port, getRequest);
+      int correlationId = getRequest.getCorrelationId();
+      correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
+      requestRegistrationCallback.registerRequestToSend(this, request);
+      replicaIterator.remove();
+    }
+  }
+
+  /**
+   * Handle the body of the response: Deserialize and set the {@link BlobInfo} to return.
+   * @param payload the body of the response.
+   * @throws IOException if there is an IOException while deserializing the body.
+   * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
+   */
+  void handleBody(InputStream payload)
+      throws IOException, MessageFormatException {
+    if (blobInfo == null) {
+      blobInfo = new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
+          MessageFormatRecord.deserializeUserMetadata(payload).array());
+    } else {
+      // If the successTarget is 1, this case will never get executed.
+      // If it is more than 1, then, different responses will have to be reconciled in some way. Here is where that
+      // would be done. Since the store is immutable, currently we handle this by ignoring subsequent responses
+      // (if the successTarget is > 1).
+    }
+  }
+
+  /**
+   * Handle the given {@link ResponseInfo} and update the status of the operation.
+   * Based on the status of the response, this involves handling the body, notifying the operation tracker,
+   * notifying the response handler and possibly setting the operationException.
+   * @param responseInfo the {@link ResponseInfo} to be handled.
+   */
+  @Override
+  void handleResponse(ResponseInfo responseInfo) {
+    if (isOperationComplete()) {
+      return;
+    }
+    int correlationId = ((GetRequest) responseInfo.getRequest()).getCorrelationId();
+    // Get the GetOperation that generated the request.
+    GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
+    if (getRequestInfo == null) {
+      // Ignore right away. This associated operation has completed.
+      return;
+    }
+    if (responseInfo.getError() != null) {
+      setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
+      responseHandler.onRequestResponseException(getRequestInfo.replicaId, new IOException("NetworkClient error"));
+      operationTracker.onResponse(getRequestInfo.replicaId, false);
+    } else {
+      try {
+        GetResponse getResponse = GetResponse
+            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), clusterMap);
+        if (getResponse.getCorrelationId() != correlationId) {
+          // The NetworkClient associates a response with a request based on the fact that only one request is sent
+          // out over a connection id, and the response received on a connection id must be for the latest request
+          // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
+          // There is no other way to handle it.
+          logger.error("The correlation id in the GetResponse " + getResponse.getCorrelationId()
+              + " is not the same as the correlation id in the associated GetRequest: " + correlationId);
+          setOperationException(
+              new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
+          operationTracker.onResponse(getRequestInfo.replicaId, false);
+          // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
+        } else {
+          ServerErrorCode getError = getResponse.getError();
+          if (getError == ServerErrorCode.No_Error) {
+            int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
+            // Each get request issued by the router is for a single blob.
+            if (partitionsInResponse != 1) {
+              setOperationException(new RouterException("Unexpected number of partition responses, expected: 1, " +
+                  "received: " + partitionsInResponse, RouterErrorCode.UnexpectedInternalError));
+              operationTracker.onResponse(getRequestInfo.replicaId, false);
+              // Again, no need to notify the responseHandler.
+            } else {
+              getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
+              responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
+              if (getError == ServerErrorCode.No_Error) {
+                handleBody(getResponse.getInputStream());
+                operationTracker.onResponse(getRequestInfo.replicaId, true);
+              } else {
+                // process and set the most relevant exception.
+                processServerError(getError);
+                if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired) {
+                  // this is a successful response and one that completes the operation regardless of whether the
+                  // success target has been reached or not.
+                  operationCompleted = true;
+                } else {
+                  operationTracker.onResponse(getRequestInfo.replicaId, false);
+                }
+              }
+            }
+          } else {
+            responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
+            operationTracker.onResponse(getRequestInfo.replicaId, false);
+          }
+        }
+      } catch (IOException e) {
+        // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
+        // detection.
+        setOperationException(new RouterException("Response deserialization received an unexpected error", e,
+            RouterErrorCode.UnexpectedInternalError));
+        operationTracker.onResponse(getRequestInfo.replicaId, false);
+      } catch (MessageFormatException e) {
+        setOperationException(new RouterException("Response deserialization received an unexpected error", e,
+            RouterErrorCode.UnexpectedInternalError));
+        operationTracker.onResponse(getRequestInfo.replicaId, false);
+      }
+    }
+    checkAndMaybeComplete();
+  }
+
+  /**
+   * Check whether the operation can be completed, if so complete it.
+   */
+  private void checkAndMaybeComplete() {
+    if (operationTracker.isDone()) {
+      if (operationTracker.hasSucceeded()) {
+        operationException = null;
+      }
+      operationCompleted = true;
+    }
+    // this check is outside as the operation could get completed outside of the operation tracking if a
+    // Blob_Deleted error or Blob_Expired error was received (in which case the success target is not honored).
+    if (operationCompleted) {
+      NonBlockingRouter.completeOperation(operationFuture, operationCallback, blobInfo, operationException);
+    }
+  }
+}
+

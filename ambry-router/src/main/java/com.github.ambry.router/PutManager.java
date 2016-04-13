@@ -60,17 +60,16 @@ class PutManager {
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
 
-  private class PutRequestRegistrationCallbackImpl implements PutRequestRegistrationCallback {
+  private class PutRequestRegistrationCallbackImpl implements RequestRegistrationCallback<PutOperation> {
     private List<RequestInfo> requestListToFill;
 
     @Override
     public void registerRequestToSend(PutOperation putOperation, RequestInfo requestInfo) {
       requestListToFill.add(requestInfo);
-      correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
+      correlationIdToPutOperation
+          .put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
     }
-  }
-
-  ;
+  };
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to the PutOperations, every time.
   private final PutRequestRegistrationCallbackImpl requestRegistrationCallback =
@@ -142,7 +141,7 @@ class PutManager {
   }
 
   /**
-   * Hands over the response to the associated PutChunk that issued the request.
+   * Hands over the response to the associated PutOperation that issued the request.
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {

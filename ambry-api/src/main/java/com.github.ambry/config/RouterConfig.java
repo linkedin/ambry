@@ -111,6 +111,20 @@ public class RouterConfig {
   public final int routerDeleteSuccessTarget;
 
   /**
+   * The maximum number of parallel requests issued at a time by the get manager for a get operation on a chunk.
+   */
+  @Config("router.get.request.parallelism")
+  @Default("2")
+  public final int routerGetRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a get operation on a chunk.
+   */
+  @Config("router.get.success.target")
+  @Default("1")
+  public final int routerGetSuccessTarget;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -131,5 +145,7 @@ public class RouterConfig {
     routerMaxSlippedPutAttempts = verifiableProperties.getInt("router.max.slipped.put.attempts", 1);
     routerDeleteRequestParallelism = verifiableProperties.getInt("router.delete.request.parallelism", 12);
     routerDeleteSuccessTarget = verifiableProperties.getInt("router.delete.success.target", 2);
+    routerGetRequestParallelism = verifiableProperties.getInt("router.get.request.parallelism", 2);
+    routerGetSuccessTarget = verifiableProperties.getInt("router.get.success.target", 1);
   }
 }

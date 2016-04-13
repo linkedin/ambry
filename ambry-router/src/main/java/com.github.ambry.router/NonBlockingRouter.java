@@ -59,6 +59,7 @@ class NonBlockingRouter implements Router {
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   private static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
 
+  static final int MAX_IN_MEM_CHUNKS = 4;
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
 
@@ -277,8 +278,22 @@ class NonBlockingRouter implements Router {
    * Return an approximate count of the number of operations submitted to the router that are not yet completed.
    * @return (approximate) number of operations being handled at the time of this call.
    */
-  int getOperationsCount() {
+  static int getOperationsCount() {
     return currentOperationsCount.get();
+  }
+
+  /**
+   * Increment the count of currently running operations
+   */
+  static void incrementOperationsCount() {
+    currentOperationsCount.incrementAndGet();
+  }
+
+  /**
+   * Decrement the count of currently running operations
+   */
+  static void decrementOperationsCount() {
+    currentOperationsCount.decrementAndGet();
   }
 
   /**

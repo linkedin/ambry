@@ -42,13 +42,13 @@ import org.junit.Test;
 
 public class PutOperationTest {
   private final RouterConfig routerConfig;
-  private final MockClusterMap mockClusterMap;
+  private final MockClusterMap mockClusterMap = new MockClusterMap();
   private final ResponseHandler responseHandler;
   private final Time time;
   private final Map<Integer, PutOperation> correlationIdToPutOperation = new TreeMap<>();
-  private final MockServer mockServer = new MockServer();
+  private final MockServer mockServer = new MockServer(mockClusterMap, "");
 
-  private class PutTestRequestRegistrationCallbackImpl implements PutRequestRegistrationCallback {
+  private class PutTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<PutOperation> {
     private List<RequestInfo> requestListToFill;
 
     @Override
@@ -56,9 +56,7 @@ public class PutOperationTest {
       requestListToFill.add(requestInfo);
       correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
     }
-  }
-
-  ;
+  };
   private final PutTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new PutTestRequestRegistrationCallbackImpl();
 
@@ -77,7 +75,6 @@ public class PutOperationTest {
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     routerConfig = new RouterConfig(vProps);
-    mockClusterMap = new MockClusterMap();
     responseHandler = new ResponseHandler(mockClusterMap);
     time = new MockTime();
   }

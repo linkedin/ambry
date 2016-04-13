@@ -35,6 +35,9 @@ class MockServerLayout {
   public MockServerLayout(ClusterMap clusterMap) {
     this.mockServers = new HashMap<DataNodeId, MockServer>();
     this.clustermap = clusterMap;
+    for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
+      mockServers.put(dataNodeId, new MockServer(clusterMap, dataNodeId.getDatacenterName()));
+    }
   }
 
   /**
@@ -45,9 +48,6 @@ class MockServerLayout {
    */
   public synchronized MockServer getMockServer(String host, int port) {
     DataNodeId dataNodeId = clustermap.getDataNodeId(host, port);
-    if (!mockServers.containsKey(dataNodeId)) {
-      mockServers.put(dataNodeId, new MockServer());
-    }
     return mockServers.get(dataNodeId);
   }
 

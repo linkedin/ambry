@@ -114,7 +114,6 @@ class PutOperation {
   // To find the PutChunk to hand over the response quickly.
   private final Map<Integer, PutChunk> correlationIdToPutChunk = new HashMap<Integer, PutChunk>();
 
-  private static final int MAX_IN_MEM_CHUNKS = 4;
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
   /**
@@ -164,7 +163,7 @@ class PutOperation {
     chunkCounter = -1;
 
     // Initialize chunks
-    putChunks = new PutChunk[Math.min(numDataChunks, MAX_IN_MEM_CHUNKS)];
+    putChunks = new PutChunk[Math.min(numDataChunks, NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
     for (int i = 0; i < putChunks.length; i++) {
       putChunks[i] = new PutChunk();
     }
@@ -195,10 +194,10 @@ class PutOperation {
   /**
    * For this operation, create and populate put requests for chunks (in the form of {@link RequestInfo}) to
    * send out.
-   * @param requestRegistrationCallback the {@link PutRequestRegistrationCallback} to call for every request that gets created
-   *                                    as part of this poll operation.
+   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
+   *                                    created as part of this poll operation.
    */
-  void poll(PutRequestRegistrationCallback requestRegistrationCallback) {
+  void poll(RequestRegistrationCallback requestRegistrationCallback) {
     if (operationCompleted) {
       return;
     }
@@ -662,10 +661,10 @@ class PutOperation {
      * status of the operation and anything else that needs to be done within this PutChunk. The callers guarantee
      * that this method is called on all the PutChunks of an operation until either the operation,
      * or the chunk operation is completed.
-     * @param requestFillCallback the {@link PutRequestRegistrationCallback} to call for every request that gets created as
+     * @param requestFillCallback the {@link RequestRegistrationCallback} to call for every request that gets created as
      *                            part of this poll operation.
      */
-    void poll(PutRequestRegistrationCallback requestFillCallback) {
+    void poll(RequestRegistrationCallback requestFillCallback) {
       maybeFreeDefunctBuffers();
       //First, check if any of the existing requests have timed out.
       Iterator<Map.Entry<Integer, ChunkPutRequestInfo>> inFlightRequestsIterator =
