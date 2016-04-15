@@ -56,11 +56,11 @@ public class DeleteManagerTest {
   private String blobIdString;
   private PartitionId mockPartition;
   private Future<Void> future;
-  private boolean ifServerRespond;
 
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  private static final int DELETE_PARALLELISM = 9;
 
   private Properties getNonBlockingRouterProperties(String deleteParallelism) {
     Properties properties = new Properties();
@@ -71,22 +71,25 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Initialize ClusterMap, Router, mock servers, and blobId. The blobId is to be deleted.
+   * Initialize ClusterMap, Router, mock servers, and originalBlobId. The originalBlobId is to be deleted.
    * @param deleteParallelism The maximum number of parallel {@link com.github.ambry.protocol.DeleteRequest}
    *                          that can be sent out.
    * @throws Exception
    */
-  private void initialize(String deleteParallelism)
+  private void initialize(int deleteParallelism, boolean ifServerRespond)
       throws Exception {
+    if(deleteParallelism < 1) {
+      throw new IllegalArgumentException("Parallelism for delete operation should be greater than 0.");
+    }
+    VerifiableProperties vProps = new VerifiableProperties(getNonBlockingRouterProperties(String.valueOf(deleteParallelism)));
     operationCompleteLatch = new CountDownLatch(1);
     mockTime = new MockTime();
     mockSelectorState = new AtomicReference<MockSelectorState>(MockSelectorState.Good);
-    VerifiableProperties vProps = new VerifiableProperties(getNonBlockingRouterProperties(deleteParallelism));
     MockClusterMap mockClusterMap = new MockClusterMap();
     serverLayout = new MockServerLayout(mockClusterMap);
     for (DataNodeId dataNodeId : mockClusterMap.getDataNodeIds()) {
       MockServer server = serverLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
-      server.setIfServerRespond(ifServerRespond);
+      server.setIfServerRespondToDelete(ifServerRespond);
     }
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
@@ -103,8 +106,7 @@ public class DeleteManagerTest {
   @Test
   public void testBasicDeletion()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
+    initialize(9, true);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
     writeBlobRecordToServers(serverErrorCodes);
@@ -119,8 +121,7 @@ public class DeleteManagerTest {
   @Test
   public void testBlobIdNotValid()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
+    initialize(9, true);
     future = router.deleteBlob("123", new ClientCallback());
     try {
       future.get();
@@ -157,10 +158,11 @@ public class DeleteManagerTest {
   @Test
   public void testBlobExpired()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
-    ServerErrorCode[] serverErrorCodes =
-        {ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Expired, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Expired};
+    initialize(9, true);
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
+    serverErrorCodes[5]=ServerErrorCode.Blob_Expired;
+    serverErrorCodes[8]=ServerErrorCode.Blob_Expired;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -179,8 +181,7 @@ public class DeleteManagerTest {
   @Test
   public void testBlobNotFound()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
+    initialize(9, true);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
     writeBlobRecordToServers(serverErrorCodes);
@@ -196,18 +197,17 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when the blob cannot be found in store servers. Though the last response is not
-   * {@code Blob_Not_Found}, the delete operation is completed according to its {@link OperationTracker},
-   * and does not wait for the last response. The order of received responses is the same as defined in
-   * {@code serverErrorCodes}.
+   * Test the case when the blob cannot be found in store servers, though the last response is {@code Blob_Not_Found}.
+   * This is because the delete operation is completed according to its {@link OperationTracker}, and does not wait
+   * for the last response. The order of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test
   public void testBlobNotFoundWithLastResponseNotBlobNotFound()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
-    ServerErrorCode[] serverErrorCodes =
-        {ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Deleted};
+    initialize(9, true);
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
+    serverErrorCodes[8] = ServerErrorCode.Blob_Deleted;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -221,18 +221,18 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when the two responses are Blob_Not_Bound, one is in the middle of the responses, and
-   * the other is the last response. In this case, we should return BlobDeleted. Note that this time the
-   * router returns a different response to its client from the test case above. The order of received
-   * responses is the same as defined in {@code serverErrorCodes}.
+   * Test the case when the two responses are {@code ServerErrorCode.Blob_Deleted}, one is in the middle
+   * of the responses, and the other is the last response. In this case, we should return BlobDeleted.
+   * The order of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test
   public void testBlobNotFoundWithTwoBlobDeleted()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
-    ServerErrorCode[] serverErrorCodes =
-        {ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Deleted};
+    initialize(9, true);
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
+    serverErrorCodes[5] = ServerErrorCode.Blob_Deleted;
+    serverErrorCodes[8] = ServerErrorCode.Blob_Deleted;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -254,10 +254,10 @@ public class DeleteManagerTest {
   @Test
   public void testSingleBlobDeletedReturned()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
-    ServerErrorCode[] serverErrorCodes =
-        {ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Not_Found, ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Not_Found};
+    initialize(9, true);
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
+    serverErrorCodes[7] = ServerErrorCode.Blob_Deleted;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -278,10 +278,17 @@ public class DeleteManagerTest {
   @Test
   public void testVariousServerErrorCodes()
       throws Exception {
-    ifServerRespond = true;
-    initialize("9");
-    ServerErrorCode[] serverErrorCodes =
-        {ServerErrorCode.Blob_Not_Found, ServerErrorCode.Data_Corrupt, ServerErrorCode.IO_Error, ServerErrorCode.Partition_Unknown, ServerErrorCode.Disk_Unavailable, ServerErrorCode.No_Error, ServerErrorCode.Data_Corrupt, ServerErrorCode.Unknown_Error, ServerErrorCode.Disk_Unavailable};
+    initialize(9, true);
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
+    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
+    serverErrorCodes[2] = ServerErrorCode.IO_Error;
+    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
+    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
+    serverErrorCodes[5] = ServerErrorCode.No_Error;
+    serverErrorCodes[6] = ServerErrorCode.Data_Corrupt;
+    serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
+    serverErrorCodes[8] = ServerErrorCode.Disk_Unavailable;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -302,10 +309,17 @@ public class DeleteManagerTest {
   @Test
   public void testVariousServerErrorCodesForThreeParallelism()
       throws Exception {
-    ifServerRespond = true;
-    initialize("3");
-    ServerErrorCode[] serverErrorCodes =
-        {ServerErrorCode.Blob_Not_Found, ServerErrorCode.Data_Corrupt, ServerErrorCode.IO_Error, ServerErrorCode.Partition_Unknown, ServerErrorCode.Disk_Unavailable, ServerErrorCode.No_Error, ServerErrorCode.Data_Corrupt, ServerErrorCode.Unknown_Error, ServerErrorCode.Disk_Unavailable};
+    initialize(3, true);
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
+    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
+    serverErrorCodes[2] = ServerErrorCode.IO_Error;
+    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
+    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
+    serverErrorCodes[5] = ServerErrorCode.No_Error;
+    serverErrorCodes[6] = ServerErrorCode.Data_Corrupt;
+    serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
+    serverErrorCodes[8] = ServerErrorCode.Disk_Unavailable;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -326,8 +340,7 @@ public class DeleteManagerTest {
   @Test
   public void testResponseTimeout()
       throws Exception {
-    ifServerRespond = false;
-    initialize("9");
+    initialize(9, false);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
     writeBlobRecordToServers(serverErrorCodes);
@@ -355,8 +368,7 @@ public class DeleteManagerTest {
       throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
-    ifServerRespond = true;
-    initialize("9");
+    initialize(9, true);
     HashMap<MockSelectorState, RouterErrorCode> errorCodeHashMap = new HashMap<MockSelectorState, RouterErrorCode>();
     errorCodeHashMap.put(MockSelectorState.DisconnectOnSend, RouterErrorCode.OperationTimedOut);
     errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnAllPoll, RouterErrorCode.RouterClosed);
@@ -395,8 +407,7 @@ public class DeleteManagerTest {
       throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
-    ifServerRespond = false;
-    initialize("9");
+    initialize(9, false);
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     router.close();
@@ -412,9 +423,9 @@ public class DeleteManagerTest {
 
   /**
    * Prepare {@link MockServer}"s" so that each of them will respond to a request with a predefined
-   * {@link ServerErrorCode}. The size of {@code serverErrorCodes} should be the same as the number
-   * of nodes (i.e., {@link MockServer}"s") for a {@link com.github.ambry.clustermap.Partition}.
-   * @param serverErrorCodes
+   * {@link ServerErrorCode}. Since each server will have only one replica, so the size of {@code
+   * serverErrorCodes} should be the same as the number of replicas for a {@link com.github.ambry.clustermap.Partition}.
+   * @param serverErrorCodes The array of {@link ServerErrorCode}.
    */
   private void writeBlobRecordToServers(ServerErrorCode[] serverErrorCodes) {
     int i = 0;

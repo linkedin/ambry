@@ -120,14 +120,14 @@ class DeleteOperation {
   }
 
   /**
-   * Get {@link DeleteRequest} for sending by {@link com.github.ambry.network.NetworkClient}.
+   * Get a list of {@link DeleteRequest} for sending by {@link com.github.ambry.network.NetworkClient}.
    * @param requestInfos The list of {@link RequestInfo} for which a {@link DeleteRequest} is generated.
    */
   void fetchRequest(List<RequestInfo> requestInfos) {
     if (operationCompleted) {
       return;
     }
-    checkExpiredInflightRequests();
+    cleanupExpiredInflightRequests();
     if (completeOperationIfDone()) {
       return;
     }
@@ -167,7 +167,7 @@ class DeleteOperation {
    * @param responseInfo The response to be handled.
    */
   void handleResponse(ResponseInfo responseInfo) {
-    checkExpiredInflightRequests();
+    cleanupExpiredInflightRequests();
     if (completeOperationIfDone()) {
       return;
     }
@@ -204,7 +204,9 @@ class DeleteOperation {
           logger.error("Unable to recover a deleteResponse from received stream.");
           updateRouterError(replica, RouterErrorCode.UnexpectedInternalError);
         } catch (IllegalArgumentException e) {
-          logger.error("Incompatible response is received for " + RequestOrResponseType.DeleteRequest);
+          logger.error(
+              "Incompatible response is received for " + RequestOrResponseType.DeleteRequest + ". Blob ID: " + blobId
+                  .getID() + ".");
           updateRouterError(replica, RouterErrorCode.UnexpectedInternalError);
         }
       }
@@ -215,6 +217,9 @@ class DeleteOperation {
     }
   }
 
+  /**
+   * A wrapper class that is used to check if a request has been expired.
+   */
   private class InflightRequestInfo {
     private long submissionTime;
     private ReplicaId replica;
@@ -229,7 +234,7 @@ class DeleteOperation {
    * Go through the inflight request list of this {@code DeleteOperation} and remove those that
    * have been timed out.
    */
-  private void checkExpiredInflightRequests() {
+  private void cleanupExpiredInflightRequests() {
     Iterator<Map.Entry<Integer, InflightRequestInfo>> itr = inflightRequestInfos.entrySet().iterator();
     while (itr.hasNext()) {
       InflightRequestInfo inflightRequestInfo = itr.next().getValue();

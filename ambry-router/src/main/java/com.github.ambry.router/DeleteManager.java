@@ -53,6 +53,12 @@ class DeleteManager {
 
   /**
    * Initialize a {@link DeleteManager}.
+   * @param clusterMap The {@link ClusterMap} of the cluster.
+   * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
+   * @param notificationSystem The {@link NotificationSystem} used for notifying blob deletions.
+   * @param routerConfig The {@link RouterConfig} containing the configs for the DeleteManager.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param time The {@link Time} instance to use.
    */
   public DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
@@ -112,7 +118,9 @@ class DeleteManager {
     } else {
       // This will happen if the DeleteOperation has already been finished by getting enough responses
       // or failed by some server error.
-      logger.trace("Received response for a request of an operation that has completed.");
+      logger.trace(
+          "Received response for a delete operation that has completed. Blob Id: " + deleteOperation.getBlobId()
+              .getID());
     }
   }
 

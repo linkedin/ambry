@@ -17,6 +17,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.network.BoundedByteBufferReceive;
 import com.github.ambry.network.Send;
 import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -41,7 +42,7 @@ class MockServer {
   private LinkedList<ServerErrorCode> putErrors = new LinkedList<ServerErrorCode>();
   private final Map<String, ByteBuffer> blobs = new ConcurrentHashMap<String, ByteBuffer>();
   private final HashMap<String, ServerErrorCode> blobIdToServerErrorCode = new HashMap<String, ServerErrorCode>();
-  private boolean ifServerRespond = true;
+  private boolean ifServerRespondToDelete = true;
 
   /**
    * Take in a request in the form of {@link Send} and return a response in the form of a
@@ -77,14 +78,14 @@ class MockServer {
             }.getPayload());
 
       case DeleteRequest:
-        if(!ifServerRespond) {
+        if(!ifServerRespondToDelete) {
           return null;
         }
         final DeleteRequest deleteRequest = (DeleteRequest) send;
         final String blobIdString = deleteRequest.getBlobId().getID();
         final ServerErrorCode error = getErrorFromBlobIdStr(blobIdString);
         return new MockBoundedByteBufferReceive(
-            new PutResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error) {
+            new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error) {
               ByteBuffer getPayload()
                   throws IOException {
                 ByteArrayOutputStream bStream = new ByteArrayOutputStream();
@@ -158,16 +159,16 @@ class MockServer {
 
   /**
    * Set whether or not the server would send response back.
-   * @param ifServerRespond {@code true} if the server responds.
+   * @param ifServerRespondToDelete {@code true} if the server responds.
    */
-  public void setIfServerRespond(boolean ifServerRespond) {
-    this.ifServerRespond = ifServerRespond;
+  public void setIfServerRespondToDelete(boolean ifServerRespondToDelete) {
+    this.ifServerRespondToDelete = ifServerRespondToDelete;
   }
 
   /**
    * Get the pre-defined {@link ServerErrorCode} that this server should return for a given {@code blobIdString}.
    * @param blobIdString The blob for which a {@link ServerErrorCode} needs to be returned.
-   * @return
+   * @return A {@code ServerErrorCode} if it is preset. Otherwise {@code ServerErrorCode.Blob_Not_Found}.
    */
   public ServerErrorCode getErrorFromBlobIdStr(String blobIdString) {
     return blobIdToServerErrorCode.containsKey(blobIdString)? blobIdToServerErrorCode.get(blobIdString) : ServerErrorCode.Blob_Not_Found;
