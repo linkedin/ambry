@@ -69,9 +69,9 @@ public class NetworkClientTest {
     VerifiableProperties vprops = new VerifiableProperties(props);
     NetworkConfig networkConfig = new NetworkConfig(vprops);
     selector = new MockSelector();
-    ConnectionTracker connectionTracker = new ConnectionTracker(MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL);
     time = new MockTime();
-    networkClient = new NetworkClient(selector, connectionTracker, networkConfig, CHECKOUT_TIMEOUT_MS, time);
+    networkClient =
+        new NetworkClient(selector, networkConfig, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL, CHECKOUT_TIMEOUT_MS, time);
   }
 
   /**

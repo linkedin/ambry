@@ -96,13 +96,13 @@ public class SimpleOperationTrackerTest {
     assertEquals(3, inflightReplicas.size());
     assertFalse(ot.hasSucceeded());
     for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), null);
+      ot.onResponse(inflightReplicas.poll(), true);
     }
     // 0-1-2-0; 9-0-0-0
     assertTrue(ot.hasSucceeded());
     assertTrue(ot.isDone());
 
-    ot.onResponse(inflightReplicas.poll(), new Exception());
+    ot.onResponse(inflightReplicas.poll(), false);
     // 0-0-2-1; 9-0-0-0
     assertTrue(ot.hasSucceeded());
     assertTrue(ot.isDone());
@@ -132,13 +132,13 @@ public class SimpleOperationTrackerTest {
     }
     // 0-3-0-0; 9-0-0-0
     for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), new Exception());
+      ot.onResponse(inflightReplicas.poll(), false);
     }
     assertFalse(ot.hasSucceeded());
     assertTrue(ot.isDone());
     // 0-1-0-2; 9-0-0-0
     //cannot send more request
-    ot.onResponse(inflightReplicas.poll(), null);
+    ot.onResponse(inflightReplicas.poll(), true);
     // 0-0-1-2; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     assertTrue(ot.isDone());
@@ -169,7 +169,7 @@ public class SimpleOperationTrackerTest {
     }
     // 1-2-0-0; 9-0-0-0
 
-    ot.onResponse(inflightReplicas.poll(), new Exception());
+    ot.onResponse(inflightReplicas.poll(), false);
     // 1-1-0-1; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
@@ -186,7 +186,7 @@ public class SimpleOperationTrackerTest {
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
 
-    ot.onResponse(inflightReplicas.poll(), null);
+    ot.onResponse(inflightReplicas.poll(), true);
     // 0-1-1-1; 9-0-0-0
 
     assertTrue(ot.hasSucceeded());
@@ -225,7 +225,7 @@ public class SimpleOperationTrackerTest {
     }
     // 1-2-0-0; 9-0-0-0
 
-    ot.onResponse(inflightReplicas.poll(), new Exception());
+    ot.onResponse(inflightReplicas.poll(), false);
     // 1-1-0-1; 9-0-0-0
 
     assertFalse(ot.hasSucceeded());
@@ -239,8 +239,8 @@ public class SimpleOperationTrackerTest {
     }
     // 0-2-0-1; 9-0-0-0
 
-    ot.onResponse(inflightReplicas.poll(), new Exception());
-    ot.onResponse(inflightReplicas.poll(), new Exception());
+    ot.onResponse(inflightReplicas.poll(), false);
+    ot.onResponse(inflightReplicas.poll(), false);
     // 0-0-0-3; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
@@ -255,7 +255,7 @@ public class SimpleOperationTrackerTest {
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
     for (int i = 0; i < 2; i++) {
-      ot.onResponse(inflightReplicas.poll(), new Exception());
+      ot.onResponse(inflightReplicas.poll(), false);
     }
     // 0-0-0-3; 7-0-0-2
     itr = ot.getReplicaIterator();
@@ -268,7 +268,7 @@ public class SimpleOperationTrackerTest {
     // 0-0-0-3; 5-2-0-2
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
-    ot.onResponse(inflightReplicas.poll(), new Exception());
+    ot.onResponse(inflightReplicas.poll(), false);
     assertFalse(ot.isDone());
     // 0-0-0-3; 5-1-0-3
     itr = ot.getReplicaIterator();
@@ -279,7 +279,7 @@ public class SimpleOperationTrackerTest {
       itr.remove();
     }
     // 0-0-0-3; 4-1-0-3
-    ot.onResponse(inflightReplicas.poll(), null);
+    ot.onResponse(inflightReplicas.poll(), true);
     assertTrue(ot.hasSucceeded());
     assertTrue(ot.isDone());
   }
@@ -309,7 +309,7 @@ public class SimpleOperationTrackerTest {
       }
       for (int i = 0; i < 3; i++) {
         if (inflightReplicas.size() != 0) {
-          ot.onResponse(inflightReplicas.poll(), null);
+          ot.onResponse(inflightReplicas.poll(), true);
         }
       }
     }
@@ -357,8 +357,8 @@ public class SimpleOperationTrackerTest {
       }
       oddEvenFlag++;
     }
-    ot.onResponse(inflightReplicas.poll(), new Exception());
-    ot.onResponse(inflightReplicas.poll(), new Exception());
+    ot.onResponse(inflightReplicas.poll(), false);
+    ot.onResponse(inflightReplicas.poll(), false);
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
     itr = ot.getReplicaIterator();
@@ -372,7 +372,7 @@ public class SimpleOperationTrackerTest {
       }
       oddEvenFlag++;
     }
-    ot.onResponse(inflightReplicas.poll(), new Exception());
+    ot.onResponse(inflightReplicas.poll(), false);
     assertFalse(ot.hasSucceeded());
     assertFalse(ot.isDone());
     itr = ot.getReplicaIterator();
@@ -382,7 +382,7 @@ public class SimpleOperationTrackerTest {
       sendReplica(nextReplica);
       itr.remove();
     }
-    ot.onResponse(inflightReplicas.poll(), null);
+    ot.onResponse(inflightReplicas.poll(), true);
     assertTrue(ot.hasSucceeded());
     assertTrue(ot.isDone());
   }

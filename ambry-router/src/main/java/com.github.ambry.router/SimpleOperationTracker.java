@@ -28,9 +28,9 @@ import java.util.NoSuchElementException;
  * continue or terminate.
  *
  * This implementation simplifies such that it unifies parallelism. That is, a single parallelism
- * parameter controls the maximum number of total allowed inflight requests to both local and remote
- * replicas. This simplification is valid for PUT operation, yet a maturized implementation will take
- * a more sophisiticate control of parallelism in the future.
+ * parameter controls the maximum number of total allowed in-flight requests to both local and remote
+ * replicas. This simplification is valid for PUT operation, yet a mature implementation will take
+ * a more sophisticated control of parallelism in the future.
  *
  * This class assumes a request will be {@code succeeded, failed, or timedout} (which means failed).
  * So a deterministic response will be received in a definite time, and no request will pend forever.
@@ -108,12 +108,12 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
-  public void onResponse(ReplicaId replicaId, Exception e) {
+  public void onResponse(ReplicaId replicaId, boolean isSuccessFul) {
     inflightCount--;
-    if (e != null) {
-      failedCount++;
-    } else {
+    if (isSuccessFul) {
       succeededCount++;
+    } else {
+      failedCount++;
     }
   }
 

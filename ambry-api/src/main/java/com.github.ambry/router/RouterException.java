@@ -38,4 +38,17 @@ public class RouterException extends Exception {
   public RouterErrorCode getErrorCode() {
     return this.errorCode;
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    RouterException that = (RouterException) o;
+    return this.errorCode == that.errorCode && this.getCause() == that.getCause();
+  }
 }
