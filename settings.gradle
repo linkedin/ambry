@@ -23,4 +23,5 @@ include 'ambry-api',
         'ambry-rest',
         'ambry-admin',
         'ambry-router',
-        'ambry-frontend'
+        'ambry-frontend',
+        'ambry-mocks'
