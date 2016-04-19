@@ -22,7 +22,10 @@ import io.netty.handler.codec.http.HttpVersion;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Random;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 
 /**
@@ -66,5 +69,18 @@ public class RestTestUtils {
     byte[] bytes = new byte[size];
     new Random().nextBytes(bytes);
     return bytes;
+  }
+
+  /**
+   * Sets entries from the passed in HashMap to the @{link JSONObject} headers
+   * @param headers  {@link org.json.JSONObject} to which the new headers are to be added
+   * @param userMetadata {@link java.util.Map} which has the new entries that has to be added
+   * @throws org.json.JSONException
+   */
+  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata)
+      throws JSONException {
+    for (String key : userMetadata.keySet()) {
+      headers.put(key, userMetadata.get(key));
+    }
   }
 }
