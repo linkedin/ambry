@@ -657,7 +657,7 @@ public class RestUtilsTest {
    * @param userMetadata {@link Map} which has the new entries that has to be added
    * @throws org.json.JSONException
    */
-  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata)
+  private static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata)
       throws JSONException {
     for (String key : userMetadata.keySet()) {
       headers.put(key, userMetadata.get(key));
