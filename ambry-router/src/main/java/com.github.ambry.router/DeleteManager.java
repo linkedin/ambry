@@ -52,7 +52,24 @@ class DeleteManager {
   private static final Logger logger = LoggerFactory.getLogger(DeleteManager.class);
 
   /**
-   * Initialize a {@link DeleteManager}.
+   * Used by a {@link DeleteOperation} to associate a {@code CorrelationId} to a {@link DeleteOperation}.
+   */
+  private class DeleteRequestRegistrationCallbackImpl implements DeleteRequestRegistrationCallback {
+    private List<RequestInfo> requestListToFill;
+
+    @Override
+    public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo requestInfo) {
+      requestListToFill.add(requestInfo);
+      correlationIdToDeleteOperation
+          .put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), deleteOperation);
+    }
+  }
+
+  private final DeleteRequestRegistrationCallbackImpl requestRegistrationCallback =
+      new DeleteRequestRegistrationCallbackImpl();
+
+  /**
+   * Create a DeleteManager.
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob deletions.
@@ -82,8 +99,7 @@ class DeleteManager {
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
-          new DeleteOperation(routerConfig, blobId, clusterMap, responseHandler, futureResult, callback,
-              new DeleteRequestRegistrationCallbackImpl(), time);
+          new DeleteOperation(routerConfig, responseHandler, blobId, futureResult, callback, time);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       NonBlockingRouter.completeOperation(futureResult, callback, null, e);
@@ -91,17 +107,19 @@ class DeleteManager {
   }
 
   /**
-   * Poll among all delete operations. For each polled {@link DeleteOperation}, its generates a number of
-   * {@link RequestInfo} for actual sending.
-   * @param requestInfos the list of {@link RequestInfo} to fill.
+   * Polls all delete operations and populates a list of {@link RequestInfo} to be sent to data nodes in order to
+   * complete delete operations.
+   * @param requestListToFill list to be filled with the requests created.
    */
-  public void poll(List<RequestInfo> requestInfos) {
-    Iterator<DeleteOperation> iter = deleteOperations.iterator();
-    while (iter.hasNext()) {
-      DeleteOperation deleteOperation = iter.next();
-      deleteOperation.fetchRequest(requestInfos);
-      if (deleteOperation.isOperationCompleted()) {
-        onOperationComplete(deleteOperation);
+  public void poll(List<RequestInfo> requestListToFill) {
+    Iterator<DeleteOperation> deleteOperationIterator = deleteOperations.iterator();
+    requestRegistrationCallback.requestListToFill = requestListToFill;
+    while (deleteOperationIterator.hasNext()) {
+      DeleteOperation op = deleteOperationIterator.next();
+      op.poll(requestRegistrationCallback);
+      if (op.isOperationComplete()) {
+        deleteOperationIterator.remove();
+        onComplete(op);
       }
     }
   }
@@ -111,31 +129,29 @@ class DeleteManager {
    * @param responseInfo A response from {@link com.github.ambry.network.NetworkClient}
    */
   void handleResponse(ResponseInfo responseInfo) {
-    DeleteRequest deleteRequest = (DeleteRequest) responseInfo.getRequest();
-    DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(deleteRequest.getCorrelationId());
+    int correlationId = ((DeleteRequest) responseInfo.getRequest()).getCorrelationId();
+    DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);
+    // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (deleteOperations.contains(deleteOperation)) {
       deleteOperation.handleResponse(responseInfo);
-    } else {
-      // This will happen if the DeleteOperation has already been finished by getting enough responses
-      // or failed by some server error.
-      logger.trace(
-          "Received response for a delete operation that has completed. Blob Id: " + deleteOperation.getBlobId()
-              .getID());
+      if (deleteOperation.isOperationComplete()) {
+        deleteOperations.remove(deleteOperation);
+        onComplete(deleteOperation);
+      }
     }
   }
 
   /**
    * Called when the delete operation is completed. The {@code DeleteManager} also finishes the delete operation
    * by performing the callback and notification.
-   * @param deleteOperation The {@lilnk DeleteOperation} that has completed.
+   * @param op The {@lilnk DeleteOperation} that has completed.
    */
-  void onOperationComplete(DeleteOperation deleteOperation) {
-    if (deleteOperation.getOperationException() == null) {
-      notificationSystem.onBlobDeleted(deleteOperation.getBlobId().getID());
+  void onComplete(DeleteOperation op) {
+    if (op.getOperationException() == null) {
+      notificationSystem.onBlobDeleted(op.getBlobId().getID());
     }
-    NonBlockingRouter.completeOperation(deleteOperation.getFutureResult(), deleteOperation.getCallback(),
-        deleteOperation.getOperationResult(), deleteOperation.getOperationException());
-    deleteOperations.remove(deleteOperation);
+    NonBlockingRouter
+        .completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
 
   /**
@@ -151,17 +167,6 @@ class DeleteManager {
             new RouterException("Cannot process operation because Router is closed.", RouterErrorCode.RouterClosed));
         iter.remove();
       }
-    }
-  }
-
-  /**
-   * Used by a {@link DeleteOperation} to associate a {@code CorrelationId} to a {@link DeleteOperation}.
-   */
-  private class DeleteRequestRegistrationCallbackImpl implements DeleteRequestRegistrationCallback {
-    @Override
-    public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo requestInfo) {
-      correlationIdToDeleteOperation
-          .put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), deleteOperation);
     }
   }
 }

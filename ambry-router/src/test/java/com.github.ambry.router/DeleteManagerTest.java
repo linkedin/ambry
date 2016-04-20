@@ -60,7 +60,6 @@ public class DeleteManagerTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
-  private static final int DELETE_PARALLELISM = 9;
 
   private Properties getNonBlockingRouterProperties(String deleteParallelism) {
     Properties properties = new Properties();
@@ -71,17 +70,18 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Initialize ClusterMap, Router, mock servers, and originalBlobId. The originalBlobId is to be deleted.
+   * Initialize ClusterMap, Router, mock servers, and an {@code originalBlobId} to be deleted.
    * @param deleteParallelism The maximum number of parallel {@link com.github.ambry.protocol.DeleteRequest}
    *                          that can be sent out.
    * @throws Exception
    */
   private void initialize(int deleteParallelism, boolean ifServerRespond)
       throws Exception {
-    if(deleteParallelism < 1) {
+    if (deleteParallelism < 1) {
       throw new IllegalArgumentException("Parallelism for delete operation should be greater than 0.");
     }
-    VerifiableProperties vProps = new VerifiableProperties(getNonBlockingRouterProperties(String.valueOf(deleteParallelism)));
+    VerifiableProperties vProps =
+        new VerifiableProperties(getNonBlockingRouterProperties(String.valueOf(deleteParallelism)));
     operationCompleteLatch = new CountDownLatch(1);
     mockTime = new MockTime();
     mockSelectorState = new AtomicReference<MockSelectorState>(MockSelectorState.Good);
@@ -101,7 +101,7 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the basic delete operation and it will succeed.
+   * Test a basic delete operation that will succeed.
    */
   @Test
   public void testBasicDeletion()
@@ -116,7 +116,7 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when an invalid blobIs string is passed to delete.
+   * Test the cases for invalid blobId strings.
    */
   @Test
   public void testBlobIdNotValid()
@@ -152,8 +152,10 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when deleting a blob that has already been expired. The order of received
-   * responses is the same as defined in {@code serverErrorCodes}.
+   * Test the case when one server store responds with {@code Blob_Expired}, and other servers
+   * respond with {@code Blob_Not_Found}. The delete operation should be able to resolve the
+   * router error code as {@code Blob_Expired}. The order of received responses is the same as
+   * defined in {@code serverErrorCodes}.
    */
   @Test
   public void testBlobExpired()
@@ -161,8 +163,7 @@ public class DeleteManagerTest {
     initialize(9, true);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[5]=ServerErrorCode.Blob_Expired;
-    serverErrorCodes[8]=ServerErrorCode.Blob_Expired;
+    serverErrorCodes[5] = ServerErrorCode.Blob_Expired;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -197,9 +198,10 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when the blob cannot be found in store servers, though the last response is {@code Blob_Not_Found}.
-   * This is because the delete operation is completed according to its {@link OperationTracker}, and does not wait
-   * for the last response. The order of received responses is the same as defined in {@code serverErrorCodes}.
+   * Test the case when the blob cannot be found in store servers, though the last response is {@code IO_Error}.
+   * The delete operation is expected to return {@BlobDoesNotExist}, since the delete operation will be completed
+   * before the last response according to its {@link OperationTracker}. The order of received responses is the
+   * same as defined in {@code serverErrorCodes}.
    */
   @Test
   public void testBlobNotFoundWithLastResponseNotBlobNotFound()
@@ -207,7 +209,7 @@ public class DeleteManagerTest {
     initialize(9, true);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[8] = ServerErrorCode.Blob_Deleted;
+    serverErrorCodes[8] = ServerErrorCode.IO_Error;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
     try {
@@ -221,8 +223,9 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when the two responses are {@code ServerErrorCode.Blob_Deleted}, one is in the middle
-   * of the responses, and the other is the last response. In this case, we should return BlobDeleted.
+   * Test the case when the two server responses are {@code ServerErrorCode.Blob_Deleted}, one is in the middle
+   * of the responses, and the other is the last response. In this case, we should return {@code Blob_Deleted},
+   * as we treat {@code Blob_Deleted} as a successful response, and we have met the {@code successTarget}.
    * The order of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test
@@ -230,33 +233,26 @@ public class DeleteManagerTest {
       throws Exception {
     initialize(9, true);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
+    Arrays.fill(serverErrorCodes, ServerErrorCode.IO_Error);
     serverErrorCodes[5] = ServerErrorCode.Blob_Deleted;
     serverErrorCodes[8] = ServerErrorCode.Blob_Deleted;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
-    try {
-      future.get();
-      fail("Deletion should be unsuccessful. Error is expected.");
-    } catch (Exception e) {
-      assertEquals("RouterErrorCode should be BlobDeleted", RouterErrorCode.BlobDeleted,
-          ((RouterException) e.getCause()).getErrorCode());
-    }
+    future.get();
     assertCloseCleanup();
   }
 
   /**
-   * Test the case when the blob has already been deleted. In this test, there is only one server (but not the last
-   * server) that will return {@code ServerErrorCode.Blob_Deleted}. This only {@code ServerErrorCode.Blob_Deleted}
-   * should be enough to figure out that the blob has been deleted without the need of meeting the {@code successTarget}.
-   * The order of received responses is the same as defined in {@code serverErrorCodes}.
+   * In this test, there is only one server that returns {@code ServerErrorCode.Blob_Deleted}, which is
+   * not sufficient to meet the success target, therefore a router exception should be expected. The order
+   * of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test
   public void testSingleBlobDeletedReturned()
       throws Exception {
     initialize(9, true);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
+    Arrays.fill(serverErrorCodes, ServerErrorCode.Unknown_Error);
     serverErrorCodes[7] = ServerErrorCode.Blob_Deleted;
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
@@ -264,7 +260,7 @@ public class DeleteManagerTest {
       future.get();
       fail("Deletion should be unsuccessful. Error is expected.");
     } catch (Exception e) {
-      assertEquals("RouterErrorCode should be BlobDeleted", RouterErrorCode.BlobDeleted,
+      assertEquals("RouterErrorCode should be BlobDeleted", RouterErrorCode.UnexpectedInternalError,
           ((RouterException) e.getCause()).getErrorCode());
     }
     assertCloseCleanup();
@@ -334,12 +330,14 @@ public class DeleteManagerTest {
 
   /**
    * Test the case when request gets expired before the corresponding store server sends
-   * back a response. Setting servers to not respond any requests, so {@link DeleteOperation}
-   * can be "in flight". The order of received responses is the same as defined in {@code serverErrorCodes}.
+   * back a response. Set servers to not respond any requests, so {@link DeleteOperation}
+   * can be "in flight" all the time. The order of received responses is the same as defined
+   * in {@code serverErrorCodes}.
    */
   @Test
   public void testResponseTimeout()
       throws Exception {
+    // false sets the servers not to respond any requests.
     initialize(9, false);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
@@ -407,6 +405,7 @@ public class DeleteManagerTest {
       throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
+    // false sets the servers not to respond any requests.
     initialize(9, false);
     writeBlobRecordToServers(serverErrorCodes);
     future = router.deleteBlob(blobIdString, new ClientCallback());
