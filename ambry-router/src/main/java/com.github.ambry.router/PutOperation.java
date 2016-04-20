@@ -540,7 +540,7 @@ class PutOperation {
         partitionId = getPartitionForPut(attemptedPartitionIds);
         chunkBlobId = new BlobId(partitionId);
         operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false,
-            routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism, false);
+            routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {

@@ -378,7 +378,6 @@ public class DeleteManagerTest {
       }
       mockSelectorState.set(state);
       writeBlobRecordToServers(serverErrorCodes);
-      blobRecordVerification(serverErrorCodes);
       future = router.deleteBlob(blobIdString, new ClientCallback());
       do {
         // increment mock time
@@ -432,21 +431,6 @@ public class DeleteManagerTest {
       DataNodeId node = replica.getDataNodeId();
       MockServer mockServer = serverLayout.getMockServer(node.getHostname(), node.getPort());
       mockServer.setBlobIdToServerErrorCode(blobIdString, serverErrorCodes[i++]);
-    }
-    blobRecordVerification(serverErrorCodes);
-  }
-
-  /**
-   * Verify if the {@link ServerErrorCode}s have been correctly written to {@link MockServer}.
-   * @param serverErrorCodes
-   */
-  private void blobRecordVerification(ServerErrorCode[] serverErrorCodes) {
-    int i = 0;
-    List<ReplicaId> replicas = blobId.getPartition().getReplicaIds();
-    for (ReplicaId replica : replicas) {
-      DataNodeId node = replica.getDataNodeId();
-      MockServer server = serverLayout.getMockServer(node.getHostname(), node.getPort());
-      assertEquals(serverErrorCodes[i++], server.getErrorFromBlobIdStr(blobIdString));
     }
   }
 

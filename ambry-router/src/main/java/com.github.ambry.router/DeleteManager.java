@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * DeleteManager that handles {@link DeleteOperation}. A {@code DeleteManager} keeps track of all the delete
+ * Handles {@link DeleteOperation}. A {@code DeleteManager} keeps track of all the delete
  * operations that are assigned to it, and manages their states and life cycles.
  */
 class DeleteManager {
@@ -69,7 +69,7 @@ class DeleteManager {
       new DeleteRequestRegistrationCallbackImpl();
 
   /**
-   * Create a DeleteManager.
+   * Creates a DeleteManager.
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob deletions.
@@ -77,7 +77,7 @@ class DeleteManager {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param time The {@link Time} instance to use.
    */
-  public DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
+  DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
@@ -125,7 +125,7 @@ class DeleteManager {
   }
 
   /**
-   * Handle responses received for each of the {@link DeleteOperation} within this delete manager.
+   * Handles responses received for each of the {@link DeleteOperation} within this delete manager.
    * @param responseInfo A response from {@link com.github.ambry.network.NetworkClient}
    */
   void handleResponse(ResponseInfo responseInfo) {
@@ -155,7 +155,7 @@ class DeleteManager {
   }
 
   /**
-   * Close the {@code DeleteManager}. A {@code DeleteManager} can be closed for only once. Any further close action
+   * Closes the {@code DeleteManager}. A {@code DeleteManager} can be closed for only once. Any further close action
    * will have no effect.
    */
   void close() {
@@ -164,7 +164,7 @@ class DeleteManager {
       while (iter.hasNext()) {
         DeleteOperation deleteOperation = iter.next();
         NonBlockingRouter.completeOperation(deleteOperation.getFutureResult(), deleteOperation.getCallback(), null,
-            new RouterException("Cannot process operation because Router is closed.", RouterErrorCode.RouterClosed));
+            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed));
         iter.remove();
       }
     }

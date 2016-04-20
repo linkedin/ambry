@@ -37,43 +37,42 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * This class manages all internal variables and states during the life cycle of a {@code DeleteOperation}. For
- * simple blobs (blobs that are under the max put chunk size), the delete request will be issued to the actual
- * blob. For composite blobs, each composite blob is chunked to multiple pieces and stored individually with a
- * metadata blob that manages information of all the pieces. The delete request will be issued only to the metadata
- * blob.
- * </p>
- * This class involvs multiple concepts:
- *   {@link DeleteOperation}: the highest level of a "request" to delete a blob based on its blob id.
- *                            This virtual request comprises a number of physical requests (i.e.,
- *                            {@link RequestInfo}).
- *   {@link RequestInfo}:     a wrapper of a request that is sent to a specific replica.
- *   {@link DeleteRequest}:   the actual request sent to a replica. It is a destination-agnostic, router-server
- *                            protocol that requests a store server to make a deletion.
- *   {@link ResponseInfo}:    a wrapper of a response that is received for the {@code DeleteOperation}. A
- *                            {@link DeleteOperation} can be completed after a number of responses have been
- *                            received. ResponseInfo is one-to-one mapped to a RequestInfo.
+ * This class manages the internal state of a {@code DeleteOperation} during its life cycle. A {@code DeleteOperation}
+ * can be issued to two types of blobs.
+ * Simple blob: A single blob that is under the max put chunk size. The {@code DeleteOperation} will be issued to the
+ * actual blob.
+ * Composite blob: A blob consists of a number of data blobs and a metadata blob that manages the medadata of all the
+ * data blobs. The {@code DeleteOperation} is issued only to delete the metadata blob.
  */
 class DeleteOperation {
-  private final Time time;
-  private final OperationTracker operationTracker;
-  private final HashMap<Integer, InflightRequestInfo> inflightRequestInfos;
+  //Operation arguments
+  private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
   private final BlobId blobId;
   private final FutureResult<Void> futureResult;
   private final Callback<Void> callback;
-  private final Void operationResult = null;
-  private final RouterConfig routerConfig;
+  private final Time time;
 
+  // Parameters associated with the state.
+
+  // The operation tracker that tracks the state of this operation.
+  private final OperationTracker operationTracker;
+  // A map used to find inflight requests using a correlation id.
+  private final HashMap<Integer, InflightRequestInfo> inflightRequestInfos;
+  // The result of this operation to be set into FutureResult.
+  private final Void operationResult = null;
+  // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
+  // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
+  // RouterErrorCode that is resolved from all the received ServerErrorCode for this operation.
   private RouterErrorCode resolvedRouterErrorCode;
+  // denotes whether the operation is complete.
   private boolean operationCompleted = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DeleteOperation.class);
-  private static final HashMap<RouterErrorCode, Integer> precedenceLevels = new HashMap<RouterErrorCode, Integer>();
 
   /**
-   * Instantiate a {@link DeleteOperation}.
+   * Instantiates a {@link DeleteOperation}.
    * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
    * @param responsehandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param blobId The {@link BlobId} that is to be deleted by this {@code DeleteOperation}.
@@ -84,8 +83,8 @@ class DeleteOperation {
   DeleteOperation(RouterConfig routerConfig, ResponseHandler responsehandler, BlobId blobId,
       FutureResult<Void> futureResult, Callback<Void> callback, Time time) {
     this.routerConfig = routerConfig;
-    this.blobId = blobId;
     this.responseHandler = responsehandler;
+    this.blobId = blobId;
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
@@ -95,22 +94,7 @@ class DeleteOperation {
   }
 
   /**
-   * The predefined precedence levels among different {@link RouterErrorCode}. This will help resolve
-   * {@link RouterErrorCode} if different {@link RouterErrorCode} are returned by multiple replicas. For
-   * example, if one replica causes {@link RouterErrorCode.BlobExpired}, and another replica causes
-   * {@link RouterErrorCode.AmbryUnavailable}, the final RouterErrorCode should be {@link RouterErrorCode.BlobExpired}.
-   */
-  static {
-    precedenceLevels.put(RouterErrorCode.BlobDeleted, 1);
-    precedenceLevels.put(RouterErrorCode.BlobExpired, 2);
-    precedenceLevels.put(RouterErrorCode.AmbryUnavailable, 3);
-    precedenceLevels.put(RouterErrorCode.UnexpectedInternalError, 4);
-    precedenceLevels.put(RouterErrorCode.OperationTimedOut, 5);
-    precedenceLevels.put(RouterErrorCode.BlobDoesNotExist, 6);
-  }
-
-  /**
-   * Get a list of {@link DeleteRequest} for sending to replicas.
+   * Gets a list of {@link DeleteRequest} for sending to replicas.
    * @param requestFillCallback the {@link DeleteRequestRegistrationCallback} to call for every request
    *                            that gets created as part of this poll operation.
    */
@@ -143,7 +127,7 @@ class DeleteOperation {
   }
 
   /**
-   * Handle a response for a delete operation. It determines whether the request was successful,
+   * Handles a response for a delete operation. It determines whether the request was successful,
    * updates operation tracker, and notifies the response handler for failure detection.
    * can be different cases during handling a response. For the same delete operation, it is possible
    * that different {@link ServerErrorCode} are received from different replicas. These error codes
@@ -161,7 +145,7 @@ class DeleteOperation {
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
       responseHandler.onRequestResponseException(replica, new IOException(("NetworkClient error.")));
-      updateOperationStatus(replica, RouterErrorCode.OperationTimedOut);
+      updateOperationState(replica, RouterErrorCode.OperationTimedOut);
     } else {
       try {
         DeleteResponse deleteResponse =
@@ -175,6 +159,7 @@ class DeleteOperation {
           setOperationException(
               new RouterException("Received wrong response that is not for the corresponding request.",
                   RouterErrorCode.UnexpectedInternalError));
+          updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
           return;
         } else {
           responseHandler.onRequestResponseError(replica, deleteResponse.getError());
@@ -183,7 +168,7 @@ class DeleteOperation {
       } catch (IOException e) {
         // @todo: Even this should really not happen. But we need a metric.
         logger.error("Unable to recover a deleteResponse from received stream.");
-        updateOperationStatus(replica, RouterErrorCode.UnexpectedInternalError);
+        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
       }
     }
     checkAndMaybeComplete();
@@ -203,7 +188,7 @@ class DeleteOperation {
   }
 
   /**
-   * Go through the inflight request list of this {@code DeleteOperation} and remove those that
+   * Goes through the inflight request list of this {@code DeleteOperation} and remove those that
    * have been timed out.
    */
   private void cleanupExpiredInflightRequests() {
@@ -212,80 +197,67 @@ class DeleteOperation {
       InflightRequestInfo inflightRequestInfo = itr.next().getValue();
       if (time.milliseconds() - inflightRequestInfo.submissionTime > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
-        resolveRouterError(RouterErrorCode.OperationTimedOut);
-        operationTracker.onResponse(inflightRequestInfo.replica, false);
+        updateOperationState(inflightRequestInfo.replica, RouterErrorCode.OperationTimedOut);
       }
     }
   }
 
   /**
-   * Update the DeleteOperation based on the {@link ServerErrorCode}, and the source {@link ReplicaId}
-   * for which the {@link ServerErrorCode} is generated. This method internally maps a {@link ServerErrorCode}
-   * to a {@link RouterErrorCode}.
+   * Processes {@link ServerErrorCode} received from {@code replica}. This method maps a {@link ServerErrorCode}
+   * to a {@link RouterErrorCode}, and then makes corresponding state update.
    * @param replica The replica for which the ServerErrorCode was generated.
-   * @param serverErrorCode ServerErrorCode that indicates the error for the replica.
+   * @param serverErrorCode The ServerErrorCode received from the replica.
    */
   private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode) {
-    if (replica != null && serverErrorCode != null) {
-      switch (serverErrorCode) {
-        case No_Error:
-          logger.trace("The delete request was successful.");
-          operationTracker.onResponse(replica, true);
-          break;
-        case Blob_Deleted:
-          logger.trace("Blob has already been deleted.");
-          operationTracker.onResponse(replica, true);
-          break;
-        case Blob_Not_Found:
-          resolveRouterError(RouterErrorCode.BlobDoesNotExist);
-          operationTracker.onResponse(replica, false);
-          break;
-        case Blob_Expired:
-          updateOperationStatus(replica, RouterErrorCode.BlobExpired);
-          break;
-        case Disk_Unavailable:
-          updateOperationStatus(replica, RouterErrorCode.AmbryUnavailable);
-          break;
-        case IO_Error:
-          updateOperationStatus(replica, RouterErrorCode.UnexpectedInternalError);
-          break;
-        case Partition_Unknown:
-          updateOperationStatus(replica, RouterErrorCode.BlobDoesNotExist);
-          break;
-        case Partition_ReadOnly:
-          updateOperationStatus(replica, RouterErrorCode.UnexpectedInternalError);
-          break;
-        default:
-          logger.trace("Server returned an error: ", serverErrorCode);
-          updateOperationStatus(replica, RouterErrorCode.UnexpectedInternalError);
-          break;
-      }
-    } else {
-      // This should not happen. If falls in this block, it is an illegal state.
-      logger.error("Both Replica and ServerErrorCode cannot be null to handle.");
-      updateOperationStatus(replica, RouterErrorCode.UnexpectedInternalError);
+    switch (serverErrorCode) {
+      case No_Error:
+        logger.trace("The delete request was successful.");
+        operationTracker.onResponse(replica, true);
+        break;
+      case Blob_Deleted:
+        logger.trace("Blob has already been deleted.");
+        operationTracker.onResponse(replica, true);
+        break;
+      case Blob_Expired:
+        updateOperationState(replica, RouterErrorCode.BlobExpired);
+        break;
+      case Blob_Not_Found:
+      case Partition_Unknown:
+        updateOperationState(replica, RouterErrorCode.BlobDoesNotExist);
+        break;
+      case Disk_Unavailable:
+        updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
+        break;
+      default:
+        logger.trace("Server returned an error: ", serverErrorCode);
+        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
+        break;
     }
   }
 
   /**
-   * Update the {@code DeleteOperation} based on the {@link RouterErrorCode}, and the source {@link ReplicaId}
+   * Updates the state of the {@code DeleteOperation}. This includes two parts: 1) resolves the
+   * {@link RouterErrorCode} depending on the precedence level of the new router error code from
+   * {@code replica} and the current {@code resolvedRouterErrorCode}. An error code with a smaller
+   * precedence level overrides an error code with a larger precedence level. 2) updates the
+   * {@code DeleteOperation} based on the {@link RouterErrorCode}, and the source {@link ReplicaId}
    * for which the {@link RouterErrorCode} is generated.
    * @param replica The replica for which the RouterErrorCode was generated.
-   * @param routerErrorCode {@link RouterErrorCode} that indicates the error for the replica.
+   * @param newError {@link RouterErrorCode} that indicates the error for the replica.
    */
-  private void updateOperationStatus(ReplicaId replica, RouterErrorCode routerErrorCode) {
-    if (replica != null && routerErrorCode != null) {
-      resolveRouterError(routerErrorCode);
-      operationTracker.onResponse(replica, false);
+  private void updateOperationState(ReplicaId replica, RouterErrorCode newError) {
+    if (resolvedRouterErrorCode == null) {
+      resolvedRouterErrorCode = newError;
     } else {
-      logger.error("Either replica or routerErrorCode is null when updating router error code.");
-      resolveRouterError(RouterErrorCode.UnexpectedInternalError);
-      operationTracker.onResponse(replica, false);
+      if (getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedRouterErrorCode)) {
+        resolvedRouterErrorCode = newError;
+      }
     }
+    operationTracker.onResponse(replica, false);
   }
 
   /**
-   * Complete the {@code DeleteOperation} if it is done.
+   * Completes the {@code DeleteOperation} if it is done.
    */
   private void checkAndMaybeComplete() {
     if (operationTracker.isDone()) {
@@ -298,33 +270,26 @@ class DeleteOperation {
   }
 
   /**
-   * Get the precedence level for a {@link RouterErrorCode}. A precedence level is a relative priority assigned
+   * Gets the precedence level for a {@link RouterErrorCode}. A precedence level is a relative priority assigned
    * to a {@link RouterErrorCode}. If a {@link RouterErrorCode} has not been assigned a precedence level, a
    * {@code Integer.MIN_VALUE} will be returned.
    * @param routerErrorCode The {@link RouterErrorCode} for which to get its precedence level.
    * @return The precedence level of the {@link RouterErrorCode}.
    */
   private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
-    if (precedenceLevels.containsKey(routerErrorCode)) {
-      return precedenceLevels.get(routerErrorCode);
-    } else {
-      return Integer.MIN_VALUE;
-    }
-  }
-
-  /**
-   * Resolve the {@link RouterErrorCode} depending on two codes' precedence level. An error code with a
-   * smaller precedence level overrides an error code with a larger precedence level. If both error codes
-   * are not assigned with precedence level, the old code will not be overriden.
-   * @param newError The error code to resolve.
-   */
-  private void resolveRouterError(RouterErrorCode newError) {
-    if (resolvedRouterErrorCode == null) {
-      resolvedRouterErrorCode = newError;
-    } else {
-      if (getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedRouterErrorCode)) {
-        resolvedRouterErrorCode = newError;
-      }
+    switch (routerErrorCode) {
+      case BlobExpired:
+        return 1;
+      case AmbryUnavailable:
+        return 2;
+      case UnexpectedInternalError:
+        return 3;
+      case OperationTimedOut:
+        return 4;
+      case BlobDoesNotExist:
+        return 5;
+      default:
+        return Integer.MIN_VALUE;
     }
   }
 
@@ -337,7 +302,7 @@ class DeleteOperation {
   }
 
   /**
-   * Get {@link BlobId} of this {@code DeleteOperation}.
+   * Gets {@link BlobId} of this {@code DeleteOperation}.
    * @return The {@link BlobId}.
    */
   BlobId getBlobId() {
@@ -353,7 +318,7 @@ class DeleteOperation {
   }
 
   /**
-   * Get the {@link Callback} for this {@code DeleteOperation}.
+   * Gets the {@link Callback} for this {@code DeleteOperation}.
    * @return The {@link Callback}.
    */
   Callback<Void> getCallback() {
@@ -361,7 +326,7 @@ class DeleteOperation {
   }
 
   /**
-   * The exception associated with this operation if it failed; null otherwise.
+   * Gets the exception associated with this operation if it failed; null otherwise.
    * @return exception associated with this operation if it failed; null otherwise.
    */
   Exception getOperationException() {
@@ -369,7 +334,7 @@ class DeleteOperation {
   }
 
   /**
-   * Get the result for this {@code DeleteOperation}. In a {@link DeleteOperation}, nothing is returned
+   * Gets the result for this {@code DeleteOperation}. In a {@link DeleteOperation}, nothing is returned
    * to the caller as a result of this operation. Including this {@link Void} result is for consistency
    * with other operations.
    * @return Void.
@@ -379,7 +344,7 @@ class DeleteOperation {
   }
 
   /**
-   * Set the exception associated with this operation. When this is called, the operation has failed.
+   * Sets the exception associated with this operation. When this is called, the operation has failed.
    * @param exception the irrecoverable exception associated with this operation.
    */
   void setOperationException(Exception exception) {

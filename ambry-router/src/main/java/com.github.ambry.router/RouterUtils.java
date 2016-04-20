@@ -36,11 +36,6 @@ public class RouterUtils {
    */
   static BlobId getBlobIdFromString(String blobIdString, ClusterMap clusterMap)
       throws RouterException {
-    if (blobIdString == null || blobIdString.length() == 0) {
-      logger.error("BlobIdString argument is null or zero length: {}", blobIdString);
-      throw new RouterException("BlobId is empty.", RouterErrorCode.InvalidBlobId);
-    }
-
     BlobId blobId;
     try {
       blobId = new BlobId(blobIdString, clusterMap);

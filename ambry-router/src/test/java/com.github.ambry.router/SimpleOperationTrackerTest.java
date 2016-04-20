@@ -81,7 +81,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localSucceedTest() {
     initialize();
-    ot = new SimpleOperationTracker(localDcName, mockPartition, false, 2, 3, true);
+    ot = new SimpleOperationTracker(localDcName, mockPartition, false, 2, 3);
     // 3-0-0-0; 9-0-0-0
     assertFalse("Operation should not succeed.", ot.hasSucceeded());
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
@@ -119,7 +119,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localFailTest() {
     initialize();
-    ot = new SimpleOperationTracker(localDcName, mockPartition, false, 2, 3, true);
+    ot = new SimpleOperationTracker(localDcName, mockPartition, false, 2, 3);
     // 3-0-0-0; 9-0-0-0
     assertFalse(ot.hasSucceeded());
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
@@ -157,7 +157,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void localSucceedWithDifferentParameterTest() {
     initialize();
-    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 1, 2, true);
+    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 1, 2);
     // 3-0-0-0; 9-0-0-0
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
@@ -213,7 +213,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void remoteReplicaTest() {
     initialize();
-    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 1, 2, true);
+    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 1, 2);
     // 3-0-0-0; 9-0-0-0
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
@@ -297,7 +297,7 @@ public class SimpleOperationTrackerTest {
   @Test
   public void fullSuccessTargetTest() {
     initialize();
-    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 12, 3, true);
+    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 12, 3);
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
     while (!ot.hasSucceeded()) {
@@ -344,7 +344,7 @@ public class SimpleOperationTrackerTest {
     populateReplicaList(mockPartition, replicaCount, datanodes);
     localDcName = datanodes.get(0).getDatacenterName();
     inflightReplicas = new LinkedList<ReplicaId>();
-    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 1, 2, true);
+    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 1, 2);
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
     ReplicaId nextReplica;
     int oddEvenFlag = 0;

@@ -76,6 +76,7 @@ class SimpleOperationTracker implements OperationTracker {
    *                                otherwise.
    * @param successTarget The number of successful responses required to succeed the operation.
    * @param parallelism The maximum number of inflight requests at any point of time.
+   * @param shuffleReplicas Indicates if the replicas need to be shuffled.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
       int parallelism, boolean shuffleReplicas) {
@@ -97,6 +98,21 @@ class SimpleOperationTracker implements OperationTracker {
     }
     totalReplicaCount = replicaPool.size();
     this.otIterator = new OpTrackerIterator();
+  }
+
+  /**
+   * Constructor for an {@code SimpleOperationTracker}, which shuffles replicas.
+   *
+   * @param datacenterName The datacenter where the router is located.
+   * @param partitionId The partition on which the operation is performed.
+   * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
+   *                                otherwise.
+   * @param successTarget The number of successful responses required to succeed the operation.
+   * @param parallelism The maximum number of inflight requests at any point of time.
+   */
+  SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
+      int parallelism) {
+    this(datacenterName, partitionId, crossColoEnabled, successTarget, parallelism, true);
   }
 
   @Override
