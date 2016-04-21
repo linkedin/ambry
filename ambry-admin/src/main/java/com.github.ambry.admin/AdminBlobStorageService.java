@@ -645,16 +645,6 @@ class HeadCallback implements Callback<BlobInfo> {
       if (exception == null && result != null) {
         logger.trace("Successful HEAD of {}", blobId);
         setBlobPropertiesResponseHeaders(result);
-        Map<String, String> userMetadata = RestUtils.buildUserMetadata(result.getUserMetadata());
-        if (userMetadata == null) {
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, result.getUserMetadata().length);
-          response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(result.getUserMetadata()));
-        } else {
-          setUserMetadataHeaders(userMetadata, restResponseChannel);
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-          response = new ByteBufferReadableStreamChannel(AdminBlobStorageService.EMPTY_BUFFER);
-        }
       } else if (exception == null) {
         exception = new IllegalStateException("Both response and exception are null for HeadCallback");
       }

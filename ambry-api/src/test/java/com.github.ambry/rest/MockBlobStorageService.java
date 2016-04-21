@@ -521,16 +521,6 @@ class MockHeadCallback implements Callback<BlobInfo> {
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setBlobPropertiesResponseHeaders(result);
-        Map<String, String> userMetadata = RestUtils.buildUserMetadata(result.getUserMetadata());
-        if (userMetadata == null) {
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, result.getUserMetadata().length);
-          response = new ByteBufferRSC(ByteBuffer.wrap(result.getUserMetadata()));
-        } else {
-          setUserMetadataHeaders(userMetadata, restResponseChannel);
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-          response = new ByteBufferRSC(MockBlobStorageService.EMPTY_BUFFER);
-        }
       } else if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));

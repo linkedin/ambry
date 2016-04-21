@@ -16,7 +16,6 @@ package com.github.ambry.rest;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -393,11 +392,6 @@ public class RestUtilsTest {
         userMetadataMap.containsKey(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1"));
     assertEquals("User metadata " + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1 value don't match ", value,
         userMetadataMap.get(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1"));
-
-    // random data
-    userMetadataByteArray = UtilsTest.getRandomString(RestUtils.Max_UserMetadata_Value_Size + 2).getBytes();
-    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
-    assertNull("UserMetadata should have been null ", userMetadataMap);
   }
 
   /**

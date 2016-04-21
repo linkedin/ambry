@@ -300,12 +300,12 @@ public class RestUtils {
             } else {
               int entryCount = userMetadataBuffer.getInt();
               int counter = 0;
+              if (entryCount > 0) {
+                toReturn = new HashMap<>();
+              }
               while (counter++ < entryCount) {
                 String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
                 String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-                if (toReturn == null) {
-                  toReturn = new HashMap<>();
-                }
                 toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
               }
               long actualCRC = userMetadataBuffer.getLong();
