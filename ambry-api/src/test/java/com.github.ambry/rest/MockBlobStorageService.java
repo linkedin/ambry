@@ -48,6 +48,7 @@ public class MockBlobStorageService implements BlobStorageService {
   private volatile boolean serviceRunning = false;
   private volatile boolean blocking = false;
   private volatile CountDownLatch blockLatch = new CountDownLatch(0);
+  protected static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 
   /**
    * Changes the {@link VerifiableProperties} instance with this instance so that the behaviour can be changed on the
@@ -515,10 +516,21 @@ class MockHeadCallback implements Callback<BlobInfo> {
    */
   @Override
   public void onCompletion(BlobInfo result, Exception exception) {
+    ReadableStreamChannel response = null;
     try {
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
-        setResponseHeaders(result);
+        setBlobPropertiesResponseHeaders(result);
+        Map<String, String> userMetadata = RestUtils.buildUserMetadata(result.getUserMetadata());
+        if (userMetadata == null) {
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, result.getUserMetadata().length);
+          response = new ByteBufferRSC(ByteBuffer.wrap(result.getUserMetadata()));
+        } else {
+          setUserMetadataHeaders(userMetadata, restResponseChannel);
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          response = new ByteBufferRSC(MockBlobStorageService.EMPTY_BUFFER);
+        }
       } else if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
@@ -526,16 +538,16 @@ class MockHeadCallback implements Callback<BlobInfo> {
     } catch (Exception e) {
       exception = exception == null ? e : exception;
     } finally {
-      mockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
+      mockBlobStorageService.handleResponse(restRequest, restResponseChannel, response, exception);
     }
   }
 
   /**
-   * Sets the required headers in the response.
+   * Sets the required blob properties headers in the response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo)
+  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
@@ -556,10 +568,18 @@ class MockHeadCallback implements Callback<BlobInfo> {
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
     }
-    byte[] userMetadataArray = blobInfo.getUserMetadata();
-    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
-    for (String key : userMetadata.keySet()) {
-      restResponseChannel.setHeader(key, userMetadata.get(key));
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadata the user metadata that need to be set in the headers.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  private void setUserMetadataHeaders(Map<String, String> userMetadata, RestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
+      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
     }
   }
 }

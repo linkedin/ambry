@@ -1100,8 +1100,10 @@ public class AdminBlobStorageServiceTest {
     doHead(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
-    assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertEquals("Content-Length should be 0 ", 0,
+        Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Blob size does not match ", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
         expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
         restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));

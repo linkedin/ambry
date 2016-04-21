@@ -14,6 +14,7 @@
 package com.github.ambry.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.BlobStorageService;
@@ -31,6 +32,7 @@ import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
@@ -48,6 +50,7 @@ import org.slf4j.LoggerFactory;
 class AdminBlobStorageService implements BlobStorageService {
   protected final static String ECHO = "echo";
   protected final static String GET_REPLICAS_FOR_BLOB_ID = "getReplicasForBlobId";
+  protected static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 
   private final static Set<String> adminOperations = new HashSet<String>();
 
@@ -630,6 +633,7 @@ class HeadCallback implements Callback<BlobInfo> {
   @Override
   public void onCompletion(BlobInfo result, Exception exception) {
     long processingStartTime = System.currentTimeMillis();
+    ReadableStreamChannel response = null;
     try {
       long routerTime = processingStartTime - operationStartTime;
       adminBlobStorageService.adminMetrics.headTimeInMs.update(routerTime);
@@ -640,7 +644,17 @@ class HeadCallback implements Callback<BlobInfo> {
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         logger.trace("Successful HEAD of {}", blobId);
-        setResponseHeaders(result);
+        setBlobPropertiesResponseHeaders(result);
+        Map<String, String> userMetadata = RestUtils.buildUserMetadata(result.getUserMetadata());
+        if (userMetadata == null) {
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, result.getUserMetadata().length);
+          response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(result.getUserMetadata()));
+        } else {
+          setUserMetadataHeaders(userMetadata, restResponseChannel);
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          response = new ByteBufferReadableStreamChannel(AdminBlobStorageService.EMPTY_BUFFER);
+        }
       } else if (exception == null) {
         exception = new IllegalStateException("Both response and exception are null for HeadCallback");
       }
@@ -658,16 +672,16 @@ class HeadCallback implements Callback<BlobInfo> {
       if (exception != null) {
         adminBlobStorageService.adminMetrics.operationError.inc();
       }
-      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, null, exception);
+      adminBlobStorageService.submitResponse(restRequest, restResponseChannel, response, exception);
     }
   }
 
   /**
-   * Sets the required headers in the response.
+   * Sets the required blob properties headers in the response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo)
+  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setStatus(ResponseStatus.Ok);
@@ -689,8 +703,16 @@ class HeadCallback implements Callback<BlobInfo> {
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
     }
-    byte[] userMetadataArray = blobInfo.getUserMetadata();
-    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadata the user metadata that need to be set in the headers.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  private void setUserMetadataHeaders(Map<String, String> userMetadata, RestResponseChannel restResponseChannel)
+      throws RestServiceException {
     for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
       restResponseChannel.setHeader(entry.getKey(), entry.getValue());
     }
