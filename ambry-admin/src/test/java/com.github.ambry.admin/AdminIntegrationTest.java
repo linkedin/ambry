@@ -350,8 +350,9 @@ public class AdminIntegrationTest {
     discardContent(responseParts, 1);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     checkCommonGetHeadHeaders(response.headers(), expectedHeaders);
-    assertEquals("Content-Length does not match blob size",
-        Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)), HttpHeaders.getContentLength(response));
+    assertEquals("Content-Length does not match 0", 0, HttpHeaders.getContentLength(response));
+    assertEquals("Blob size does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
+        HttpHeaders.getHeader(response, RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match", expectedHeaders.get(RestUtils.Headers.SERVICE_ID),
         HttpHeaders.getHeader(response, RestUtils.Headers.SERVICE_ID));
     assertEquals(RestUtils.Headers.PRIVATE + " does not match", expectedHeaders.get(RestUtils.Headers.PRIVATE),
