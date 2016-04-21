@@ -50,6 +50,7 @@ public class DataNode extends DataNodeId {
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
   private final long rackId;
+  private final ArrayList<String> sslEnabledDataCenters;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -59,6 +60,7 @@ public class DataNode extends DataNodeId {
       logger.trace("DataNode " + jsonObject.toString());
     }
     this.datacenter = datacenter;
+    this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.port = jsonObject.getInt("port");
@@ -149,6 +151,18 @@ public class DataNode extends DataNodeId {
 
   @Override
   public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
+    if (sslEnabledDataCenters.contains(datacenter.getName())) {
+      if (ports.containsKey(PortType.SSL)) {
+        return new Port(ports.get(PortType.SSL), PortType.SSL);
+      } else {
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+      }
+    }
+    return new Port(port, PortType.PLAINTEXT);
+  }
+
+  @Override
+  public Port getPortToConnectTo() {
     if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
         return new Port(ports.get(PortType.SSL), PortType.SSL);

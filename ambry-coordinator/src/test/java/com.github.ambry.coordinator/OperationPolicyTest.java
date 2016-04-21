@@ -1662,6 +1662,11 @@ public class OperationPolicyTest {
     }
 
     @Override
+    public Port getPortToConnectTo() {
+      return new Port(0, PortType.PLAINTEXT);
+    }
+
+    @Override
     public HardwareState getState() {
       throw new IllegalStateException("Should not be invoked.");
     }

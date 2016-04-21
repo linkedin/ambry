@@ -28,6 +28,7 @@ public class MockDataNodeId extends DataNodeId {
   String hostname = "localhost";
   String datacenter;
   long rackId = -1;
+  ArrayList<String> sslEnabledDataCenters = new ArrayList<String>();
 
   public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
@@ -84,6 +85,18 @@ public class MockDataNodeId extends DataNodeId {
 
   @Override
   public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
+    if (sslEnabledDataCenters.contains(datacenter)) {
+      if (ports.containsKey(PortType.SSL)) {
+        return new Port(ports.get(PortType.SSL), PortType.SSL);
+      } else {
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+      }
+    }
+    return new Port(port, PortType.PLAINTEXT);
+  }
+
+  @Override
+  public Port getPortToConnectTo() {
     if (sslEnabledDataCenters.contains(datacenter)) {
       if (ports.containsKey(PortType.SSL)) {
         return new Port(ports.get(PortType.SSL), PortType.SSL);

@@ -57,7 +57,15 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
    * @param sslEnabledDataCenters List of ssl enabled Datacenters
    * @return {@Port} to which the caller can connect to
    */
+  @Deprecated
   public abstract Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters);
+
+  /**
+   * Returns the Port of this node to connect to.
+   *
+   * @return {@Port} to which the caller can connect to
+   */
+  public abstract Port getPortToConnectTo();
 
   /**
    * Gets the state of the DataNodeId.
