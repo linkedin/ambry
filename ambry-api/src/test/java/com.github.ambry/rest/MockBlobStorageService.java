@@ -559,17 +559,4 @@ class MockHeadCallback implements Callback<BlobInfo> {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
     }
   }
-
-  /**
-   * Sets the user metadata in the headers of the response.
-   * @param userMetadata the user metadata that need to be set in the headers.
-   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
-   * @throws RestServiceException if there are any problems setting the header.
-   */
-  private void setUserMetadataHeaders(Map<String, String> userMetadata, RestResponseChannel restResponseChannel)
-      throws RestServiceException {
-    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
-      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
-    }
-  }
 }
