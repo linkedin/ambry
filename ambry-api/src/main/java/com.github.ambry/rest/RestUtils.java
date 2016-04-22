@@ -296,7 +296,7 @@ public class RestUtils {
           case UserMetadata_Version_V1:
             int sizeToRead = userMetadataBuffer.getInt();
             if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
-              logger.trace("Size didn't match. Returning as old format");
+              logger.trace("Size didn't match. Returning null");
             } else {
               int entryCount = userMetadataBuffer.getInt();
               int counter = 0;
@@ -320,10 +320,10 @@ public class RestUtils {
             }
             break;
           default:
-            logger.trace("Failed to parse version in new format. Returning as old format");
+            logger.trace("Failed to parse version in new format. Returning null");
         }
       } catch (RuntimeException e) {
-        logger.trace("Runtime Exception on parsing user metadata. Returning as old format");
+        logger.trace("Runtime Exception on parsing user metadata. Returning null");
         toReturn = null;
       }
     }

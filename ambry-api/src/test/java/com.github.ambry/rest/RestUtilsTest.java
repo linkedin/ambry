@@ -274,6 +274,22 @@ public class RestUtilsTest {
     userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
     assertNull("UserMetadata should have been null ", userMetadataMap);
 
+    // user metadata with wrong version
+    userMetadataByteArray = new byte[4];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 3);
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertNull("UserMetadata should have been null ", userMetadataMap);
+
+    // 0 sized user metadata
+    userMetadataByteArray = new byte[12];
+    byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(4);
+    byteBuffer.putInt(0);
+    userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
+    assertNull("UserMetadata should have been null ", userMetadataMap);
+
     // wrong size
     userMetadataByteArray = new byte[36];
     byteBuffer = ByteBuffer.wrap(userMetadataByteArray);
