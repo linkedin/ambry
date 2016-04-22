@@ -53,7 +53,8 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
 
   /**
    * Returns the Port to connect to based on the whether the {@DataNodeId} belongs to the list of ssl-enabled
-   * Datacenters
+   * Datacenters.
+   * @deprecated This method is obsolete. Please use {@link #getPortToConnectTo()} instead.
    * @param sslEnabledDataCenters List of ssl enabled Datacenters
    * @return {@Port} to which the caller can connect to
    */
@@ -61,9 +62,9 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
   public abstract Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters);
 
   /**
-   * Returns the Port of this node to connect to.
+   * Returns the {@link Port} of this node to connect to.
    *
-   * @return {@Port} to which the caller can connect to
+   * @return {@link Port} to which the caller can connect to.
    */
   public abstract Port getPortToConnectTo();
 

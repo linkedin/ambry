@@ -44,8 +44,8 @@ public class DataNode extends DataNodeId {
 
   private final Datacenter datacenter;
   private final String hostname;
-  private final int port;
-  private final Map<PortType, Integer> ports;
+  private final int portNum;
+  private final Map<PortType, Port> ports;
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
@@ -63,7 +63,7 @@ public class DataNode extends DataNodeId {
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
 
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
-    this.port = jsonObject.getInt("port");
+    this.portNum = jsonObject.getInt("port");
     try {
       ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
           .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
@@ -72,7 +72,7 @@ public class DataNode extends DataNodeId {
     } catch (Exception e) {
       logger.error("Error creating resource state policy when instantiating a datanode " + e);
       throw new IllegalStateException(
-          "Error creating resource state policy when instantiating a datanode: " + hostname + " " + port, e);
+          "Error creating resource state policy when instantiating a datanode: " + hostname + ":" + portNum, e);
     }
     JSONArray diskJSONArray = jsonObject.getJSONArray("disks");
     this.disks = new ArrayList<Disk>(diskJSONArray.length());
@@ -80,8 +80,8 @@ public class DataNode extends DataNodeId {
       this.disks.add(new Disk(this, diskJSONArray.getJSONObject(i), clusterMapConfig));
     }
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
-    this.ports = new HashMap<PortType, Integer>();
-    this.ports.put(PortType.PLAINTEXT, port);
+    this.ports = new HashMap<PortType, Port>();
+    this.ports.put(PortType.PLAINTEXT, new Port(portNum, PortType.PLAINTEXT));
     populatePorts(jsonObject);
 
     if (jsonObject.has("rackId")) {
@@ -99,8 +99,8 @@ public class DataNode extends DataNodeId {
   private void populatePorts(JSONObject jsonObject)
       throws JSONException {
     if (jsonObject.has("sslport")) {
-      int sslPort = jsonObject.getInt("sslport");
-      this.ports.put(PortType.SSL, sslPort);
+      int sslPortNum = jsonObject.getInt("sslport");
+      this.ports.put(PortType.SSL, new Port(sslPortNum, PortType.SSL));
     }
   }
 
@@ -132,7 +132,7 @@ public class DataNode extends DataNodeId {
 
   @Override
   public int getPort() {
-    return port;
+    return portNum;
   }
 
   @Override
@@ -143,9 +143,9 @@ public class DataNode extends DataNodeId {
   @Override
   public int getSSLPort() {
     if (hasSSLPort()) {
-      return ports.get(PortType.SSL);
+      return ports.get(PortType.SSL).getPort();
     } else {
-      throw new IllegalStateException("No SSL port exists for the Data Node " + hostname + ":" + port);
+      throw new IllegalStateException("No SSL port exists for the Data Node " + hostname + ":" + portNum);
     }
   }
 
@@ -153,24 +153,24 @@ public class DataNode extends DataNodeId {
   public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
     if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
-        return new Port(ports.get(PortType.SSL), PortType.SSL);
+        return ports.get(PortType.SSL);
       } else {
-        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
       }
     }
-    return new Port(port, PortType.PLAINTEXT);
+    return ports.get(PortType.PLAINTEXT);
   }
 
   @Override
   public Port getPortToConnectTo() {
     if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
-        return new Port(ports.get(PortType.SSL), PortType.SSL);
+        return ports.get(PortType.SSL);
       } else {
-        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
       }
     }
-    return new Port(port, PortType.PLAINTEXT);
+    return ports.get(PortType.PLAINTEXT);
   }
 
   @Override
@@ -237,16 +237,16 @@ public class DataNode extends DataNodeId {
   private void validatePorts() {
     Set<Integer> portNumbers = new HashSet<Integer>();
     for (PortType portType : ports.keySet()) {
-      int portNo = ports.get(portType);
+      int portNo = ports.get(portType).getPort();
       if (portNumbers.contains(portNo)) {
         throw new IllegalStateException("Same port number " + portNo + " found for two port types");
       }
-      portNumbers.add(portNo);
       if (portNo < MinPort) {
         throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is less than " + MinPort);
       } else if (portNo > MaxPort) {
         throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is greater than " + MaxPort);
       }
+      portNumbers.add(portNo);
     }
   }
 
@@ -263,7 +263,7 @@ public class DataNode extends DataNodeId {
 
   public JSONObject toJSONObject()
       throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port);
+    JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", portNum);
     addSSLPortToJson(jsonObject);
     if (rackId >= 0) {
       jsonObject.put("rackId", getRackId());
@@ -281,7 +281,7 @@ public class DataNode extends DataNodeId {
       throws JSONException {
     for (PortType portType : ports.keySet()) {
       if (portType == PortType.SSL) {
-        jsonObject.put("sslport", ports.get(portType));
+        jsonObject.put("sslport", ports.get(portType).getPort());
       }
     }
   }
@@ -302,7 +302,7 @@ public class DataNode extends DataNodeId {
 
     DataNode dataNode = (DataNode) o;
 
-    if (port != dataNode.port) {
+    if (portNum != dataNode.portNum) {
       return false;
     }
     return hostname.equals(dataNode.hostname);
@@ -311,7 +311,7 @@ public class DataNode extends DataNodeId {
   @Override
   public int hashCode() {
     int result = hostname.hashCode();
-    result = 31 * result + port;
+    result = 31 * result + portNum;
     return result;
   }
 
@@ -322,7 +322,7 @@ public class DataNode extends DataNodeId {
     }
 
     DataNode other = (DataNode) o;
-    int compare = (port < other.port) ? -1 : ((port == other.port) ? 0 : 1);
+    int compare = (portNum < other.portNum) ? -1 : ((portNum == other.portNum) ? 0 : 1);
     if (compare == 0) {
       compare = hostname.compareTo(other.hostname);
     }

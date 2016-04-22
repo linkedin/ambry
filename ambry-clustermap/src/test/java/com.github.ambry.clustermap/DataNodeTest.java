@@ -16,7 +16,6 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.PortType;
-import java.util.ArrayList;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -221,6 +220,7 @@ public class DataNodeTest {
     System.out.println(clusterMapConfig.clusterMapSslEnabledDatacenters);
     JSONObject jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
+
     DataNode dataNode = new TestDataNode("datacenter2", jsonObject, clusterMapConfig);
     assertEquals("The datacenter of the data node is in the ssl enabled datacenter list. SSL port should be returned",
         PortType.SSL, dataNode.getPortToConnectTo().getPortType());
@@ -229,6 +229,15 @@ public class DataNodeTest {
     assertEquals(
         "The datacenter of the data node is not in the ssl enabled datacenter list. Plaintext port should be returned",
         PortType.PLAINTEXT, dataNode.getPortToConnectTo().getPortType());
+
+    jsonObject.remove("sslport");
+    try {
+      dataNode = new TestDataNode("datacenter1", jsonObject, clusterMapConfig);
+      dataNode.getPortToConnectTo();
+    } catch (IllegalArgumentException e) {
+      // The datacenter of the data node is in the ssl enabled datacenter list, but the data node does not have an ssl
+      // port to connect. Exception should be thrown.
+    }
   }
 
   void ensure(DataNode dataNode, HardwareState state) {
