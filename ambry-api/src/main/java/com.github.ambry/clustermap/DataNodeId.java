@@ -72,4 +72,19 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
    * @return name of the Datacenter
    */
   public abstract String getDatacenterName();
+
+  /**
+   * Get the DataNodeId's server rack ID
+   *
+   * @return a valid rack ID
+   * if no rack ID is defined, throws IllegalArgumentException
+   */
+  public abstract int getRackId();
+
+  /**
+   * Returns true if a server rack ID is defined for the DataNodeId
+   *
+   * @return true if the rack ID is defined, false otherwise
+   */
+  public abstract boolean hasRackId();
 }

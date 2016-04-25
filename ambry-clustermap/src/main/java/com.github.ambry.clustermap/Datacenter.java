@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import java.util.Iterator;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -34,6 +35,7 @@ public class Datacenter {
   private final String name;
   private final ArrayList<DataNode> dataNodes;
   private final long rawCapacityInBytes;
+  private boolean rackAware = false;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -77,6 +79,10 @@ public class Datacenter {
     return dataNodes;
   }
 
+  public boolean isRackAware() {
+    return rackAware;
+  }
+
   protected void validateHardwareLayout() {
     if (hardwareLayout == null) {
       throw new IllegalStateException("HardwareLayout cannot be null");
@@ -91,10 +97,26 @@ public class Datacenter {
     }
   }
 
+  protected void validateRackAwareness() {
+    if (dataNodes.size() > 0) {
+      Iterator<DataNode> dataNodeIter = dataNodes.iterator();
+      boolean lastHasRackId = dataNodeIter.next().hasRackId();
+      while (dataNodeIter.hasNext()) {
+        boolean currHasRackId = dataNodeIter.next().hasRackId();
+        if (lastHasRackId != currHasRackId) {
+          throw new IllegalStateException("dataNodes in datacenter must all have defined rack IDs or none at all");
+        }
+        lastHasRackId = currHasRackId;
+      }
+      this.rackAware = lastHasRackId;
+    }
+  }
+
   protected void validate() {
     logger.trace("begin validate.");
     validateHardwareLayout();
     validateName();
+    validateRackAwareness();
     logger.trace("complete validate.");
   }
 

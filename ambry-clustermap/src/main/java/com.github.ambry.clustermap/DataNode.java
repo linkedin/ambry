@@ -48,6 +48,7 @@ public class DataNode extends DataNodeId {
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
+  private final Integer rackId;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -79,6 +80,9 @@ public class DataNode extends DataNodeId {
     this.ports = new HashMap<PortType, Integer>();
     this.ports.put(PortType.PLAINTEXT, port);
     populatePorts(jsonObject);
+
+    this.rackId = jsonObject.has("rackId")? jsonObject.getInt("rackId") : null;
+
     validate();
   }
 
@@ -189,6 +193,19 @@ public class DataNode extends DataNodeId {
     return disks;
   }
 
+  @Override
+  public int getRackId() {
+    if (rackId == null) {
+      throw new IllegalStateException("rackId not defined for the data node " + hostname + ":" + port);
+    }
+    return rackId;
+  }
+
+  @Override
+  public boolean hasRackId() {
+    return rackId != null;
+  }
+
   protected void validateDatacenter() {
     if (datacenter == null) {
       throw new IllegalStateException("Datacenter cannot be null.");
@@ -219,11 +236,18 @@ public class DataNode extends DataNodeId {
     }
   }
 
+  protected void validateRackId() {
+    if (hasRackId() && rackId < 0) {
+      throw new IllegalStateException("Invalid rackId : " + rackId + " is less than 0");
+    }
+  }
+
   protected void validate() {
     logger.trace("begin validate.");
     validateDatacenter();
     validateHostname();
     validatePorts();
+    validateRackId();
     for (Disk disk : disks) {
       disk.validate();
     }
@@ -234,6 +258,9 @@ public class DataNode extends DataNodeId {
       throws JSONException {
     JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port);
     addSSLPortToJson(jsonObject);
+    if (hasRackId()) {
+      jsonObject.put("rackId", getRackId());
+    }
     jsonObject
         .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());

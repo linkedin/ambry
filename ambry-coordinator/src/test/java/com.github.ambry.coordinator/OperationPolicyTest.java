@@ -1672,6 +1672,15 @@ public class OperationPolicyTest {
     }
 
     @Override
+    public int getRackId() {
+      throw new IllegalStateException("No rack ID for OperationPolicyDataNodeId.");
+    }
+
+    @Override
+    public boolean hasRackId() {
+      return false;
+    }
+    @Override
     public boolean equals(Object o) {
       if (this == o) {
         return true;

@@ -94,6 +94,19 @@ public class TestUtils {
     return jsonObject;
   }
 
+  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, int rackId,
+      HardwareState hardwareState, JSONArray disks)
+      throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("hostname", hostname);
+    jsonObject.put("port", port);
+    jsonObject.put("sslport", sslPort);
+    jsonObject.put("rackId", rackId);
+    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("disks", disks);
+    return jsonObject;
+  }
+
   // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
   public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort,
       HardwareState hardwareState, JSONArray disks)
@@ -112,6 +125,31 @@ public class TestUtils {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
       jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks));
+    }
+    return jsonArray;
+  }
+
+  // assigns rackId for each DataNode
+  public static JSONArray getJsonArrayDataNodesRackAware(int dataNodeCount, String hostname, int basePort, int sslPort,
+      HardwareState hardwareState, JSONArray disks)
+      throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < dataNodeCount; ++i) {
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, i, hardwareState, disks));
+    }
+    return jsonArray;
+  }
+
+  // assigns rackId for DataNodes with even indexes (0,2,4 ...)
+  public static JSONArray getJsonArrayDataNodesPartiallyRackAware(int dataNodeCount, String hostname, int basePort,
+      int sslPort, HardwareState hardwareState, JSONArray disks)
+      throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < dataNodeCount; ++i) {
+      JSONObject jsonDataNode = (i % 2 == 0)?
+          getJsonDataNode(hostname, basePort + i, sslPort + i, i, hardwareState, disks) :
+          getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks);
+      jsonArray.put(jsonDataNode);
     }
     return jsonArray;
   }
