@@ -102,12 +102,6 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
-
-    /**
-     *  prefix for old style user metadata that will be served as headers
-     */
-    public final static String USER_META_DATA_OLD_STYLE_PREFIX = "x-ambry-oldstyle-um-";
-
     /**
      * Header to contain the Cookies
      */
@@ -293,8 +287,7 @@ public class RestUtils {
    */
   public static Map<String, String> buildUserMetadata(byte[] userMetadata)
       throws RestServiceException {
-    Map<String, String> toReturn = new HashMap<String, String>();
-    boolean oldStyle = false;
+    Map<String, String> toReturn = null;
     if (userMetadata.length > 0) {
       try {
         ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
@@ -303,11 +296,13 @@ public class RestUtils {
           case UserMetadata_Version_V1:
             int sizeToRead = userMetadataBuffer.getInt();
             if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
-              logger.trace("Size didn't match. Returning as old format");
-              oldStyle = true;
+              logger.trace("Size didn't match. Returning null");
             } else {
               int entryCount = userMetadataBuffer.getInt();
               int counter = 0;
+              if (entryCount > 0) {
+                toReturn = new HashMap<>();
+              }
               while (counter++ < entryCount) {
                 String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
                 String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
@@ -320,41 +315,17 @@ public class RestUtils {
               if (actualCRC != expectedCRC) {
                 logger.trace("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC "
                     + actualCRC);
-                oldStyle = true;
+                toReturn = null;
               }
             }
             break;
           default:
-            logger.trace("Failed to parse version in new format. Returning as old format");
-            oldStyle = true;
+            logger.trace("Failed to parse version in new format. Returning null");
         }
       } catch (RuntimeException e) {
-        logger.trace("Runtime Exception on parsing user metadata. Returning as old format");
-        oldStyle = true;
+        logger.trace("Runtime Exception on parsing user metadata. Returning null");
+        toReturn = null;
       }
-    }
-    if (oldStyle) {
-      toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
-    }
-    return toReturn;
-  }
-
-  /**
-   * Returns a default representation of user metadata that is not in the expected format
-   * @param userMetadata byte[] which contains the user metadata in old style
-   * @return user metadata in the form of Map<String, String>
-   */
-  private static Map<String, String> getOldStyleUserMetadataAsHashMap(byte[] userMetadata) {
-    int totalSize = userMetadata.length;
-    Map<String, String> toReturn = new HashMap<String, String>();
-    int sizeRead = 0;
-    int counter = 0;
-    while (sizeRead < totalSize) {
-      String key = Headers.USER_META_DATA_OLD_STYLE_PREFIX + counter++;
-      int sizeToRead = Math.min(totalSize - sizeRead, Max_UserMetadata_Value_Size);
-      String value = new String(userMetadata, sizeRead, sizeToRead, StandardCharsets.US_ASCII);
-      toReturn.put(key, value);
-      sizeRead += sizeToRead;
     }
     return toReturn;
   }
