@@ -56,7 +56,7 @@ public class AmbryMain {
       logger.error("Exception during bootstrap of AmbryServer", e);
       exitCode = 1;
     }
-    logger.info("Exiting RestServerMain");
+    logger.info("Exiting AmbryMain");
     System.exit(exitCode);
   }
 }
