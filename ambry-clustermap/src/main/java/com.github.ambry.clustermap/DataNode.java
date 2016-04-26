@@ -212,7 +212,7 @@ public class DataNode extends DataNodeId {
     }
   }
 
-  protected void validateHostname() {
+  private void validateHostname() {
     String fqdn = getFullyQualifiedDomainName(hostname);
     if (!fqdn.equals(hostname)) {
       throw new IllegalStateException(
@@ -220,7 +220,7 @@ public class DataNode extends DataNodeId {
     }
   }
 
-  protected void validatePorts() {
+  private void validatePorts() {
     Set<Integer> portNumbers = new HashSet<Integer>();
     for (PortType portType : ports.keySet()) {
       int portNo = ports.get(portType);
@@ -236,13 +236,13 @@ public class DataNode extends DataNodeId {
     }
   }
 
-  protected void validateRackId() {
+  private void validateRackId() {
     if (hasRackId() && rackId < 0) {
       throw new IllegalStateException("Invalid rackId : " + rackId + " is less than 0");
     }
   }
 
-  protected void validate() {
+  private void validate() {
     logger.trace("begin validate.");
     validateDatacenter();
     validateHostname();
