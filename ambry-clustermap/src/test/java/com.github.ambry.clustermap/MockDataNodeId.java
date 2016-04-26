@@ -27,7 +27,7 @@ public class MockDataNodeId extends DataNodeId {
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
-  Integer rackId = null;
+  long rackId = -1;
 
   public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
@@ -105,16 +105,8 @@ public class MockDataNodeId extends DataNodeId {
   }
 
   @Override
-  public int getRackId() {
-    if (rackId == null) {
-      throw new IllegalStateException("rackId not defined for the data node " + hostname + ":" + port);
-    }
+  public long getRackId() {
     return rackId;
-  }
-
-  @Override
-  public boolean hasRackId() {
-    return rackId != null;
   }
 
   public List<String> getMountPaths() {

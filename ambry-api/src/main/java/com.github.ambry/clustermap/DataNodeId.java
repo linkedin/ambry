@@ -74,17 +74,10 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
   public abstract String getDatacenterName();
 
   /**
-   * Get the DataNodeId's server rack ID
+   * Get the DataNodeId's server rack ID.  If there is no rack ID for this node,
+   * -1 will be returned, so the caller must check that the returned value is non-negative.
    *
-   * @return a valid rack ID
-   * @throws IllegalStateException if no rack ID is defined
+   * @return a valid rack ID, or a negative number if no rack ID is assigned
    */
-  public abstract int getRackId();
-
-  /**
-   * Returns {@code true} if a server rack ID is defined for the DataNodeId
-   *
-   * @return {@code true} if the rack ID is defined, {@code false} otherwise
-   */
-  public abstract boolean hasRackId();
+  public abstract long getRackId();
 }

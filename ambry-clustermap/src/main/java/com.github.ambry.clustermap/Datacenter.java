@@ -110,9 +110,9 @@ public class Datacenter {
   protected void validateRackAwareness() {
     if (dataNodes.size() > 0) {
       Iterator<DataNode> dataNodeIter = dataNodes.iterator();
-      boolean hasRackId = dataNodeIter.next().hasRackId();
+      boolean hasRackId = (dataNodeIter.next().getRackId() >= 0);
       while (dataNodeIter.hasNext()) {
-        if (hasRackId != dataNodeIter.next().hasRackId()) {
+        if (hasRackId != (dataNodeIter.next().getRackId() >= 0)) {
           throw new IllegalStateException("dataNodes in datacenter must all have defined rack IDs or none at all");
         }
       }

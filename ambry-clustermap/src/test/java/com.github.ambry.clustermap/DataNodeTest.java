@@ -60,10 +60,7 @@ class TestDataNode extends DataNode {
     if (getState() != testDataNode.getState()) {
       return false;
     }
-    if (hasRackId() != testDataNode.hasRackId()) {
-      return false;
-    }
-    if (hasRackId() && (getRackId() != testDataNode.getRackId())) {
+    if (getRackId() != testDataNode.getRackId()) {
       return false;
     }
     return getRawCapacityInBytes() == testDataNode.getRawCapacityInBytes();
@@ -99,13 +96,7 @@ public class DataNodeTest {
     assertEquals(dataNode.getDisks().size(), diskCount);
     assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
 
-    assertFalse(dataNode.hasRackId());
-    try {
-      dataNode.getRackId();
-      fail("getRackId should throw an exception when no rackId is defined");
-    } catch (IllegalStateException e) {
-      //expected
-    }
+    assertEquals(-1, dataNode.getRackId());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject(), clusterMapConfig));
@@ -114,7 +105,6 @@ public class DataNodeTest {
     jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, HardwareState.AVAILABLE, getDisks());
     dataNode = new TestDataNode(jsonObject, clusterMapConfig);
-    assertTrue(dataNode.hasRackId());
     assertEquals(42, dataNode.getRackId());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
