@@ -30,33 +30,32 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
   public abstract String getHostname();
 
   /**
-   * Gets the DataNodeId's connection port.
+   * Gets the DataNodeId's connection port number.
    *
-   * @return port upon which to establish a connection with the DataNodeId.
+   * @return Port number upon which to establish a connection with the DataNodeId.
    */
   public abstract int getPort();
 
   /**
-   * Gets the DataNodeId's SSL connection port.
+   * Gets the DataNodeId's SSL connection port number.
    *
-   * @return port upon which to establish an SSL encrypted connection with the DataNodeId
-   * if no SSL port exists, throws IllegalArgumentException
+   * @return Port number upon which to establish an SSL encrypted connection with the DataNodeId.
    */
   public abstract int getSSLPort();
 
   /**
-   * Returns true is SSL port exists for the DataNodeId.
+   * Returns true if SSL port exists for the DataNodeId.
    *
-   * @return true if SSL port exists for the datanode, false otherwise
+   * @return true if SSL port exists for the datanode, false otherwise.
    */
   public abstract boolean hasSSLPort();
 
   /**
-   * Returns the Port to connect to based on the whether the {@DataNodeId} belongs to the list of ssl-enabled
+   * Returns the {@link Port} to connect to based on the whether the {@link DataNodeId} belongs to the list of ssl-enabled
    * Datacenters.
+   * @param sslEnabledDataCenters List of ssl enabled Datacenters.
+   * @return {@link Port} to which the caller can connect to.
    * @deprecated This method is obsolete. Please use {@link #getPortToConnectTo()} instead.
-   * @param sslEnabledDataCenters List of ssl enabled Datacenters
-   * @return {@Port} to which the caller can connect to
    */
   @Deprecated
   public abstract Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters);

@@ -100,12 +100,12 @@ public class DataNodeTest {
     assertEquals(-1, dataNode.getRackId());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
-    assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject(), clusterMapConfig));
+    assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
 
     // Test with defined rackId
     jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, HardwareState.AVAILABLE, getDisks());
-    dataNode = new TestDataNode(jsonObject, clusterMapConfig);
+    dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
     assertEquals(42, dataNode.getRackId());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
@@ -231,10 +231,11 @@ public class DataNodeTest {
         PortType.PLAINTEXT, dataNode.getPortToConnectTo().getPortType());
 
     jsonObject.remove("sslport");
+    dataNode = new TestDataNode("datacenter1", jsonObject, clusterMapConfig);
     try {
-      dataNode = new TestDataNode("datacenter1", jsonObject, clusterMapConfig);
       dataNode.getPortToConnectTo();
-    } catch (IllegalArgumentException e) {
+      fail("Should have thrown Exception because there is no sslPort.");
+    } catch (IllegalStateException e) {
       // The datacenter of the data node is in the ssl enabled datacenter list, but the data node does not have an ssl
       // port to connect. Exception should be thrown.
     }

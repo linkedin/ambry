@@ -140,6 +140,12 @@ public class DataNode extends DataNodeId {
     return ports.containsKey(PortType.SSL);
   }
 
+  /**
+   * Gets the DataNode's SSL port number.
+   *
+   * @return Port number upon which to establish an SSL encrypted connection with the DataNodeId.
+   * @throws IllegalStateException Thrown if no SSL port exists.
+   */
   @Override
   public int getSSLPort() {
     if (hasSSLPort()) {
@@ -149,25 +155,43 @@ public class DataNode extends DataNodeId {
     }
   }
 
+  /**
+   * Returns the {@link Port} to connect to based on the whether the {@link DataNodeId} belongs to the list of ssl-enabled
+   * Datacenters.
+   * @param sslEnabledDataCenters List of ssl enabled Datacenters.
+   * @return {@link Port} to which the caller can connect to.
+   * @throws IllegalStateException Thrown if the list dictates that an SSL port must be used, but the {@link DataNodeId}
+   * does not have an SSL port.
+   * @deprecated This method is obsolete. Please use {@link #getPortToConnectTo()} instead.
+   */
   @Override
+  @Deprecated
   public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
     if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
         return ports.get(PortType.SSL);
       } else {
-        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
+        throw new IllegalStateException(
+            "An SSL port is needed but does not exist at data node " + hostname + ":" + portNum);
       }
     }
     return ports.get(PortType.PLAINTEXT);
   }
 
+  /**
+   * Returns the {@link Port} of this node to connect to. A {@link Port} will be automatically selected based on if
+   * there is a need of establishing an SSL connection.
+   *
+   * @return {@link Port} to which the caller can connect to.
+   * @throws IllegalStateException Thrown if an SSL connection is needed but no SSL port exists.
+   */
   @Override
   public Port getPortToConnectTo() {
     if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
         return ports.get(PortType.SSL);
       } else {
-        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
+        throw new IllegalStateException("No SSL Port exists for the data node " + hostname + ":" + portNum);
       }
     }
     return ports.get(PortType.PLAINTEXT);
