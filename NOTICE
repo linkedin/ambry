@@ -31,10 +31,6 @@ This product includes/uses Netty (http://netty.io/)
 Copyright (C) 2016 The Netty project
 License: Apache 2.0
 
-This product includes/uses JUnit (http://junit.org)
-Copyright (C) 2016 JUnit
-License: Eclipse Public License - v 1.0
-
 This product includes/uses Log4j2 (http://logging.apache.org/log4j/2.x/)
 Copyright (C) 2015 Apache Log4j
 License: Apache 2.0
