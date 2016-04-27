@@ -520,21 +520,19 @@ public class NettyRequestTest {
   public void zeroSizeContentTest()
       throws Exception {
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
-    List<HttpContent> httpContents = new ArrayList<HttpContent>(1);
+    HttpContent httpContent = new DefaultLastHttpContent();
 
-    httpContents.add(new DefaultLastHttpContent());
-    nettyRequest.addContent(httpContents.get(0));
-    assertEquals("Reference count is not as expected", 2, httpContents.get(0).refCnt());
+    nettyRequest.addContent(httpContent);
+    assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
 
     ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
     ReadIntoCallback callback = new ReadIntoCallback();
     Future<Long> future = nettyRequest.readInto(writeChannel, callback);
     assertEquals("There should be no content", 0, writeChannel.getNextChunk().remaining());
     writeChannel.resolveOldestChunk(null);
-
     closeRequestAndValidate(nettyRequest);
     writeChannel.close();
-    verifyRefCnts(httpContents);
+    assertEquals("Reference count of http content has changed", 1, httpContent.refCnt());
     if (callback.exception != null) {
       throw callback.exception;
     }

@@ -77,6 +77,13 @@ class NettyRequest implements RestRequest {
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
    * request.
+   * <p/>
+   * Note on content size: The content size is deduced in the following order:-
+   * 1. From the {@link RestUtils.Headers#BLOB_SIZE} header.
+   * 2. If 1 fails, from the {@link HttpHeaders.Names#CONTENT_LENGTH} header.
+   * 3. If 2 fails, it is set to -1 which means that the content size is unknown.
+   * If content size is set in the header (i.e. not -1), the actual content size should match that value. Otherwise, an
+   * exception will be thrown.
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @throws IllegalArgumentException if {@code request} is null.

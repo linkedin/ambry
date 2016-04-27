@@ -57,7 +57,10 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
 
     /**
      * {@inheritDoc}
-     * Simply echoes {@code input}.
+     * On {@link RestMethod#POST}, adds a leading slash to indicate that the ID represents the path of the resource
+     * created.
+     * On any other {@link RestMethod}, removes the leading slash in order to convert the path into an ID that the
+     * {@link com.github.ambry.router.Router} will understand.
      * @param restRequest {@link RestRequest} representing the request.
      * @param input the ID that needs to be converted.
      * @param callback the {@link Callback} to invoke once the converted ID is available. Can be null.
