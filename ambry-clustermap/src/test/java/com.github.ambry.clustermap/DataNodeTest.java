@@ -23,6 +23,8 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 
@@ -58,6 +60,9 @@ class TestDataNode extends DataNode {
     if (getState() != testDataNode.getState()) {
       return false;
     }
+    if (getRackId() != testDataNode.getRackId()) {
+      return false;
+    }
     return getRawCapacityInBytes() == testDataNode.getRawCapacityInBytes();
   }
 }
@@ -90,6 +95,17 @@ public class DataNodeTest {
 
     assertEquals(dataNode.getDisks().size(), diskCount);
     assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
+
+    assertEquals(-1, dataNode.getRackId());
+
+    assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
+    assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject(), clusterMapConfig));
+
+    // Test with defined rackId
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, HardwareState.AVAILABLE, getDisks());
+    dataNode = new TestDataNode(jsonObject, clusterMapConfig);
+    assertEquals(42, dataNode.getRackId());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject(), clusterMapConfig));
@@ -148,6 +164,11 @@ public class DataNodeTest {
 
     // same port number for plain text and ssl port
     jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 6666, HardwareState.AVAILABLE, getDisks());
+    failValidation(jsonObject, clusterMapConfig);
+
+    // bad rack ID
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, -2, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
   }
 

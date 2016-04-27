@@ -40,6 +40,7 @@ import java.util.List;
 public class DataNode extends DataNodeId {
   private static final int MinPort = 1025;
   private static final int MaxPort = 65535;
+  private static final int MissingRackId = -1;
 
   private final Datacenter datacenter;
   private final String hostname;
@@ -48,6 +49,7 @@ public class DataNode extends DataNodeId {
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
+  private final long rackId;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -79,6 +81,16 @@ public class DataNode extends DataNodeId {
     this.ports = new HashMap<PortType, Integer>();
     this.ports.put(PortType.PLAINTEXT, port);
     populatePorts(jsonObject);
+
+    if (jsonObject.has("rackId")) {
+      this.rackId = jsonObject.getLong("rackId");
+      if (this.rackId < 0) {
+        throw new IllegalStateException("Invalid rackId : " + this.rackId + " is less than 0");
+      }
+    } else {
+      this.rackId = MissingRackId;
+    }
+
     validate();
   }
 
@@ -189,13 +201,18 @@ public class DataNode extends DataNodeId {
     return disks;
   }
 
+  @Override
+  public long getRackId() {
+    return rackId;
+  }
+
   protected void validateDatacenter() {
     if (datacenter == null) {
       throw new IllegalStateException("Datacenter cannot be null.");
     }
   }
 
-  protected void validateHostname() {
+  private void validateHostname() {
     String fqdn = getFullyQualifiedDomainName(hostname);
     if (!fqdn.equals(hostname)) {
       throw new IllegalStateException(
@@ -203,7 +220,7 @@ public class DataNode extends DataNodeId {
     }
   }
 
-  protected void validatePorts() {
+  private void validatePorts() {
     Set<Integer> portNumbers = new HashSet<Integer>();
     for (PortType portType : ports.keySet()) {
       int portNo = ports.get(portType);
@@ -219,7 +236,7 @@ public class DataNode extends DataNodeId {
     }
   }
 
-  protected void validate() {
+  private void validate() {
     logger.trace("begin validate.");
     validateDatacenter();
     validateHostname();
@@ -234,6 +251,9 @@ public class DataNode extends DataNodeId {
       throws JSONException {
     JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", port);
     addSSLPortToJson(jsonObject);
+    if (rackId >= 0) {
+      jsonObject.put("rackId", getRackId());
+    }
     jsonObject
         .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());
