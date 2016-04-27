@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.IdConverterFactory;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -71,8 +72,10 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       long startTimeInMs = System.currentTimeMillis();
       if (!isOpen) {
         exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
+      } else if (restRequest.getRestMethod().equals(RestMethod.POST)) {
+        convertedId = "/" + input;
       } else {
-        convertedId = input;
+        convertedId = input.startsWith("/") ? input.substring(1) : input;
       }
       futureResult.done(convertedId, exception);
       if (callback != null) {

@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -24,6 +25,7 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.utils.UtilsTest;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
+import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -47,7 +49,6 @@ public class AmbryIdConverterFactoryTest {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    IdConversionCallback callback = new IdConversionCallback();
 
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry());
@@ -55,13 +56,16 @@ public class AmbryIdConverterFactoryTest {
     assertNotNull("No IdConverter returned", idConverter);
 
     String input = UtilsTest.getRandomString(10);
-    callback.reset();
-    assertEquals("IdConverter should not have converted ID (Future)", input,
-        idConverter.convert(new MockRestRequest(MockRestRequest.DUMMY_DATA, null), input, callback).get());
-    assertEquals("IdConverter should not have converted ID (Callback)", input, callback.result);
+    // GET
+    // without leading slash
+    testConversion(idConverter, RestMethod.GET, input, input);
+    // with leading slash
+    testConversion(idConverter, RestMethod.GET, "/" + input, input);
+    // POST (no leading slash test required)
+    testConversion(idConverter, RestMethod.POST, input, "/" + input);
 
     idConverter.close();
-    callback.reset();
+    IdConversionCallback callback = new IdConversionCallback();
     try {
       idConverter.convert(new MockRestRequest(MockRestRequest.DUMMY_DATA, null), input, callback).get();
       fail("ID conversion should have failed because IdConverter is closed");
@@ -73,6 +77,26 @@ public class AmbryIdConverterFactoryTest {
       assertEquals("Unexpected RestServerErrorCode (Callback)", RestServiceErrorCode.ServiceUnavailable,
           re.getErrorCode());
     }
+  }
+
+  /**
+   * Tests the conversion by the {@code idConverter}.
+   * @param idConverter the {@link IdConverter} instance to use.
+   * @param restMethod the {@link RestMethod} of the {@link RestRequest} that will be created.
+   * @param input the input string
+   * @param expectedOutput the expected output from the {@code idConverter}.
+   * @throws Exception
+   */
+  private void testConversion(IdConverter idConverter, RestMethod restMethod, String input, String expectedOutput)
+      throws Exception {
+    JSONObject requestData = new JSONObject();
+    requestData.put(MockRestRequest.REST_METHOD_KEY, restMethod);
+    requestData.put(MockRestRequest.URI_KEY, "/");
+    RestRequest restRequest = new MockRestRequest(requestData, null);
+    IdConversionCallback callback = new IdConversionCallback();
+    assertEquals("IdConverter should not have converted ID (Future)", expectedOutput,
+        idConverter.convert(restRequest, input, callback).get());
+    assertEquals("IdConverter should not have converted ID (Callback)", expectedOutput, callback.result);
   }
 
   /**

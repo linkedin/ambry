@@ -451,17 +451,16 @@ public class RestUtilsTest {
     String[] noOpUris = {"", "/"};
     for (String uri : noOpUris) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
-      assertEquals("Unexpected operation/blob id in " + uri, "", RestUtils.getOperationOrBlobIdFromUri(restRequest));
+      assertEquals("Unexpected operation/blob id in " + uri, uri, RestUtils.getOperationOrBlobIdFromUri(restRequest));
     }
 
     // valid operation
-    String expectedOperationOrBlobId = "expectedOp";
-    String[] validOpUris = {"/" + expectedOperationOrBlobId,
-        "/" + expectedOperationOrBlobId + "/random/extra", expectedOperationOrBlobId,
-        expectedOperationOrBlobId + "/random/extra"};
+    String baseId = "expectedOp";
+    String[] validOpUris = {"/" + baseId, "/" + baseId + "/random/extra", baseId, baseId + "/random/extra"};
     for (String uri : validOpUris) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
-      assertEquals("Unexpected operation/blob id in " + uri, expectedOperationOrBlobId,
+      String expectedId = uri.startsWith("/") ? "/" + baseId : baseId;
+      assertEquals("Unexpected operation/blob id in " + uri, expectedId,
           RestUtils.getOperationOrBlobIdFromUri(restRequest));
     }
   }

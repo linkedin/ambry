@@ -264,7 +264,6 @@ public class NettyMultipartRequestTest {
     files[0] = new InMemoryFile("Part-1", ByteBuffer.wrap(RestTestUtils.getRandomBytes(256)));
     files[1] = new InMemoryFile("Part-1", ByteBuffer.wrap(RestTestUtils.getRandomBytes(256)));
     request = createRequest(null, files);
-    assertEquals("Request size does not match", 0, request.getSize());
     try {
       request.prepare();
       fail("Prepare should have failed because there was more than one part named Part-1");
