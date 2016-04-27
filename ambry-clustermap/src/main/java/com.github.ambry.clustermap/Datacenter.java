@@ -102,18 +102,20 @@ public class Datacenter {
   }
 
   /**
-   * Checks if the datacenter is rack aware or not by verifying that either all nodes have defined rack IDs or
-   * none do.  Assigns the {@code rackAware} flag accordingly.
+   * A datacenter can be marked as rack-aware if all nodes have defined rack IDs. This method throws an exception
+   * if some nodes have rack IDs and some do not.  It also sets the {@code rackAware} flag to {@code true} if all
+   * nodes have rack IDs.
    *
-   * @throws IllegalStateException if nodes do not all have defined rack IDs or none at all
+   * @throws IllegalStateException if some nodes have defined rack IDs and some do not.
    */
-  protected void validateRackAwareness() {
+  private void validateRackAwareness() {
     if (dataNodes.size() > 0) {
       Iterator<DataNode> dataNodeIter = dataNodes.iterator();
       boolean hasRackId = (dataNodeIter.next().getRackId() >= 0);
       while (dataNodeIter.hasNext()) {
         if (hasRackId != (dataNodeIter.next().getRackId() >= 0)) {
-          throw new IllegalStateException("dataNodes in datacenter must all have defined rack IDs or none at all");
+          throw new IllegalStateException("dataNodes in datacenter: " + name
+              + " must all have defined rack IDs or none at all");
         }
       }
       this.rackAware = hasRackId;

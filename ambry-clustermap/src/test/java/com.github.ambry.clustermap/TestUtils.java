@@ -94,7 +94,19 @@ public class TestUtils {
     return jsonObject;
   }
 
-  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, int rackId,
+  /**
+   * Generate a JSON data node object with a defined {@code rackId}.
+   *
+   * @param hostname the hostname for the node
+   * @param port the plaintext port number for the node
+   * @param sslPort the ssl port number for the node
+   * @param rackId the rack ID for the node
+   * @param hardwareState A {@link HardwareState} value for the node
+   * @param disks an array of disks belonging to the node
+   * @return a {@link JSONObject) representing the node with the properties passed into the function
+   * @throws JSONException
+   */
+  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, long rackId,
       HardwareState hardwareState, JSONArray disks)
       throws JSONException {
     JSONObject jsonObject = new JSONObject();
@@ -129,7 +141,19 @@ public class TestUtils {
     return jsonArray;
   }
 
-  // assigns rackId for each DataNode
+  /**
+   * Generates an array of JSON data node objects, each with a unique, defined rack ID.
+   * Increments basePort and sslPort for each node to ensure unique DataNode given same hostname.
+   *
+   * @param dataNodeCount how many data nodes to generate
+   * @param hostname the hostname for each node in the array
+   * @param basePort the starting standard port number for nodes generated
+   * @param sslPort the starting SSL port number for nodes generated
+   * @param hardwareState a {@link HardwareLayout} value for each node
+   * @param disks a {@link JSONArray} of disks for each node
+   * @return a {@link JSONArray} of nodes
+   * @throws JSONException
+   */
   public static JSONArray getJsonArrayDataNodesRackAware(int dataNodeCount, String hostname, int basePort, int sslPort,
       HardwareState hardwareState, JSONArray disks)
       throws JSONException {
@@ -140,7 +164,21 @@ public class TestUtils {
     return jsonArray;
   }
 
-  // assigns rackId for DataNodes with even indexes (0,2,4 ...)
+  /**
+   * Generates an array of JSON data node objects.
+   * The nodes at even indices in the array will have unique, defined rack IDs, while the ones
+   * at odd indices will have undefined rack IDs.
+   * Increments basePort and sslPort for each node to ensure unique DataNode given same hostname.
+   *
+   * @param dataNodeCount how many data nodes to generate
+   * @param hostname the hostname for each node in the array
+   * @param basePort the starting standard port number for nodes generated
+   * @param sslPort the starting SSL port number for nodes generated
+   * @param hardwareState a {@link HardwareLayout} value for each node
+   * @param disks a {@link JSONArray} of disks for each node
+   * @return a {@link JSONArray} of nodes
+   * @throws JSONException
+   */
   public static JSONArray getJsonArrayDataNodesPartiallyRackAware(int dataNodeCount, String hostname, int basePort,
       int sslPort, HardwareState hardwareState, JSONArray disks)
       throws JSONException {
