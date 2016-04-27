@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,42 +17,46 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.InvocationOptions;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.util.Properties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
- * Ambry main
+ * Start point for creating an instance of {@link AmbryServer} and starting/shutting it down.
  */
 public class AmbryMain {
-  public static void main(String args[]) {
-    if (args.length != 3) {
-      System.out.println("USAGE: java [options] " + AmbryMain.class.getCanonicalName() +
-          " server.properties hardwarelayout partitionlayout");
-      System.exit(1);
-    }
+  private static Logger logger = LoggerFactory.getLogger(AmbryMain.class);
 
+  public static void main(String[] args) {
+    final AmbryServer ambryServer;
+    int exitCode = 0;
     try {
-      Properties props = Utils.loadProps(args[0]);
-      VerifiableProperties vprops = new VerifiableProperties(props);
-
-      ClusterMap clusterMap = new ClusterMapManager(args[1], args[2], new ClusterMapConfig(vprops));
-
-      final AmbryServer server = new AmbryServer(vprops, clusterMap, SystemTime.getInstance());
-
+      final InvocationOptions options = new InvocationOptions(args);
+      final Properties properties = Utils.loadProps(options.serverPropsFilePath);
+      final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+      final ClusterMap clusterMap =
+          new ClusterMapManager(options.hardwareLayoutFilePath, options.partitionLayoutFilePath,
+              new ClusterMapConfig(verifiableProperties));
+      logger.info("Bootstrapping AmbryServer");
+      ambryServer = new AmbryServer(verifiableProperties, clusterMap, SystemTime.getInstance());
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
-          server.shutdown();
+          logger.info("Received shutdown signal. Shutting down AmbryServer");
+          ambryServer.shutdown();
         }
       });
-
-      server.startup();
-      server.awaitShutdown();
+      ambryServer.startup();
+      ambryServer.awaitShutdown();
     } catch (Exception e) {
-      System.out.println("error " + e);
+      logger.error("Exception during bootstrap of AmbryServer", e);
+      exitCode = 1;
     }
-    System.exit(0);
+    logger.info("Exiting AmbryMain");
+    System.exit(exitCode);
   }
 }
