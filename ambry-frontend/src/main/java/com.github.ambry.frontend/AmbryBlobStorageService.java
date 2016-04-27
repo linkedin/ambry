@@ -610,9 +610,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                     logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
                     router.getBlob(blobId, new GetCallback(restRequest, restResponseChannel));
                   } else {
-                    // TODO: if old style, make RestUtils.getUserMetadata() just return null.
                     Map<String, String> userMetadata = RestUtils.buildUserMetadata(routerResult.getUserMetadata());
-                    if (shouldSendMetadataAsContent(userMetadata)) {
+                    if (userMetadata == null) {
                       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
                       restResponseChannel
                           .setHeader(RestUtils.Headers.CONTENT_LENGTH, routerResult.getUserMetadata().length);
@@ -660,24 +659,6 @@ class AmbryBlobStorageService implements BlobStorageService {
      */
     void markStartTime() {
       callbackTracker.markOperationStart();
-    }
-
-    /**
-     * Determines if user metadata should be sent as content by looking for any keys that are prefixed with
-     * {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
-     * @param userMetadata the user metadata that was constructed from the byte stream.
-     * @return {@code true} if any key is prefixed with {@link RestUtils.Headers#USER_META_DATA_OLD_STYLE_PREFIX}.
-     *         {@code false} otherwise.
-     */
-    private boolean shouldSendMetadataAsContent(Map<String, String> userMetadata) {
-      boolean shouldSendAsContent = false;
-      for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
-        if (entry.getKey().startsWith(RestUtils.Headers.USER_META_DATA_OLD_STYLE_PREFIX)) {
-          shouldSendAsContent = true;
-          break;
-        }
-      }
-      return shouldSendAsContent;
     }
 
     /**
