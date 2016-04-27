@@ -254,7 +254,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Tests getting back user metadata (old style) from byte array
+   * Tests deserializing user metadata from byte array
    * @throws Exception
    */
   @Test
@@ -404,10 +404,10 @@ public class RestUtilsTest {
     byteBuffer.putLong(crc32.getValue());
     userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
     assertEquals("Sizes don't match ", userMetadataMap.size(), 1);
-    assertTrue("User metadata " + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1 not found in user metadata ",
-        userMetadataMap.containsKey(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1"));
-    assertEquals("User metadata " + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1 value don't match ", value,
-        userMetadataMap.get(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1"));
+    assertTrue("User metadata " + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + key + " not found in user metadata ",
+        userMetadataMap.containsKey(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + key));
+    assertEquals("User metadata " + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + key + " value don't match ", value,
+        userMetadataMap.get(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + key));
   }
 
   /**

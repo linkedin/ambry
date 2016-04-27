@@ -282,10 +282,10 @@ public class RestUtils {
   }
 
   /**
-   * Fetches user metadata from the byte array for new style user metadata
+   * Gets deserialized metadata from the byte array if possible
    * @param userMetadata the byte array which has the user metadata
    * @return Map<String,String> the user metadata that is read from the byte array, or {@code null} incase
-   * the {@code userMetadata} cannot be parsed in the expected format
+   * the {@code userMetadata} cannot be parsed in expected format
    */
   public static Map<String, String> buildUserMetadata(byte[] userMetadata)
       throws RestServiceException {
