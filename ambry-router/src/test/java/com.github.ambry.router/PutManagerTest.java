@@ -643,7 +643,7 @@ public class PutManagerTest {
   private void assertSuccess()
       throws Exception {
     // Go through all the requests received by all the servers and ensure that all requests for the same blob id are
-    // identical. In the process also fill in the map of originalBlobId to serializedPutRequests.
+    // identical. In the process also fill in the map of blobId to serializedPutRequests.
     HashMap<String, ByteBuffer> allChunks = new HashMap<String, ByteBuffer>();
     for (MockServer mockServer : mockServerLayout.getMockServers()) {
       for (Map.Entry<String, ByteBuffer> blobEntry : mockServer.getBlobs().entrySet()) {
@@ -661,7 +661,7 @@ public class PutManagerTest {
     for (RequestAndResult requestAndResult : requestAndResultsList) {
       String blobId = requestAndResult.result.result();
       Exception exception = requestAndResult.result.error();
-      Assert.assertNotNull("originalBlobId should not be null", blobId);
+      Assert.assertNotNull("blobId should not be null", blobId);
       Assert.assertNull("exception should be null", exception);
       verifyBlob(blobId, requestAndResult.putContent, allChunks);
     }
@@ -670,7 +670,7 @@ public class PutManagerTest {
   /**
    * Verifies that the blob associated with the blob id returned by a successful put operation has exactly the same
    * data as the original object that was put.
-   * @param blobId the originalBlobId of the blob that is to be verified.
+   * @param blobId the blobId of the blob that is to be verified.
    * @param serializedRequests the mapping from blob ids to their corresponding serialized {@link PutRequest}.
    */
 
@@ -741,7 +741,7 @@ public class PutManagerTest {
     for (RequestAndResult requestAndResult : requestAndResultsList) {
       String blobId = requestAndResult.result.result();
       Exception exception = requestAndResult.result.error();
-      Assert.assertNull("originalBlobId should be null", blobId);
+      Assert.assertNull("blobId should be null", blobId);
       Assert.assertNotNull("exception should not be null", exception);
       Assert.assertTrue("Exception received should be the expected Exception",
           exceptionsAreEqual(expectedException, exception));

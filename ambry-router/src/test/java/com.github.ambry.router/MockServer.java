@@ -42,7 +42,7 @@ class MockServer {
   private LinkedList<ServerErrorCode> putErrors = new LinkedList<ServerErrorCode>();
   private final Map<String, ByteBuffer> blobs = new ConcurrentHashMap<String, ByteBuffer>();
   private final HashMap<String, ServerErrorCode> blobIdToServerErrorCode = new HashMap<String, ServerErrorCode>();
-  private boolean ifServerRespondToDelete = true;
+  private boolean shouldRespond = true;
 
   /**
    * Take in a request in the form of {@link Send} and return a response in the form of a
@@ -54,6 +54,9 @@ class MockServer {
   public MockBoundedByteBufferReceive send(Send send)
       throws IOException {
     RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
+    if (!shouldRespond) {
+      return null;
+    }
     switch (type) {
       case PutRequest:
         PutRequest putRequest = (PutRequest) send;
@@ -78,9 +81,6 @@ class MockServer {
             }.getPayload());
 
       case DeleteRequest:
-        if(!ifServerRespondToDelete) {
-          return null;
-        }
         final DeleteRequest deleteRequest = (DeleteRequest) send;
         final String blobIdString = deleteRequest.getBlobId().getID();
         final ServerErrorCode error = getErrorFromBlobIdStr(blobIdString);
@@ -159,19 +159,20 @@ class MockServer {
 
   /**
    * Set whether or not the server would send response back.
-   * @param ifServerRespondToDelete {@code true} if the server responds.
+   * @param shouldRespond {@code true} if the server responds.
    */
-  public void setIfServerRespondToDelete(boolean ifServerRespondToDelete) {
-    this.ifServerRespondToDelete = ifServerRespondToDelete;
+  public void setShouldRespond (boolean shouldRespond) {
+    this.shouldRespond = shouldRespond;
   }
 
   /**
    * Get the pre-defined {@link ServerErrorCode} that this server should return for a given {@code blobIdString}.
    * @param blobIdString The blob for which a {@link ServerErrorCode} needs to be returned.
-   * @return A {@code ServerErrorCode} if it is preset. Otherwise {@code ServerErrorCode.Blob_Not_Found}.
+   * @return A {@code ServerErrorCode} if it is present. Otherwise {@code ServerErrorCode.Blob_Not_Found}.
    */
   public ServerErrorCode getErrorFromBlobIdStr(String blobIdString) {
-    return blobIdToServerErrorCode.containsKey(blobIdString)? blobIdToServerErrorCode.get(blobIdString) : ServerErrorCode.Blob_Not_Found;
+    return blobIdToServerErrorCode.containsKey(blobIdString) ? blobIdToServerErrorCode.get(blobIdString)
+        : ServerErrorCode.Blob_Not_Found;
   }
 
   /**
@@ -179,7 +180,7 @@ class MockServer {
    * @param blobIdString The key in this mapping relation.
    * @param code The {@link ServerErrorCode} for the {@code blobIdString}.
    */
-  public void setBlobIdToServerErrorCode (String blobIdString, ServerErrorCode code) {
+  public void setBlobIdToServerErrorCode(String blobIdString, ServerErrorCode code) {
     blobIdToServerErrorCode.put(blobIdString, code);
   }
 }
