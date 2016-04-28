@@ -249,6 +249,21 @@ public final class ServerTestUtil {
         Assert.assertEquals(false, true);
       }
 
+      // get blob info
+      GetRequest getRequest3 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOptions.None);
+      channel.send(getRequest3);
+      stream = channel.receive().getInputStream();
+      GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      InputStream responseStream = resp3.getInputStream();
+      // verify blob properties.
+      BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(responseStream);
+      Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
+      Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+      // verify user metadata
+      ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(responseStream);
+      Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
+
       try {
         // get blob data
         // Use coordinator to get the blob

@@ -156,9 +156,8 @@ public class MessageFormatSendTest {
         send2.writeTo(channel2);
       }
 
-      for (int i = 6; i < 102; i++) {
-        Assert.assertEquals(usermetadata[i - 6], bufresult.array()[i]);
-      }
+      bufresult.flip();
+      verifyBlobUserMetadata(usermetadata, bufresult);
 
       // get blob properties
       MessageFormatSend send3 =
@@ -171,19 +170,50 @@ public class MessageFormatSendTest {
       }
 
       bufresult.flip();
-      Assert.assertEquals(bufresult.getShort(), (short) 1);
-      byte[] attributes = new byte[3];
-      bufresult.get(attributes);
-      Assert.assertEquals("ttl", new String(attributes));
-      Assert.assertEquals(12345, bufresult.getLong());
-      bufresult.get(attributes);
-      Assert.assertEquals("del", new String(attributes));
-      Assert.assertEquals(1, bufresult.get());
-      Assert.assertEquals(456, bufresult.getInt());
+      verifyBlobProperties(bufresult);
+
+      // get blob info
+      MessageFormatSend send4 =
+          new MessageFormatSend(readSet, MessageFormatFlags.BlobInfo, metrics, new MockIdFactory());
+      Assert.assertEquals(send4.sizeInBytes(), 110 + 21);
+      bufresult.clear();
+      WritableByteChannel channel5 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
+      while (!send4.isSendComplete()) {
+        send4.writeTo(channel4);
+      }
+
+      bufresult.flip();
+      verifyBlobProperties(bufresult);
+      verifyBlobUserMetadata(usermetadata, bufresult);
     } catch (MessageFormatException e) {
       e.printStackTrace();
       Assert.assertEquals(true, false);
     }
+  }
+
+  private void verifyBlobProperties(ByteBuffer bufresult) {
+    Assert.assertEquals(bufresult.getShort(), (short) 1);
+    byte[] attributes = new byte[3];
+    bufresult.get(attributes);
+    Assert.assertEquals("ttl", new String(attributes));
+    Assert.assertEquals(12345, bufresult.getLong());
+    bufresult.get(attributes);
+    Assert.assertEquals("del", new String(attributes));
+    Assert.assertEquals(1, bufresult.get());
+    Assert.assertEquals(456, bufresult.getInt());
+  }
+
+  private void verifyBlobUserMetadata(byte[] usermetadata, ByteBuffer result) {
+    // version
+    Assert.assertEquals(result.getShort(), 1);
+    // size
+    Assert.assertEquals(result.getInt(), 100);
+    // content
+    for (int i = 0; i < 100; i++) {
+      Assert.assertEquals(usermetadata[i], result.get());
+    }
+    // crc
+    Assert.assertEquals(result.getInt(), 123);
   }
 
   @Test
