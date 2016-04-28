@@ -369,10 +369,10 @@ public class RestUtils {
    */
   public static String getOperationOrBlobIdFromUri(RestRequest restRequest) {
     String path = restRequest.getPath();
-    int startIndex = path.startsWith("/") ? 1 : 0;
-    int endIndex = path.indexOf("/", startIndex);
+    int searchStartIndex = path.startsWith("/") ? 1 : 0;
+    int endIndex = path.indexOf("/", searchStartIndex);
     endIndex = endIndex > 0 ? endIndex : path.length();
-    return path.substring(startIndex, endIndex);
+    return path.substring(0, endIndex);
   }
 
   /**
