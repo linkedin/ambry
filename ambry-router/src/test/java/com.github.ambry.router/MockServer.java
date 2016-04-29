@@ -16,6 +16,8 @@ package com.github.ambry.router;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.network.BoundedByteBufferReceive;
 import com.github.ambry.network.Send;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -25,6 +27,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +41,8 @@ class MockServer {
   private ServerErrorCode hardError = null;
   private LinkedList<ServerErrorCode> putErrors = new LinkedList<ServerErrorCode>();
   private final Map<String, ByteBuffer> blobs = new ConcurrentHashMap<String, ByteBuffer>();
+  private final HashMap<String, ServerErrorCode> blobIdToServerErrorCode = new HashMap<String, ServerErrorCode>();
+  private boolean shouldRespond = true;
 
   /**
    * Take in a request in the form of {@link Send} and return a response in the form of a
@@ -49,6 +54,9 @@ class MockServer {
   public MockBoundedByteBufferReceive send(Send send)
       throws IOException {
     RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
+    if (!shouldRespond) {
+      return null;
+    }
     switch (type) {
       case PutRequest:
         PutRequest putRequest = (PutRequest) send;
@@ -68,6 +76,25 @@ class MockServer {
                 dStream.writeInt(correlationId);
                 dStream.writeInt(0); // avoiding adding clientId
                 dStream.writeShort((short) putError.ordinal());
+                return ByteBuffer.wrap(bStream.toByteArray());
+              }
+            }.getPayload());
+
+      case DeleteRequest:
+        final DeleteRequest deleteRequest = (DeleteRequest) send;
+        final String blobIdString = deleteRequest.getBlobId().getID();
+        final ServerErrorCode error = getErrorFromBlobIdStr(blobIdString);
+        return new MockBoundedByteBufferReceive(
+            new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error) {
+              ByteBuffer getPayload()
+                  throws IOException {
+                ByteArrayOutputStream bStream = new ByteArrayOutputStream();
+                DataOutputStream dStream = new DataOutputStream(bStream);
+                dStream.writeShort((short) RequestOrResponseType.DeleteResponse.ordinal());
+                dStream.writeShort(versionId);
+                dStream.writeInt(correlationId);
+                dStream.writeInt(0); // avoiding adding clientId
+                dStream.writeShort((short) error.ordinal());
                 return ByteBuffer.wrap(bStream.toByteArray());
               }
             }.getPayload());
@@ -128,6 +155,33 @@ class MockServer {
   public void resetPutErrors() {
     this.putErrors.clear();
     this.hardError = null;
+  }
+
+  /**
+   * Set whether or not the server would send response back.
+   * @param shouldRespond {@code true} if the server responds.
+   */
+  public void setShouldRespond (boolean shouldRespond) {
+    this.shouldRespond = shouldRespond;
+  }
+
+  /**
+   * Get the pre-defined {@link ServerErrorCode} that this server should return for a given {@code blobIdString}.
+   * @param blobIdString The blob for which a {@link ServerErrorCode} needs to be returned.
+   * @return A {@code ServerErrorCode} if it is present. Otherwise {@code ServerErrorCode.Blob_Not_Found}.
+   */
+  public ServerErrorCode getErrorFromBlobIdStr(String blobIdString) {
+    return blobIdToServerErrorCode.containsKey(blobIdString) ? blobIdToServerErrorCode.get(blobIdString)
+        : ServerErrorCode.Blob_Not_Found;
+  }
+
+  /**
+   * Set the mapping relationship between a {@code blobIdString} and the {@link ServerErrorCode} this server should return.
+   * @param blobIdString The key in this mapping relation.
+   * @param code The {@link ServerErrorCode} for the {@code blobIdString}.
+   */
+  public void setBlobIdToServerErrorCode(String blobIdString, ServerErrorCode code) {
+    blobIdToServerErrorCode.put(blobIdString, code);
   }
 }
 
