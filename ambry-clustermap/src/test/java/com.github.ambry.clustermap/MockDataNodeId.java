@@ -22,17 +22,18 @@ import java.util.Map;
 
 
 public class MockDataNodeId extends DataNodeId {
-  int port;
-  Map<PortType, Integer> ports;
+  int portNum;
+  Map<PortType, Port> ports;
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
   long rackId = -1;
+  ArrayList<String> sslEnabledDataCenters = new ArrayList<String>();
 
   public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
-    this.ports = new HashMap<PortType, Integer>();
+    this.ports = new HashMap<PortType, Port>();
     populatePorts(ports);
   }
 
@@ -46,9 +47,9 @@ public class MockDataNodeId extends DataNodeId {
     for (Port port : ports) {
       if (port.getPortType() == PortType.PLAINTEXT) {
         plainTextPortFound = true;
-        this.port = port.getPort();
+        this.portNum = port.getPort();
       }
-      this.ports.put(port.getPortType(), port.getPort());
+      this.ports.put(port.getPortType(), port);
     }
     if (!plainTextPortFound) {
       throw new IllegalArgumentException("No Plain Text port found");
@@ -62,15 +63,15 @@ public class MockDataNodeId extends DataNodeId {
 
   @Override
   public int getPort() {
-    return port;
+    return portNum;
   }
 
   @Override
   public int getSSLPort() {
     if (hasSSLPort()) {
-      return ports.get(PortType.SSL);
+      return ports.get(PortType.SSL).getPort();
     }
-    throw new IllegalArgumentException("No SSL port exists for the datanode " + hostname + ":" + port);
+    throw new IllegalArgumentException("No SSL port exists for the datanode " + hostname + ":" + portNum);
   }
 
   @Override
@@ -83,15 +84,28 @@ public class MockDataNodeId extends DataNodeId {
   }
 
   @Override
+  @Deprecated
   public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
     if (sslEnabledDataCenters.contains(datacenter)) {
       if (ports.containsKey(PortType.SSL)) {
-        return new Port(ports.get(PortType.SSL), PortType.SSL);
+        return ports.get(PortType.SSL);
       } else {
-        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + port);
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
       }
     }
-    return new Port(port, PortType.PLAINTEXT);
+    return new Port(portNum, PortType.PLAINTEXT);
+  }
+
+  @Override
+  public Port getPortToConnectTo() {
+    if (sslEnabledDataCenters.contains(datacenter)) {
+      if (ports.containsKey(PortType.SSL)) {
+        return ports.get(PortType.SSL);
+      } else {
+        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
+      }
+    }
+    return new Port(portNum, PortType.PLAINTEXT);
   }
 
   @Override
@@ -124,7 +138,7 @@ public class MockDataNodeId extends DataNodeId {
 
     MockDataNodeId dataNode = (MockDataNodeId) o;
 
-    if (port != dataNode.port) {
+    if (portNum != dataNode.portNum) {
       return false;
     }
     return hostname.equals(dataNode.hostname);
@@ -133,7 +147,7 @@ public class MockDataNodeId extends DataNodeId {
   @Override
   public int hashCode() {
     int result = hostname.hashCode();
-    result = 31 * result + port;
+    result = 31 * result + portNum;
     return result;
   }
 
@@ -144,7 +158,7 @@ public class MockDataNodeId extends DataNodeId {
     }
 
     MockDataNodeId other = (MockDataNodeId) o;
-    int compare = (port < other.port) ? -1 : ((port == other.port) ? 0 : 1);
+    int compare = (portNum < other.portNum) ? -1 : ((portNum == other.portNum) ? 0 : 1);
     if (compare == 0) {
       compare = hostname.compareTo(other.hostname);
     }

@@ -1657,7 +1657,13 @@ public class OperationPolicyTest {
     }
 
     @Override
+    @Deprecated
     public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
+      return new Port(0, PortType.PLAINTEXT);
+    }
+
+    @Override
+    public Port getPortToConnectTo() {
       return new Port(0, PortType.PLAINTEXT);
     }
 

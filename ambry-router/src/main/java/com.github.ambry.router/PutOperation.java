@@ -25,7 +25,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
@@ -641,7 +640,7 @@ class PutOperation {
       while (replicaIterator.hasNext()) {
         ReplicaId replicaId = replicaIterator.next();
         String hostname = replicaId.getDataNodeId().getHostname();
-        Port port = new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
+        Port port = replicaId.getDataNodeId().getPortToConnectTo();
         PutRequest putRequest = createPutRequest();
         RequestInfo request = new RequestInfo(hostname, port, putRequest);
         int correlationId = putRequest.getCorrelationId();

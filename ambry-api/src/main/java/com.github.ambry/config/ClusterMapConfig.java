@@ -58,6 +58,13 @@ public class ClusterMapConfig {
   @Default("10 * 60 * 1000")
   public final int clusterMapFixedTimeoutDiskRetryBackoffMs;
 
+  /**
+   * List of Datacenters to which local node needs SSL encryption to communicate
+   */
+  @Config("clustermap.ssl.enabled.datacenters")
+  @Default("")
+  public final String clusterMapSslEnabledDatacenters;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapResourceStatePolicyFactory = verifiableProperties.getString("clustermap.resourcestatepolicy.factory",
         "com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory");
@@ -69,5 +76,6 @@ public class ClusterMapConfig {
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.error.threshold", 1, 1, 100);
     clusterMapFixedTimeoutDiskRetryBackoffMs = verifiableProperties
         .getIntInRange("clustermap.fixedtimeout.disk.retry.backoff.ms", 10 * 60 * 1000, 1, 30 * 60 * 1000);
+    clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
   }
 }
