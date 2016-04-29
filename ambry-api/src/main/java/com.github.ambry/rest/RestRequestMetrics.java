@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,9 @@
  */
 package com.github.ambry.rest;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 
 
@@ -24,29 +26,33 @@ import com.codahale.metrics.MetricRegistry;
  * used to track all requests of that type.
  */
 public class RestRequestMetrics {
-  protected static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTimeInMs";
-  protected static final String NIO_RESPONSE_PROCESSING_TIME_SUFFIX = "NioResponseProcessingTimeInMs";
-  protected static final String NIO_ROUND_TRIP_TIME_SUFFIX = "NioRoundTripTimeInMs";
+  static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTimeInMs";
+  static final String NIO_RESPONSE_PROCESSING_TIME_SUFFIX = "NioResponseProcessingTimeInMs";
+  static final String NIO_ROUND_TRIP_TIME_SUFFIX = "NioRoundTripTimeInMs";
 
-  protected static final String SC_REQUEST_PROCESSING_TIME_SUFFIX = "ScRequestProcessingTimeInMs";
-  protected static final String SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX = "ScRequestProcessingWaitTimeInMs";
-  protected static final String SC_RESPONSE_PROCESSING_TIME_SUFFIX = "ScResponseProcessingTimeInMs";
-  protected static final String SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX = "ScResponseProcessingWaitTimeInMs";
-  protected static final String SC_ROUND_TRIP_TIME_SUFFIX = "ScRoundTripTimeInMs";
+  static final String SC_REQUEST_PROCESSING_TIME_SUFFIX = "ScRequestProcessingTimeInMs";
+  static final String SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX = "ScRequestProcessingWaitTimeInMs";
+  static final String SC_RESPONSE_PROCESSING_TIME_SUFFIX = "ScResponseProcessingTimeInMs";
+  static final String SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX = "ScResponseProcessingWaitTimeInMs";
+  static final String SC_ROUND_TRIP_TIME_SUFFIX = "ScRoundTripTimeInMs";
 
-  protected static final String TOTAL_CPU_TIME_SUFFIX = "TotalCpuTimeInMs";
+  static final String TOTAL_CPU_TIME_SUFFIX = "TotalCpuTimeInMs";
+  static final String OPERATION_RATE_SUFFIX = "Rate";
+  static final String OPERATION_ERROR_SUFFIX = "Error";
 
-  protected final Histogram nioRequestProcessingTimeInMs;
-  protected final Histogram nioResponseProcessingTimeInMs;
-  protected final Histogram nioRoundTripTimeInMs;
+  final Histogram nioRequestProcessingTimeInMs;
+  final Histogram nioResponseProcessingTimeInMs;
+  final Histogram nioRoundTripTimeInMs;
 
-  protected final Histogram scRequestProcessingTimeInMs;
-  protected final Histogram scRequestProcessingWaitTimeInMs;
-  protected final Histogram scResponseProcessingTimeInMs;
-  protected final Histogram scResponseProcessingWaitTimeInMs;
-  protected final Histogram scRoundTripTimeInMs;
+  final Histogram scRequestProcessingTimeInMs;
+  final Histogram scRequestProcessingWaitTimeInMs;
+  final Histogram scResponseProcessingTimeInMs;
+  final Histogram scResponseProcessingWaitTimeInMs;
+  final Histogram scRoundTripTimeInMs;
 
-  protected final Histogram totalCpuTimeInMs;
+  final Histogram totalCpuTimeInMs;
+  final Meter operationRate;
+  final Counter operationError;
 
   /**
    * Creates an instance of RestRequestMetrics for {@code requestType} and attaches all the metrics related to the
@@ -81,5 +87,7 @@ public class RestRequestMetrics {
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_ROUND_TRIP_TIME_SUFFIX));
 
     totalCpuTimeInMs = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + TOTAL_CPU_TIME_SUFFIX));
+    operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
+    operationError = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX));
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,12 +27,18 @@ public class MockDataNodeId extends DataNodeId {
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
+  long rackId = -1;
 
   public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
     this.ports = new HashMap<PortType, Integer>();
     populatePorts(ports);
+  }
+
+  public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter, int rackId) {
+    this(ports, mountPaths, dataCenter);
+    this.rackId = rackId;
   }
 
   private void populatePorts(ArrayList<Port> ports) {
@@ -96,6 +102,11 @@ public class MockDataNodeId extends DataNodeId {
   @Override
   public HardwareState getState() {
     return HardwareState.AVAILABLE;
+  }
+
+  @Override
+  public long getRackId() {
+    return rackId;
   }
 
   public List<String> getMountPaths() {

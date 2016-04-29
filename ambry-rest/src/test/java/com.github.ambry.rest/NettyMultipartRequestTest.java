@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -264,7 +264,6 @@ public class NettyMultipartRequestTest {
     files[0] = new InMemoryFile("Part-1", ByteBuffer.wrap(RestTestUtils.getRandomBytes(256)));
     files[1] = new InMemoryFile("Part-1", ByteBuffer.wrap(RestTestUtils.getRandomBytes(256)));
     request = createRequest(null, files);
-    assertEquals("Request size does not match", 0, request.getSize());
     try {
       request.prepare();
       fail("Prepare should have failed because there was more than one part named Part-1");

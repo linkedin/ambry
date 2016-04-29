@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,7 +42,6 @@ import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Random;
@@ -352,6 +351,8 @@ public class AdminIntegrationTest {
     checkCommonGetHeadHeaders(response.headers(), expectedHeaders);
     assertEquals("Content-Length does not match blob size",
         Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)), HttpHeaders.getContentLength(response));
+    assertEquals("Blob size does not match", expectedHeaders.get(RestUtils.Headers.BLOB_SIZE),
+        HttpHeaders.getHeader(response, RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match", expectedHeaders.get(RestUtils.Headers.SERVICE_ID),
         HttpHeaders.getHeader(response, RestUtils.Headers.SERVICE_ID));
     assertEquals(RestUtils.Headers.PRIVATE + " does not match", expectedHeaders.get(RestUtils.Headers.PRIVATE),
@@ -368,22 +369,6 @@ public class AdminIntegrationTest {
     if (expectedHeaders.contains(RestUtils.Headers.OWNER_ID)) {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match", expectedHeaders.get(RestUtils.Headers.OWNER_ID),
           HttpHeaders.getHeader(response, RestUtils.Headers.OWNER_ID));
-    }
-    verifyUserMetadataHeaders(expectedHeaders, response);
-  }
-
-  /**
-   * Verifies User metadata headers from output, to that sent in during input
-   * @param expectedHeaders the expected headers in the response.
-   * @param response the {@link HttpResponse} which contains the headers of the response.
-   */
-  private void verifyUserMetadataHeaders(HttpHeaders expectedHeaders, HttpResponse response) {
-    for (Map.Entry<String, String> header : expectedHeaders) {
-      String key = header.getKey();
-      if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
-        assertEquals("Value for " + key + "does not match in user metadata", header.getValue(),
-            HttpHeaders.getHeader(response, key));
-      }
     }
   }
 

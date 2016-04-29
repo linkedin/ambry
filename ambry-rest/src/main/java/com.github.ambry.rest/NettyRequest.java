@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,6 +50,8 @@ import org.slf4j.LoggerFactory;
  * A wrapper over {@link HttpRequest} and all the {@link HttpContent} associated with the request.
  */
 class NettyRequest implements RestRequest {
+  private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
+
   protected final HttpRequest request;
   protected final NettyMetrics nettyMetrics;
   protected final Map<String, Object> allArgs = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
@@ -64,15 +66,24 @@ class NettyRequest implements RestRequest {
   private final RestMethod restMethod;
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final AtomicLong bytesReceived = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private volatile AsyncWritableChannel writeChannel = null;
+  private volatile Exception channelException = CLOSED_CHANNEL_EXCEPTION;
 
   protected static String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
 
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
    * request.
+   * <p/>
+   * Note on content size: The content size is deduced in the following order:-
+   * 1. From the {@link RestUtils.Headers#BLOB_SIZE} header.
+   * 2. If 1 fails, from the {@link HttpHeaders.Names#CONTENT_LENGTH} header.
+   * 3. If 2 fails, it is set to -1 which means that the content size is unknown.
+   * If content size is set in the header (i.e. not -1), the actual content size should match that value. Otherwise, an
+   * exception will be thrown.
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @throws IllegalArgumentException if {@code request} is null.
@@ -106,7 +117,7 @@ class NettyRequest implements RestRequest {
     if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
       size = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
     } else {
-      size = HttpHeaders.getContentLength(request, 0);
+      size = HttpHeaders.getContentLength(request, -1);
     }
 
     // query params.
@@ -158,30 +169,6 @@ class NettyRequest implements RestRequest {
     allArgsReadOnly = Collections.unmodifiableMap(allArgs);
   }
 
-  /**
-   * Converts the Set of {@link javax.servlet.http.Cookie}s to equivalent {@link javax.servlet.http.Cookie}s
-   * @param httpCookies Set of {@link javax.servlet.http.Cookie}s that needs to be converted
-   * @return Set of {@link javax.servlet.http.Cookie}s equivalent to the passed in {@link javax.servlet.http.Cookie}s
-   */
-  public Set<Cookie> convertHttpToJavaCookies(Set<io.netty.handler.codec.http.Cookie> httpCookies) {
-    Set<javax.servlet.http.Cookie> cookies = new HashSet<Cookie>();
-    for (io.netty.handler.codec.http.Cookie cookie : httpCookies) {
-      javax.servlet.http.Cookie javaCookie = new javax.servlet.http.Cookie(cookie.getName(), cookie.getValue());
-      cookies.add(javaCookie);
-    }
-    return cookies;
-  }
-
-  private StringBuilder combineVals(StringBuilder currValue, List<String> values) {
-    for (String value : values) {
-      if (currValue.length() > 0) {
-        currValue.append(MULTIPLE_HEADER_VALUE_DELIMITER);
-      }
-      currValue.append(value);
-    }
-    return currValue;
-  }
-
   @Override
   public String getUri() {
     return request.getUri();
@@ -229,7 +216,7 @@ class NettyRequest implements RestRequest {
         contentLock.unlock();
         restRequestMetricsTracker.recordMetrics();
         if (callbackWrapper != null) {
-          callbackWrapper.invokeCallback(new ClosedChannelException());
+          callbackWrapper.invokeCallback(channelException);
         }
       }
     }
@@ -304,6 +291,7 @@ class NettyRequest implements RestRequest {
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
+      validateState(httpContent);
       contentLock.lock();
       try {
         if (!isOpen()) {
@@ -382,6 +370,58 @@ class NettyRequest implements RestRequest {
     } finally {
       if (retained && !asyncWritesCalled) {
         ReferenceCountUtil.release(httpContent);
+      }
+    }
+  }
+
+  /**
+   * Converts the Set of {@link javax.servlet.http.Cookie}s to equivalent {@link javax.servlet.http.Cookie}s
+   * @param httpCookies Set of {@link javax.servlet.http.Cookie}s that needs to be converted
+   * @return Set of {@link javax.servlet.http.Cookie}s equivalent to the passed in {@link javax.servlet.http.Cookie}s
+   */
+  private Set<Cookie> convertHttpToJavaCookies(Set<io.netty.handler.codec.http.Cookie> httpCookies) {
+    Set<javax.servlet.http.Cookie> cookies = new HashSet<Cookie>();
+    for (io.netty.handler.codec.http.Cookie cookie : httpCookies) {
+      javax.servlet.http.Cookie javaCookie = new javax.servlet.http.Cookie(cookie.getName(), cookie.getValue());
+      cookies.add(javaCookie);
+    }
+    return cookies;
+  }
+
+  /**
+   * Combines {@code values} into {@code currValue} by creating a comma seperated string.
+   * @param currValue the value to which {@code values} have to be appeneded to.
+   * @param values the values that need to be appended to @code currValue}.
+   * @return the updated @code currValue}.
+   */
+  private StringBuilder combineVals(StringBuilder currValue, List<String> values) {
+    for (String value : values) {
+      if (currValue.length() > 0) {
+        currValue.append(MULTIPLE_HEADER_VALUE_DELIMITER);
+      }
+      currValue.append(value);
+    }
+    return currValue;
+  }
+
+  /**
+   * Validates the stream by checking that the size in the headers matches the size of the actual data.
+   * @param httpContent the {@link HttpContent} that was just received.
+   * @throws RestServiceException if {@code httpContent} is the last piece of content and the size of data does
+   *                              not match the size in the header.
+   */
+  private void validateState(HttpContent httpContent)
+      throws RestServiceException {
+    long bytesReceivedTillNow = bytesReceived.addAndGet(httpContent.content().readableBytes());
+    if (size > 0) {
+      if (bytesReceivedTillNow > size) {
+        channelException = new RestServiceException("Size of content is more than the size provided in headers",
+            RestServiceErrorCode.BadRequest);
+        throw (RestServiceException) channelException;
+      } else if (httpContent instanceof LastHttpContent && bytesReceivedTillNow != size) {
+        channelException = new RestServiceException("Size of content is less than the size provided in headers",
+            RestServiceErrorCode.BadRequest);
+        throw (RestServiceException) channelException;
       }
     }
   }

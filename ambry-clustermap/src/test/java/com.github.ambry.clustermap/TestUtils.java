@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -94,6 +94,31 @@ public class TestUtils {
     return jsonObject;
   }
 
+  /**
+   * Generate a JSON data node object with a defined {@code rackId}.
+   *
+   * @param hostname the hostname for the node
+   * @param port the plaintext port number for the node
+   * @param sslPort the ssl port number for the node
+   * @param rackId the rack ID for the node
+   * @param hardwareState A {@link HardwareState} value for the node
+   * @param disks an array of disks belonging to the node
+   * @return a {@link JSONObject) representing the node with the properties passed into the function
+   * @throws JSONException
+   */
+  public static JSONObject getJsonDataNode(String hostname, int port, int sslPort, long rackId,
+      HardwareState hardwareState, JSONArray disks)
+      throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    jsonObject.put("hostname", hostname);
+    jsonObject.put("port", port);
+    jsonObject.put("sslport", sslPort);
+    jsonObject.put("rackId", rackId);
+    jsonObject.put("hardwareState", hardwareState);
+    jsonObject.put("disks", disks);
+    return jsonObject;
+  }
+
   // Increments basePort for each DataNode to ensure unique DataNode given same hostname.
   public static JSONArray getJsonArrayDataNodes(int dataNodeCount, String hostname, int basePort,
       HardwareState hardwareState, JSONArray disks)
@@ -112,6 +137,57 @@ public class TestUtils {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
       jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks));
+    }
+    return jsonArray;
+  }
+
+  /**
+   * Generates an array of JSON data node objects, each with a unique, defined rack ID.
+   * Increments basePort and sslPort for each node to ensure unique DataNode given same hostname.
+   *
+   * @param dataNodeCount how many data nodes to generate
+   * @param hostname the hostname for each node in the array
+   * @param basePort the starting standard port number for nodes generated
+   * @param sslPort the starting SSL port number for nodes generated
+   * @param hardwareState a {@link HardwareLayout} value for each node
+   * @param disks a {@link JSONArray} of disks for each node
+   * @return a {@link JSONArray} of nodes
+   * @throws JSONException
+   */
+  public static JSONArray getJsonArrayDataNodesRackAware(int dataNodeCount, String hostname, int basePort, int sslPort,
+      HardwareState hardwareState, JSONArray disks)
+      throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < dataNodeCount; ++i) {
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, i, hardwareState, disks));
+    }
+    return jsonArray;
+  }
+
+  /**
+   * Generates an array of JSON data node objects.
+   * The nodes at even indices in the array will have unique, defined rack IDs, while the ones
+   * at odd indices will have undefined rack IDs.
+   * Increments basePort and sslPort for each node to ensure unique DataNode given same hostname.
+   *
+   * @param dataNodeCount how many data nodes to generate
+   * @param hostname the hostname for each node in the array
+   * @param basePort the starting standard port number for nodes generated
+   * @param sslPort the starting SSL port number for nodes generated
+   * @param hardwareState a {@link HardwareLayout} value for each node
+   * @param disks a {@link JSONArray} of disks for each node
+   * @return a {@link JSONArray} of nodes
+   * @throws JSONException
+   */
+  public static JSONArray getJsonArrayDataNodesPartiallyRackAware(int dataNodeCount, String hostname, int basePort,
+      int sslPort, HardwareState hardwareState, JSONArray disks)
+      throws JSONException {
+    JSONArray jsonArray = new JSONArray();
+    for (int i = 0; i < dataNodeCount; ++i) {
+      JSONObject jsonDataNode = (i % 2 == 0)?
+          getJsonDataNode(hostname, basePort + i, sslPort + i, i, hardwareState, disks) :
+          getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks);
+      jsonArray.put(jsonDataNode);
     }
     return jsonArray;
   }

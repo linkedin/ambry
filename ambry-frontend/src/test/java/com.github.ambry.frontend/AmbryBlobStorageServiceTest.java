@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,11 +88,12 @@ public class AmbryBlobStorageServiceTest {
 
   private final MetricRegistry metricRegistry = new MetricRegistry();
   private final FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
+  private final IdConverterFactory idConverterFactory;
+  private final SecurityServiceFactory securityServiceFactory;
+  private final FrontendTestResponseHandler responseHandler;
+  private final InMemoryRouter router;
+
   private AmbryBlobStorageService ambryBlobStorageService;
-  private IdConverterFactory idConverterFactory;
-  private SecurityServiceFactory securityServiceFactory;
-  private FrontendTestResponseHandler responseHandler;
-  private InMemoryRouter router;
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -439,323 +440,47 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests for non common case scenarios for {@link HeadForGetCallback}.
-   * @throws Exception
+   * Tests for cases where the {@link Router} returns valid {@link RouterException}.
+   * @throws InstantiationException
+   * @throws JSONException
    */
   @Test
-  public void headForGetCallbackTest()
+  public void routerExceptionPipelineTest()
       throws Exception {
+    FrontendTestRouter testRouter = new FrontendTestRouter();
     String exceptionMsg = UtilsTest.getRandomString(10);
-    SecurityService securityService = securityServiceFactory.getSecurityService();
-    responseHandler.reset();
-
-    // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
-    // Both arguments null
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    HeadForGetCallback callback =
-        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
-            null);
-    callback.onCompletion(null, null);
-    // there should be an exception
-    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        responseHandler.getException().getClass());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is not null.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
-            null);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is RouterException.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
-            null);
-    callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
-    assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        responseHandler.getException().getClass());
-    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
-          + exceptionMsg + "]");
+    testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError);
+    ambryBlobStorageService =
+        new AmbryBlobStorageService(frontendMetrics, CLUSTER_MAP, responseHandler, testRouter, idConverterFactory,
+            securityServiceFactory);
+    ambryBlobStorageService.start();
+    for (RestMethod restMethod : RestMethod.values()) {
+      switch (restMethod) {
+        case HEAD:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlobInfo;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          break;
+        case GET:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlobInfo;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlob;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          break;
+        case POST:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
+          JSONObject headers = new JSONObject();
+          setAmbryHeaders(headers, 1, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
+              "routerExceptionPipelineTest");
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
+          break;
+        case DELETE:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.DeleteBlob;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          break;
+        default:
+          break;
+      }
     }
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Callback encounters a processing error (induced here via a bad RestRequest).
-    restRequest = new BadRestRequest();
-    // there is an exception already.
-    restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
-            null);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
-
-    // there is no exception and the exception thrown in the callback is the primary exception.
-    restResponseChannel = new MockRestResponseChannel();
-    callback =
-        new HeadForGetCallback(ambryBlobStorageService, restRequest, restResponseChannel, router, securityService,
-            null);
-    BlobInfo blobInfo = new BlobInfo(null, null);
-    callback.onCompletion(blobInfo, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getException());
-  }
-
-  /**
-   * Tests for non common case scenarios for {@link GetCallback}.
-   * @throws Exception
-   */
-  @Test
-  public void getCallbackTest()
-      throws Exception {
-    String exceptionMsg = UtilsTest.getRandomString(10);
-    responseHandler.reset();
-
-    // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
-    // Both arguments null
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    GetCallback callback = new GetCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, null);
-    // there should be an exception
-    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        responseHandler.getException().getClass());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is not null.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is RouterException.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
-    assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        responseHandler.getException().getClass());
-    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
-          + exceptionMsg + "]");
-    }
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Callback encounters a processing error (induced here via a bad RestRequest).
-    restRequest = new BadRestRequest();
-    // there is an exception already.
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
-
-    // there is no exception and exception thrown in the callback.
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new GetCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-    assertTrue("Response channel is not open", response.isOpen());
-    callback.onCompletion(response, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getException());
-  }
-
-  /**
-   * Tests for non common case scenarios for {@link PostCallback}.
-   * @throws Exception
-   */
-  @Test
-  public void postCallbackTest()
-      throws Exception {
-    BlobProperties blobProperties = new BlobProperties(0, "test-serviceId");
-    String exceptionMsg = UtilsTest.getRandomString(10);
-    IdConverter idConverter = idConverterFactory.getIdConverter();
-    responseHandler.reset();
-
-    // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
-    // Both arguments null
-    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    PostCallback callback =
-        new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
-    callback.onCompletion(null, null);
-    // there should be an exception
-    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        responseHandler.getException().getClass());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is not null.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.POST, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is RouterException.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.POST, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new PostCallback(ambryBlobStorageService, restRequest, restResponseChannel, blobProperties, idConverter);
-    callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
-    assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        responseHandler.getException().getClass());
-    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
-          + exceptionMsg + "]");
-    }
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // There are no tests for callback processing failure here because there is no good way of inducing a failure
-    // and checking that the behavior is alright in PostCallback.
-  }
-
-  /**
-   * Tests for non common case scenarios for {@link DeleteCallback}.
-   * @throws Exception
-   */
-  @Test
-  public void deleteCallbackTest()
-      throws Exception {
-    String exceptionMsg = UtilsTest.getRandomString(10);
-    responseHandler.reset();
-    // the good case is tested through the postGetHeadDeleteTest() (result null, exception null)
-    // Exception is not null.
-    RestRequest restRequest = createRestRequest(RestMethod.DELETE, "/", null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    DeleteCallback callback = new DeleteCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is RouterException.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.DELETE, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new DeleteCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
-    assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        responseHandler.getException().getClass());
-    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
-          + exceptionMsg + "]");
-    }
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Callback encounters a processing error (induced here via a bad RestRequest).
-    restRequest = new BadRestRequest();
-    // there is an exception already.
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new DeleteCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
-
-    // there is no exception and exception thrown in the callback.
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new DeleteCallback(ambryBlobStorageService, restRequest, restResponseChannel);
-    callback.onCompletion(null, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getException());
-  }
-
-  /**
-   * Tests for non common case scenarios for {@link HeadCallback}.
-   * @throws Exception
-   */
-  @Test
-  public void headCallbackTest()
-      throws Exception {
-    String exceptionMsg = UtilsTest.getRandomString(10);
-    SecurityService securityService = securityServiceFactory.getSecurityService();
-    responseHandler.reset();
-    // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
-    // Both arguments null
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    HeadCallback callback =
-        new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
-    callback.onCompletion(null, null);
-    // there should be an exception
-    assertEquals("Both arguments null should have thrown exception", IllegalStateException.class,
-        responseHandler.getException().getClass());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is not null.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, responseHandler.getException().getMessage());
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Exception is RouterException.
-    responseHandler.reset();
-    restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
-    callback.onCompletion(null, new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError));
-    assertEquals("RouterException not converted to RestServiceException", RestServiceException.class,
-        responseHandler.getException().getClass());
-    if (!responseHandler.getException().getMessage().contains(exceptionMsg)) {
-      fail("Exception msg [" + responseHandler.getException().getMessage() + "] does contain expected substring ["
-          + exceptionMsg + "]");
-    }
-    // Nothing should be closed.
-    assertTrue("RestRequest channel is not open", restRequest.isOpen());
-    restRequest.close();
-
-    // Callback encounters a processing error (induced here via a bad RestRequest).
-    restRequest = new BadRestRequest();
-    // there is an exception already.
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
-    callback.onCompletion(null, new RuntimeException(exceptionMsg));
-    assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
-
-    // there is no exception and exception thrown in the callback.
-    restResponseChannel = new MockRestResponseChannel();
-    callback = new HeadCallback(ambryBlobStorageService, restRequest, restResponseChannel, securityService);
-    BlobInfo blobInfo = new BlobInfo(new BlobProperties(0, "test-serviceId"), new byte[0]);
-    callback.onCompletion(blobInfo, null);
-    assertNotNull("There is no cause of failure", restResponseChannel.getException());
   }
 
   // helpers
@@ -1188,6 +913,43 @@ public class AmbryBlobStorageServiceTest {
       }
     }
   }
+
+  // routerExceptionPipelineTest() helpers.
+
+  /**
+   * Checks that the exception received by submitting {@code restRequest} to {@link AmbryBlobStorageService} matches
+   * what was expected.
+   * @param expectedExceptionMsg the expected exception message.
+   * @param restRequest the {@link RestRequest} to submit to {@link AmbryBlobStorageService}.
+   * @throws Exception
+   */
+  private void checkRouterExceptionPipeline(String expectedExceptionMsg, RestRequest restRequest)
+      throws Exception {
+    try {
+      doOperation(restRequest, new MockRestResponseChannel());
+      fail("Operation " + restRequest.getRestMethod()
+          + " should have failed because an external service would have thrown an exception");
+    } catch (RestServiceException e) {
+      // catching RestServiceException because RouterException should have been converted.
+      assertEquals("Unexpected exception message", expectedExceptionMsg, getRootCause(e).getMessage());
+      // Nothing should be closed.
+      assertTrue("RestRequest channel is not open", restRequest.isOpen());
+      restRequest.close();
+    }
+  }
+
+  /**
+   * Gets the root cause for {@code e}.
+   * @param e the {@link Exception} whose root cause is required.
+   * @return the root cause for {@code e}.
+   */
+  private Exception getRootCause(Exception e) {
+    Exception exception = e;
+    while (exception.getCause() != null) {
+      exception = (Exception) exception.getCause();
+    }
+    return exception;
+  }
 }
 
 /**
@@ -1483,10 +1245,23 @@ class BadRSC implements ReadableStreamChannel {
 }
 
 /**
- * Implementation of {@link Router} that does nothing except respond immediately.
+ * Implementation of {@link Router} that responds immediately or throws exceptions as required.
  */
 class FrontendTestRouter implements Router {
   private boolean isOpen = true;
+
+  /**
+   * Enumerates the different operation types in the router.
+   */
+  enum OpType {
+    DeleteBlob,
+    GetBlobInfo,
+    GetBlob,
+    PutBlob
+  }
+
+  public OpType exceptionOpType = null;
+  public Exception exceptionToReturn = null;
 
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId) {
@@ -1495,7 +1270,8 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
-    return completeOperation(new BlobInfo(new BlobProperties(0, "FrontendTestRouter"), new byte[0]), callback);
+    return completeOperation(new BlobInfo(new BlobProperties(0, "FrontendTestRouter"), new byte[0]), callback,
+        OpType.GetBlobInfo);
   }
 
   @Override
@@ -1505,7 +1281,7 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
-    return completeOperation(new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), callback);
+    return completeOperation(new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), callback, OpType.GetBlob);
   }
 
   @Override
@@ -1516,7 +1292,7 @@ class FrontendTestRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
-    return completeOperation(UtilsTest.getRandomString(10), callback);
+    return completeOperation(UtilsTest.getRandomString(10), callback, OpType.PutBlob);
   }
 
   @Override
@@ -1526,7 +1302,7 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
-    return completeOperation(null, callback);
+    return completeOperation(null, callback, OpType.DeleteBlob);
   }
 
   @Override
@@ -1538,17 +1314,23 @@ class FrontendTestRouter implements Router {
    * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
    * @param result the result to return.
    * @param callback the {@link Callback} to invoke. Can be null.
+   * @param opType the type of operation calling this function.
    * @param <T> the type of future/callback.
    * @return the created {@link Future}.
    */
-  private <T> Future<T> completeOperation(T result, Callback<T> callback) {
+  private <T> Future<T> completeOperation(T result, Callback<T> callback, OpType opType) {
     if (!isOpen) {
       throw new IllegalStateException("Router not open");
     }
+    Exception exception = null;
+    if (opType == exceptionOpType && exceptionToReturn != null) {
+      exception = exceptionToReturn;
+      result = null;
+    }
     FutureResult<T> futureResult = new FutureResult<T>();
-    futureResult.done(result, null);
+    futureResult.done(result, exception);
     if (callback != null) {
-      callback.onCompletion(result, null);
+      callback.onCompletion(result, exception);
     }
     return futureResult;
   }

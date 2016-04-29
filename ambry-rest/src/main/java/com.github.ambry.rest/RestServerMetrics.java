@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,9 +48,6 @@ public class RestServerMetrics {
   public final Histogram responsePreProcessingTimeInMs;
   // AsyncRequestResponseHandler
   public final Histogram requestWorkerSelectionTimeInMs;
-
-  // RestServer state
-  public Gauge<Boolean> restServerStatus;
 
   // Errors
   // AsyncRequestWorker
@@ -193,10 +190,10 @@ public class RestServerMetrics {
         metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
     routerCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
 
-    restServerStatus = new Gauge<Boolean>() {
+    Gauge<Integer> restServerStatus = new Gauge<Integer>() {
       @Override
-      public Boolean getValue() {
-        return restServerState.isServiceUp();
+      public Integer getValue() {
+        return restServerState.isServiceUp() ? 1 : 0;
       }
     };
     metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);

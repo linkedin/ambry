@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 
@@ -518,7 +517,7 @@ class MockHeadCallback implements Callback<BlobInfo> {
     try {
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
-        setResponseHeaders(result);
+        setBlobPropertiesResponseHeaders(result);
       } else if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
             RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
@@ -531,11 +530,11 @@ class MockHeadCallback implements Callback<BlobInfo> {
   }
 
   /**
-   * Sets the required headers in the response.
+   * Sets the required blob properties headers in the response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo)
+  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
@@ -555,11 +554,6 @@ class MockHeadCallback implements Callback<BlobInfo> {
     }
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
-    }
-    byte[] userMetadataArray = blobInfo.getUserMetadata();
-    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
-    for (String key : userMetadata.keySet()) {
-      restResponseChannel.setHeader(key, userMetadata.get(key));
     }
   }
 }

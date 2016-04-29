@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -155,6 +155,9 @@ class NettyResponseChannel implements RestResponseChannel {
             chunkedWriteHandler.resumeTransfer();
           }
         } else {
+          if (request != null) {
+            request.getMetricsTracker().markFailure();
+          }
           // need to set writeFuture as failed in case writes have started or chunks have been queued.
           if (!writeFuture.isDone()) {
             writeFuture.setFailure(exception);

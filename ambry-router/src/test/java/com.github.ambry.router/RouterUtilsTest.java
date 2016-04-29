@@ -69,6 +69,6 @@ public class RouterUtilsTest {
       throws Exception {
     initialize();
     BlobId convertedBlobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-    assertTrue("The converted BlobId should be the same as the original.", convertedBlobId.equals(originalBlobId));
+    assertEquals("The converted BlobId should be the same as the original.", originalBlobId, convertedBlobId);
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.IdConverterFactory;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -56,7 +57,10 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
 
     /**
      * {@inheritDoc}
-     * Simply echoes {@code input}.
+     * On {@link RestMethod#POST}, adds a leading slash to indicate that the ID represents the path of the resource
+     * created.
+     * On any other {@link RestMethod}, removes the leading slash in order to convert the path into an ID that the
+     * {@link com.github.ambry.router.Router} will understand.
      * @param restRequest {@link RestRequest} representing the request.
      * @param input the ID that needs to be converted.
      * @param callback the {@link Callback} to invoke once the converted ID is available. Can be null.
@@ -71,14 +75,16 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       long startTimeInMs = System.currentTimeMillis();
       if (!isOpen) {
         exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
+      } else if (restRequest.getRestMethod().equals(RestMethod.POST)) {
+        convertedId = "/" + input;
       } else {
-        convertedId = input;
+        convertedId = input.startsWith("/") ? input.substring(1) : input;
       }
       futureResult.done(convertedId, exception);
       if (callback != null) {
         callback.onCompletion(convertedId, exception);
       }
-      frontendMetrics.idConverterRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
+      frontendMetrics.idConverterProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       return futureResult;
     }
   }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 
@@ -75,6 +77,18 @@ public class DatacenterTest {
         getDisks());
   }
 
+  JSONArray getDataNodesRackAware()
+      throws JSONException {
+    return TestUtils.getJsonArrayDataNodesRackAware(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666,
+        HardwareState.AVAILABLE, getDisks());
+  }
+
+  JSONArray getDataNodesPartiallyRackAware()
+      throws JSONException {
+    return TestUtils.getJsonArrayDataNodesPartiallyRackAware(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666,
+        HardwareState.AVAILABLE, getDisks());
+  }
+
   @Test
   public void basics()
       throws JSONException {
@@ -86,6 +100,13 @@ public class DatacenterTest {
     assertEquals(datacenter.getName(), "XYZ1");
     assertEquals(datacenter.getDataNodes().size(), dataNodeCount);
     assertEquals(datacenter.getRawCapacityInBytes(), dataNodeCount * diskCount * diskCapacityInBytes);
+    assertFalse(datacenter.isRackAware());
+    assertEquals(datacenter.toJSONObject().toString(), jsonObject.toString());
+    assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject(), clusterMapConfig));
+
+    jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodesRackAware());
+    datacenter = new TestDatacenter(jsonObject, clusterMapConfig);
+    assertTrue(datacenter.isRackAware());
     assertEquals(datacenter.toJSONObject().toString(), jsonObject.toString());
     assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject(), clusterMapConfig));
   }
@@ -117,6 +138,10 @@ public class DatacenterTest {
 
     // Bad datacenter name
     jsonObject = TestUtils.getJsonDatacenter("", getDataNodes());
+    failValidation(jsonObject, clusterMapConfig);
+
+    // Missing rack IDs
+    jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodesPartiallyRackAware());
     failValidation(jsonObject, clusterMapConfig);
   }
 }

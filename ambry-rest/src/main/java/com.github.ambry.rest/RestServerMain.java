@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,9 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.InvocationOptions;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Properties;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,9 +33,9 @@ public class RestServerMain {
 
   public static void main(String[] args) {
     final RestServer restServer;
+    int exitCode = 0;
     try {
       final InvocationOptions options = new InvocationOptions(args);
-      PropertyConfigurator.configure(options.logPropsFile);
       final Properties properties = Utils.loadProps(options.serverPropsFilePath);
       final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
       final ClusterMap clusterMap =
@@ -52,7 +46,7 @@ public class RestServerMain {
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
-          logger.info("Received shutdown signal. Requesting RestServer shutdown");
+          logger.info("Received shutdown signal. Shutting down RestServer");
           restServer.shutdown();
         }
       });
@@ -60,81 +54,11 @@ public class RestServerMain {
       restServer.awaitShutdown();
     } catch (Exception e) {
       logger.error("Exception during bootstrap of RestServer", e);
-    } finally {
-      logger.info("Exiting RestServerMain");
-      System.exit(0);
+      exitCode = 1;
     }
+    logger.info("Exiting RestServerMain");
+    System.exit(exitCode);
   }
 }
 
-/**
- * Abstraction class for all the parameters we expect to receive.
- */
-class InvocationOptions {
-  public final String hardwareLayoutFilePath;
-  public final String logPropsFile;
-  public final String partitionLayoutFilePath;
-  public final String serverPropsFilePath;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  /**
-   * Parses the arguments provided and extracts them into variables that can be retrieved through APIs.
-   * @param args the command line argument list.
-   * @throws InstantiationException if all required arguments were not provided.
-   * @throws IOException if help text could not be printed.
-   */
-  public InvocationOptions(String args[])
-      throws InstantiationException, IOException {
-    OptionParser parser = new OptionParser();
-    ArgumentAcceptingOptionSpec<String> hardwareLayoutFilePath =
-        parser.accepts("hardwareLayoutFilePath", "Path to hardware layout file").withRequiredArg()
-            .describedAs("hardwareLayoutFilePath").ofType(String.class);
-    ArgumentAcceptingOptionSpec<String> logPropsFilePath =
-        parser.accepts("logPropsFilePath", "Path to log4j properties file").withRequiredArg()
-            .describedAs("logPropsFilePath").ofType(String.class);
-    ArgumentAcceptingOptionSpec<String> partitionLayoutFilePath =
-        parser.accepts("partitionLayoutFilePath", "Path to partition layout file").withRequiredArg()
-            .describedAs("partitionLayoutFilePath").ofType(String.class);
-    ArgumentAcceptingOptionSpec<String> serverPropsFilePath =
-        parser.accepts("serverPropsFilePath", "Path to server properties file").withRequiredArg()
-            .describedAs("serverPropsFilePath").ofType(String.class);
-
-    ArrayList<OptionSpec<?>> requiredArgs = new ArrayList<OptionSpec<?>>();
-    requiredArgs.add(hardwareLayoutFilePath);
-    requiredArgs.add(logPropsFilePath);
-    requiredArgs.add(partitionLayoutFilePath);
-    requiredArgs.add(serverPropsFilePath);
-
-    OptionSet options = parser.parse(args);
-    if (hasRequiredOptions(requiredArgs, options)) {
-      this.hardwareLayoutFilePath = options.valueOf(hardwareLayoutFilePath);
-      logger.trace("Hardware layout file path: {}", this.hardwareLayoutFilePath);
-      this.logPropsFile = options.valueOf(logPropsFilePath);
-      logger.trace("Log4j properties file path: {}", this.logPropsFile);
-      this.partitionLayoutFilePath = options.valueOf(partitionLayoutFilePath);
-      logger.trace("Partition layout file path: {}", this.partitionLayoutFilePath);
-      this.serverPropsFilePath = options.valueOf(serverPropsFilePath);
-      logger.trace("Server properties file path: {}", this.serverPropsFilePath);
-    } else {
-      parser.printHelpOn(System.err);
-      throw new InstantiationException("Did not receive all required arguments for starting RestServer");
-    }
-  }
-
-  /**
-   * Checks if all required arguments are present. Prints the ones that are not.
-   * @param requiredArgs the list of required arguments.
-   * @param options the list of received options.
-   * @return whether required options are present.
-   */
-  private boolean hasRequiredOptions(ArrayList<OptionSpec<?>> requiredArgs, OptionSet options) {
-    boolean haveAll = true;
-    for (OptionSpec opt : requiredArgs) {
-      if (!options.has(opt)) {
-        System.err.println("Missing required argument " + opt);
-        haveAll = false;
-      }
-    }
-    return haveAll;
-  }
-}

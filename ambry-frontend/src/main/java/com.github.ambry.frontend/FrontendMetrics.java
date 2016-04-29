@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,19 +40,10 @@ class FrontendMetrics {
   public final RestRequestMetrics postBlobMetrics;
 
   // Rates
-  // AmbryBlobStorageService
-  // DELETE
-  public final Meter deleteBlobRate;
-  // HEAD
-  public final Meter headBlobRate;
-  // GET
-  public final Meter getBlobRate;
-  // POST
-  public final Meter postBlobRate;
-  // security service
+  // AmbrySecurityService
   public final Meter securityServiceProcessRequestRate;
   public final Meter securityServiceProcessResponseRate;
-  // Id converter
+  // AmbryIdConverter
   public final Meter idConverterRequestRate;
 
   // Latencies
@@ -72,27 +63,61 @@ class FrontendMetrics {
   // HeadCallback
   public final Histogram headCallbackProcessingTimeInMs;
   public final Histogram headTimeInMs;
+  public final Histogram headSecurityResponseTimeInMs;
+  public final Histogram headSecurityResponseCallbackProcessingTimeInMs;
   // HeadForGetCallback
   public final Histogram headForGetCallbackProcessingTimeInMs;
   public final Histogram headForGetTimeInMs;
+  public final Histogram getSecurityResponseCallbackProcessingTimeInMs;
+  public final Histogram getSecurityResponseTimeInMs;
   // GetCallback
   public final Histogram getCallbackProcessingTimeInMs;
   public final Histogram getTimeInMs;
   // PostCallback
+  public final Histogram outboundIdConversionCallbackProcessingTimeInMs;
+  public final Histogram outboundIdConversionTimeInMs;
   public final Histogram postCallbackProcessingTimeInMs;
   public final Histogram postTimeInMs;
-  // security service
+  // InboundIdConverterCallback
+  public final Histogram inboundIdConversionCallbackProcessingTimeInMs;
+  public final Histogram inboundIdConversionTimeInMs;
+  // SecurityProcessRequestCallback
+  public final Histogram deleteSecurityRequestCallbackProcessingTimeInMs;
+  public final Histogram getSecurityRequestCallbackProcessingTimeInMs;
+  public final Histogram headSecurityRequestCallbackProcessingTimeInMs;
+  public final Histogram postSecurityRequestCallbackProcessingTimeInMs;
+  public final Histogram deleteSecurityRequestTimeInMs;
+  public final Histogram getSecurityRequestTimeInMs;
+  public final Histogram headSecurityRequestTimeInMs;
+  public final Histogram postSecurityRequestTimeInMs;
+  // AmbrySecurityService
   public final Histogram securityServiceProcessRequestTimeInMs;
   public final Histogram securityServiceProcessResponseTimeInMs;
-  // Id converter
-  public final Histogram idConverterRequestProcessingTimeInMs;
+  // AmbryIdConverter
+  public final Histogram idConverterProcessingTimeInMs;
 
   // Errors
   // AmbryBlobStorageService
-  public final Counter callbackProcessingError;
-  public final Counter operationError;
   public final Counter responseSubmissionError;
   public final Counter resourceReleaseError;
+  public final Counter routerCallbackError;
+  // DeleteCallback
+  public final Counter deleteCallbackProcessingError;
+  // HeadCallback
+  public final Counter headCallbackProcessingError;
+  // HeadForGetCallback
+  public final Counter headForGetCallbackProcessingError;
+  public final Counter getSecurityResponseCallbackProcessingError;
+  // GetCallback
+  public final Counter getCallbackProcessingError;
+  // PostCallback
+  public final Counter postCallbackProcessingError;
+  public final Counter outboundIdConversionCallbackProcessingError;
+
+  // Other
+  // AmbryBlobStorageService
+  public final Histogram blobStorageServiceStartupTimeInMs;
+  public final Histogram blobStorageServiceShutdownTimeInMs;
 
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
@@ -112,23 +137,13 @@ class FrontendMetrics {
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
 
     // Rates
-    // AmbryBlobStorageService
-    // DELETE
-    deleteBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "DeleteBlobRate"));
-    // HEAD
-    headBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "HeadBlobRate"));
-    // GET
-    getBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "GetBlobRate"));
-    // POST
-    postBlobRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "PostBlobRate"));
-    // security service
+    // AmbrySecurityService
     securityServiceProcessRequestRate =
-        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "SecurityServiceProcessRequestRate"));
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "ProcessRequestRate"));
     securityServiceProcessResponseRate =
-        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "SecurityServiceProcessResponseRate"));
-    // Id converter
-    idConverterRequestRate =
-        metricRegistry.meter(MetricRegistry.name(AmbryIdConverterFactory.class, "IdConverterRequestRate"));
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "ProcessResponseRate"));
+    // AmbryIdConverter
+    idConverterRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryIdConverterFactory.class, "RequestRate"));
 
     // Latencies
     // AmbryBlobStorageService
@@ -147,42 +162,105 @@ class FrontendMetrics {
     postPreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostPreProcessingTimeInMs"));
     // DeleteCallback
-    deleteCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(DeleteCallback.class, "ProcessingTimeInMs"));
-    deleteTimeInMs = metricRegistry.histogram(MetricRegistry.name(DeleteCallback.class, "ResultTimeInMs"));
+    deleteCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "DeleteCallbackProcessingTimeInMs"));
+    deleteTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "DeleteCallbackResultTimeInMs"));
     // HeadCallback
     headCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(HeadCallback.class, "ProcessingTimeInMs"));
-    headTimeInMs = metricRegistry.histogram(MetricRegistry.name(HeadCallback.class, "ResultTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadCallbackProcessingTimeInMs"));
+    headTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadCallbackResultTimeInMs"));
+    headSecurityResponseCallbackProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(AmbryBlobStorageService.class, "HeadSecurityResponseCallbackProcessingTimeInMs"));
+    headSecurityResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadSecurityResponseTimeInMs"));
     // HeadForGetCallback
-    headForGetCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(HeadForGetCallback.class, "ProcessingTimeInMs"));
-    headForGetTimeInMs = metricRegistry.histogram(MetricRegistry.name(HeadForGetCallback.class, "ResultTimeInMs"));
+    headForGetCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadForGetCallbackProcessingTimeInMs"));
+    headForGetTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadForGetCallbackResultTimeInMs"));
+    getSecurityResponseCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseCallbackProcessingTimeInMs"));
+    getSecurityResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseTimeInMs"));
     // GetCallback
     getCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(GetCallback.class, "ProcessingTimeInMs"));
-    getTimeInMs = metricRegistry.histogram(MetricRegistry.name(GetCallback.class, "ResultTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetCallbackProcessingTimeInMs"));
+    getTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetCallbackResultTimeInMs"));
     // PostCallback
+    outboundIdConversionCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OutboundIdCallbackProcessingTimeInMs"));
+    outboundIdConversionTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OutboundIdConversionTimeInMs"));
     postCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(PostCallback.class, "ProcessingTimeInMs"));
-    postTimeInMs = metricRegistry.histogram(MetricRegistry.name(PostCallback.class, "ResultTimeInMs"));
-    // security service
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostCallbackProcessingTimeInMs"));
+    postTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostCallbackResultTimeInMs"));
+    // InboundIdConverterCallback
+    inboundIdConversionCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "InboundIdCallbackProcessingTimeInMs"));
+    inboundIdConversionTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "InboundIdConversionTimeInMs"));
+    // SecurityProcessRequestCallback
+    deleteSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(AmbryBlobStorageService.class, "DeleteSecurityRequestCallbackProcessingTimeInMs"));
+    deleteSecurityRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "DeleteSecurityRequestTimeInMs"));
+    headSecurityRequestCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadSecurityRequestCallbackProcessingTimeInMs"));
+    headSecurityRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadSecurityRequestTimeInMs"));
+    getSecurityRequestCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityRequestCallbackProcessingTimeInMs"));
+    getSecurityRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityRequestTimeInMs"));
+    postSecurityRequestCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityRequestCallbackProcessingTimeInMs"));
+    postSecurityRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityRequestTimeInMs"));
+    // AmbrySecurityService
     securityServiceProcessRequestTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ProcessingTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestProcessingTimeInMs"));
     securityServiceProcessResponseTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ProcessingTimeInMs"));
-    // Id converter
-    idConverterRequestProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ResponseProcessingTimeInMs"));
+    // AmbryIdConverter
+    idConverterProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
 
     // Errors
     // AmbryBlobStorageService
-    callbackProcessingError =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "CallbackProcessingError"));
-    operationError = metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "OperationError"));
     responseSubmissionError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "ResponseSubmissionError"));
     resourceReleaseError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "ResourceReleaseError"));
+    routerCallbackError =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "RouterCallbackError"));
+    // DeleteCallback
+    deleteCallbackProcessingError =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "DeleteCallbackProcessingError"));
+    // HeadCallback
+    headCallbackProcessingError =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "HeadCallbackProcessingError"));
+    // HeadForGetCallback
+    headForGetCallbackProcessingError =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "HeadForGetCallbackProcessingError"));
+    getSecurityResponseCallbackProcessingError = metricRegistry
+        .counter(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseCallbackProcessingError"));
+    // GetCallback
+    getCallbackProcessingError =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "GetCallbackProcessingError"));
+    // PostCallback
+    postCallbackProcessingError =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "PostCallbackProcessingError"));
+    outboundIdConversionCallbackProcessingError = metricRegistry
+        .counter(MetricRegistry.name(AmbryBlobStorageService.class, "OutboundIdConversionCallbackProcessingError"));
+
+    // Other
+    blobStorageServiceStartupTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "StartupTimeInMs"));
+    blobStorageServiceShutdownTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "ShutdownTimeInMs"));
   }
 }

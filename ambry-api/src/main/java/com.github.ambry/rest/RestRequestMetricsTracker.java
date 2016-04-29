@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -198,6 +198,10 @@ public class RestRequestMetricsTracker {
     return totalCpuTimeInMs.addAndGet(delta);
   }
 
+  public void markFailure() {
+    metrics.operationError.inc();
+  }
+
   /**
    * Injects a {@link RestRequestMetrics} that can be used to track the metrics of the {@link RestRequest} that this
    * instance of RestRequestMetricsTracker is attached to.
@@ -207,6 +211,7 @@ public class RestRequestMetricsTracker {
   public void injectMetrics(RestRequestMetrics restRequestMetrics) {
     if (restRequestMetrics != null) {
       metrics = restRequestMetrics;
+      metrics.operationRate.mark();
     } else {
       throw new IllegalArgumentException("RestRequestMetrics provided cannot be null");
     }
@@ -232,6 +237,10 @@ public class RestRequestMetricsTracker {
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
 
         metrics.totalCpuTimeInMs.update(totalCpuTimeInMs.get());
+        if (metrics == defaultMetrics) {
+          // track unknown requests rate.
+          metrics.operationRate.mark();
+        }
       }
     } else {
       throw new IllegalStateException("Could not record metrics because there is no metrics tracker");

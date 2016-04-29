@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -86,6 +86,7 @@ public class RestRequestMetricsTrackerTest {
     TestMetrics testMetrics = new TestMetrics(requestMetrics);
     long additionalTime = 20;
     requestMetrics.addToTotalCpuTime(additionalTime);
+    requestMetrics.markFailure();
     requestMetrics.recordMetrics();
     String metricPrefix =
         RestRequestMetricsTracker.class.getCanonicalName() + "." + RestRequestMetricsTracker.DEFAULT_REQUEST_TYPE;
@@ -105,6 +106,7 @@ public class RestRequestMetricsTrackerTest {
     long additionalTime = 20;
     requestMetrics.addToTotalCpuTime(additionalTime);
     requestMetrics.injectMetrics(restRequestMetrics);
+    requestMetrics.markFailure();
     requestMetrics.recordMetrics();
     String metricPrefix = getClass().getCanonicalName() + "." + testRequestType;
     testMetrics.compareMetrics(metricPrefix, metricRegistry, additionalTime);
@@ -165,6 +167,10 @@ class TestMetrics {
 
     assertEquals("Request total CPU time unequal", totalTime,
         histograms.get(metricPrefix + RestRequestMetrics.TOTAL_CPU_TIME_SUFFIX).getSnapshot().getValues()[0]);
+    assertEquals("Rate metric has not fired", 1,
+        metricRegistry.getMeters().get(metricPrefix + RestRequestMetrics.OPERATION_RATE_SUFFIX).getCount());
+    assertEquals("Error metric has not fired", 1,
+        metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.OPERATION_ERROR_SUFFIX).getCount());
   }
 
   /**

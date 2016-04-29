@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -485,7 +486,7 @@ public class NettyRequestTest {
       throws RestServiceException {
     // no length headers provided.
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null);
-    assertEquals("Size not as expected", 0, nettyRequest.getSize());
+    assertEquals("Size not as expected", -1, nettyRequest.getSize());
 
     // deliberate mismatch to check priorities.
     int xAmbryBlobSize = 20;
@@ -509,6 +510,48 @@ public class NettyRequestTest {
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, contentLength);
     nettyRequest = createNettyRequest(HttpMethod.GET, "/", headers);
     assertEquals("Size not as expected", xAmbryBlobSize, nettyRequest.getSize());
+  }
+
+  /**
+   * Tests for POST request that has no content.
+   * @throws Exception
+   */
+  @Test
+  public void zeroSizeContentTest()
+      throws Exception {
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
+    HttpContent httpContent = new DefaultLastHttpContent();
+
+    nettyRequest.addContent(httpContent);
+    assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
+
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    Future<Long> future = nettyRequest.readInto(writeChannel, callback);
+    assertEquals("There should be no content", 0, writeChannel.getNextChunk().remaining());
+    writeChannel.resolveOldestChunk(null);
+    closeRequestAndValidate(nettyRequest);
+    writeChannel.close();
+    assertEquals("Reference count of http content has changed", 1, httpContent.refCnt());
+    if (callback.exception != null) {
+      throw callback.exception;
+    }
+    long futureBytesRead = future.get();
+    assertEquals("Total bytes read does not match (callback)", 0, callback.bytesRead);
+    assertEquals("Total bytes read does not match (future)", 0, futureBytesRead);
+  }
+
+  /**
+   * Tests reaction of NettyRequest when content size is different from the size specified in the headers.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws RestServiceException
+   */
+  @Test
+  public void headerAndContentSizeMismatchTest()
+      throws InterruptedException, IOException, RestServiceException {
+    sizeInHeaderMoreThanContentTest();
+    sizeInHeaderLessThanContentTest();
   }
 
   /**
@@ -723,6 +766,93 @@ public class NettyRequestTest {
         bytesRead++;
       }
       writeChannel.resolveOldestChunk(null);
+    }
+  }
+
+  // headerAndContentSizeMismatchTest() helpers
+
+  /**
+   * Tests reaction of NettyRequest when content size is less than the size specified in the headers.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws RestServiceException
+   */
+  private void sizeInHeaderMoreThanContentTest()
+      throws InterruptedException, IOException, RestServiceException {
+    List<HttpContent> httpContents = new ArrayList<HttpContent>();
+    ByteBuffer content = generateContent(httpContents);
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
+    httpHeaders.set(HttpHeaders.Names.CONTENT_LENGTH, content.limit() + 1);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", httpHeaders);
+    doHeaderAndContentSizeMismatchTest(nettyRequest, httpContents);
+  }
+
+  /**
+   * Tests reaction of NettyRequest when content size is more than the size specified in the headers.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws RestServiceException
+   */
+  private void sizeInHeaderLessThanContentTest()
+      throws InterruptedException, IOException, RestServiceException {
+    List<HttpContent> httpContents = new ArrayList<HttpContent>();
+    ByteBuffer content = generateContent(httpContents);
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
+    int lastHttpContentSize = httpContents.get(httpContents.size() - 1).content().readableBytes();
+    httpHeaders.set(HttpHeaders.Names.CONTENT_LENGTH, content.limit() - lastHttpContentSize - 1);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", httpHeaders);
+    doHeaderAndContentSizeMismatchTest(nettyRequest, httpContents);
+  }
+
+  /**
+   * Tests reaction of NettyRequest when content size is different from the size specified in the headers.
+   * @param nettyRequest the {@link NettyRequest} to which content will be added.
+   * @param httpContents the {@link List<HttpContent>} that needs to be added to {@code nettyRequest}.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws RestServiceException
+   */
+  private void doHeaderAndContentSizeMismatchTest(NettyRequest nettyRequest, List<HttpContent> httpContents)
+      throws InterruptedException, IOException, RestServiceException {
+    AsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    Future<Long> future = nettyRequest.readInto(writeChannel, callback);
+
+    int bytesAdded = 0;
+    HttpContent httpContentToAdd = null;
+    for (HttpContent httpContent : httpContents) {
+      httpContentToAdd = httpContent;
+      int contentBytes = httpContentToAdd.content().readableBytes();
+      if (!(httpContentToAdd instanceof LastHttpContent) && (bytesAdded + contentBytes <= nettyRequest.getSize())) {
+        nettyRequest.addContent(httpContentToAdd);
+        assertEquals("Reference count is not as expected", 2, httpContentToAdd.refCnt());
+        bytesAdded += contentBytes;
+      } else {
+        break;
+      }
+    }
+
+    // the addition of the next content should throw an exception.
+    try {
+      nettyRequest.addContent(httpContentToAdd);
+      fail("Adding content should have failed because there was a mismatch in size");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest, e.getErrorCode());
+    }
+    closeRequestAndValidate(nettyRequest);
+    writeChannel.close();
+    verifyRefCnts(httpContents);
+    assertNotNull("There should be a RestServiceException in the callback", callback.exception);
+    assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest,
+        ((RestServiceException) callback.exception).getErrorCode());
+    try {
+      future.get();
+      fail("Should have thrown exception because the future is expected to have been given one");
+    } catch (ExecutionException e) {
+      RestServiceException restServiceException = (RestServiceException) getRootCause(e);
+      assertNotNull("There should be a RestServiceException in the future", restServiceException);
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest,
+          restServiceException.getErrorCode());
     }
   }
 }

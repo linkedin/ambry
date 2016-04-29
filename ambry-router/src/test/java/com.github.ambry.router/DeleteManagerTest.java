@@ -1,5 +1,5 @@
 /**
- * Copyright 2015 LinkedIn Corp. All rights reserved.
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import com.github.ambry.utils.Time;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -69,8 +70,6 @@ public class DeleteManagerTest {
 
   /**
    * Initializes ClusterMap, Router, mock servers, and an {@code BlobId} to be deleted.
-   *
-   * @throws Exception
    */
   @Before
   public void init()
@@ -81,7 +80,6 @@ public class DeleteManagerTest {
     mockSelectorState = new AtomicReference<MockSelectorState>(MockSelectorState.Good);
     clusterMap = new MockClusterMap();
     serverLayout = new MockServerLayout(clusterMap);
-    setServerResponse(true);
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, mockTime);
@@ -118,31 +116,16 @@ public class DeleteManagerTest {
   @Test
   public void testBlobIdNotValid()
       throws Exception {
-    future = router.deleteBlob("123", new ClientCallback());
-    try {
-      future.get();
-      fail("Deletion should be unsuccessful. Exception is expected.");
-    } catch (ExecutionException e) {
-      assertEquals("RouterErrorCode should be InvalidBlobId", RouterErrorCode.InvalidBlobId,
-          ((RouterException) e.getCause()).getErrorCode());
-    }
-
-    future = router.deleteBlob("", new ClientCallback());
-    try {
-      future.get();
-      fail("Deletion should be unsuccessful. Error is expected.");
-    } catch (Exception e) {
-      assertEquals("RouterErrorCode should be InvalidBlobId", RouterErrorCode.InvalidBlobId,
-          ((RouterException) e.getCause()).getErrorCode());
-    }
-
-    future = router.deleteBlob(null, new ClientCallback());
-    try {
-      future.get();
-      fail("Deletion should be unsuccessful. Error is expected.");
-    } catch (Exception e) {
-      assertEquals("RouterErrorCode should be InvalidBlobId", RouterErrorCode.InvalidBlobId,
-          ((RouterException) e.getCause()).getErrorCode());
+    String[] input = {"123", "abcd", "", "/", null};
+    for (String s : input) {
+      future = router.deleteBlob(s, new ClientCallback());
+      try {
+        future.get();
+        fail("Deletion should be unsuccessful. Exception is expected.");
+      } catch (Exception e) {
+        assertEquals("RouterErrorCode should be InvalidBlobId", RouterErrorCode.InvalidBlobId,
+            ((RouterException) e.getCause()).getErrorCode());
+      }
     }
   }
 
@@ -170,27 +153,30 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when the blob cannot be found in store servers.
+   * Test if the {@link RouterErrorCode} is as expected for different {@link ServerErrorCode}.
    */
   @Test
-  public void testBlobNotFound()
+  public void testVariousServerErrorCode()
       throws Exception {
-    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    presetServerErrorCode(serverErrorCodes);
-    future = router.deleteBlob(blobIdString, new ClientCallback());
-    try {
-      future.get();
-      fail("Deletion should be unsuccessful. Error is expected.");
-    } catch (Exception e) {
-      assertEquals("RouterErrorCode should be BlobDoesNotExist", RouterErrorCode.BlobDoesNotExist,
-          ((RouterException) e.getCause()).getErrorCode());
+    HashMap<ServerErrorCode, RouterErrorCode> map = new HashMap<>();
+    map.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
+    map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
+    map.put(ServerErrorCode.Partition_Unknown, RouterErrorCode.BlobDoesNotExist);
+    map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
+      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted && !map
+          .containsKey(serverErrorCode)) {
+        map.put(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
+      }
+    }
+    for (Map.Entry<ServerErrorCode, RouterErrorCode> entity : map.entrySet()) {
+      testResponseForServerErrorUtil(entity.getKey(), entity.getValue());
     }
   }
 
   /**
    * Test the case when the blob cannot be found in store servers, though the last response is {@code IO_Error}.
-   * The delete operation is expected to return {@BlobDoesNotExist}, since the delete operation will be completed
+   * The delete operation is expected to return {@link RouterErrorCode#BlobDoesNotExist}, since the delete operation will be completed
    * before the last response according to its {@link OperationTracker}. The order of received responses is the
    * same as defined in {@code serverErrorCodes}.
    */
@@ -253,7 +239,7 @@ public class DeleteManagerTest {
 
   /**
    * Test the case where servers return different {@link ServerErrorCode}, and the {@link DeleteOperation}
-   * is able to resolve and conclude the correct {@link RouterErrorCode}. The {link ServerErrorCode} tested
+   * is able to resolve and conclude the correct {@link RouterErrorCode}. The {@link ServerErrorCode} tested
    * are those could be mapped to {@link RouterErrorCode#AmbryUnavailable}. The order of received responses
    * is the same as defined in {@code serverErrorCodes}.
    */
@@ -292,7 +278,6 @@ public class DeleteManagerTest {
   @Test
   public void testVariousServerErrorCodesForThreeParallelism()
       throws Exception {
-    //initialize(3, true);
     assertCloseCleanup();
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "3");
@@ -357,7 +342,7 @@ public class DeleteManagerTest {
       throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
-    HashMap<MockSelectorState, RouterErrorCode> errorCodeHashMap = new HashMap<MockSelectorState, RouterErrorCode>();
+    HashMap<MockSelectorState, RouterErrorCode> errorCodeHashMap = new HashMap<>();
     errorCodeHashMap.put(MockSelectorState.DisconnectOnSend, RouterErrorCode.OperationTimedOut);
     errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnAllPoll, RouterErrorCode.RouterClosed);
     errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnConnect, RouterErrorCode.OperationTimedOut);
@@ -386,7 +371,6 @@ public class DeleteManagerTest {
   /**
    * Test the case how a {@link DeleteManager} acts when a router is closed, and when there are inflight
    * operations. Setting servers to not respond any requests, so {@link DeleteOperation} can be "in flight".
-   * @throws Exception
    */
   @Test
   public void testRouterClosedDuringOperation()
@@ -466,5 +450,26 @@ public class DeleteManagerTest {
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.delete.request.parallelism", DELETE_PARALLELISM);
     return properties;
+  }
+
+  /**
+   * A util method that is used to test when all servers respond the same {@code serverErrorCode},
+   * the exception thrown by the router has the error code the same as {@code expectedRouterErrorCode}.
+   * @param serverErrorCode The {@link ServerErrorCode} that all servers return.
+   * @param expectedRouterErrorCode The excepted {@link RouterErrorCode}.
+   */
+  private void testResponseForServerErrorUtil(ServerErrorCode serverErrorCode, RouterErrorCode expectedRouterErrorCode)
+      throws Exception {
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, serverErrorCode);
+    presetServerErrorCode(serverErrorCodes);
+    future = router.deleteBlob(blobIdString, new ClientCallback());
+    try {
+      future.get();
+      fail("Deletion should be unsuccessful. Error is expected.");
+    } catch (Exception e) {
+      assertEquals("RouterErrorCodes mistmatch.", expectedRouterErrorCode,
+          ((RouterException) e.getCause()).getErrorCode());
+    }
   }
 }
