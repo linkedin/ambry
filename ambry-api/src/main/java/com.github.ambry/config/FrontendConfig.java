@@ -27,15 +27,14 @@ public class FrontendConfig {
   public final long frontendCacheValiditySeconds;
 
   /**
-   * The {@link com.github.ambry.rest.IdConverterFactory} that needs to be used by {@link AmbryBlobStorageService} to
-   * convert IDs.
+   * The IdConverterFactory that needs to be used by AmbryBlobStorageService to convert IDs.
    */
   @Config("frontend.id.converter.factory")
   @Default("com.github.ambry.frontend.AmbryIdConverterFactory")
   public final String frontendIdConverterFactory;
 
   /**
-   * The {@link com.github.ambry.rest.SecurityServiceFactory} that needs to be used by {@link AmbryBlobStorageService}
+   * The SecurityServiceFactory that needs to be used by AmbryBlobStorageService
    * to validate requests.
    */
   @Config("frontend.security.service.factory")

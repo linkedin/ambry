@@ -26,8 +26,9 @@ public class ClusterMapConfig {
   public final String clusterMapResourceStatePolicyFactory;
 
   /**
-   * The fixed timeout based resource state handling checks if we have had a 'threshold' number of consecutive errors,
-   * and if so, considers the resource as down for 'retry backoff' milliseconds.
+   * The fixed timeout based resource state handling checks if we have had a 'threshold'
+   * number of consecutive errors, and if so, considers the resource as down for
+   * 'retry backoff' milliseconds.
    */
 
   /**

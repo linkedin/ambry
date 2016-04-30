@@ -19,7 +19,7 @@ package com.github.ambry.config;
  */
 public class RestServerConfig {
   /**
-   * The BlobStorageServiceFactory} that needs to be used by the RestServer
+   * The BlobStorageServiceFactory that needs to be used by the RestServer
    * for bootstrapping the BlobStorageService.
    */
   @Config("rest.server.blob.storage.service.factory")
@@ -64,8 +64,8 @@ public class RestServerConfig {
   public final String restServerResponseHandlerFactory;
 
   /**
-   * The {@link com.github.ambry.router.RouterFactory} that needs to be used by the RestServer
-   * for bootstrapping the {@link com.github.ambry.router.Router}.
+   * The RouterFactory that needs to be used by the RestServer
+   * for bootstrapping the Router.
    */
   @Config("rest.server.router.factory")
   @Default("com.github.ambry.router.CoordinatorBackedRouterFactory")
