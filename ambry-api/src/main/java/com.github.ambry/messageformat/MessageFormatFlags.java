@@ -20,6 +20,7 @@ public enum MessageFormatFlags {
   BlobProperties,
   BlobUserMetadata,
   Blob,
-  All
+  All,
+  BlobInfo
 }
 

@@ -227,6 +227,12 @@ public class AmbryRequests implements RequestAPI {
       responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataResponseQueueTimeInMs);
       responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataSendTimeInMs);
       responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataTotalTimeInMs);
+    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
+      metrics.getBlobInfoRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.getBlobInfoRequestRate.mark();
+      responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobInfoResponseQueueTimeInMs);
+      responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobInfoSendTimeInMs);
+      responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobInfoTotalTimeInMs);
     } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
       metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
       metrics.getBlobAllRequestRate.mark();
@@ -323,6 +329,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.getBlobPropertiesProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
         metrics.getBlobUserMetadataProcessingTimeInMs.update(processingTime);
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
+        metrics.getBlobInfoProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
         metrics.getBlobAllProcessingTimeInMs.update(processingTime);
       }
