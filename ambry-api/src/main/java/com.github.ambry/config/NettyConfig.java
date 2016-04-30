@@ -11,11 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.rest;
-
-import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
-import com.github.ambry.config.VerifiableProperties;
+package com.github.ambry.config;
 
 
 /**
@@ -24,7 +20,7 @@ import com.github.ambry.config.VerifiableProperties;
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
  * required for Netty and presents them for retrieval through defined APIs.
  */
-class NettyConfig {
+public class NettyConfig {
   /**
    * Number of netty boss threads.
    */

@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.admin;
+package com.github.ambry.config;
 
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;

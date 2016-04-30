@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.ResponseStatus;

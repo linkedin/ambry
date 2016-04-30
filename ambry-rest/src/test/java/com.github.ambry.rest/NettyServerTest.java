@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.IOException;
 import java.util.Properties;

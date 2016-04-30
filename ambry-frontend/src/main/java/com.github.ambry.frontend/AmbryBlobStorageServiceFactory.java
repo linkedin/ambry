@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
