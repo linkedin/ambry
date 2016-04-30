@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;

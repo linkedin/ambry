@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;

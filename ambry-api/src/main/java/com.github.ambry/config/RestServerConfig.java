@@ -11,69 +11,61 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.rest;
-
-import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
-import com.github.ambry.config.VerifiableProperties;
+package com.github.ambry.config;
 
 
 /**
- * Configuration parameters required by {@link RestServer} and Rest infrastructure ({@link RestRequestHandler},
- * {@link RestResponseHandler}).
- * <p/>
- * Receives the in-memory representation of a properties file and extracts parameters that are specifically
- * required for {@link RestServer} and presents them for retrieval through defined APIs.
+ * Configuration parameters required by RestServer and Rest infrastructure
  */
-class RestServerConfig {
+public class RestServerConfig {
   /**
-   * The {@link BlobStorageServiceFactory} that needs to be used by the {@link RestServer}
-   * for bootstrapping the {@link BlobStorageService}.
+   * The BlobStorageServiceFactory that needs to be used by the RestServer
+   * for bootstrapping the BlobStorageService.
    */
   @Config("rest.server.blob.storage.service.factory")
   public final String restServerBlobStorageServiceFactory;
 
   /**
-   * The {@link NioServerFactory} that needs to be used by the {@link RestServer} for
-   * bootstrapping the {@link NioServer}.
+   * The NioServerFactory that needs to be used by the RestServer for
+   * bootstrapping the NioServer
    */
   @Config("rest.server.nio.server.factory")
   @Default("com.github.ambry.rest.NettyServerFactory")
   public final String restServerNioServerFactory;
 
   /**
-   * The number of scaling units in {@link RestRequestHandler} that will handle requests.
+   * The number of scaling units in RestRequestHandler that will handle requests.
    */
   @Config("rest.server.request.handler.scaling.unit.count")
   @Default("5")
   public final int restServerRequestHandlerScalingUnitCount;
 
   /**
-   * The {@link RestRequestHandlerFactory} that needs to be used by the {@link RestServer}
-   * for bootstrapping the {@link RestRequestHandler}.
+   * The RestRequestHandlerFactory that needs to be used by the RestServer
+   * for bootstrapping the RestRequestHandler
    */
   @Config("rest.server.request.handler.factory")
   @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
   public final String restServerRequestHandlerFactory;
 
   /**
-   * The number of scaling units in {@link RestResponseHandler} handle responses.
+   * The number of scaling units in RestResponseHandler handle responses.
    */
   @Config("rest.server.response.handler.scaling.unit.count")
   @Default("5")
   public final int restServerResponseHandlerScalingUnitCount;
 
   /**
-   * The {@link RestResponseHandlerFactory} that needs to be used by the {@link RestServer}
-   * for bootstrapping the {@link RestResponseHandler}.
+   * The RestResponseHandlerFactory that needs to be used by the RestServer
+   * for bootstrapping the RestResponseHandler.
    */
   @Config("rest.server.response.handler.factory")
   @Default("com.github.ambry.rest.AsyncRequestResponseHandlerFactory")
   public final String restServerResponseHandlerFactory;
 
   /**
-   * The {@link com.github.ambry.router.RouterFactory} that needs to be used by the {@link RestServer}
-   * for bootstrapping the {@link com.github.ambry.router.Router}.
+   * The RouterFactory that needs to be used by the RestServer
+   * for bootstrapping the Router.
    */
   @Config("rest.server.router.factory")
   @Default("com.github.ambry.router.CoordinatorBackedRouterFactory")

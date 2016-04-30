@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.config.NettyConfig;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.HttpContent;

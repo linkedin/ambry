@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.admin;
+package com.github.ambry.config;
 
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
@@ -20,11 +20,8 @@ import com.github.ambry.config.VerifiableProperties;
 
 /**
  * Configuration parameters required by the Admin.
- * <p/>
- * Receives the in-memory representation of a properties file and extracts parameters that are specifically
- * required for admin and presents them for retrieval through defined APIs.
  */
-class AdminConfig {
+public class AdminConfig {
 
   /**
    * Cache validity in seconds for non-private blobs for GET.

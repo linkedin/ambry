@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.JmxReporter;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
