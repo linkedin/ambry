@@ -179,7 +179,7 @@ public class MessageFormatSendTest {
       bufresult.clear();
       WritableByteChannel channel5 = Channels.newChannel(new ByteBufferOutputStream(bufresult));
       while (!send4.isSendComplete()) {
-        send4.writeTo(channel4);
+        send4.writeTo(channel5);
       }
 
       bufresult.flip();
