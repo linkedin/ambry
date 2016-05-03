@@ -15,8 +15,11 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -44,6 +47,24 @@ public class ClusterMapManager implements ClusterMap {
   private final ClusterMapMetrics clusterMapMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
+
+  // Comparators for comparing unallocated capacity in datanodes/disks
+  private final Comparator<DataNode> dataNodeCapacityComparator = new Comparator<DataNode>() {
+    @Override
+    public int compare(DataNode o1, DataNode o2) {
+      long o1Capacity = getUnallocatedRawCapacityInBytes(o1);
+      long o2Capacity = getUnallocatedRawCapacityInBytes(o2);
+      return (o1Capacity < o2Capacity) ? -1 : (o1Capacity == o2Capacity) ? 0 : 1;
+    }
+  };
+  private final Comparator<Disk> diskCapacityComparator = new Comparator<Disk>() {
+    @Override
+    public int compare(Disk o1, Disk o2) {
+      long o1Capacity = getUnallocatedRawCapacityInBytes(o1);
+      long o2Capacity = getUnallocatedRawCapacityInBytes(o2);
+      return (o1Capacity < o2Capacity) ? -1 : (o1Capacity == o2Capacity) ? 0 : 1;
+    }
+  };
 
   public ClusterMapManager(PartitionLayout partitionLayout) {
     if (logger.isTraceEnabled()) {
@@ -261,45 +282,195 @@ public class ClusterMapManager implements ClusterMap {
     return true;
   }
 
-  // Allocate unique datanode.disks for each replica in each datacenter up to replicaCountPerDatacenter (hard-code all
-  // datacenters to have same number of replicas for now).
-  private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityInBytes,
-      List<Datacenter> dataCenters) {
-    ArrayList<Disk> allocatedDisks = new ArrayList<Disk>();
-
-    for (Datacenter datacenter : dataCenters) {
-      int rcpd = replicaCountPerDatacenter;
-      Set<DataNode> nodesToExclude = new HashSet<DataNode>();
-      for (int i = 0; i < rcpd; i++) {
-        DataNode nodeWithMostCapacity = getDataNodeWithMostUnallocatedRawCapacity(datacenter, nodesToExclude);
-        Disk diskWithMostCapacity = getDiskWithMostUnallocatedRawCapacity(nodeWithMostCapacity, replicaCapacityInBytes);
-        allocatedDisks.add(diskWithMostCapacity);
-        nodesToExclude.add(nodeWithMostCapacity);
-      }
-    }
-    return allocatedDisks;
+  /**
+   * Get a list of the nodes in a {@link Datacenter} ordered by amount of free space. Nodes with the same amount
+   * of free space are shuffled.
+   *
+   * @param datacenter
+   * @return
+   */
+  private List<DataNode> getShuffledDataNodesSortedByUnallocatedCapacity(Datacenter datacenter) {
+    ArrayList<DataNode> dataNodes = new ArrayList<>(datacenter.getDataNodes());
+    Collections.shuffle(dataNodes);
+    Collections.sort(dataNodes, dataNodeCapacityComparator);
+    return dataNodes;
   }
 
-  // Best effort (or less) allocation of partitions. I.e., size of returned list may be less than numPartitions.
+  /**
+   * Get a sampling of {@code numDisks} random disks from a list of {@link DataNode}s.
+   * NOTE 1: This method will change the ordering of the nodes in {@code dataNodes}
+   * NOTE 2: If {@code numDisks} valid disks could not be found, the returned list could be shorter than
+   *         {@code numDisks}
+   *
+   * @param dataNodes the list of {@link DataNode}s to sample from
+   * @param dataNodesUsed the set of {@link DataNode}s to exclude from the sample
+   * @param replicaCapacityInBytes the minimum amount of free space that a disk in the sample should have
+   * @param rackAware if {@code true}, only return disks in nodes that do not share racks with the nodes
+   *                  in {@code dataNodesUsed}
+   * @param numDisks how many disks to return in the sample
+   * @return a list of {@link Disk}s of length {@code numDisks}, or fewer if {@code numDisks} valid samples could not
+   *         be found
+   */
+  private List<Disk> getRandomDiskCandidateSample(List<DataNode> dataNodes, Set<DataNode> dataNodesUsed,
+      long replicaCapacityInBytes, boolean rackAware, int numDisks) {
+    Set<Long> rackIdsUsed = new HashSet<>();
+    if (rackAware) {
+      for (DataNode dataNode : dataNodesUsed) {
+        rackIdsUsed.add(dataNode.getRackId());
+      }
+    }
+    List<Disk> diskCandidates = new ArrayList<>();
+    int selectionBound = dataNodes.size();
+    Random randomGen = new Random();
+    while ((selectionBound > 0) && (diskCandidates.size() < numDisks)) {
+      int selectionIndex = randomGen.nextInt(selectionBound);
+      DataNode candidate = dataNodes.get(selectionIndex);
+      if (!dataNodesUsed.contains(candidate) && !rackIdsUsed.contains(candidate.getRackId())) {
+        Disk diskWithMostCapacity = getDiskWithMostUnallocatedRawCapacity(candidate, replicaCapacityInBytes);
+        if (diskWithMostCapacity != null) {
+          diskCandidates.add(diskWithMostCapacity);
+        }
+      }
+      selectionBound--;
+      Collections.swap(dataNodes, selectionIndex, selectionBound);
+    }
+    return diskCandidates;
+  }
+
+  /**
+   * Return a list of disks for a new partition in the specified {@link Datacenter}.  Does not retry if fewer than
+   * {@code replicaCountPerDatacenter} disks cannot be allocated.
+   *
+   * @param replicaCountPerDatacenter how many replicas to attempt to allocate in the datacenter
+   * @param replicaCapacityInBytes the minimum amount of free space on a disk for a replica
+   * @param datacenter the {@link Datacenter} to allocate replicas in
+   * @param disableRackAwareness if {@code true}, do not attempt a rack-aware allocation
+   * @return
+   */
+  private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityInBytes,
+      Datacenter datacenter, boolean disableRackAwareness) {
+    ArrayList<Disk> disksToAllocate = new ArrayList<Disk>();
+    boolean rackAware = datacenter.isRackAware() && !disableRackAwareness;
+    Set<DataNode> nodesToExclude = new HashSet<>();
+    List<DataNode> dataNodes = new ArrayList<>(datacenter.getDataNodes());
+    for (int i = 0; i < replicaCountPerDatacenter; i++) {
+      List<Disk> diskCandidates =
+          getRandomDiskCandidateSample(dataNodes, nodesToExclude, replicaCapacityInBytes, rackAware, 3);
+      if (diskCandidates.size() > 0) {
+        Disk diskToAdd = Collections.max(diskCandidates, diskCapacityComparator);
+        disksToAllocate.add(diskToAdd);
+        nodesToExclude.add(diskToAdd.getDataNode());
+      }
+    }
+    return disksToAllocate;
+  }
+
+  //TODO compare this method's results to the allocation strategy above, remove one of them.
+  private List<Disk> allocateDisksForPartition2(int replicaCountPerDatacenter, long replicaCapacityInBytes,
+      Datacenter datacenter, boolean disableRackAwareness) {
+    ArrayList<Disk> disksToAllocate = new ArrayList<>();
+    boolean rackAware = datacenter.isRackAware() && !disableRackAwareness;
+    Set<DataNode> dataNodesUsed = new HashSet<>();
+    Set<Long> rackIdsUsed = new HashSet<>();
+    List<DataNode> sortedDataNodes = getShuffledDataNodesSortedByUnallocatedCapacity(datacenter);
+
+    int nodeIndex = sortedDataNodes.size() - 1;
+    for (int i = 0; i < replicaCountPerDatacenter; i++) {
+      while (nodeIndex >= 0) {
+        DataNode candidate = sortedDataNodes.get(nodeIndex);
+        long rackId = candidate.getRackId();
+        if (!dataNodesUsed.contains(candidate) && !rackIdsUsed.contains(rackId)) {
+          Disk diskWithMostCapacity =
+              getDiskWithMostUnallocatedRawCapacity(candidate, replicaCapacityInBytes);
+          if (diskWithMostCapacity != null) {
+            disksToAllocate.add(diskWithMostCapacity);
+            if (rackAware && rackId >= 0) {
+              rackIdsUsed.add(rackId);
+            }
+            dataNodesUsed.add(candidate);
+            break;
+          }
+        }
+        nodeIndex--;
+      }
+    }
+    return disksToAllocate;
+  }
+
+  /**
+   * Return a list of disks for a new partition in the specified {@link Datacenter}. Retry a non rack-aware allocation
+   * in certain cases described below if {@code bestEffort} is enabled.
+   *
+   * @param replicaCountPerDatacenter how many replicas to attempt to allocate in the datacenter
+   * @param replicaCapacityInBytes the minimum amount of free space on a disk for a replica
+   * @param datacenter the {@link Datacenter} to allocate replicas in
+   * @param disableRackAwareness if {@code true}, do not attempt a rack-aware allocation
+   * @param bestEffort If {@code bestEffort} is {@code true} and {@code disableRackAwareness} is {@code false},
+   *                   this method will attempt a non rack-aware allocation if it cannot find a rack-aware allocation.
+   * @return a list of {@code replicaCountPerDatacenter} or fewer disks that can be allocated for a new partition in
+   *         the specified datacenter
+   */
+  private List<Disk> allocateDisksForPartitionWithRetry(int replicaCountPerDatacenter, long replicaCapacityInBytes,
+      Datacenter datacenter, boolean disableRackAwareness, boolean bestEffort) {
+
+    List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes,
+        datacenter, disableRackAwareness);
+    if (datacenter.isRackAware() && !disableRackAwareness && (disks.size() < replicaCountPerDatacenter)) {
+      System.err.println("Rack-aware allocation failed for a partition on datacenter:" + datacenter.getName());
+      if (bestEffort) {
+        System.err.println("Attempting to perform a non rack-aware allocation.");
+        disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter, false);
+      }
+    }
+    if (disks.size() < replicaCountPerDatacenter) {
+      System.err.println("Could only allocate " + disks.size() + "/" + replicaCountPerDatacenter
+          + " replicas in datacenter: " + datacenter.getName());
+    }
+    return disks;
+  }
+
+
+  /**
+   * Perform a best effort (or less) allocation of partitions.
+   * i.e., size of returned list may be less than numPartitions.
+   *
+   * @param numPartitions How many partitions to allocate.
+   * @param replicaCountPerDatacenter The number of replicas per partition on each datacenter
+   * @param replicaCapacityInBytes How large each replica (of a partition) should be
+   * @param disableRackAwareness {@code true} if we should not attempt a rack aware allocation (do not try to ensure
+   *                             that the replicas of a partition are on separate racks)
+   * @param bestEffort {@code true} if we should retry a non rack aware allocation if a rack aware allocation fails
+   * @return A list of the new {@link PartitionId}s.
+   */
   public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter,
-      long replicaCapacityInBytes) {
+      long replicaCapacityInBytes, boolean disableRackAwareness, boolean bestEffort) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
 
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
-      List<Disk> disks =
-          allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, hardwareLayout.getDatacenters());
-      if (disks.size() == 0) {
-        System.err.println("numPartitions: " + numPartitions);
-        break;
+      List<Disk> disksToAllocate = new ArrayList<>();
+      for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+        List<Disk> disks = allocateDisksForPartitionWithRetry(replicaCountPerDatacenter, replicaCapacityInBytes,
+            datacenter, disableRackAwareness, bestEffort);
+        disksToAllocate.addAll(disks);
       }
-      partitions.add(partitionLayout.addNewPartition(disks, replicaCapacityInBytes));
+      partitions.add(partitionLayout.addNewPartition(disksToAllocate, replicaCapacityInBytes));
       numPartitions--;
     }
 
     return partitions;
   }
 
-  public void addReplicas(PartitionId partitionId, String dataCenterName) {
+  /**
+   * Add a set of replicas on a new datacenter for an existing partition.
+   *
+   * @param partitionId The partition to add the new datacenter to
+   * @param dataCenterName The name of the new datacenter
+   * @param disableRackAwareness {@code true} if we should not attempt a rack aware allocation (do not try to ensure
+   *                             that the replicas of a partition are on separate racks)
+   * @param bestEffort {@code true} if we should retry a non rack aware allocation if a rack aware allocation fails
+   */
+  public void addReplicas(PartitionId partitionId, String dataCenterName, boolean disableRackAwareness,
+      boolean bestEffort) {
     List<ReplicaId> replicaIds = partitionId.getReplicaIds();
     Map<String, Integer> replicaCountByDatacenter = new HashMap<String, Integer>();
     long capacityOfReplicasInBytes = 0;
@@ -333,10 +504,8 @@ public class ClusterMapManager implements ClusterMap {
       index++;
     }
     Datacenter datacenterToAdd = hardwareLayout.findDatacenter(dataCenterName);
-    List<Datacenter> datacentersToAdd = new ArrayList<Datacenter>();
-    datacentersToAdd.add(datacenterToAdd);
-    List<Disk> disksForReplicas =
-        allocateDisksForPartition(numberOfReplicasPerDatacenter, capacityOfReplicasInBytes, datacentersToAdd);
+    List<Disk> disksForReplicas = allocateDisksForPartitionWithRetry(numberOfReplicasPerDatacenter,
+        capacityOfReplicasInBytes, datacenterToAdd, disableRackAwareness, bestEffort);
     partitionLayout.addNewReplicas((Partition) partitionId, disksForReplicas);
   }
 

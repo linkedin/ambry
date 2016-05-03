@@ -15,7 +15,11 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,6 +32,7 @@ import java.util.List;
 import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 
 public class TestUtils {
@@ -142,7 +147,7 @@ public class TestUtils {
   }
 
   /**
-   * Generates an array of JSON data node objects, each with a unique, defined rack ID.
+   * Generates an array of JSON data node objects, each with a defined rack ID.
    * Increments basePort and sslPort for each node to ensure unique DataNode given same hostname.
    *
    * @param dataNodeCount how many data nodes to generate
@@ -159,7 +164,7 @@ public class TestUtils {
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, i, hardwareState, disks));
+      jsonArray.put(getJsonDataNode(hostname, basePort + i, sslPort + i, i % 3, hardwareState, disks));
     }
     return jsonArray;
   }
@@ -345,6 +350,51 @@ public class TestUtils {
     return jsonObject;
   }
 
+  /**
+   * Verify that the partitions in the list are on unique racks for each datacenter.
+   *
+   * @param allocatedPartitions the list of partitions to check
+   */
+  public static void checkRackUsage(List<PartitionId> allocatedPartitions) {
+    for (PartitionId partition : allocatedPartitions) {
+      Map<String, Set<Long>> rackSetByDatacenter = new HashMap<>();
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        String datacenter = replica.getDataNodeId().getDatacenterName();
+        Set<Long> rackSet = rackSetByDatacenter.get(datacenter);
+        if (rackSet == null) {
+          rackSet = new HashSet<>();
+          rackSetByDatacenter.put(datacenter, rackSet);
+        }
+
+        long rackId = replica.getDataNodeId().getRackId();
+        if (rackId >= 0) {
+          assertFalse("Allocation was not on unique racks", rackSet.contains(rackId));
+          rackSet.add(rackId);
+        }
+      }
+    }
+  }
+
+  /**
+   * Verify that the partitions in the list have {@code numReplicas} per datacenter
+   *
+   * @param allocatedPartitions the list of partitions to check
+   * @param numReplicas how many replicas a partition should have in each datacenter
+   */
+  public static void checkNumReplicasPerDatacenter(List<PartitionId> allocatedPartitions, int numReplicas) {
+    for (PartitionId partition : allocatedPartitions) {
+      Map<String, Integer> numReplicasMap = new HashMap<>();
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        String datacenter = replica.getDataNodeId().getDatacenterName();
+        Integer replicasInDatacenter = numReplicasMap.containsKey(datacenter)? numReplicasMap.get(datacenter) : 0;
+        numReplicasMap.put(datacenter, replicasInDatacenter+1);
+      }
+      for (int replicasInDatacenter : numReplicasMap.values()) {
+        assertEquals("Datacenter does not have expected number of replicas", numReplicas, replicasInDatacenter);
+      }
+    }
+  }
+
   public static class TestHardwareLayout {
     private static final int defaultDiskCount = 10; // per DataNode
     private static final long defaultDiskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
@@ -358,6 +408,7 @@ public class TestUtils {
     private int dataNodeCount;
     private int datacenterCount;
     private int basePort;
+    private boolean rackAware;
 
     private HardwareLayout hardwareLayout;
 
@@ -368,6 +419,10 @@ public class TestUtils {
 
     protected JSONArray getDataNodes(int basePort, int sslPort, JSONArray disks)
         throws JSONException {
+      if (rackAware) {
+        return getJsonArrayDataNodesRackAware(dataNodeCount, getLocalHost(), basePort, sslPort,
+            HardwareState.AVAILABLE, disks);
+      }
       return getJsonArrayDataNodes(dataNodeCount, getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE, disks);
     }
 
@@ -388,22 +443,40 @@ public class TestUtils {
     }
 
     public TestHardwareLayout(String clusterName, int diskCount, long diskCapacityInBytes, int dataNodeCount,
-        int datacenterCount, int basePort)
+        int datacenterCount, int basePort, boolean rackAware)
         throws JSONException {
       this.diskCount = diskCount;
       this.diskCapacityInBytes = diskCapacityInBytes;
       this.dataNodeCount = dataNodeCount;
       this.datacenterCount = datacenterCount;
       this.basePort = basePort;
+      this.rackAware = rackAware;
 
       this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters()),
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
     }
 
-    public TestHardwareLayout(String clusterName)
+    /**
+     * Construct a default hardware layout.
+     *
+     * @param clusterName the name of the cluster generated
+     * @param rackAware {@code true} if the cluster should have defined rack IDs
+     * @throws JSONException
+     */
+    public TestHardwareLayout(String clusterName, boolean rackAware)
         throws JSONException {
       this(clusterName, defaultDiskCount, defaultDiskCapacityInBytes, defaultDataNodeCount, defaultDatacenterCount,
-          defaultBasePort);
+          defaultBasePort, rackAware);
+    }
+
+    /**
+     * Construct a default hardware layout without defined rack IDs.
+     * @param clusterName the name of the cluster generated
+     * @throws JSONException
+     */
+    public TestHardwareLayout(String clusterName)
+        throws JSONException {
+      this(clusterName, false);
     }
 
     public HardwareLayout getHardwareLayout() {
@@ -424,6 +497,10 @@ public class TestUtils {
 
     public int getDatacenterCount() {
       return datacenterCount;
+    }
+
+    public boolean isRackAware() {
+      return rackAware;
     }
 
     public Datacenter getRandomDatacenter() {
@@ -616,7 +693,7 @@ public class TestUtils {
     List<PartitionId> allocatedPartitions;
 
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(partitionCount, replicaCountPerDatacenter, replicaCapacityInBytes);
+        clusterMapManager.allocatePartitions(partitionCount, replicaCountPerDatacenter, replicaCapacityInBytes, false, false);
     assertEquals(allocatedPartitions.size(), 5);
 
     return clusterMapManager;

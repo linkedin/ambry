@@ -119,7 +119,7 @@ public class PartitionManager {
         int numberOfPartitions = options.valueOf(numberOfPartitionsOpt);
         int numberOfReplicas = options.valueOf(numberOfReplicasPerDatacenterOpt);
         long replicaCapacityInBytes = options.valueOf(replicaCapacityInBytesOpt);
-        manager.allocatePartitions(numberOfPartitions, numberOfReplicas, replicaCapacityInBytes);
+        manager.allocatePartitions(numberOfPartitions, numberOfReplicas, replicaCapacityInBytes, true, false);
       } else if (operationType.compareToIgnoreCase("AddReplicas") == 0) {
         listOpt.add(partitionIdsToAddReplicasToOpt);
         listOpt.add(datacenterToAddReplicasToOpt);
@@ -135,14 +135,14 @@ public class PartitionManager {
         String datacenterToAddReplicasTo = options.valueOf(datacenterToAddReplicasToOpt);
         if (partitionIdsToAddReplicas.compareToIgnoreCase(".") == 0) {
           for (PartitionId partitionId : manager.getAllPartitions()) {
-            manager.addReplicas(partitionId, datacenterToAddReplicasTo);
+            manager.addReplicas(partitionId, datacenterToAddReplicasTo, true, false);
           }
         } else {
           String[] partitionIds = partitionIdsToAddReplicas.split(",");
           for (String partitionId : partitionIds) {
             for (PartitionId partitionInCluster : manager.getAllPartitions()) {
               if (partitionInCluster.isEqual(partitionId)) {
-                manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo);
+                manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo, true, false);
               }
             }
           }
