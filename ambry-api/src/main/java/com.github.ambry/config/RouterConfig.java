@@ -14,7 +14,7 @@
 package com.github.ambry.config;
 
 /**
- * Configuration parameters required by a Router.
+ * Configuration parameters required by a {@link com.github.ambry.router.Router}.
  * <p/>
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
  * required for a Router and presents them for retrieval through defined APIs.
@@ -97,6 +97,20 @@ public class RouterConfig {
   public final int routerMaxSlippedPutAttempts;
 
   /**
+   * The maximum number of parallel requests allowed for a delete operation.
+   */
+  @Config("router.delete.request.parallelism")
+  @Default("12")
+  public final int routerDeleteRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a delete operation.
+   */
+  @Config("router.delete.success.target")
+  @Default("2")
+  public final int routerDeleteSuccessTarget;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -115,5 +129,7 @@ public class RouterConfig {
     routerPutRequestParallelism = verifiableProperties.getInt("router.put.request.parallelism", 3);
     routerPutSuccessTarget = verifiableProperties.getInt("router.put.success.target", 2);
     routerMaxSlippedPutAttempts = verifiableProperties.getInt("router.max.slipped.put.attempts", 1);
+    routerDeleteRequestParallelism = verifiableProperties.getInt("router.delete.request.parallelism", 12);
+    routerDeleteSuccessTarget = verifiableProperties.getInt("router.delete.success.target", 2);
   }
 }

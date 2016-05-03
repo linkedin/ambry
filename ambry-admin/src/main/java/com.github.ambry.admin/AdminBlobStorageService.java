@@ -35,7 +35,6 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -641,7 +640,7 @@ class HeadCallback implements Callback<BlobInfo> {
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         logger.trace("Successful HEAD of {}", blobId);
-        setResponseHeaders(result);
+        setBlobPropertiesResponseHeaders(result);
       } else if (exception == null) {
         exception = new IllegalStateException("Both response and exception are null for HeadCallback");
       }
@@ -664,11 +663,11 @@ class HeadCallback implements Callback<BlobInfo> {
   }
 
   /**
-   * Sets the required headers in the response.
+   * Sets the required blob properties headers in the response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo)
+  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setStatus(ResponseStatus.Ok);
@@ -689,11 +688,6 @@ class HeadCallback implements Callback<BlobInfo> {
     }
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
-    }
-    byte[] userMetadataArray = blobInfo.getUserMetadata();
-    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
-    for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
-      restResponseChannel.setHeader(entry.getKey(), entry.getValue());
     }
   }
 }

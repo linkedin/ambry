@@ -53,7 +53,6 @@ import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -1103,6 +1102,8 @@ public class AdminBlobStorageServiceTest {
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
     assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertEquals("Blob size does not match ", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
         expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
         restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
@@ -1121,25 +1122,6 @@ public class AdminBlobStorageServiceTest {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match",
           expectedHeaders.getString(RestUtils.Headers.OWNER_ID),
           restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
-    }
-    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
-  }
-
-  /**
-   * Verifies User metadata headers from output, to that sent in during input
-   * @param expectedHeaders the expected headers in the response.
-   * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
-   * @throws JSONException
-   */
-  private void verifyUserMetadataHeaders(JSONObject expectedHeaders, MockRestResponseChannel restResponseChannel)
-      throws JSONException {
-    Iterator itr = expectedHeaders.keys();
-    while (itr.hasNext()) {
-      String key = (String) itr.next();
-      if (key.startsWith(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX)) {
-        String outValue = restResponseChannel.getHeader(key);
-        assertEquals("Value for " + key + "does not match in user metadata", expectedHeaders.getString(key), outValue);
-      }
     }
   }
 

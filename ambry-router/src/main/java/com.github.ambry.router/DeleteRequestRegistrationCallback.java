@@ -11,16 +11,15 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.messageformat;
+package com.github.ambry.router;
+
+import com.github.ambry.network.RequestInfo;
+
 
 /**
- * Set of flags used to identify different types of messages
+ * The callback to be used when delete requests are created and needs to be sent out. The {@link DeleteManager} passes this
+ * callback to the {@link DeleteOperation}.
  */
-public enum MessageFormatFlags {
-  BlobProperties,
-  BlobUserMetadata,
-  Blob,
-  All,
-  BlobInfo
+interface DeleteRequestRegistrationCallback {
+  public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo request);
 }
-

@@ -15,7 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.util.ArrayList;
+import com.github.ambry.network.PortType;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -23,14 +23,17 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 
 // TestDataNode permits DataNode to be constructed with a null Datacenter.
 class TestDataNode extends DataNode {
-  public TestDataNode(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
+  public TestDataNode(String dataCenterName, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
-    super(null, jsonObject, clusterMapConfig);
+    super(new TestDatacenter(TestUtils.getJsonDatacenter(dataCenterName, new JSONArray()), clusterMapConfig),
+        jsonObject, clusterMapConfig);
   }
 
   @Override
@@ -58,6 +61,9 @@ class TestDataNode extends DataNode {
     if (getState() != testDataNode.getState()) {
       return false;
     }
+    if (getRackId() != testDataNode.getRackId()) {
+      return false;
+    }
     return getRawCapacityInBytes() == testDataNode.getRawCapacityInBytes();
   }
 }
@@ -82,7 +88,7 @@ public class DataNodeTest {
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
-    DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
+    DataNode dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
 
     assertEquals(dataNode.getHostname(), TestUtils.getLocalHost());
     assertEquals(dataNode.getPort(), 6666);
@@ -91,14 +97,25 @@ public class DataNodeTest {
     assertEquals(dataNode.getDisks().size(), diskCount);
     assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
 
+    assertEquals(-1, dataNode.getRackId());
+
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
-    assertEquals(dataNode, new TestDataNode(dataNode.toJSONObject(), clusterMapConfig));
+    assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
+
+    // Test with defined rackId
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, HardwareState.AVAILABLE, getDisks());
+    dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
+    assertEquals(42, dataNode.getRackId());
+
+    assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
+    assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
   }
 
   public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     try {
-      new TestDataNode(jsonObject, clusterMapConfig);
+      new TestDataNode("datacenter", jsonObject, clusterMapConfig);
       fail("Construction of TestDataNode should have failed validation.");
     } catch (IllegalStateException e) {
       // Expected.
@@ -149,6 +166,11 @@ public class DataNodeTest {
     // same port number for plain text and ssl port
     jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 6666, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
+
+    // bad rack ID
+    jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, -2, HardwareState.AVAILABLE, getDisks());
+    failValidation(jsonObject, clusterMapConfig);
   }
 
   @Test
@@ -162,7 +184,7 @@ public class DataNodeTest {
     int threshold = clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold;
     long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs;
 
-    DataNode dataNode = new TestDataNode(jsonObject, clusterMapConfig);
+    DataNode dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
     for (int i = 0; i < threshold; i++) {
       ensure(dataNode, HardwareState.AVAILABLE);
       dataNode.onNodeTimeout();
@@ -181,6 +203,42 @@ public class DataNodeTest {
     //A single response should make the node available now
     dataNode.onNodeResponse();
     ensure(dataNode, HardwareState.AVAILABLE);
+  }
+
+  /**
+   * Validate {@link DataNodeId#getPortToConnectTo()} returns port type corresponding to the
+   * SSL enabled datacenter list specified in {@link ClusterMapConfig}.
+   * @throws Exception
+   */
+  @Test
+  public void validateGetPort()
+      throws Exception {
+    ClusterMapConfig clusterMapConfig;
+    Properties props = new Properties();
+    props.setProperty("clustermap.ssl.enabled.datacenters", "datacenter1,datacenter2,datacenter3");
+    clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    System.out.println(clusterMapConfig.clusterMapSslEnabledDatacenters);
+    JSONObject jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
+
+    DataNode dataNode = new TestDataNode("datacenter2", jsonObject, clusterMapConfig);
+    assertEquals("The datacenter of the data node is in the ssl enabled datacenter list. SSL port should be returned",
+        PortType.SSL, dataNode.getPortToConnectTo().getPortType());
+
+    dataNode = new TestDataNode("datacenter5", jsonObject, clusterMapConfig);
+    assertEquals(
+        "The datacenter of the data node is not in the ssl enabled datacenter list. Plaintext port should be returned",
+        PortType.PLAINTEXT, dataNode.getPortToConnectTo().getPortType());
+
+    jsonObject.remove("sslport");
+    dataNode = new TestDataNode("datacenter1", jsonObject, clusterMapConfig);
+    try {
+      dataNode.getPortToConnectTo();
+      fail("Should have thrown Exception because there is no sslPort.");
+    } catch (IllegalStateException e) {
+      // The datacenter of the data node is in the ssl enabled datacenter list, but the data node does not have an ssl
+      // port to connect. Exception should be thrown.
+    }
   }
 
   void ensure(DataNode dataNode, HardwareState state) {
