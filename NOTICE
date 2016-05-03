@@ -38,3 +38,7 @@ License: Apache 2.0
 This product includes/uses Apache commons codec (https://commons.apache.org/proper/commons-codec/)
 Copyright (C) 2014 Apache Commons
 License: Apache 2.0
+
+This product includes/uses JUnit (http://junit.org)
+Copyright (C) 2016 JUnit
+License: Eclipse Public License - v 1.0
