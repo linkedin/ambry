@@ -306,7 +306,8 @@ class NettyResponseChannel implements RestResponseChannel {
     boolean responseSent = false;
     logger.trace("Sending error response to client on channel {}", ctx.channel());
     FullHttpResponse errorResponse = getErrorResponse(exception);
-    if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
+    if (maybeWriteResponseMetadata(errorResponse,
+        new ErrorResponseWriteListener(HttpHeaders.isKeepAlive(errorResponse)))) {
       logger.trace("Successfully sent error response on channel {}", ctx.channel());
       responseSent = true;
       long processingTime = System.currentTimeMillis() - processingStartTime;
@@ -338,12 +339,19 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     String fullMsg = "Failure: " + status + errReason;
     logger.trace("Constructed error response for the client - [{}]", fullMsg);
-    FullHttpResponse response =
-        new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
-    HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    HttpHeaders.setContentLength(response, fullMsg.length());
+    FullHttpResponse response;
+    if (request != null && !request.getRestMethod().equals(RestMethod.HEAD)) {
+      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
+    } else {
+      // for HEAD, we cannot send the actual body but we need to return what the length would have been if this was GET.
+      // https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html (Section 9.4)
+      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
+    }
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
-    HttpHeaders.setKeepAlive(response, false);
+    HttpHeaders.setContentLength(response, fullMsg.length());
+    HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+    boolean keepAlive = status == HttpResponseStatus.NOT_FOUND || status == HttpResponseStatus.GONE;
+    HttpHeaders.setKeepAlive(response, keepAlive);
     return response;
   }
 
@@ -646,6 +654,15 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private class ErrorResponseWriteListener implements GenericFutureListener<ChannelFuture> {
     private final long responseWriteStartTime = System.currentTimeMillis();
+    private final boolean keepAlive;
+
+    /**
+     * Constructs a channel write listener for error responses.
+     * @param keepAlive {@code true} if the channel needs to be kept open. {@code false} otherwise.
+     */
+    ErrorResponseWriteListener(boolean keepAlive) {
+      this.keepAlive = keepAlive;
+    }
 
     @Override
     public void operationComplete(ChannelFuture future)
@@ -660,7 +677,7 @@ class NettyResponseChannel implements RestResponseChannel {
       if (request != null) {
         request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(channelWriteTime);
       }
-      completeRequest(true);
+      completeRequest(!keepAlive);
     }
   }
 

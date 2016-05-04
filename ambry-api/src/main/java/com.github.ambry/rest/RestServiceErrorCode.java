@@ -43,17 +43,19 @@ public enum RestServiceErrorCode {
   NotFound,
 
   /**
-   * Generic BadRequest error code when a client provides a request that is not fit for processing.
-   */
-  BadRequest,
-  /**
    * Resource scan still in progress and result not yet available
    */
   ResourceScanInProgress,
+
   /**
    * Resource scan has deducted that the resource is not safe for serving
    */
   ResourceDirty,
+
+  /**
+   * Generic BadRequest error code when a client provides a request that is not fit for processing.
+   */
+  BadRequest,
   /**
    * Client has sent arguments (whether in the URI or in the headers) that are not in the format that is expected or if
    * the number of values for an argument expected by the server does not match what the client sent.
