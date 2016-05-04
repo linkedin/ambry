@@ -124,14 +124,14 @@ class MockServer {
     ServerErrorCode serverError;
     ServerErrorCode partitionError;
     // getError could be at the server level or the partition level. For partition level errors,
-    // handle set it in the partitionResponseInfo
+    // set it in the partitionResponseInfo
     if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired
         || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found) {
       partitionError = getError;
       serverError = ServerErrorCode.No_Error;
     } else {
       serverError = getError;
-      // does not matter.
+      // does not matter - this will not be checked if serverError is not No_Error.
       partitionError = ServerErrorCode.No_Error;
     }
 
@@ -141,8 +141,10 @@ class MockServer {
       StoreKey key = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0);
       if (blobs.containsKey(key.getID())) {
         ByteBuffer buf = blobs.get(key.getID()).duplicate();
-        buf.getLong(); // read off the size
-        buf.getShort(); // read off the type.
+        // read off the size
+        buf.getLong();
+        // read off the type.
+        buf.getShort();
         PutRequest originalBlobPutReq =
             PutRequest.readFrom(new DataInputStream(new ByteBufferInputStream(buf)), clusterMap);
         switch (getRequest.getMessageFormatFlag()) {
@@ -211,7 +213,6 @@ class MockServer {
    * @param putRequest the PutRequest
    * @throws IOException if there was an error reading the contents of the given PutRequest.
    */
-
   private void updateBlobMap(PutRequest putRequest)
       throws IOException {
     String id = putRequest.getBlobId().getID();

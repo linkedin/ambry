@@ -95,10 +95,10 @@ class DeleteOperation {
 
   /**
    * Gets a list of {@link DeleteRequest} for sending to replicas.
-   * @param requestFillCallback the {@link DeleteRequestRegistrationCallback} to call for every request
+   * @param requestFillCallback the {@link RequestRegistrationCallback} to call for every request
    *                            that gets created as part of this poll operation.
    */
-  void poll(DeleteRequestRegistrationCallback requestFillCallback) {
+  void poll(RequestRegistrationCallback<DeleteOperation> requestFillCallback) {
     cleanupExpiredInflightRequests();
     checkAndMaybeComplete();
     if (isOperationComplete()) {
@@ -178,8 +178,8 @@ class DeleteOperation {
    * A wrapper class that is used to check if a request has been expired.
    */
   private class InflightRequestInfo {
-    private final long submissionTime;
-    private final ReplicaId replica;
+    final long submissionTime;
+    final ReplicaId replica;
 
     InflightRequestInfo(long submissionTime, ReplicaId replica) {
       this.submissionTime = submissionTime;

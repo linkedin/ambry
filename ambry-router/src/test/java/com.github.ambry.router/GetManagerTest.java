@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -38,20 +37,18 @@ public class GetManagerTest {
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
+  private final Random random = new Random();
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
-  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
+  private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private NonBlockingRouter router;
-
   private int chunkSize;
   private int requestParallelism;
   private int successTarget;
-  private final Random random = new Random();
-
   // Request params;
-  BlobProperties putBlobProperties;
-  byte[] putUserMetadata;
-  byte[] putContent;
-  ReadableStreamChannel putChannel;
+  private BlobProperties putBlobProperties;
+  private byte[] putUserMetadata;
+  private byte[] putContent;
+  private ReadableStreamChannel putChannel;
 
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -93,7 +90,8 @@ public class GetManagerTest {
     setOperationParams(chunkSize);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
-    Assert.assertEquals("Blob properties should match", putBlobProperties, blobInfo.getBlobProperties());
+    Assert.assertTrue("Blob properties should match",
+        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
     router.close();
   }
@@ -109,7 +107,8 @@ public class GetManagerTest {
     setOperationParams(chunkSize * 6 + 11);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
-    Assert.assertEquals("Blob properties should match", putBlobProperties, blobInfo.getBlobProperties());
+    Assert.assertTrue("Blob properties should match",
+        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
     router.close();
   }
@@ -125,8 +124,8 @@ public class GetManagerTest {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     try {
-      mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
       router.getBlobInfo(blobId).get();
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
@@ -148,7 +147,8 @@ public class GetManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
-    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(new MetricRegistry()),
+    router = new NonBlockingRouter(new RouterConfig(vProps),
+        new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry()),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
         mockTime);

@@ -125,6 +125,13 @@ public class RouterConfig {
   public final int routerGetSuccessTarget;
 
   /**
+   * Indicates whether get operations are allowed to make requests to nodes in remote data centers.
+   */
+  @Config("router.get.cross.dc.enabled")
+  @Default("true")
+  public final boolean routerGetCrossDcEnabled;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -147,5 +154,6 @@ public class RouterConfig {
     routerDeleteSuccessTarget = verifiableProperties.getInt("router.delete.success.target", 2);
     routerGetRequestParallelism = verifiableProperties.getInt("router.get.request.parallelism", 2);
     routerGetSuccessTarget = verifiableProperties.getInt("router.get.success.target", 1);
+    routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
   }
 }

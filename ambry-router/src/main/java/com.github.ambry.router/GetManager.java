@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +47,6 @@ class GetManager {
   // Because there is a guaranteed response from the NetworkClient for every request sent out, entries
   // get cleaned up periodically.
   private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<Integer, GetOperation>();
-  private final AtomicBoolean isOpen = new AtomicBoolean(true);
 
   // shared by all GetOperations
   private final ClusterMap clusterMap;
@@ -64,7 +62,7 @@ class GetManager {
       requestListToFill.add(requestInfo);
       correlationIdToGetOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), getOperation);
     }
-  };
+  }
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to GetOperations, every time.
   private final GetRequestRegistrationCallbackImpl requestRegistrationCallback =
@@ -131,8 +129,20 @@ class GetManager {
       op.poll(requestRegistrationCallback);
       if (op.isOperationComplete()) {
         getOperationIterator.remove();
+        onComplete(op);
       }
     }
+  }
+
+  /**
+   * Called for a {@link GetOperation} when the operation is complete. Any cleanup that the GetManager needs to do
+   * with respect to this operation will have to be done here. The GetManager also finishes the operation by
+   * performing the callback and notification.
+   * @param op the {@link PutOperation} that has completed.
+   */
+  void onComplete(GetOperation op) {
+    NonBlockingRouter
+        .completeOperation(op.getFuture(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
 
   /**
@@ -146,6 +156,7 @@ class GetManager {
       getOperation.handleResponse(responseInfo);
       if (getOperation.isOperationComplete()) {
         getOperations.remove(getOperation);
+        onComplete(getOperation);
       }
     }
   }
@@ -158,10 +169,10 @@ class GetManager {
     Iterator<GetOperation> iter = getOperations.iterator();
     while (iter.hasNext()) {
       GetOperation op = iter.next();
+      iter.remove();
       logger.trace("Aborting operation for blob id: ", op.getBlobIdStr());
       NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
           new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
-      iter.remove();
     }
   }
 }

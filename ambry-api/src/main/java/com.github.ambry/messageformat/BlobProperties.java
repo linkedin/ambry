@@ -131,19 +131,4 @@ public class BlobProperties {
     sb.append("]");
     return sb.toString();
   }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-
-    if (o == null) {
-      return false;
-    }
-
-    BlobProperties that = (BlobProperties) o;
-    return blobSize == that.blobSize && serviceId.equals(that.serviceId) && ownerId.equals(that.ownerId) && contentType
-        .equals(that.contentType) && isPrivate == that.isPrivate && timeToLiveInSeconds == that.timeToLiveInSeconds;
-  }
 }

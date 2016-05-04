@@ -86,10 +86,11 @@ public class PutOperationTest {
   @Test
   public void testSendIncomplete()
       throws Exception {
+    int numChunks = NonBlockingRouter.MAX_IN_MEM_CHUNKS + 1;
     BlobProperties blobProperties =
-        new BlobProperties(chunkSize * 5, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(chunkSize * numChunks, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     byte[] userMetadata = new byte[10];
-    byte[] content = new byte[chunkSize * 5];
+    byte[] content = new byte[chunkSize * numChunks];
     random.nextBytes(content);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
     FutureResult<String> future = new FutureResult<>();
@@ -98,15 +99,15 @@ public class PutOperationTest {
             null, time);
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;
-    // Since this channel is in memory, one call to fill chunks would end up filling the maximum number of PutChunks (4).
+    // Since this channel is in memory, one call to fill chunks would end up filling the maximum number of PutChunks.
     op.fillChunks();
     // A poll should therefore return requestParallelism number of requests from each chunk
     op.poll(requestRegistrationCallback);
-    Assert.assertEquals(4 * requestParallelism, requestInfos.size());
+    Assert.assertEquals(NonBlockingRouter.MAX_IN_MEM_CHUNKS * requestParallelism, requestInfos.size());
 
-    // There are 5 data chunks for this blob (and a metadata chunk). The maximum number of in-memory PutChunk objects
-    // for an operation is 4. So, once the first chunk is completely sent out, the first PutChunk will be reused. What
-    // the test verifies is that the buffer of the first PutChunk does not get reused. It does this as follows:
+    // There are MAX_IN_MEM_CHUNKS + 1 data chunks for this blob (and a metadata chunk).
+    // Once the first chunk is completely sent out, the first PutChunk will be reused. What the test verifies is that
+    // the buffer of the first PutChunk does not get reused. It does this as follows:
     // For the first chunk,
     // 1. use first request to succeed the chunk (the successTarget is set to 1).
     // 2. read and store from the second for comparing later.
@@ -132,14 +133,14 @@ public class PutOperationTest {
     for (int i = 3; i < requestInfos.size(); i++) {
       op.handleResponse(getResponseInfo(requestInfos.get(i)));
     }
-    // fill the first PutChunk with the 5th chunk.
+    // fill the first PutChunk with the last chunk.
     op.fillChunks();
-    // Verify that the 5th chunk was filled.
+    // Verify that the last chunk was filled.
     requestInfos.clear();
     op.poll(requestRegistrationCallback);
     Assert.assertEquals(1 * requestParallelism, requestInfos.size());
 
-    // Verify that that the buffer of the third request is not affected.
+    // Verify that the buffer of the third request is not affected.
     buf = ByteBuffer.allocate((int) savedRequest.sizeInBytes());
     bufChannel = new ByteBufferChannel(buf);
     savedRequest.writeTo(bufChannel);
@@ -178,7 +179,7 @@ public class PutOperationTest {
   }
 
   /**
-   * Get the {@link ResponseInfo} for the given {@link RequestInfo} using tha {@link MockServer}
+   * Get the {@link ResponseInfo} for the given {@link RequestInfo} using the {@link MockServer}
    * @param requestInfo the {@link RequestInfo} for which the response is to be returned.
    * @return the {@link ResponseInfo} the response for the request.
    * @throws IOException if there is an error sending the request.

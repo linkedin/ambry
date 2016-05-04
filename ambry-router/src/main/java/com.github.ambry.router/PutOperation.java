@@ -197,7 +197,7 @@ class PutOperation {
    * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
    *                                    created as part of this poll operation.
    */
-  void poll(RequestRegistrationCallback requestRegistrationCallback) {
+  void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
     if (operationCompleted) {
       return;
     }
@@ -664,7 +664,7 @@ class PutOperation {
      * @param requestFillCallback the {@link RequestRegistrationCallback} to call for every request that gets created as
      *                            part of this poll operation.
      */
-    void poll(RequestRegistrationCallback requestFillCallback) {
+    void poll(RequestRegistrationCallback<PutOperation> requestFillCallback) {
       maybeFreeDefunctBuffers();
       //First, check if any of the existing requests have timed out.
       Iterator<Map.Entry<Integer, ChunkPutRequestInfo>> inFlightRequestsIterator =
@@ -822,9 +822,9 @@ class PutOperation {
      * A class that holds information about requests sent out by this PutChunk.
      */
     private class ChunkPutRequestInfo {
-      private final ReplicaId replicaId;
-      private final PutRequest putRequest;
-      private final long startTimeMs;
+      final ReplicaId replicaId;
+      final PutRequest putRequest;
+      final long startTimeMs;
 
       /**
        * Construct a ChunkPutRequestInfo
@@ -844,9 +844,9 @@ class PutOperation {
      */
     private class DefunctBufferInfo {
       // the buffer that is now defunct, but not yet freed.
-      ByteBuffer buf;
+      final ByteBuffer buf;
       // Requests that are reading from this buffer.
-      List<PutRequest> putRequests;
+      final List<PutRequest> putRequests;
 
       /**
        * Construct a DefunctBufferInfo

@@ -54,7 +54,7 @@ class DeleteManager {
   /**
    * Used by a {@link DeleteOperation} to associate a {@code CorrelationId} to a {@link DeleteOperation}.
    */
-  private class DeleteRequestRegistrationCallbackImpl implements DeleteRequestRegistrationCallback {
+  private class DeleteRequestRegistrationCallbackImpl implements RequestRegistrationCallback<DeleteOperation> {
     private List<RequestInfo> requestListToFill;
 
     @Override
@@ -163,9 +163,9 @@ class DeleteManager {
       Iterator<DeleteOperation> iter = deleteOperations.iterator();
       while (iter.hasNext()) {
         DeleteOperation deleteOperation = iter.next();
+        iter.remove();
         NonBlockingRouter.completeOperation(deleteOperation.getFutureResult(), deleteOperation.getCallback(), null,
             new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed));
-        iter.remove();
       }
     }
   }

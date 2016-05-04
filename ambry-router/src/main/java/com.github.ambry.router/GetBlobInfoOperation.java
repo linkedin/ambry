@@ -36,6 +36,8 @@ import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -44,10 +46,11 @@ import java.util.TreeMap;
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
 class GetBlobInfoOperation extends GetOperation<BlobInfo> {
-  private BlobInfo blobInfo;
   private final SimpleOperationTracker operationTracker;
   // map of correlation id to the request metadata for every request issued for this operation.
-  protected final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
+  private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
+
+  private static final Logger logger = LoggerFactory.getLogger(GetBlobInfoOperation.class);
 
   /**
    * Construct a GetBlobInfoOperation
@@ -64,8 +67,9 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       String blobIdStr, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback, Time time)
       throws RouterException {
     super(routerConfig, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
-    operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true,
-        routerConfig.routerGetSuccessTarget, routerConfig.routerGetRequestParallelism);
+    operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
+        routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
+        routerConfig.routerGetRequestParallelism);
   }
 
   /**
@@ -78,13 +82,9 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   }
 
   /**
-   * For this operation, create and populate get requests (in the form of {@link RequestInfo}) to send out.
-   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
-   *                                    created as part of this poll operation.
+   * Clean up requests sent out by this operation that have now timed out.
    */
-  @Override
-  void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
-    //First, check if any of the existing requests have timed out.
+  void cleanupExpiredInFlightRequests() {
     Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
         correlationIdToGetRequestInfo.entrySet().iterator();
     while (inFlightRequestsIterator.hasNext()) {
@@ -99,6 +99,17 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
         break;
       }
     }
+  }
+
+  /**
+   * For this operation, create and populate get requests (in the form of {@link RequestInfo}) to send out.
+   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
+   *                                    created as part of this poll operation.
+   */
+  @Override
+  void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
+    //First, check if any of the existing requests have timed out.
+    cleanupExpiredInFlightRequests();
 
     checkAndMaybeComplete();
     if (isOperationComplete()) {
@@ -116,25 +127,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
       requestRegistrationCallback.registerRequestToSend(this, request);
       replicaIterator.remove();
-    }
-  }
-
-  /**
-   * Handle the body of the response: Deserialize and set the {@link BlobInfo} to return.
-   * @param payload the body of the response.
-   * @throws IOException if there is an IOException while deserializing the body.
-   * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
-   */
-  void handleBody(InputStream payload)
-      throws IOException, MessageFormatException {
-    if (blobInfo == null) {
-      blobInfo = new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
-          MessageFormatRecord.deserializeUserMetadata(payload).array());
-    } else {
-      // If the successTarget is 1, this case will never get executed.
-      // If it is more than 1, then, different responses will have to be reconciled in some way. Here is where that
-      // would be done. Since the store is immutable, currently we handle this by ignoring subsequent responses
-      // (if the successTarget is > 1).
     }
   }
 
@@ -169,58 +161,84 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
           // out over a connection id, and the response received on a connection id must be for the latest request
           // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
           // There is no other way to handle it.
-          logger.error("The correlation id in the GetResponse " + getResponse.getCorrelationId()
-              + " is not the same as the correlation id in the associated GetRequest: " + correlationId);
           setOperationException(
-              new RouterException("Unexpected internal error", RouterErrorCode.UnexpectedInternalError));
+              new RouterException("The correlation id in the GetResponse " + getResponse.getCorrelationId() +
+                  "is not the same as the correlation id in the associated GetRequest: " + correlationId,
+                  RouterErrorCode.UnexpectedInternalError));
           operationTracker.onResponse(getRequestInfo.replicaId, false);
           // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
         } else {
-          ServerErrorCode getError = getResponse.getError();
-          if (getError == ServerErrorCode.No_Error) {
-            int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
-            // Each get request issued by the router is for a single blob.
-            if (partitionsInResponse != 1) {
-              setOperationException(new RouterException("Unexpected number of partition responses, expected: 1, " +
-                  "received: " + partitionsInResponse, RouterErrorCode.UnexpectedInternalError));
-              operationTracker.onResponse(getRequestInfo.replicaId, false);
-              // Again, no need to notify the responseHandler.
-            } else {
-              getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-              responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
-              if (getError == ServerErrorCode.No_Error) {
-                handleBody(getResponse.getInputStream());
-                operationTracker.onResponse(getRequestInfo.replicaId, true);
-              } else {
-                // process and set the most relevant exception.
-                processServerError(getError);
-                if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired) {
-                  // this is a successful response and one that completes the operation regardless of whether the
-                  // success target has been reached or not.
-                  operationCompleted = true;
-                } else {
-                  operationTracker.onResponse(getRequestInfo.replicaId, false);
-                }
-              }
-            }
-          } else {
-            responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
-            operationTracker.onResponse(getRequestInfo.replicaId, false);
-          }
+          processGetResponse(getRequestInfo, getResponse);
         }
-      } catch (IOException e) {
+      } catch (IOException | MessageFormatException e) {
         // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
         // detection.
-        setOperationException(new RouterException("Response deserialization received an unexpected error", e,
-            RouterErrorCode.UnexpectedInternalError));
-        operationTracker.onResponse(getRequestInfo.replicaId, false);
-      } catch (MessageFormatException e) {
         setOperationException(new RouterException("Response deserialization received an unexpected error", e,
             RouterErrorCode.UnexpectedInternalError));
         operationTracker.onResponse(getRequestInfo.replicaId, false);
       }
     }
     checkAndMaybeComplete();
+  }
+
+  /**
+   * Process the actual GetResponse extracted from a {@link ResponseInfo}
+   * @param getRequestInfo the associated {@link RequestInfo} for which this response was received.
+   * @param getResponse the {@link GetResponse} extracted the {@link ResponseInfo}
+   * @throws IOException if there is an error during deserialization of the GetResponse.
+   * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
+   */
+  void processGetResponse(GetRequestInfo getRequestInfo, GetResponse getResponse)
+      throws IOException, MessageFormatException {
+    ServerErrorCode getError = getResponse.getError();
+    if (getError == ServerErrorCode.No_Error) {
+      int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
+      // Each get request issued by the router is for a single blob.
+      if (partitionsInResponse != 1) {
+        setOperationException(new RouterException("Unexpected number of partition responses, expected: 1, " +
+            "received: " + partitionsInResponse, RouterErrorCode.UnexpectedInternalError));
+        operationTracker.onResponse(getRequestInfo.replicaId, false);
+        // Again, no need to notify the responseHandler.
+      } else {
+        getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
+        responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
+        if (getError == ServerErrorCode.No_Error) {
+          handleBody(getResponse.getInputStream());
+          operationTracker.onResponse(getRequestInfo.replicaId, true);
+        } else {
+          // process and set the most relevant exception.
+          processServerError(getError);
+          if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired) {
+            // this is a successful response and one that completes the operation regardless of whether the
+            // success target has been reached or not.
+            operationCompleted = true;
+          } else {
+            operationTracker.onResponse(getRequestInfo.replicaId, false);
+          }
+        }
+      }
+    } else {
+      responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
+      operationTracker.onResponse(getRequestInfo.replicaId, false);
+    }
+  }
+
+  /**
+   * Handle the body of the response: Deserialize and set the {@link BlobInfo} to return.
+   * @param payload the body of the response.
+   * @throws IOException if there is an IOException while deserializing the body.
+   * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
+   */
+  private void handleBody(InputStream payload)
+      throws IOException, MessageFormatException {
+    if (operationResult == null) {
+      operationResult = new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
+          MessageFormatRecord.deserializeUserMetadata(payload).array());
+    } else {
+      // If the successTarget is 1, this case will never get executed.
+      // If it is more than 1, then, different responses will have to be reconciled in some way. Here is where that
+      // would be done. Since the store is immutable, currently we handle this by ignoring subsequent responses.
+    }
   }
 
   /**
@@ -232,11 +250,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
         operationException = null;
       }
       operationCompleted = true;
-    }
-    // this check is outside as the operation could get completed outside of the operation tracking if a
-    // Blob_Deleted error or Blob_Expired error was received (in which case the success target is not honored).
-    if (operationCompleted) {
-      NonBlockingRouter.completeOperation(operationFuture, operationCallback, blobInfo, operationException);
     }
   }
 }

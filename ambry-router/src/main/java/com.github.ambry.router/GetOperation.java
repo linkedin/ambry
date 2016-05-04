@@ -26,6 +26,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,17 +37,18 @@ import org.slf4j.LoggerFactory;
  * @param <T> the type of the result of this operation.
  */
 abstract class GetOperation<T> {
-  final RouterConfig routerConfig;
-  final ClusterMap clusterMap;
-  final ResponseHandler responseHandler;
-  final FutureResult<T> operationFuture;
-  final Callback<T> operationCallback;
-  final BlobId blobId;
-  final Time time;
-  boolean operationCompleted = false;
-  Exception operationException;
+  protected final RouterConfig routerConfig;
+  protected final ClusterMap clusterMap;
+  protected final ResponseHandler responseHandler;
+  protected final FutureResult<T> operationFuture;
+  protected final Callback<T> operationCallback;
+  protected final BlobId blobId;
+  protected final Time time;
+  protected boolean operationCompleted = false;
+  protected Exception operationException;
+  protected T operationResult;
 
-  static final Logger logger = LoggerFactory.getLogger(GetOperation.class);
+  private static final Logger logger = LoggerFactory.getLogger(GetOperation.class);
 
   /**
    * Construct a GetOperation
@@ -93,6 +95,14 @@ abstract class GetOperation<T> {
    */
   Exception getOperationException() {
     return operationException;
+  }
+
+  /**
+   * Return the result of the operation.
+   * @return the operation result.
+   */
+  T getOperationResult() {
+    return operationResult;
   }
 
   /**
@@ -149,15 +159,17 @@ abstract class GetOperation<T> {
         setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
         break;
       default:
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.AmbryUnavailable));
+        setOperationException(
+            new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
         break;
     }
   }
 
   /**
    * Set the exception associated with this operation.
-   * A Blob_Deleted or Blob_Expired error overrides any other error previously received exception.
-   * @param exception the RouterException to possibly set.
+   * A {@link ServerErrorCode#Blob_Deleted} or {@link ServerErrorCode#Blob_Expired} error overrides any other
+   * previously received exception.
+   * @param exception the {@link RouterException} to possibly set.
    */
   void setOperationException(RouterException exception) {
     if (operationException == null || exception.getErrorCode() == RouterErrorCode.BlobDeleted
@@ -168,14 +180,13 @@ abstract class GetOperation<T> {
 
   /**
    * Create and return the {@link GetRequest} associated with the given blobId.
-   * @return the crated {@link GetRequest}.
-   * @param blobId The {@link BlobId} for which the GetRequest is being created.
+   * @return the created {@link GetRequest}.
+   * @param blobId The {@link BlobId} for which the {@link GetRequest} is being created.
    * @param flag The {@link MessageFormatFlags} to be set with the GetRequest.
    * @return the created GetRequest.
    */
   protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag) {
-    ArrayList<BlobId> blobIds = new ArrayList<BlobId>(1);
-    blobIds.add(blobId);
+    List<BlobId> blobIds = Collections.singletonList(blobId);
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
     partitionRequestInfoList.add(partitionRequestInfo);
@@ -188,8 +199,8 @@ abstract class GetOperation<T> {
  * A class that holds information about the get requests sent out.
  */
 class GetRequestInfo {
-  ReplicaId replicaId;
-  long startTimeMs;
+  final ReplicaId replicaId;
+  final long startTimeMs;
 
   /**
    * Construct a GetRequestInfo

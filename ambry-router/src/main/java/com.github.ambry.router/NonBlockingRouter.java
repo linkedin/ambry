@@ -283,20 +283,6 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Increment the count of currently running operations
-   */
-  static void incrementOperationsCount() {
-    currentOperationsCount.incrementAndGet();
-  }
-
-  /**
-   * Decrement the count of currently running operations
-   */
-  static void decrementOperationsCount() {
-    currentOperationsCount.decrementAndGet();
-  }
-
-  /**
    * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with
    * {@code operationResult} (if any) and {@code exception} (if any).
    * @param futureResult the {@link FutureResult} that needs to be set.
@@ -307,6 +293,7 @@ class NonBlockingRouter implements Router {
    */
   static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception) {
+    currentOperationsCount.decrementAndGet();
     try {
       futureResult.done(operationResult, exception);
       if (callback != null) {
@@ -314,8 +301,6 @@ class NonBlockingRouter implements Router {
       }
     } catch (Exception e) {
       logger.error("Exception caught during future and callback completion", e);
-    } finally {
-      currentOperationsCount.decrementAndGet();
     }
   }
 
