@@ -39,8 +39,10 @@ import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
@@ -60,6 +62,10 @@ import org.slf4j.LoggerFactory;
  * will be accepted and all scheduled writes will be notified of the failure.
  */
 class NettyResponseChannel implements RestResponseChannel {
+  // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
+  // for a POST, we always close the connection on error because we expect the channel to be in a bad state.
+  static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
+
   private final ChannelHandlerContext ctx;
   private final NettyMetrics nettyMetrics;
   private final ChannelProgressivePromise writeFuture;
@@ -350,7 +356,9 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setContentLength(response, fullMsg.length());
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    boolean keepAlive = status == HttpResponseStatus.NOT_FOUND || status == HttpResponseStatus.GONE;
+    boolean keepAlive =
+        request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES
+            .contains(status);
     HttpHeaders.setKeepAlive(response, keepAlive);
     return response;
   }
@@ -677,7 +685,7 @@ class NettyResponseChannel implements RestResponseChannel {
       if (request != null) {
         request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(channelWriteTime);
       }
-      completeRequest(!keepAlive);
+      completeRequest(!keepAlive || !future.isSuccess());
     }
   }
 

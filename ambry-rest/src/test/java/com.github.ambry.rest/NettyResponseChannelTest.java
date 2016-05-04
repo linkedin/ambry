@@ -40,10 +40,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -66,8 +64,6 @@ import static org.junit.Assert.*;
 public class NettyResponseChannelTest {
   private static final Map<RestServiceErrorCode, HttpResponseStatus>
       REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP = new HashMap<>();
-  private static final List<HttpResponseStatus> KEEP_ALIVE_ERROR_STATUSES =
-      Arrays.asList(HttpResponseStatus.GONE, HttpResponseStatus.NOT_FOUND);
 
   static {
     REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
@@ -151,11 +147,11 @@ public class NettyResponseChannelTest {
   public void onResponseCompleteWithExceptionTest() {
     for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
         .entrySet()) {
-      boolean shouldClose = !KEEP_ALIVE_ERROR_STATUSES.contains(entry.getValue());
+      boolean shouldClose = NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(entry.getValue());
       doOnResponseCompleteWithExceptionTest(entry.getKey(), entry.getValue(), shouldClose);
     }
     // Throws RuntimeException. There should be a INTERNAL_SERVER_ERROR HTTP response.
-    doOnResponseCompleteWithExceptionTest(null, HttpResponseStatus.INTERNAL_SERVER_ERROR, true);
+    doOnResponseCompleteWithExceptionTest(null, HttpResponseStatus.INTERNAL_SERVER_ERROR, false);
   }
 
   /**
@@ -357,12 +353,48 @@ public class NettyResponseChannelTest {
         assertTrue("End marker should be received", content instanceof LastHttpContent);
       }
       assertNull("There should be no more data in the channel", channel.readOutbound());
-      boolean shouldBeAlive = KEEP_ALIVE_ERROR_STATUSES.contains(entry.getValue());
+      boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(entry.getValue());
       assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
       assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
           HttpHeaders.isKeepAlive(response));
       if (!shouldBeAlive) {
         channel = createEmbeddedChannel();
+      }
+    }
+    channel.close();
+  }
+
+  /**
+   * Tests keep-alive for different HTTP methods and error statuses.
+   */
+  @Test
+  public void keepAliveTest() {
+    HttpMethod[] HTTP_METHODS = {HttpMethod.POST, HttpMethod.GET, HttpMethod.HEAD, HttpMethod.DELETE};
+    EmbeddedChannel channel = createEmbeddedChannel();
+    for (HttpMethod httpMethod : HTTP_METHODS) {
+      for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+          .entrySet()) {
+        HttpHeaders httpHeaders = new DefaultHttpHeaders();
+        httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, entry.getKey());
+        channel.writeInbound(RestTestUtils
+            .createRequest(httpMethod, TestingUri.OnResponseCompleteWithRestException.toString(), httpHeaders));
+        HttpResponse response = (HttpResponse) channel.readOutbound();
+        assertEquals("Unexpected response status", entry.getValue(), response.getStatus());
+        if (!(response instanceof FullHttpResponse)) {
+          // empty the channel
+          while (channel.readOutbound() != null) {
+            ;
+          }
+        }
+        boolean shouldBeAlive =
+            !httpMethod.equals(HttpMethod.POST) && !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES
+                .contains(entry.getValue());
+        assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
+        assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
+            HttpHeaders.isKeepAlive(response));
+        if (!shouldBeAlive) {
+          channel = createEmbeddedChannel();
+        }
       }
     }
     channel.close();
@@ -420,9 +452,11 @@ public class NettyResponseChannelTest {
     channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), httpHeaders));
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", expectedResponseStatus, response.getStatus());
-    assertEquals("Channel state (open/close) not as expected", shouldClose, !channel.isActive());
-    assertEquals("Connection header should be consistent with channel state", shouldClose,
+    assertEquals("Unexpected response status for " + restServiceErrorCode, expectedResponseStatus,
+        response.getStatus());
+    assertEquals("Channel state (open/close) not as expected for " + restServiceErrorCode, shouldClose,
+        !channel.isActive());
+    assertEquals("Connection header should be consistent with channel state for " + restServiceErrorCode, shouldClose,
         !HttpHeaders.isKeepAlive(response));
     channel.close();
   }
