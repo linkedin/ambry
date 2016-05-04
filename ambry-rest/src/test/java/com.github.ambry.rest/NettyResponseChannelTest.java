@@ -26,6 +26,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -39,7 +40,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -59,6 +64,27 @@ import static org.junit.Assert.*;
  * {@link MockNettyMessageProcessor#handleContent(HttpContent)}
  */
 public class NettyResponseChannelTest {
+  private static final Map<RestServiceErrorCode, HttpResponseStatus>
+      REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP = new HashMap<>();
+  private static final List<HttpResponseStatus> KEEP_ALIVE_ERROR_STATUSES =
+      Arrays.asList(HttpResponseStatus.GONE, HttpResponseStatus.NOT_FOUND);
+
+  static {
+    REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .put(RestServiceErrorCode.BadRequest, HttpResponseStatus.BAD_REQUEST);
+    REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .put(RestServiceErrorCode.Unauthorized, HttpResponseStatus.UNAUTHORIZED);
+    REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP.put(RestServiceErrorCode.Deleted, HttpResponseStatus.GONE);
+    REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .put(RestServiceErrorCode.NotFound, HttpResponseStatus.NOT_FOUND);
+    REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .put(RestServiceErrorCode.ResourceScanInProgress, HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED);
+    REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .put(RestServiceErrorCode.ResourceDirty, HttpResponseStatus.FORBIDDEN);
+    REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .put(RestServiceErrorCode.InternalServerError, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+  }
+
   /**
    * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
    * {@link NettyResponseChannel#write(ByteBuffer, Callback)} and then completes the response.
@@ -123,27 +149,11 @@ public class NettyResponseChannelTest {
    */
   @Test
   public void onResponseCompleteWithExceptionTest() {
-    // Throws BadRequest RestServiceException. There should be a BAD_REQUEST HTTP response.
-    doOnResponseCompleteWithExceptionTest(RestServiceErrorCode.BadRequest, HttpResponseStatus.BAD_REQUEST, true);
-
-    // Throws Deleted RestServiceException. There should be a GONE HTTP response.
-    doOnResponseCompleteWithExceptionTest(RestServiceErrorCode.Deleted, HttpResponseStatus.GONE, false);
-
-    // Throws NotFound RestServiceException. There should be a NOT_FOUND HTTP response.
-    doOnResponseCompleteWithExceptionTest(RestServiceErrorCode.NotFound, HttpResponseStatus.NOT_FOUND, false);
-
-    // Throws ResourceScanInProgress RestServiceException. There should be a PROXY_AUTHENTICATION_REQUIRED HTTP
-    // response.
-    doOnResponseCompleteWithExceptionTest(RestServiceErrorCode.ResourceScanInProgress,
-        HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED, true);
-
-    // Throws ResourceDirty RestServiceException. There should be a FORBIDDEN HTTP response.
-    doOnResponseCompleteWithExceptionTest(RestServiceErrorCode.ResourceDirty, HttpResponseStatus.FORBIDDEN, true);
-
-    // Throws InternalServerError RestServiceException. There should be a INTERNAL_SERVER_ERROR HTTP response.
-    doOnResponseCompleteWithExceptionTest(RestServiceErrorCode.InternalServerError,
-        HttpResponseStatus.INTERNAL_SERVER_ERROR, true);
-
+    for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .entrySet()) {
+      boolean shouldClose = !KEEP_ALIVE_ERROR_STATUSES.contains(entry.getValue());
+      doOnResponseCompleteWithExceptionTest(entry.getKey(), entry.getValue(), shouldClose);
+    }
     // Throws RuntimeException. There should be a INTERNAL_SERVER_ERROR HTTP response.
     doOnResponseCompleteWithExceptionTest(null, HttpResponseStatus.INTERNAL_SERVER_ERROR, true);
   }
@@ -324,6 +334,40 @@ public class NettyResponseChannelTest {
     assertEquals("Some of the ResponseStatus codes were not recognized", 0, metricCount);
   }
 
+  /**
+   * Tests that HEAD returns no body in error responses.
+   */
+  @Test
+  public void noBodyForHeadTest() {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_SERVICE_ERROR_CODE_TO_HTTP_RESPONSE_STATUS_MAP
+        .entrySet()) {
+      HttpHeaders httpHeaders = new DefaultHttpHeaders();
+      httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, entry.getKey());
+      channel.writeInbound(RestTestUtils
+          .createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(), httpHeaders));
+      HttpResponse response = (HttpResponse) channel.readOutbound();
+      assertEquals("Unexpected response status", entry.getValue(), response.getStatus());
+      if (response instanceof FullHttpResponse) {
+        // assert that there is no content
+        assertEquals("The response should not contain content", 0,
+            ((FullHttpResponse) response).content().readableBytes());
+      } else {
+        HttpContent content = (HttpContent) channel.readOutbound();
+        assertTrue("End marker should be received", content instanceof LastHttpContent);
+      }
+      assertNull("There should be no more data in the channel", channel.readOutbound());
+      boolean shouldBeAlive = KEEP_ALIVE_ERROR_STATUSES.contains(entry.getValue());
+      assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
+      assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
+          HttpHeaders.isKeepAlive(response));
+      if (!shouldBeAlive) {
+        channel = createEmbeddedChannel();
+      }
+    }
+    channel.close();
+  }
+
   // helpers
   // general
 
@@ -361,7 +405,7 @@ public class NettyResponseChannelTest {
    * @param restServiceErrorCode the {@link RestServiceErrorCode} to set in the header. If {@code null}, the testing uri
    *                             {@link TestingUri#OnResponseCompleteWithNonRestException} is used. Otherwise the
    *                             testing uri {@link TestingUri#OnResponseCompleteWithRestException} is used.
-   * @param expectedResponseStatus the response status that is expected.
+   * @param expectedResponseStatus the {@link HttpResponseStatus} that is expected in the response.
    * @param shouldClose {@code true} if the channel should have been closed on this exception. {@code false} if not.
    */
   private void doOnResponseCompleteWithExceptionTest(RestServiceErrorCode restServiceErrorCode,
