@@ -350,51 +350,6 @@ public class TestUtils {
     return jsonObject;
   }
 
-  /**
-   * Verify that the partitions in the list are on unique racks for each datacenter.
-   *
-   * @param allocatedPartitions the list of partitions to check
-   */
-  public static void checkRackUsage(List<PartitionId> allocatedPartitions) {
-    for (PartitionId partition : allocatedPartitions) {
-      Map<String, Set<Long>> rackSetByDatacenter = new HashMap<>();
-      for (ReplicaId replica : partition.getReplicaIds()) {
-        String datacenter = replica.getDataNodeId().getDatacenterName();
-        Set<Long> rackSet = rackSetByDatacenter.get(datacenter);
-        if (rackSet == null) {
-          rackSet = new HashSet<>();
-          rackSetByDatacenter.put(datacenter, rackSet);
-        }
-
-        long rackId = replica.getDataNodeId().getRackId();
-        if (rackId >= 0) {
-          assertFalse("Allocation was not on unique racks", rackSet.contains(rackId));
-          rackSet.add(rackId);
-        }
-      }
-    }
-  }
-
-  /**
-   * Verify that the partitions in the list have {@code numReplicas} per datacenter
-   *
-   * @param allocatedPartitions the list of partitions to check
-   * @param numReplicas how many replicas a partition should have in each datacenter
-   */
-  public static void checkNumReplicasPerDatacenter(List<PartitionId> allocatedPartitions, int numReplicas) {
-    for (PartitionId partition : allocatedPartitions) {
-      Map<String, Integer> numReplicasMap = new HashMap<>();
-      for (ReplicaId replica : partition.getReplicaIds()) {
-        String datacenter = replica.getDataNodeId().getDatacenterName();
-        Integer replicasInDatacenter = numReplicasMap.containsKey(datacenter)? numReplicasMap.get(datacenter) : 0;
-        numReplicasMap.put(datacenter, replicasInDatacenter+1);
-      }
-      for (int replicasInDatacenter : numReplicasMap.values()) {
-        assertEquals("Datacenter does not have expected number of replicas", numReplicas, replicasInDatacenter);
-      }
-    }
-  }
-
   public static class TestHardwareLayout {
     private static final int defaultDiskCount = 10; // per DataNode
     private static final long defaultDiskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;

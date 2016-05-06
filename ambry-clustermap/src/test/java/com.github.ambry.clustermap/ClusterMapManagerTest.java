@@ -16,7 +16,11 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import org.json.JSONException;
 import org.junit.Rule;
 import org.junit.Test;
@@ -27,8 +31,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import static com.github.ambry.clustermap.TestUtils.checkNumReplicasPerDatacenter;
-import static com.github.ambry.clustermap.TestUtils.checkRackUsage;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -150,7 +152,7 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
     List<PartitionId> allocatedPartitions;
 
-    // Allocate a five partitions that fit within cluster's capacity
+    // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
         clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true, false);
     assertEquals(allocatedPartitions.size(), 5);
@@ -181,7 +183,7 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
     List<PartitionId> allocatedPartitions;
 
-    // Allocate a five partitions that fit within cluster's capacity
+    // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
         clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false, false);
     assertEquals(allocatedPartitions.size(), 5);
@@ -305,6 +307,51 @@ public class ClusterMapManagerTest {
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 1);
     assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
+  }
+
+  /**
+   * Verify that the partitions in the list are on unique racks for each datacenter.
+   *
+   * @param allocatedPartitions the list of partitions to check
+   */
+  private static void checkRackUsage(List<PartitionId> allocatedPartitions) {
+    for (PartitionId partition : allocatedPartitions) {
+      Map<String, Set<Long>> rackSetByDatacenter = new HashMap<>();
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        String datacenter = replica.getDataNodeId().getDatacenterName();
+        Set<Long> rackSet = rackSetByDatacenter.get(datacenter);
+        if (rackSet == null) {
+          rackSet = new HashSet<>();
+          rackSetByDatacenter.put(datacenter, rackSet);
+        }
+
+        long rackId = replica.getDataNodeId().getRackId();
+        if (rackId >= 0) {
+          assertFalse("Allocation was not on unique racks", rackSet.contains(rackId));
+          rackSet.add(rackId);
+        }
+      }
+    }
+  }
+
+  /**
+   * Verify that the partitions in the list have {@code numReplicas} per datacenter
+   *
+   * @param allocatedPartitions the list of partitions to check
+   * @param numReplicas how many replicas a partition should have in each datacenter
+   */
+  private static void checkNumReplicasPerDatacenter(List<PartitionId> allocatedPartitions, int numReplicas) {
+    for (PartitionId partition : allocatedPartitions) {
+      Map<String, Integer> numReplicasMap = new HashMap<>();
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        String datacenter = replica.getDataNodeId().getDatacenterName();
+        Integer replicasInDatacenter = numReplicasMap.containsKey(datacenter)? numReplicasMap.get(datacenter) : 0;
+        numReplicasMap.put(datacenter, replicasInDatacenter+1);
+      }
+      for (int replicasInDatacenter : numReplicasMap.values()) {
+        assertEquals("Datacenter does not have expected number of replicas", numReplicas, replicasInDatacenter);
+      }
+    }
   }
 }
 

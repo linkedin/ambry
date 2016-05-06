@@ -44,12 +44,18 @@ public class PartitionManager {
               + " operations are 'AddPartition', 'AddReplicas'").withRequiredArg().describedAs("operation_type")
           .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
-          parser.accepts("hardwareLayoutPath", " REQUIRED: The path to the hardware layout map").withRequiredArg()
-              .describedAs("hardware_layout_path").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt = parser.accepts("hardwareLayoutPath",
+          " REQUIRED: The path to the hardware layout map")
+          .withRequiredArg().describedAs("hardware_layout_path").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutPathOpt = parser.accepts("partitionLayoutPath",
-          "The path to the partition layout map. The file is updated with the new partitions").withOptionalArg();
+          "REQUIRED: The path to the partition layout map. If outputPartitionLayoutPath is not defined,"
+              + "this file is updated with the new partitions").withRequiredArg().describedAs("partition_layout_path")
+          .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> outputPartitionLayoutPathOpt = parser.accepts("outputPartitionLayoutPath",
+          "The path to the output partition layout map. The file is updated with the new partitions").withOptionalArg()
+          .describedAs("output_partition_layout_path").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfPartitionsOpt =
           parser.accepts("numberOfPartitionsToAdd", "The number of partitions to add").withOptionalArg()
@@ -73,6 +79,12 @@ public class PartitionManager {
           parser.accepts("datacenterToAddReplicasTo", "The data center to which replicas need to be added to")
               .withOptionalArg().ofType(String.class);
 
+      String disableRackAwarenessFlag = "disableRackAwareness";
+      parser.accepts(disableRackAwarenessFlag, "Disable rack-aware partition allocation");
+
+      String bestEffortFlag = "bestEffort";
+      parser.accepts(bestEffortFlag, "If rack-aware partition allocation fails, attempt a non rack-aware allocation");
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -86,10 +98,13 @@ public class PartitionManager {
           System.exit(1);
         }
       }
-
       String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
+      String outputPartitionLayoutPath = options.has(outputPartitionLayoutPathOpt) ?
+          options.valueOf(outputPartitionLayoutPathOpt) : partitionLayoutPath;
       String operationType = options.valueOf(operationTypeOpt);
+      boolean disableRackAwareness = options.has(disableRackAwarenessFlag);
+      boolean bestEffort = options.has(bestEffortFlag);
 
       String fileString = null;
       try {
@@ -119,7 +134,8 @@ public class PartitionManager {
         int numberOfPartitions = options.valueOf(numberOfPartitionsOpt);
         int numberOfReplicas = options.valueOf(numberOfReplicasPerDatacenterOpt);
         long replicaCapacityInBytes = options.valueOf(replicaCapacityInBytesOpt);
-        manager.allocatePartitions(numberOfPartitions, numberOfReplicas, replicaCapacityInBytes, true, false);
+        manager.allocatePartitions(numberOfPartitions, numberOfReplicas, replicaCapacityInBytes,
+            disableRackAwareness, bestEffort);
       } else if (operationType.compareToIgnoreCase("AddReplicas") == 0) {
         listOpt.add(partitionIdsToAddReplicasToOpt);
         listOpt.add(datacenterToAddReplicasToOpt);
@@ -135,20 +151,20 @@ public class PartitionManager {
         String datacenterToAddReplicasTo = options.valueOf(datacenterToAddReplicasToOpt);
         if (partitionIdsToAddReplicas.compareToIgnoreCase(".") == 0) {
           for (PartitionId partitionId : manager.getAllPartitions()) {
-            manager.addReplicas(partitionId, datacenterToAddReplicasTo, true, false);
+            manager.addReplicas(partitionId, datacenterToAddReplicasTo, disableRackAwareness, bestEffort);
           }
         } else {
           String[] partitionIds = partitionIdsToAddReplicas.split(",");
           for (String partitionId : partitionIds) {
             for (PartitionId partitionInCluster : manager.getAllPartitions()) {
               if (partitionInCluster.isEqual(partitionId)) {
-                manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo, true, false);
+                manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo, disableRackAwareness, bestEffort);
               }
             }
           }
         }
       }
-      manager.persist(hardwareLayoutPath, partitionLayoutPath);
+      manager.persist(hardwareLayoutPath, outputPartitionLayoutPath);
     } catch (Exception e) {
       System.out.println("Error while executing partition command " + e);
     }

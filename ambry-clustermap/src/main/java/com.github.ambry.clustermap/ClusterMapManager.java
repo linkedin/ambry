@@ -48,15 +48,9 @@ public class ClusterMapManager implements ClusterMap {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  // Comparators for comparing unallocated capacity in datanodes/disks
-  private final Comparator<DataNode> dataNodeCapacityComparator = new Comparator<DataNode>() {
-    @Override
-    public int compare(DataNode o1, DataNode o2) {
-      long o1Capacity = getUnallocatedRawCapacityInBytes(o1);
-      long o2Capacity = getUnallocatedRawCapacityInBytes(o2);
-      return (o1Capacity < o2Capacity) ? -1 : (o1Capacity == o2Capacity) ? 0 : 1;
-    }
-  };
+  /**
+   * Comparator for comparing unallocated capacity in two disks
+   */
   private final Comparator<Disk> diskCapacityComparator = new Comparator<Disk>() {
     @Override
     public int compare(Disk o1, Disk o2) {
@@ -65,6 +59,13 @@ public class ClusterMapManager implements ClusterMap {
       return (o1Capacity < o2Capacity) ? -1 : (o1Capacity == o2Capacity) ? 0 : 1;
     }
   };
+
+  /**
+   * How many data nodes to put in a random sample for partition allocation. 2 node samples provided the best balance
+   * of speed and allocation quality in testing. Larger samples (ie 3 nodes) took longer to generate but did not
+   * improve the quality of the allocated partitions.
+   */
+  private static final int NUM_CHOICES = 2;
 
   public ClusterMapManager(PartitionLayout partitionLayout) {
     if (logger.isTraceEnabled()) {
@@ -283,20 +284,6 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   /**
-   * Get a list of the nodes in a {@link Datacenter} ordered by amount of free space. Nodes with the same amount
-   * of free space are shuffled.
-   *
-   * @param datacenter
-   * @return
-   */
-  private List<DataNode> getShuffledDataNodesSortedByUnallocatedCapacity(Datacenter datacenter) {
-    ArrayList<DataNode> dataNodes = new ArrayList<>(datacenter.getDataNodes());
-    Collections.shuffle(dataNodes);
-    Collections.sort(dataNodes, dataNodeCapacityComparator);
-    return dataNodes;
-  }
-
-  /**
    * Get a sampling of {@code numDisks} random disks from a list of {@link DataNode}s.
    * NOTE 1: This method will change the ordering of the nodes in {@code dataNodes}
    * NOTE 2: If {@code numDisks} valid disks could not be found, the returned list could be shorter than
@@ -355,43 +342,11 @@ public class ClusterMapManager implements ClusterMap {
     List<DataNode> dataNodes = new ArrayList<>(datacenter.getDataNodes());
     for (int i = 0; i < replicaCountPerDatacenter; i++) {
       List<Disk> diskCandidates =
-          getRandomDiskCandidateSample(dataNodes, nodesToExclude, replicaCapacityInBytes, rackAware, 3);
+          getRandomDiskCandidateSample(dataNodes, nodesToExclude, replicaCapacityInBytes, rackAware, NUM_CHOICES);
       if (diskCandidates.size() > 0) {
         Disk diskToAdd = Collections.max(diskCandidates, diskCapacityComparator);
         disksToAllocate.add(diskToAdd);
         nodesToExclude.add(diskToAdd.getDataNode());
-      }
-    }
-    return disksToAllocate;
-  }
-
-  //TODO compare this method's results to the allocation strategy above, remove one of them.
-  private List<Disk> allocateDisksForPartition2(int replicaCountPerDatacenter, long replicaCapacityInBytes,
-      Datacenter datacenter, boolean disableRackAwareness) {
-    ArrayList<Disk> disksToAllocate = new ArrayList<>();
-    boolean rackAware = datacenter.isRackAware() && !disableRackAwareness;
-    Set<DataNode> dataNodesUsed = new HashSet<>();
-    Set<Long> rackIdsUsed = new HashSet<>();
-    List<DataNode> sortedDataNodes = getShuffledDataNodesSortedByUnallocatedCapacity(datacenter);
-
-    int nodeIndex = sortedDataNodes.size() - 1;
-    for (int i = 0; i < replicaCountPerDatacenter; i++) {
-      while (nodeIndex >= 0) {
-        DataNode candidate = sortedDataNodes.get(nodeIndex);
-        long rackId = candidate.getRackId();
-        if (!dataNodesUsed.contains(candidate) && !rackIdsUsed.contains(rackId)) {
-          Disk diskWithMostCapacity =
-              getDiskWithMostUnallocatedRawCapacity(candidate, replicaCapacityInBytes);
-          if (diskWithMostCapacity != null) {
-            disksToAllocate.add(diskWithMostCapacity);
-            if (rackAware && rackId >= 0) {
-              rackIdsUsed.add(rackId);
-            }
-            dataNodesUsed.add(candidate);
-            break;
-          }
-        }
-        nodeIndex--;
       }
     }
     return disksToAllocate;
