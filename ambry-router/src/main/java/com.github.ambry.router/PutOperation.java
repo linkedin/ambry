@@ -425,7 +425,7 @@ class PutOperation {
     // may not get overridden by a subsequent error, and this variable is meant to store the most relevant error.
     private RouterException chunkException;
     // the state of the current chunk.
-    protected ChunkState state;
+    protected volatile ChunkState state;
     // the ByteBuffer that has the data for the current chunk.
     protected ByteBuffer buf;
     // the OperationTracker used to track the status of requests for the current chunk.
@@ -439,6 +439,8 @@ class PutOperation {
     // map of correlation id to the request metadata for every request issued for the current chunk.
     private final Map<Integer, ChunkPutRequestInfo> correlationIdToChunkPutRequestInfo =
         new TreeMap<Integer, ChunkPutRequestInfo>();
+    // list of buffers that were once associated with this chunk and are not yet freed.
+    private final List<DefunctBufferInfo> defunctBufferInfos = new ArrayList<>();
     private final Logger logger = LoggerFactory.getLogger(PutChunk.class);
 
     /**
@@ -455,11 +457,59 @@ class PutOperation {
       chunkIndex = -1;
       chunkBlobId = null;
       chunkException = null;
-      state = ChunkState.Free;
       failedAttempts = 0;
       partitionId = null;
-      correlationIdToChunkPutRequestInfo.clear();
       attemptedPartitionIds.clear();
+      maybeUpdateDefunctBufferInfos();
+      correlationIdToChunkPutRequestInfo.clear();
+      // this assignment should be the last statement as this immediately makes this chunk available to the
+      // ChunkFiller thread for filling.
+      state = ChunkState.Free;
+    }
+
+    /**
+     * Go through the list of requests for which responses were not received, and if there are any that are not yet
+     * sent out completely, add the associated buffer to the defunct list for freeing in the future.
+     */
+    private void maybeUpdateDefunctBufferInfos() {
+      ArrayList<PutRequest> requestsAwaitingSendCompletion = null;
+      for (Map.Entry<Integer, ChunkPutRequestInfo> entry : correlationIdToChunkPutRequestInfo.entrySet()) {
+        if (!entry.getValue().putRequest.isSendComplete()) {
+          if (requestsAwaitingSendCompletion == null) {
+            requestsAwaitingSendCompletion = new ArrayList<>();
+          }
+          requestsAwaitingSendCompletion.add(entry.getValue().putRequest);
+        }
+      }
+
+      if (requestsAwaitingSendCompletion != null) {
+        // This means that the buffer associated with this PutChunk could get read by the NetworkClient in the
+        // future and assigning this PutChunk to a subsequent chunk of the overall blob could lead to this buffer
+        // getting read and written concurrently, or other undefined behavior. There are multiple ways to handle this,
+        // and the simplest way is to set the buf to null so that it gets allocated afresh if/when this PutChunk gets
+        // assigned for a subsequent chunk of the overall blob. Every time this chunk gets polled, an attempt to clear
+        // out the list will be made.
+        defunctBufferInfos.add(new DefunctBufferInfo(buf, requestsAwaitingSendCompletion));
+        buf = null;
+      }
+    }
+
+    /**
+     * Iterate defunctBufferInfos and possibly free up entries from it.
+     */
+    private void maybeFreeDefunctBuffers() {
+      for (Iterator<DefunctBufferInfo> iter = defunctBufferInfos.iterator(); iter.hasNext(); ) {
+        boolean canBeFreed = true;
+        for (PutRequest putRequest : iter.next().putRequests) {
+          if (!putRequest.isSendComplete()) {
+            canBeFreed = false;
+          }
+        }
+        if (canBeFreed) {
+          // this is where the buffer will be freed if the buffer pool is used. For now, simply remove the reference.
+          iter.remove();
+        }
+      }
     }
 
     /**
@@ -616,6 +666,7 @@ class PutOperation {
      *                            part of this poll operation.
      */
     void poll(PutRequestRegistrationCallback requestFillCallback) {
+      maybeFreeDefunctBuffers();
       //First, check if any of the existing requests have timed out.
       Iterator<Map.Entry<Integer, ChunkPutRequestInfo>> inFlightRequestsIterator =
           correlationIdToChunkPutRequestInfo.entrySet().iterator();
@@ -644,7 +695,8 @@ class PutOperation {
         PutRequest putRequest = createPutRequest();
         RequestInfo request = new RequestInfo(hostname, port, putRequest);
         int correlationId = putRequest.getCorrelationId();
-        correlationIdToChunkPutRequestInfo.put(correlationId, new ChunkPutRequestInfo(replicaId, time.milliseconds()));
+        correlationIdToChunkPutRequestInfo
+            .put(correlationId, new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
         correlationIdToPutChunk.put(correlationId, this);
         requestFillCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
@@ -771,17 +823,41 @@ class PutOperation {
      * A class that holds information about requests sent out by this PutChunk.
      */
     private class ChunkPutRequestInfo {
-      private ReplicaId replicaId;
-      private long startTimeMs;
+      private final ReplicaId replicaId;
+      private final PutRequest putRequest;
+      private final long startTimeMs;
 
       /**
        * Construct a ChunkPutRequestInfo
        * @param replicaId the replica to which this request is being sent.
        * @param startTimeMs the time at which this request was created.
        */
-      ChunkPutRequestInfo(ReplicaId replicaId, long startTimeMs) {
+      ChunkPutRequestInfo(ReplicaId replicaId, PutRequest putRequest, long startTimeMs) {
         this.replicaId = replicaId;
+        this.putRequest = putRequest;
         this.startTimeMs = startTimeMs;
+      }
+    }
+
+    /**
+     * Class that holds the buffer of a chunk that will no longer be used and is kept around only because the
+     * associated requests are not yet completely sent out.
+     */
+    private class DefunctBufferInfo {
+      // the buffer that is now defunct, but not yet freed.
+      ByteBuffer buf;
+      // Requests that are reading from this buffer.
+      List<PutRequest> putRequests;
+
+      /**
+       * Construct a DefunctBufferInfo
+       * @param buf the buffer that is now defunct and waiting to be freed.
+       * @param putRequests the requests associated with this buffer whose send completion blocks the freeing of this
+       *                    buffer.
+       */
+      DefunctBufferInfo(ByteBuffer buf, List<PutRequest> putRequests) {
+        this.buf = buf;
+        this.putRequests = putRequests;
       }
     }
   }
