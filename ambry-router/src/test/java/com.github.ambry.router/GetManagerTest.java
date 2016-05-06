@@ -130,8 +130,8 @@ public class GetManagerTest {
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
       RouterException routerException = (RouterException) e.getCause();
-      Assert.assertEquals("Exception received should be router closed error", routerException.getErrorCode(),
-          RouterErrorCode.RouterClosed);
+      Assert.assertEquals("Exception received should be router closed error", RouterErrorCode.RouterClosed,
+          routerException.getErrorCode());
     }
   }
 

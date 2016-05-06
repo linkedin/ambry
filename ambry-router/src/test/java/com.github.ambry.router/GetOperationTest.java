@@ -84,8 +84,6 @@ public class GetOperationTest {
     }
   }
 
-  ;
-
   public GetOperationTest()
       throws Exception {
     VerifiableProperties vprops = getNonBlockingRouterProperties();

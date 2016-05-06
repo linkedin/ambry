@@ -56,7 +56,8 @@ public class PutOperationTest {
       requestListToFill.add(requestInfo);
       correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
     }
-  };
+  }
+
   private final PutTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new PutTestRequestRegistrationCallbackImpl();
 

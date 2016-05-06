@@ -187,9 +187,8 @@ abstract class GetOperation<T> {
    */
   protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag) {
     List<BlobId> blobIds = Collections.singletonList(blobId);
-    List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
-    partitionRequestInfoList.add(partitionRequestInfo);
+    List<PartitionRequestInfo> partitionRequestInfoList = Collections.singletonList(new PartitionRequestInfo(blobId
+        .getPartition(), blobIds));
     return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, flag,
         partitionRequestInfoList, GetOptions.None);
   }

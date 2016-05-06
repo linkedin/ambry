@@ -24,7 +24,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.Time;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -63,6 +62,7 @@ class GetManager {
       correlationIdToGetOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), getOperation);
     }
   }
+
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to GetOperations, every time.
   private final GetRequestRegistrationCallbackImpl requestRegistrationCallback =
@@ -122,13 +122,12 @@ class GetManager {
    * @param requestListToFill list to be filled with the requests created
    */
   void poll(List<RequestInfo> requestListToFill) {
-    Iterator<GetOperation> getOperationIterator = getOperations.iterator();
     requestRegistrationCallback.requestListToFill = requestListToFill;
-    while (getOperationIterator.hasNext()) {
-      GetOperation op = getOperationIterator.next();
+    for (GetOperation op : getOperations) {
       op.poll(requestRegistrationCallback);
-      if (op.isOperationComplete()) {
-        getOperationIterator.remove();
+      if (op.isOperationComplete() && getOperations.remove(op)) {
+        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+        // operation actually gets removed from the set of operations. See comment within close().
         onComplete(op);
       }
     }
@@ -154,8 +153,7 @@ class GetManager {
     GetOperation getOperation = correlationIdToGetOperation.get(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
       getOperation.handleResponse(responseInfo);
-      if (getOperation.isOperationComplete()) {
-        getOperations.remove(getOperation);
+      if (getOperation.isOperationComplete() && getOperations.remove(getOperation)) {
         onComplete(getOperation);
       }
     }
@@ -166,13 +164,14 @@ class GetManager {
    * Complete all existing get operations.
    */
   void close() {
-    Iterator<GetOperation> iter = getOperations.iterator();
-    while (iter.hasNext()) {
-      GetOperation op = iter.next();
-      iter.remove();
-      logger.trace("Aborting operation for blob id: ", op.getBlobIdStr());
-      NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
-          new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+    for (GetOperation op : getOperations) {
+      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+      // from happening twice, complete it here only if the remove was successful.
+      if (getOperations.remove(op)) {
+        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
+            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+      }
     }
   }
 }

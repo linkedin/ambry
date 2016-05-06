@@ -69,6 +69,7 @@ class PutManager {
       correlationIdToPutOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), putOperation);
     }
   }
+
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to the PutOperations, every time.
   private final PutRequestRegistrationCallbackImpl requestRegistrationCallback =
@@ -126,14 +127,12 @@ class PutManager {
    * @param requestListToFill list to be filled with the requests created
    */
   void poll(List<RequestInfo> requestListToFill) {
-    Iterator<PutOperation> putOperationIterator = putOperations.iterator();
     requestRegistrationCallback.requestListToFill = requestListToFill;
-    while (putOperationIterator.hasNext()) {
-      PutOperation op = putOperationIterator.next();
+    for (PutOperation op : putOperations) {
       op.poll(requestRegistrationCallback);
-      if (op.isOperationComplete()) {
-        // Operation is done.
-        putOperationIterator.remove();
+      if (op.isOperationComplete() && putOperations.remove(op)) {
+        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+        // operation actually gets removed from the set of operations. See comment within closePendingOperations().
         onComplete(op);
       }
     }
@@ -150,8 +149,7 @@ class PutManager {
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (putOperations.contains(putOperation)) {
       putOperation.handleResponse(responseInfo);
-      if (putOperation.isOperationComplete()) {
-        putOperations.remove(putOperation);
+      if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
         onComplete(putOperation);
       }
     }
@@ -159,7 +157,6 @@ class PutManager {
 
   /**
    * Returns a list of ids of successfully put chunks that were part of unsuccessful put operations.
-   * @return list of ids to delete.
    */
   void getIdsToDelete(List<String> idsToDelete) {
     // @todo save and return ids of failed puts.
@@ -211,12 +208,14 @@ class PutManager {
    * 2. By the {@link ChunkFiller} thread when it exits abnormally.
    */
   void completePendingOperations() {
-    Iterator<PutOperation> iter = putOperations.iterator();
-    while (iter.hasNext()) {
-      PutOperation op = iter.next();
-      iter.remove();
-      NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
-          new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+    for (PutOperation op : putOperations) {
+      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+      // from happening twice, complete it here only if the remove was successful.
+      if (putOperations.remove(op)) {
+        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
+            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+      }
     }
   }
 

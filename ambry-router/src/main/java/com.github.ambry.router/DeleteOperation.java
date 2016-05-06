@@ -95,15 +95,21 @@ class DeleteOperation {
 
   /**
    * Gets a list of {@link DeleteRequest} for sending to replicas.
-   * @param requestFillCallback the {@link RequestRegistrationCallback} to call for every request
+   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request
    *                            that gets created as part of this poll operation.
    */
-  void poll(RequestRegistrationCallback<DeleteOperation> requestFillCallback) {
+  void poll(RequestRegistrationCallback<DeleteOperation> requestRegistrationCallback) {
     cleanupExpiredInflightRequests();
     checkAndMaybeComplete();
-    if (isOperationComplete()) {
-      return;
+    if (!isOperationComplete()) {
+      fetchRequests(requestRegistrationCallback);
     }
+  }
+
+  /**
+   * Fetch {@link DeleteRequest}s to send for the operation.
+   */
+  private void fetchRequests(RequestRegistrationCallback<DeleteOperation> requestRegistrationCallback) {
     Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
     while (replicaIterator.hasNext()) {
       ReplicaId replica = replicaIterator.next();
@@ -112,7 +118,7 @@ class DeleteOperation {
       DeleteRequest deleteRequest = createDeleteRequest();
       inflightRequestInfos.put(deleteRequest.getCorrelationId(), new InflightRequestInfo(time.milliseconds(), replica));
       RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest);
-      requestFillCallback.registerRequestToSend(this, requestInfo);
+      requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
     }
   }

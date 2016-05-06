@@ -82,9 +82,24 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   }
 
   /**
+   * For this operation, create and populate get requests (in the form of {@link RequestInfo}) to send out.
+   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
+   *                                    created as part of this poll operation.
+   */
+  @Override
+  void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
+    //First, check if any of the existing requests have timed out.
+    cleanupExpiredInFlightRequests();
+    checkAndMaybeComplete();
+    if (!isOperationComplete()) {
+      fetchRequests(requestRegistrationCallback);
+    }
+  }
+
+  /**
    * Clean up requests sent out by this operation that have now timed out.
    */
-  void cleanupExpiredInFlightRequests() {
+  private void cleanupExpiredInFlightRequests() {
     Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
         correlationIdToGetRequestInfo.entrySet().iterator();
     while (inFlightRequestsIterator.hasNext()) {
@@ -102,20 +117,9 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   }
 
   /**
-   * For this operation, create and populate get requests (in the form of {@link RequestInfo}) to send out.
-   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
-   *                                    created as part of this poll operation.
+   * Fetch {@link GetRequest}s to send for the operation.
    */
-  @Override
-  void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
-    //First, check if any of the existing requests have timed out.
-    cleanupExpiredInFlightRequests();
-
-    checkAndMaybeComplete();
-    if (isOperationComplete()) {
-      return;
-    }
-
+  private void fetchRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
     while (replicaIterator.hasNext()) {
       ReplicaId replicaId = replicaIterator.next();
@@ -144,10 +148,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
     int correlationId = ((GetRequest) responseInfo.getRequest()).getCorrelationId();
     // Get the GetOperation that generated the request.
     GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
-    if (getRequestInfo == null) {
-      // Ignore right away. This associated operation has completed.
-      return;
-    }
     if (responseInfo.getError() != null) {
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
       responseHandler.onRequestResponseException(getRequestInfo.replicaId, new IOException("NetworkClient error"));

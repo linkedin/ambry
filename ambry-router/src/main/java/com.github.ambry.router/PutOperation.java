@@ -655,18 +655,27 @@ class PutOperation {
     }
 
     /**
-     * Fetch put requests to send for the current data chunk.
      * This is one of two main entry points to this class, the other being {@link #handleResponse(ResponseInfo)}.
      * Apart from fetching requests to send out, this also checks for timeouts of issued requests,
      * status of the operation and anything else that needs to be done within this PutChunk. The callers guarantee
      * that this method is called on all the PutChunks of an operation until either the operation,
      * or the chunk operation is completed.
-     * @param requestFillCallback the {@link RequestRegistrationCallback} to call for every request that gets created as
-     *                            part of this poll operation.
+     * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
+     *                                    created as part of this poll operation.
      */
-    void poll(RequestRegistrationCallback<PutOperation> requestFillCallback) {
+    void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
       maybeFreeDefunctBuffers();
-      //First, check if any of the existing requests have timed out.
+      cleanupExpiredInFlightRequests();
+      checkAndMaybeComplete();
+      if (!isComplete()) {
+        fetchRequests(requestRegistrationCallback);
+      }
+    }
+
+    /**
+     * Clean up requests sent out by this operation that have now timed out.
+     */
+    private void cleanupExpiredInFlightRequests() {
       Iterator<Map.Entry<Integer, ChunkPutRequestInfo>> inFlightRequestsIterator =
           correlationIdToChunkPutRequestInfo.entrySet().iterator();
       while (inFlightRequestsIterator.hasNext()) {
@@ -680,12 +689,12 @@ class PutOperation {
           break;
         }
       }
+    }
 
-      checkAndMaybeComplete();
-      if (isComplete()) {
-        return;
-      }
-
+    /**
+     * Fetch {@link PutRequest}s to send for the current data chunk.
+     */
+    private void fetchRequests(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
       Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
       while (replicaIterator.hasNext()) {
         ReplicaId replicaId = replicaIterator.next();
@@ -697,7 +706,7 @@ class PutOperation {
         correlationIdToChunkPutRequestInfo
             .put(correlationId, new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
         correlationIdToPutChunk.put(correlationId, this);
-        requestFillCallback.registerRequestToSend(PutOperation.this, request);
+        requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
       }
     }
