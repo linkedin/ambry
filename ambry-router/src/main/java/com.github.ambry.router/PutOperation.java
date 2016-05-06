@@ -823,9 +823,9 @@ class PutOperation {
      * A class that holds information about requests sent out by this PutChunk.
      */
     private class ChunkPutRequestInfo {
-      private ReplicaId replicaId;
-      private PutRequest putRequest;
-      private long startTimeMs;
+      private final ReplicaId replicaId;
+      private final PutRequest putRequest;
+      private final long startTimeMs;
 
       /**
        * Construct a ChunkPutRequestInfo

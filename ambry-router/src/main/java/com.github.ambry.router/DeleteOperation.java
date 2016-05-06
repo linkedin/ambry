@@ -178,8 +178,8 @@ class DeleteOperation {
    * A wrapper class that is used to check if a request has been expired.
    */
   private class InflightRequestInfo {
-    private long submissionTime;
-    private ReplicaId replica;
+    private final long submissionTime;
+    private final ReplicaId replica;
 
     InflightRequestInfo(long submissionTime, ReplicaId replica) {
       this.submissionTime = submissionTime;

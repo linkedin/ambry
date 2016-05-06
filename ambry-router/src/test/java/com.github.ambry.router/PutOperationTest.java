@@ -149,9 +149,8 @@ public class PutOperationTest {
     byte[] savedRequestContent = buf.array();
 
     // reset the correlation id as they will be different between the two requests.
-    int offsetOfCorrelationId = 15;
-    expectedRequestContent[offsetOfCorrelationId] = 0;
-    savedRequestContent[offsetOfCorrelationId] = 0;
+    resetCorrelationId(expectedRequestContent);
+    resetCorrelationId(savedRequestContent);
     Assert
         .assertArrayEquals("Underlying buffer should not have be reused", expectedRequestContent, savedRequestContent);
 
@@ -171,6 +170,22 @@ public class PutOperationTest {
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
   }
 
+  /**
+   *  Reset the correlation id field of a {@link PutRequest} to 0.
+   */
+  private void resetCorrelationId(byte[] request) {
+    // correlation id is an int that comes after size (long), type (short) and version (short).
+    int offsetOfCorrelationId = 8 + 2 + 2;
+    ByteBuffer wrapped = ByteBuffer.wrap(request);
+    wrapped.putInt(offsetOfCorrelationId, 0);
+  }
+
+  /**
+   * Get the {@link ResponseInfo} for the given {@link RequestInfo} using tha {@link MockServer}
+   * @param requestInfo the {@link RequestInfo} for which the response is to be returned.
+   * @return the {@link ResponseInfo} the response for the request.
+   * @throws IOException if there is an error sending the request.
+   */
   private ResponseInfo getResponseInfo(RequestInfo requestInfo)
       throws IOException {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
