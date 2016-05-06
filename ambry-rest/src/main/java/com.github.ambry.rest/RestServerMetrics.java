@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p/>
  * Exports metrics that are triggered by Rest infrastructure to the provided {@link MetricRegistry}.
  */
-public class RestServerMetrics {
+class RestServerMetrics {
   private final MetricRegistry metricRegistry;
   private final AtomicInteger asyncRequestWorkerIndex = new AtomicInteger(0);
 

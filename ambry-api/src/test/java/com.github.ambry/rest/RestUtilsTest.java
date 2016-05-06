@@ -20,7 +20,9 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import org.json.JSONException;
@@ -411,7 +413,7 @@ public class RestUtilsTest {
   }
 
   /**
-   * Tests {@link RestUtils#getOperationOrBlobIdFromUri(RestRequest)}.
+   * Tests {@link RestUtils#getOperationOrBlobIdFromUri(RestRequest, RestUtils.SubResource, List)}.
    * @throws JSONException
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
@@ -419,21 +421,42 @@ public class RestUtilsTest {
   @Test
   public void getOperationOrBlobIdFromUriTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    // no operation
-    String[] noOpUris = {"", "/"};
-    for (String uri : noOpUris) {
-      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
-      assertEquals("Unexpected operation/blob id in " + uri, uri, RestUtils.getOperationOrBlobIdFromUri(restRequest));
+    String baseId = "expectedOp";
+    String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
+    String[] validIdUris = {"/" + baseId, "/" + baseId + "/random/extra", baseId, baseId + "/random/extra"};
+    List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove");
+    List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove");
+
+    // construct test cases
+    Map<String, String> testCases = new HashMap<>();
+    for (String validIdUri : validIdUris) {
+      // the uri as is (e.g. "/expectedOp).
+      testCases.put(validIdUri, validIdUri);
+      // the uri with a query string (e.g. "/expectedOp?param=value").
+      testCases.put(validIdUri + queryString, validIdUri);
+      for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+        String subResourceStr = "/" + subResource.name();
+        // the uri with a sub-resource (e.g. "/expectedOp/BlobInfo").
+        testCases.put(validIdUri + subResourceStr, validIdUri);
+        // the uri with a sub-resource and query string (e.g. "/expectedOp/BlobInfo?param=value").
+        testCases.put(validIdUri + subResourceStr + queryString, validIdUri);
+      }
     }
 
-    // valid operation
-    String baseId = "expectedOp";
-    String[] validOpUris = {"/" + baseId, "/" + baseId + "/random/extra", baseId, baseId + "/random/extra"};
-    for (String uri : validOpUris) {
-      RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
-      String expectedId = uri.startsWith("/") ? "/" + baseId : baseId;
-      assertEquals("Unexpected operation/blob id in " + uri, expectedId,
-          RestUtils.getOperationOrBlobIdFromUri(restRequest));
+    // test each case on each prefix.
+    for (String prefixToTestOn : prefixesToTestOn) {
+      for (Map.Entry<String, String> testCase : testCases.entrySet()) {
+        String testPath = testCase.getKey();
+        // skip the ones with no leading slash if prefix is not "". Otherwise they become -> "/prefixexpectedOp".
+        if (prefixToTestOn.isEmpty() || testPath.startsWith("/")) {
+          String realTestPath = prefixToTestOn + testPath;
+          String expectedOutput = testCase.getValue();
+          expectedOutput = prefixesToRemove.contains(prefixToTestOn) ? expectedOutput : prefixToTestOn + expectedOutput;
+          RestRequest restRequest = createRestRequest(RestMethod.GET, realTestPath, null);
+          assertEquals("Unexpected operation/blob id for: " + realTestPath, expectedOutput, RestUtils
+              .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest), prefixesToRemove));
+        }
+      }
     }
   }
 
@@ -447,24 +470,33 @@ public class RestUtilsTest {
   public void getBlobSubResourceTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     // sub resource null
+    String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
     String[] nullUris = {"/op", "/op/", "/op/invalid", "/op/invalid/", "op", "op/", "op/invalid", "op/invalid/"};
     for (String uri : nullUris) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, uri, null);
-      assertNull("There was no sub-resource expected", RestUtils.getBlobSubResource(restRequest));
+      assertNull("There was no sub-resource expected in: " + uri, RestUtils.getBlobSubResource(restRequest));
+      // add a sub-resource at the end as part of the query string.
+      for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+        String fullUri = uri + queryString + subResource;
+        restRequest = createRestRequest(RestMethod.GET, fullUri, null);
+        assertNull("There was no sub-resource expected in: " + fullUri, RestUtils.getBlobSubResource(restRequest));
+      }
     }
 
     // valid sub resource
     String[] nonNullUris = {"/op/", "/op/random/", "op/", "op/random/"};
     for (String uri : nonNullUris) {
-      String fullUri = uri + RestUtils.SubResource.BlobInfo;
-      RestRequest restRequest = createRestRequest(RestMethod.GET, fullUri, null);
-      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.BlobInfo,
-          RestUtils.getBlobSubResource(restRequest));
-
-      fullUri = uri + RestUtils.SubResource.UserMetadata;
-      restRequest = createRestRequest(RestMethod.GET, fullUri, null);
-      assertEquals("Unexpected sub resource in uri " + fullUri, RestUtils.SubResource.UserMetadata,
-          RestUtils.getBlobSubResource(restRequest));
+      for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+        String fullUri = uri + subResource;
+        RestRequest restRequest = createRestRequest(RestMethod.GET, fullUri, null);
+        assertEquals("Unexpected sub resource in uri: " + fullUri, subResource,
+            RestUtils.getBlobSubResource(restRequest));
+        // add a query-string.
+        fullUri = uri + subResource + queryString;
+        restRequest = createRestRequest(RestMethod.GET, fullUri, null);
+        assertEquals("Unexpected sub resource in uri: " + fullUri, subResource,
+            RestUtils.getBlobSubResource(restRequest));
+      }
     }
   }
 
@@ -576,7 +608,7 @@ public class RestUtilsTest {
       boolean keyFromInputMap = inputUserMetadata.containsKey(key);
       assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
       assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
-          + ", and output map value " + userMetadataMap.get(key),
+              + ", and output map value " + userMetadataMap.get(key),
           inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
     }
   }
