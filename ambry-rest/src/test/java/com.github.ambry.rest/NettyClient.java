@@ -230,7 +230,7 @@ public class NettyClient implements Closeable {
       } else if (in.getDecoderResult().isFailure()) {
         Throwable cause = in.getDecoderResult().cause();
         if (cause instanceof Exception) {
-          exception = (Exception) in.getDecoderResult().cause();
+          exception = (Exception) cause;
         } else {
           exception =
               new Exception("Encountered Throwable when trying to decode response. Message: " + cause.getMessage());
