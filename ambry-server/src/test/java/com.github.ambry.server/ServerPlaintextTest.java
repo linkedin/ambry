@@ -39,8 +39,7 @@ public class ServerPlaintextTest {
       throws Exception {
     coordinatorProps = new Properties();
     notificationSystem = new MockNotificationSystem(9);
-    plaintextCluster =
-        new MockCluster(notificationSystem, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
   }
 
@@ -49,7 +48,8 @@ public class ServerPlaintextTest {
   }
 
   @AfterClass
-  public static void cleanup() {
+  public static void cleanup()
+      throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
@@ -70,7 +70,8 @@ public class ServerPlaintextTest {
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil
-        .endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null, null, coordinatorProps);
+        .endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null, null,
+            coordinatorProps);
   }
 
   @Test
@@ -82,8 +83,8 @@ public class ServerPlaintextTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null,
-        null, notificationSystem, coordinatorProps);
+        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, notificationSystem,
+        coordinatorProps);
   }
 
   @Test
@@ -95,8 +96,8 @@ public class ServerPlaintextTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null,
-        null, null, null, null, notificationSystem);
+        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, null, null, null, null,
+        notificationSystem);
   }
 
   @Test
