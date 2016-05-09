@@ -210,8 +210,8 @@ public final class ServerTestUtil {
       channel.send(getRequestExpired);
       InputStream streamExpired = channel.receive().getInputStream();
       GetResponse respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
-      Assert
-          .assertEquals(respExpired.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Expired);
+      Assert.assertEquals(respExpired.getPartitionResponseInfoList().get(0).getErrorCode(),
+          ServerErrorCode.Blob_Expired);
 
       // 2. With Include_Expired flag
       idsExpired = new ArrayList<BlobId>();
@@ -881,7 +881,7 @@ public final class ServerTestUtil {
         Assert.assertEquals(propertyOutput.getBlobSize(), 1000);
         Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
       // get user metadata
       ids.clear();
@@ -898,7 +898,7 @@ public final class ServerTestUtil {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
         Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // get blob
@@ -919,7 +919,7 @@ public final class ServerTestUtil {
         }
         Assert.assertArrayEquals(blobout, data);
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       try {
@@ -938,7 +938,7 @@ public final class ServerTestUtil {
         coordinator.close();
       } catch (CoordinatorException e) {
         e.printStackTrace();
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // fetch blob that does not exist
@@ -978,73 +978,14 @@ public final class ServerTestUtil {
       Assert.assertEquals(resp5.getError(), ServerErrorCode.No_Error);
       Assert.assertEquals(resp5.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Deleted);
 
-      // persist and restore to check state
+      // get the data node to inspect replication tokens on
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
+      // read the replica file and check correctness
+      checkReplicaTokens(clusterMap, dataNodeId, 13062, "0");
+
+      // Shut down server 1
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
-      // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
-      List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
-      Set<String> setToCheck = new HashSet<String>();
-
-      // we should have an entry for each partition - remote replica pair
-      List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
-      for (ReplicaId replicaId : replicaIds) {
-        List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
-        for (ReplicaId peerReplica : peerReplicas) {
-          setToCheck.add(replicaId.getPartitionId().toString() +
-              peerReplica.getDataNodeId().getHostname() +
-              peerReplica.getDataNodeId().getPort());
-        }
-      }
-      for (String mountPath : mountPaths) {
-        File replicaTokenFile = new File(mountPath, "replicaTokens");
-        if (replicaTokenFile.exists()) {
-          CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
-          DataInputStream dataInputStream = new DataInputStream(crcStream);
-          try {
-            short version = dataInputStream.readShort();
-            Assert.assertEquals(version, 0);
-            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
-            FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
-
-            System.out.println("setToCheck" + setToCheck.size());
-            while (dataInputStream.available() > 8) {
-              // read partition id
-              PartitionId partitionId = clusterMap.getPartitionIdFromStream(dataInputStream);
-              // read remote node host name
-              String hostname = Utils.readIntString(dataInputStream);
-              // read remote replica path
-              Utils.readIntString(dataInputStream);
-
-              // read remote port
-              int port = dataInputStream.readInt();
-              Assert.assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
-              setToCheck.remove(partitionId.toString() + hostname + port);
-              // read total bytes read from local store
-              dataInputStream.readLong();
-              // read replica token
-              FindToken token = factory.getFindToken(dataInputStream);
-              System.out.println(
-                  "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
-              ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
-              Assert.assertEquals(bytebufferToken.getShort(), 0);
-              int size = bytebufferToken.getInt();
-              bytebufferToken.position(bytebufferToken.position() + size);
-              long parsedToken = bytebufferToken.getLong();
-              System.out.println("The parsed token is " + parsedToken);
-              Assert.assertTrue(parsedToken == -1 || parsedToken == 13062);
-            }
-            long crc = crcStream.getValue();
-            Assert.assertEquals(crc, dataInputStream.readLong());
-          } catch (IOException e) {
-            Assert.assertTrue(false);
-          } finally {
-            dataInputStream.close();
-          }
-        } else {
-          Assert.assertTrue(false);
-        }
-      }
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
       putRequest2 = new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata),
@@ -1110,7 +1051,7 @@ public final class ServerTestUtil {
         checkBlobContent(clusterMap, blobId10, channel1, data);
         checkBlobContent(clusterMap, blobId11, channel1, data);
       } catch (MessageFormatException e) {
-        Assert.assertFalse(true);
+        Assert.fail();
       }
 
       // Shutdown server 1. Remove all its data from all mount path. Recover server 1 and ensure node is built
@@ -1169,7 +1110,112 @@ public final class ServerTestUtil {
       channel3.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      Assert.assertTrue(false);
+      Assert.fail();
+    }
+  }
+
+  /**
+   * Repeatedly check the replication token file until a certain offset value on all nodes on a certain
+   * partition is found.  Fail if {@code numTries} is exceeded or a token offset larger than the target
+   * is found.
+   * @param clusterMap the cluster map that contains the data node to inspect
+   * @param dataNodeId the data node to inspect
+   * @param targetOffset the token offset to look for in the {@code targetPartition}
+   * @param targetPartition the name of the partition to look for the {@code targetOffset}
+   * @throws Exception
+   */
+  private static void checkReplicaTokens(MockClusterMap clusterMap, DataNodeId dataNodeId, long targetOffset,
+      String targetPartition)
+      throws Exception {
+    List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
+
+    // we should have an entry for each partition - remote replica pair
+    Set<String> completeSetToCheck = new HashSet<>();
+    List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
+    int numRemoteNodes = 0;
+    for (ReplicaId replicaId : replicaIds) {
+      List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+      if (replicaId.getPartitionId().isEqual(targetPartition)) {
+        numRemoteNodes = peerReplicas.size();
+      }
+      for (ReplicaId peerReplica : peerReplicas) {
+        completeSetToCheck.add(replicaId.getPartitionId().toString() +
+            peerReplica.getDataNodeId().getHostname() +
+            peerReplica.getDataNodeId().getPort());
+      }
+    }
+
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
+
+    int numTries = 4;
+    boolean foundTarget = false;
+    while (!foundTarget && numTries > 0) {
+      Thread.sleep(5000);
+      numTries--;
+      Set<String> setToCheck = new HashSet<String>(completeSetToCheck);
+      int numFound = 0;
+      for (String mountPath : mountPaths) {
+        File replicaTokenFile = new File(mountPath, "replicaTokens");
+        if (replicaTokenFile.exists()) {
+          CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
+          DataInputStream dataInputStream = new DataInputStream(crcStream);
+          try {
+            short version = dataInputStream.readShort();
+            Assert.assertEquals(version, 0);
+
+            System.out.println("setToCheck" + setToCheck.size());
+            while (dataInputStream.available() > 8) {
+              // read partition id
+              PartitionId partitionId = clusterMap.getPartitionIdFromStream(dataInputStream);
+              // read remote node host name
+              String hostname = Utils.readIntString(dataInputStream);
+              // read remote replica path
+              Utils.readIntString(dataInputStream);
+
+              // read remote port
+              int port = dataInputStream.readInt();
+              Assert.assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
+              setToCheck.remove(partitionId.toString() + hostname + port);
+              // read total bytes read from local store
+              dataInputStream.readLong();
+              // read replica token
+              FindToken token = factory.getFindToken(dataInputStream);
+              System.out.println(
+                  "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
+              ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
+              Assert.assertEquals(bytebufferToken.getShort(), 0);
+              int size = bytebufferToken.getInt();
+              bytebufferToken.position(bytebufferToken.position() + size);
+              long parsedToken = bytebufferToken.getLong();
+              System.out.println("The parsed token is " + parsedToken);
+              if (partitionId.isEqual(targetPartition)) {
+                Assert.assertFalse("Parsed offset must not be larger than target value: " + targetOffset,
+                    parsedToken > targetOffset);
+                if (parsedToken == targetOffset) {
+                  numFound++;
+                }
+              } else {
+                Assert.assertTrue("Offset should be 0 on unmodified partitions", parsedToken == -1);
+              }
+            }
+            long crc = crcStream.getValue();
+            Assert.assertEquals(crc, dataInputStream.readLong());
+          } catch (IOException e) {
+            Assert.fail();
+          } finally {
+            dataInputStream.close();
+          }
+        } else {
+          Assert.fail();
+        }
+        if (numFound == numRemoteNodes) {
+          foundTarget = true;
+        }
+      }
+    }
+    if (!foundTarget) {
+      Assert.fail("Could not find target token offset: " + targetOffset);
     }
   }
 
