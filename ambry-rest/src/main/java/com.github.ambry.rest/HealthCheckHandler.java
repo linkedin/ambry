@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * Responsible for responding to health check requests
  * {@link RestServerState} assists in knowing the state of the system at any point in time
  */
-public class HealthCheckHandler extends ChannelDuplexHandler {
+class HealthCheckHandler extends ChannelDuplexHandler {
   private final String healthCheckUri;
   private final RestServerState restServerState;
   private final NettyMetrics nettyMetrics;
