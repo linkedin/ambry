@@ -150,7 +150,7 @@ class GetManager {
    */
   void handleResponse(ResponseInfo responseInfo) {
     GetRequest getRequest = (GetRequest) responseInfo.getRequest();
-    GetOperation getOperation = correlationIdToGetOperation.get(getRequest.getCorrelationId());
+    GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
       getOperation.handleResponse(responseInfo);
       if (getOperation.isOperationComplete() && getOperations.remove(getOperation)) {
