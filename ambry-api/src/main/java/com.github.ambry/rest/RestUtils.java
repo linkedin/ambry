@@ -363,11 +363,12 @@ public class RestUtils {
    * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
    * performed on.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @param subResourcePresent the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
-   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction.
+   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
+   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
    * @return extracted operation type or blob ID from the URI.
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResourcePresent,
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
       List<String> prefixesToRemove) {
     String path = restRequest.getPath();
     int startIndex = 0;
@@ -389,9 +390,9 @@ public class RestUtils {
     }
 
     // remove subresource if present.
-    if (subResourcePresent != null) {
+    if (subResource != null) {
       // "- 1" removes the "slash" that precedes the sub-resource.
-      endIndex = endIndex - subResourcePresent.name().length() - 1;
+      endIndex = endIndex - subResource.name().length() - 1;
     }
     return path.substring(startIndex, endIndex);
   }
