@@ -27,6 +27,7 @@ import com.github.ambry.router.RouterErrorCode;
  * {@link ResponseStatus#InternalServerError}
  * {@link ResponseStatus#Forbidden}
  * {@link ResponseStatus#ProxyAuthenticationRequired}
+ * {@link ResponseStatus#Unauthorized}
  * <p/>
  * About logging:
  * Generally, error codes not belonging to the group {@link #InternalServerError} are logged at DEBUG level.
@@ -43,17 +44,24 @@ public enum RestServiceErrorCode {
   NotFound,
 
   /**
-   * Generic BadRequest error code when a client provides a request that is not fit for processing.
-   */
-  BadRequest,
-  /**
    * Resource scan still in progress and result not yet available
    */
   ResourceScanInProgress,
+
   /**
    * Resource scan has deducted that the resource is not safe for serving
    */
   ResourceDirty,
+
+  /**
+   * Client has sent a request that cannot be processed due to authorization failure.
+   */
+  Unauthorized,
+
+  /**
+   * Generic BadRequest error code when a client provides a request that is not fit for processing.
+   */
+  BadRequest,
   /**
    * Client has sent arguments (whether in the URI or in the headers) that are not in the format that is expected or if
    * the number of values for an argument expected by the server does not match what the client sent.
@@ -74,10 +82,6 @@ public enum RestServiceErrorCode {
    */
   MissingArgs,
   /**
-   * Client has sent a request that cannot be processed due to authorization failure.
-   */
-  Unauthorized,
-  /**
    * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
    * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
    */
@@ -92,14 +96,14 @@ public enum RestServiceErrorCode {
   UnsupportedOperation,
 
   /**
-   * Indicates that {@link IdConverter} encountered some exception during ID conversion
-   */
-  IdConverterServiceError,
-  /**
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
    * there is nothing that a client can do about it.
    */
   InternalServerError,
+  /**
+   * Indicates that {@link IdConverter} encountered some exception during ID conversion
+   */
+  IdConverterServiceError,
   /**
    * Indicates that an object that is needed for the request could not be created due to an internal server error.
    */
