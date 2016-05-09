@@ -62,21 +62,17 @@ import static org.junit.Assert.*;
  * {@link MockNettyMessageProcessor#handleContent(HttpContent)}
  */
 public class NettyResponseChannelTest {
-  private static final Map<RestServiceErrorCode, HttpResponseStatus> REST__ERROR_CODE_TO_HTTP__STATUS = new HashMap<>();
+  private static final Map<RestServiceErrorCode, HttpResponseStatus> REST_ERROR_CODE_TO_HTTP_STATUS = new HashMap<>();
 
   static {
-    REST__ERROR_CODE_TO_HTTP__STATUS
-        .put(RestServiceErrorCode.BadRequest, HttpResponseStatus.BAD_REQUEST);
-    REST__ERROR_CODE_TO_HTTP__STATUS
-        .put(RestServiceErrorCode.Unauthorized, HttpResponseStatus.UNAUTHORIZED);
-    REST__ERROR_CODE_TO_HTTP__STATUS.put(RestServiceErrorCode.Deleted, HttpResponseStatus.GONE);
-    REST__ERROR_CODE_TO_HTTP__STATUS
-        .put(RestServiceErrorCode.NotFound, HttpResponseStatus.NOT_FOUND);
-    REST__ERROR_CODE_TO_HTTP__STATUS
+    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.BadRequest, HttpResponseStatus.BAD_REQUEST);
+    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.Unauthorized, HttpResponseStatus.UNAUTHORIZED);
+    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.Deleted, HttpResponseStatus.GONE);
+    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.NotFound, HttpResponseStatus.NOT_FOUND);
+    REST_ERROR_CODE_TO_HTTP_STATUS
         .put(RestServiceErrorCode.ResourceScanInProgress, HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED);
-    REST__ERROR_CODE_TO_HTTP__STATUS
-        .put(RestServiceErrorCode.ResourceDirty, HttpResponseStatus.FORBIDDEN);
-    REST__ERROR_CODE_TO_HTTP__STATUS
+    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.ResourceDirty, HttpResponseStatus.FORBIDDEN);
+    REST_ERROR_CODE_TO_HTTP_STATUS
         .put(RestServiceErrorCode.InternalServerError, HttpResponseStatus.INTERNAL_SERVER_ERROR);
   }
 
@@ -144,8 +140,7 @@ public class NettyResponseChannelTest {
    */
   @Test
   public void onResponseCompleteWithExceptionTest() {
-    for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST__ERROR_CODE_TO_HTTP__STATUS
-        .entrySet()) {
+    for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_ERROR_CODE_TO_HTTP_STATUS.entrySet()) {
       boolean shouldClose = NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(entry.getValue());
       doOnResponseCompleteWithExceptionTest(entry.getKey(), entry.getValue(), shouldClose);
     }
@@ -335,8 +330,7 @@ public class NettyResponseChannelTest {
   @Test
   public void noBodyForHeadTest() {
     EmbeddedChannel channel = createEmbeddedChannel();
-    for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST__ERROR_CODE_TO_HTTP__STATUS
-        .entrySet()) {
+    for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_ERROR_CODE_TO_HTTP_STATUS.entrySet()) {
       HttpHeaders httpHeaders = new DefaultHttpHeaders();
       httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, entry.getKey());
       channel.writeInbound(RestTestUtils
@@ -371,8 +365,7 @@ public class NettyResponseChannelTest {
     HttpMethod[] HTTP_METHODS = {HttpMethod.POST, HttpMethod.GET, HttpMethod.HEAD, HttpMethod.DELETE};
     EmbeddedChannel channel = createEmbeddedChannel();
     for (HttpMethod httpMethod : HTTP_METHODS) {
-      for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST__ERROR_CODE_TO_HTTP__STATUS
-          .entrySet()) {
+      for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_ERROR_CODE_TO_HTTP_STATUS.entrySet()) {
         HttpHeaders httpHeaders = new DefaultHttpHeaders();
         httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, entry.getKey());
         channel.writeInbound(RestTestUtils
