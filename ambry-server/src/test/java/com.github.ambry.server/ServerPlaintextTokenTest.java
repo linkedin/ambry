@@ -48,14 +48,9 @@ public class ServerPlaintextTokenTest {
     plaintextCluster.startServers();
   }
 
-  public ServerPlaintextTokenTest()
-      throws Exception {
-  }
   @After
   public void cleanup() {
     long start = System.currentTimeMillis();
-    // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
-    // and reliable.
     System.out.println("About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {
       plaintextCluster.cleanup();

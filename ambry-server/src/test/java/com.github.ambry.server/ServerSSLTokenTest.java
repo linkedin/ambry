@@ -64,10 +64,6 @@ public class ServerSSLTokenTest {
     clientSSLSocketFactory = sslContext.getSocketFactory();
   }
 
-  public ServerSSLTokenTest()
-      throws Exception {
-  }
-
   @After
   public void cleanup() {
     long start = System.currentTimeMillis();
