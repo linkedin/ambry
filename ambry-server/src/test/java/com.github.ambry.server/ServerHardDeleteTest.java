@@ -94,6 +94,15 @@ public class ServerHardDeleteTest {
     mockClusterMap.cleanup();
   }
 
+  /**
+   * Waits and ensures that the hard delete cleanup token catches up to the expected token value.
+   * @param path the path to the cleanup token.
+   * @param mockClusterMap the {@link MockClusterMap} being used for the cluster.
+   * @param expectedTokenValue the expected value that the cleanup token should contain. Until this value is reached,
+   *                           the method will keep reopening the file and read the value or until a predefined
+   *                           timeout is reached.
+   * @throws Exception if there were any I/O errors or the sleep gets interrupted.
+   */
   void ensureCleanupTokenCatchesUp(String path, MockClusterMap mockClusterMap, long expectedTokenValue)
       throws Exception {
     final int TIMEOUT = 10000;
