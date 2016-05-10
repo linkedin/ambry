@@ -20,7 +20,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -111,7 +113,8 @@ public class RestUtils {
      */
     public final static String COOKIE = "Cookie";
     /**
-     * {@code "If-Modified-Since"}
+     * Header to be set by the clients during a Get blob call to denote, that blob should be served only if the blob
+     * has been modified after the value set for this header.
      */
     public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
   }
@@ -138,9 +141,6 @@ public class RestUtils {
   private static final int Crc_Size = 8;
   private static final short UserMetadata_Version_V1 = 1;
   public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
-
-  // Max size of a value for user metadata as key value pairs
-  protected static final int Max_UserMetadata_Value_Size = 1024 * 8;
 
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
@@ -373,14 +373,38 @@ public class RestUtils {
    * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
    * performed on.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @return extracted operation type or blob ID from the uri.
+   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
+   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
+   * @return extracted operation type or blob ID from the URI.
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest) {
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
+      List<String> prefixesToRemove) {
     String path = restRequest.getPath();
-    int searchStartIndex = path.startsWith("/") ? 1 : 0;
-    int endIndex = path.indexOf("/", searchStartIndex);
-    endIndex = endIndex > 0 ? endIndex : path.length();
-    return path.substring(0, endIndex);
+    int startIndex = 0;
+
+    // remove query string.
+    int endIndex = path.indexOf("?");
+    if (endIndex == -1) {
+      endIndex = path.length();
+    }
+
+    // remove prefix.
+    if (prefixesToRemove != null) {
+      for (String prefix : prefixesToRemove) {
+        if (path.startsWith(prefix)) {
+          startIndex = prefix.length();
+          break;
+        }
+      }
+    }
+
+    // remove subresource if present.
+    if (subResource != null) {
+      // "- 1" removes the "slash" that precedes the sub-resource.
+      endIndex = endIndex - subResource.name().length() - 1;
+    }
+    return path.substring(startIndex, endIndex);
   }
 
   /**
@@ -404,15 +428,18 @@ public class RestUtils {
   }
 
   /**
-   * @return Time in ms since epoch. Note http time is kept in Seconds so last three digits will be
-   *         000. Returns null in case of parse exception
+   * Fetch time in ms for the {@code dateString} passed in, since epoch
+   * @param dateString the String representation of the date that needs to be parsed
+   * @return Time in ms since epoch. Note http time is kept in Seconds so last three digits will be 000.
+   *         Returns null if the {@code dateString} is not in the expected format or could not be parsed
    */
-  public static Long getTimeFromDateString(String dataString) {
-    SimpleDateFormat dateFormatter = new SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US);
+  public static Long getTimeFromDateString(String dateString) {
     try {
-      return new Long(dateFormatter.parse(dataString).getTime());
+      SimpleDateFormat dateFormatter = new SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US);
+      Date date = dateFormatter.parse(dateString);
+      return date.getTime();
     } catch (ParseException e) {
-      logger.warn("Could not parse milliseconds from an HTTP date header (" + dataString + ").");
+      logger.warn("Could not parse milliseconds from an HTTP date header (" + dateString + ").");
       return null;
     }
   }
@@ -422,7 +449,7 @@ public class RestUtils {
    * three digits 000. Useful for comparing times kept in milliseconds that get converted to seconds and back (as is
    * done with HTTP date format).
    *
-   * @param ms
+   * @param ms time that needs to be parsed
    * @return milliseconds with seconds precision (last three digits 000).
    */
   public static long toSecondsPrecisionInMs(long ms) {

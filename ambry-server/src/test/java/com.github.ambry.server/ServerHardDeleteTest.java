@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -50,48 +51,59 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.Random;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 
 public class ServerHardDeleteTest {
-  private static MockNotificationSystem notificationSystem;
-  private static MockTime time;
-  private static MockCluster cluster;
+  private MockNotificationSystem notificationSystem;
+  private MockTime time;
+  private AmbryServer server;
+  private MockClusterMap mockClusterMap;
 
-  @BeforeClass
-  public static void initializeTests()
+  @Before
+  public void initialize()
       throws Exception {
-    notificationSystem = new MockNotificationSystem(9);
+    notificationSystem = new MockNotificationSystem(1);
+    mockClusterMap = new MockClusterMap(false, 1, 1, 1);
     time = new MockTime(SystemTime.getInstance().milliseconds());
-    cluster = new MockCluster(notificationSystem, time);
-    cluster.startServers();
+    Properties props = new Properties();
+    props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
+    props.setProperty("port", Integer.toString(mockClusterMap.getDataNodes().get(0).getPort()));
+    props.setProperty("store.data.flush.interval.seconds", "1");
+    props.setProperty("store.enable.hard.delete", "true");
+    props.setProperty("store.deleted.message.retention.days", "1");
+    VerifiableProperties propverify = new VerifiableProperties(props);
+    server = new AmbryServer(propverify, mockClusterMap, notificationSystem, time);
+    server.startup();
   }
 
-  public ServerHardDeleteTest()
-      throws Exception {
+  @After
+  public void cleanup()
+      throws IOException {
+    server.shutdown();
+    mockClusterMap.cleanup();
   }
 
-  @AfterClass
-  public static void cleanup() {
-    long start = System.currentTimeMillis();
-    // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
-    // and reliable.
-    System.out.println("About to invoke cluster.cleanup()");
-    if (cluster != null) {
-      cluster.cleanup();
-    }
-    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
-  }
-
-  void ensureCleanupTokenCatchesUp(String path, MockClusterMap clusterMap, long expectedTokenValue)
+  /**
+   * Waits and ensures that the hard delete cleanup token catches up to the expected token value.
+   * @param path the path to the cleanup token.
+   * @param mockClusterMap the {@link MockClusterMap} being used for the cluster.
+   * @param expectedTokenValue the expected value that the cleanup token should contain. Until this value is reached,
+   *                           the method will keep reopening the file and read the value or until a predefined
+   *                           timeout is reached.
+   * @throws Exception if there were any I/O errors or the sleep gets interrupted.
+   */
+  void ensureCleanupTokenCatchesUp(String path, MockClusterMap mockClusterMap, long expectedTokenValue)
       throws Exception {
     final int TIMEOUT = 10000;
     File cleanupTokenFile = new File(path, "cleanuptoken");
@@ -130,7 +142,7 @@ public class ServerHardDeleteTest {
         try {
           short version = stream.readShort();
           Assert.assertEquals(version, PersistentIndex.Cleanup_Token_Version_V1);
-          StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+          StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", mockClusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
           factory.getFindToken(stream);
@@ -185,18 +197,33 @@ public class ServerHardDeleteTest {
     Assert.assertEquals(expectedTokenValue, parsedTokenValue);
   }
 
+  /**
+   * Tests the hard delete functionality.
+   * <p>
+   * This test does the following:
+   * 1. Makes 6 puts, waits for notification.
+   * 2. Makes 2 deletes, waits for notification.
+   * 3. Waits for hard deletes to catch up to the expected token value.
+   * 4. Verifies that the two records that are deleted are zeroed out by hard deletes.
+   * 5. Makes 3 more puts, waits for notification.
+   * 6. Makes 3 deletes - 2 of records from the initial set of puts, and 1 from the new set.
+   * 7. Waits for hard deletes to catch up again to the expected token value.
+   * 8. Verifies that the three records that are deleted are zeroed out by hard deletes.
+   *
+   * @throws Exception
+   */
   @Test
   public void endToEndTestHardDeletes()
       throws Exception {
-    MockClusterMap clusterMap = cluster.getClusterMap();
-    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
+    Random random = new Random();
     for (int i = 0; i < 9; i++) {
       usermetadata.add(new byte[1000 + i]);
       data.add(new byte[31870 + i]);
-      new Random().nextBytes(usermetadata.get(i));
-      new Random().nextBytes(data.get(i));
+      random.nextBytes(usermetadata.get(i));
+      random.nextBytes(data.get(i));
     }
 
     ArrayList<BlobProperties> properties = new ArrayList<BlobProperties>(9);
@@ -210,7 +237,7 @@ public class ServerHardDeleteTest {
     properties.add(new BlobProperties(31877, "serviceid1"));
     properties.add(new BlobProperties(31878, "serviceid1"));
 
-    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds();
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>(9);
     blobIdList.add(new BlobId(partitionIds.get(0)));
     blobIdList.add(new BlobId(partitionIds.get(0)));
@@ -318,11 +345,9 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 198431);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 132299);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 132299);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198431);
 
-    MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+    MockPartitionId partition = (MockPartitionId) mockClusterMap.getWritablePartitionIds().get(0);
 
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -339,7 +364,7 @@ public class ServerHardDeleteTest {
               GetOptions.Include_All);
       channel.send(getRequest);
       InputStream stream = channel.receive().getInputStream();
-      GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
 
       for (int i = 0; i < 6; i++) {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
@@ -351,7 +376,7 @@ public class ServerHardDeleteTest {
           GetOptions.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
-      resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
 
       for (int i = 0; i < 6; i++) {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
@@ -362,7 +387,7 @@ public class ServerHardDeleteTest {
           new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
-      resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
 
       for (int i = 0; i < 6; i++) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
@@ -450,9 +475,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), clusterMap, 297905);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(1).getReplicaPath(), clusterMap, 231676);
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(2).getReplicaPath(), clusterMap, 231676);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 297905);
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);
@@ -464,7 +487,7 @@ public class ServerHardDeleteTest {
               GetOptions.Include_All);
       channel.send(getRequest);
       InputStream stream = channel.receive().getInputStream();
-      GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
 
       for (int i = 0; i < 9; i++) {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
@@ -476,7 +499,7 @@ public class ServerHardDeleteTest {
           GetOptions.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
-      resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
 
       for (int i = 0; i < 9; i++) {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
@@ -487,7 +510,7 @@ public class ServerHardDeleteTest {
           new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
-      resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
 
       for (int i = 0; i < 9; i++) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());

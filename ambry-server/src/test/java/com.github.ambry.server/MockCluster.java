@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import junit.framework.Assert;
 
 import static org.junit.Assert.assertTrue;
 
@@ -47,9 +49,9 @@ public class MockCluster {
   private NotificationSystem notificationSystem;
   private boolean serverInitialized = false;
 
-  public MockCluster(NotificationSystem notificationSystem, Time time)
+  public MockCluster(NotificationSystem notificationSystem, boolean enableHardDeletes, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, false, "", new Properties(), true, time);
+    this(notificationSystem, false, "", new Properties(), enableHardDeletes, time);
   }
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps,
@@ -57,7 +59,7 @@ public class MockCluster {
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     this.notificationSystem = notificationSystem;
-    clusterMap = new MockClusterMap(enableSSL);
+    clusterMap = new MockClusterMap(enableSSL, 9, 3, 3);
     serverList = new ArrayList<AmbryServer>();
     ArrayList<String> datacenterList = Utils.splitString(datacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
@@ -109,7 +111,8 @@ public class MockCluster {
     }
   }
 
-  public void cleanup() {
+  public void cleanup()
+      throws IOException {
     if (serverInitialized) {
       CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
       for (AmbryServer server : serverList) {
@@ -131,10 +134,9 @@ public class MockCluster {
    * @return the config value for sslEnabledDatacenters for the given datacenter
    */
   private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
-    ArrayList<String> localCopy = (ArrayList<String>) sslEnabledDataCenterList.clone();
+    ArrayList<String> localCopy = new ArrayList<String>(sslEnabledDataCenterList);
     localCopy.remove(datacenter);
-    String sslEnabledDatacenters = Utils.concatenateString(localCopy, ",");
-    return sslEnabledDatacenters;
+    return Utils.concatenateString(localCopy, ",");
   }
 
   public List<DataNodeId> getOneDataNodeFromEachDatacenter(ArrayList<String> datacenterList) {
@@ -213,7 +215,8 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+  public synchronized void onBlobReplicaDeleted(String sourceHost, int port, String blobId,
+      BlobReplicaSourceType sourceType) {
     Tracker tracker = objectTracker.get(blobId);
     tracker.totalReplicasDeleted.countDown();
   }
@@ -227,7 +230,10 @@ class MockNotificationSystem implements NotificationSystem {
   public void awaitBlobCreations(String blobId) {
     try {
       Tracker tracker = objectTracker.get(blobId);
-      tracker.totalReplicasCreated.await();
+      if (!tracker.totalReplicasCreated.await(2, TimeUnit.SECONDS)) {
+        Assert.fail(
+            "Failed awaiting for " + blobId + " creations, current count " + tracker.totalReplicasCreated.getCount());
+      }
     } catch (InterruptedException e) {
       // ignore
     }
@@ -236,7 +242,10 @@ class MockNotificationSystem implements NotificationSystem {
   public void awaitBlobDeletions(String blobId) {
     try {
       Tracker tracker = objectTracker.get(blobId);
-      tracker.totalReplicasDeleted.await();
+      if (!tracker.totalReplicasDeleted.await(2, TimeUnit.SECONDS)) {
+        Assert.fail(
+            "Failed awaiting for " + blobId + " deletions, current count " + tracker.totalReplicasDeleted.getCount());
+      }
     } catch (InterruptedException e) {
       // ignore
     }

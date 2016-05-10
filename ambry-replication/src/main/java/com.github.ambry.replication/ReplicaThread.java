@@ -32,7 +32,6 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -73,7 +72,7 @@ class ReplicaThread implements Runnable {
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
-  private boolean needToWaitForReplicaLag;
+  private boolean waitEnabled;
   private final FindTokenFactory findTokenFactory;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
@@ -88,12 +87,16 @@ class ReplicaThread implements Runnable {
   private final boolean validateMessageStream;
   private final MetricRegistry metricRegistry;
   private final ResponseHandler responseHandler;
+  private final boolean replicatingFromRemoteColo;
+  private final boolean replicatingOverSsl;
+  private final String datacenterName;
 
   public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
-      boolean validateMessageStream, MetricRegistry metricRegistry, ResponseHandler responseHandler) {
+      boolean validateMessageStream, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName,
+      ResponseHandler responseHandler) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -105,11 +108,14 @@ class ReplicaThread implements Runnable {
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
-    this.needToWaitForReplicaLag = true;
     this.storeKeyFactory = storeKeyFactory;
     this.validateMessageStream = validateMessageStream;
     this.metricRegistry = metricRegistry;
     this.responseHandler = responseHandler;
+    this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
+    this.waitEnabled = !replicatingFromRemoteColo;
+    this.replicatingOverSsl = replicatingOverSsl;
+    this.datacenterName = datacenterName;
   }
 
   public String getName() {
@@ -140,23 +146,20 @@ class ReplicaThread implements Runnable {
           DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
           logger.trace("Remote node: {} Thread name: {} Remote replicas: {}", remoteNode, threadName,
               replicasToReplicatePerNode);
-          boolean remoteColo = true;
-          if (dataNodeId.getDatacenterName().equals(remoteNode.getDatacenterName())) {
-            remoteColo = false;
-          }
-          boolean sslEnabled = replicasToReplicatePerNode.get(0).getPort().getPortType() == PortType.SSL ? true : false;
           Timer.Context context = null;
           Timer.Context portTypeBasedContext = null;
-          if (remoteColo) {
-            context = replicationMetrics.interColoReplicationLatency.time();
-            if (sslEnabled) {
-              portTypeBasedContext = replicationMetrics.sslInterColoReplicationLatency.time();
+          if (replicatingFromRemoteColo) {
+            context = replicationMetrics.interColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
+            if (replicatingOverSsl) {
+              portTypeBasedContext =
+                  replicationMetrics.sslInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
             } else {
-              portTypeBasedContext = replicationMetrics.plainTextInterColoReplicationLatency.time();
+              portTypeBasedContext =
+                  replicationMetrics.plainTextInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
             }
           } else {
             context = replicationMetrics.intraColoReplicationLatency.time();
-            if (sslEnabled) {
+            if (replicatingOverSsl) {
               portTypeBasedContext = replicationMetrics.sslIntraColoReplicationLatency.time();
             } else {
               portTypeBasedContext = replicationMetrics.plainTextIntraColoReplicationLatency.time();
@@ -177,18 +180,17 @@ class ReplicaThread implements Runnable {
           }
           if (activeReplicasPerNode.size() > 0) {
             try {
-              connectedChannel =
-                  connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
+              connectedChannel = connectionPool
+                  .checkOutConnection(remoteNode.getHostname(), replicasToReplicatePerNode.get(0).getPort(),
                       replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
               checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
               startTimeInMs = SystemTime.getInstance().milliseconds();
               List<ExchangeMetadataResponse> exchangeMetadataResponseList =
-                  exchangeMetadata(connectedChannel, activeReplicasPerNode, remoteColo, sslEnabled);
+                  exchangeMetadata(connectedChannel, replicasToReplicatePerNode);
               exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
 
               startTimeInMs = SystemTime.getInstance().milliseconds();
-              fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, remoteColo, exchangeMetadataResponseList,
-                  sslEnabled);
+              fixMissingStoreKeys(connectedChannel, replicasToReplicatePerNode, exchangeMetadataResponseList);
               fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
             } catch (Exception e) {
               if (checkoutConnectionTimeInMs == -1) {
@@ -218,7 +220,7 @@ class ReplicaThread implements Runnable {
               } else {
                 logger.error(strBuilder.toString() + e);
               }
-              replicationMetrics.incrementReplicationErrors(sslEnabled);
+              replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
               if (connectedChannel != null) {
                 connectionPool.destroyConnection(connectedChannel);
                 connectedChannel = null;
@@ -229,14 +231,16 @@ class ReplicaThread implements Runnable {
                   " Remote replicas: " + replicasToReplicatePerNode +
                   " Active remote replicas: " + activeReplicasPerNode +
                   " Throwable exception while replicating with remote replica ", e);
-              replicationMetrics.incrementReplicationErrors(sslEnabled);
+              replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
               if (connectedChannel != null) {
                 connectionPool.destroyConnection(connectedChannel);
                 connectedChannel = null;
               }
             } finally {
               long totalReplicationTime = SystemTime.getInstance().milliseconds() - replicationStartTimeInMs;
-              replicationMetrics.updateTotalReplicationTime(totalReplicationTime, remoteColo, sslEnabled);
+              replicationMetrics
+                  .updateTotalReplicationTime(totalReplicationTime, replicatingFromRemoteColo, replicatingOverSsl,
+                      datacenterName);
               if (connectedChannel != null) {
                 connectionPool.checkInConnection(connectedChannel);
               }
@@ -258,7 +262,6 @@ class ReplicaThread implements Runnable {
    * and ttl state.
    * @param connectedChannel The connected channel that represents a connection to the remote replica
    * @param replicasToReplicatePerNode The information about the replicas that is being replicated
-   * @param remoteColo True, if the replicas are from remote DC. False, if the replicas are from local DC
    * @return - List of ExchangeMetadataResponse that contains the set of store keys that are missing from the local
    *           store and are present in the remote replicas and also the new token from the remote replicas
    * @throws IOException
@@ -268,7 +271,7 @@ class ReplicaThread implements Runnable {
    * @throws InterruptedException
    */
   protected List<ExchangeMetadataResponse> exchangeMetadata(ConnectedChannel connectedChannel,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, boolean remoteColo, boolean sslEnabled)
+      List<RemoteReplicaInfo> replicasToReplicatePerNode)
       throws IOException, ReplicationException, InterruptedException {
 
     long exchangeMetadataStartTimeInMs = SystemTime.getInstance().milliseconds();
@@ -277,10 +280,9 @@ class ReplicaThread implements Runnable {
       try {
         DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
         ReplicaMetadataResponse response =
-            getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode, remoteColo,
-                sslEnabled);
+            getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
         long startTimeInMs = SystemTime.getInstance().milliseconds();
-        needToWaitForReplicaLag = true;
+        waitEnabled = !replicatingFromRemoteColo;
         for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
@@ -292,11 +294,13 @@ class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              checkNeedWaitTime(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
+              if (waitEnabled) {
+                waitIfRequired(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+              }
               Set<StoreKey> missingStoreKeys =
-                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, remoteColo);
+                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
-                  remoteNode, remoteColo);
+                  remoteNode);
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
@@ -323,7 +327,9 @@ class ReplicaThread implements Runnable {
             processMetadataResponseTimeInMs);
       } finally {
         long exchangeMetadataTime = SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs;
-        replicationMetrics.updateExchangeMetadataTime(exchangeMetadataTime, remoteColo, sslEnabled);
+        replicationMetrics
+            .updateExchangeMetadataTime(exchangeMetadataTime, replicatingFromRemoteColo, replicatingOverSsl,
+                datacenterName);
       }
     }
     return exchangeMetadataResponseList;
@@ -333,7 +339,6 @@ class ReplicaThread implements Runnable {
    * Gets all the messages from the remote node for the missing keys and writes them to the local store
    * @param connectedChannel The connected channel that represents a connection to the remote replica
    * @param replicasToReplicatePerNode The information about the replicas that is being replicated
-   * @param remoteColo True, if the replicas are from remote DC. False, if the replicas are from local DC
    * @param exchangeMetadataResponseList The missing keys in the local stores whose message needs to be retrieved
    *                                     from the remote stores
    * @throws IOException
@@ -342,8 +347,7 @@ class ReplicaThread implements Runnable {
    * @throws ReplicationException
    */
   protected void fixMissingStoreKeys(ConnectedChannel connectedChannel,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, boolean remoteColo,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean sslEnabled)
+      List<RemoteReplicaInfo> replicasToReplicatePerNode, List<ExchangeMetadataResponse> exchangeMetadataResponseList)
       throws IOException, StoreException, MessageFormatException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = SystemTime.getInstance().milliseconds();
     try {
@@ -356,12 +360,13 @@ class ReplicaThread implements Runnable {
       DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
       GetResponse getResponse =
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
-              remoteNode, remoteColo, sslEnabled);
-      writeMessagesToLocalStore(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode, remoteNode,
-          remoteColo, sslEnabled);
+              remoteNode);
+      writeMessagesToLocalStore(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode, remoteNode);
     } finally {
       long fixMissingStoreKeysTime = SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs;
-      replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, remoteColo, sslEnabled);
+      replicationMetrics
+          .updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo, replicatingOverSsl,
+              datacenterName);
     }
   }
 
@@ -370,13 +375,12 @@ class ReplicaThread implements Runnable {
    * @param replicasToReplicatePerNode The list of remote replicas for a node
    * @param connectedChannel The connection channel to the node
    * @param remoteNode The remote node from which replication needs to happen
-   * @param remoteColo True, if the remote node is in a remote colo, False otherwise
    * @return ReplicaMetadataResponse, the response from replica metadata request to remote node
    * @throws ReplicationException
    * @throws IOException
    */
   private ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      ConnectedChannel connectedChannel, DataNodeId remoteNode, boolean remoteColo, boolean sslEnabled)
+      ConnectedChannel connectedChannel, DataNodeId remoteNode)
       throws ReplicationException, IOException {
     long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -405,7 +409,8 @@ class ReplicaThread implements Runnable {
           ReplicaMetadataResponse.readFrom(new DataInputStream(byteBufferInputStream), findTokenFactory, clusterMap);
 
       long metadataRequestTime = SystemTime.getInstance().milliseconds() - replicaMetadataRequestStartTime;
-      replicationMetrics.updateMetadataRequestTime(metadataRequestTime, remoteColo, sslEnabled);
+      replicationMetrics
+          .updateMetadataRequestTime(metadataRequestTime, replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
 
       if (response.getError() != ServerErrorCode.No_Error
           || response.getReplicaMetadataResponseInfoList().size() != replicasToReplicatePerNode.size()) {
@@ -429,12 +434,11 @@ class ReplicaThread implements Runnable {
    * @param replicaMetadataResponseInfo The response that contains the messages from the remote node
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
-   * @param remoteColo True, if the remote node is in a remote colo, False otherwise
    * @return List of store keys that are missing from the local store
    * @throws StoreException
    */
   private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
-      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo, boolean remoteColo)
+      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo)
       throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -450,11 +454,9 @@ class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
     }
-    if (remoteColo) {
-      replicationMetrics.interColoCheckMissingKeysTime.update(SystemTime.getInstance().milliseconds() - startTime);
-    } else {
-      replicationMetrics.intraColoCheckMissingKeysTime.update(SystemTime.getInstance().milliseconds() - startTime);
-    }
+    replicationMetrics
+        .updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime, replicatingFromRemoteColo,
+            datacenterName);
     return missingStoreKeys;
   }
 
@@ -466,14 +468,13 @@ class ReplicaThread implements Runnable {
    * @param replicaMetadataResponseInfo The replica metadata response from the remote store
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @param remoteNode The remote node from which replication needs to happen
-   * @param remoteColo True, if the remote node is in remote colo, False otherwise
    * @throws IOException
    * @throws StoreException
    * @throws MessageFormatException
    */
   private void processReplicaMetadataResponse(Set<StoreKey> missingStoreKeys,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
-      DataNodeId remoteNode, boolean remoteColo)
+      DataNodeId remoteNode)
       throws IOException, StoreException, MessageFormatException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -521,8 +522,8 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    if (remoteColo) {
-      replicationMetrics.interColoProcessMetadataResponseTime
+    if (replicatingFromRemoteColo) {
+      replicationMetrics.interColoProcessMetadataResponseTime.get(datacenterName)
           .update(SystemTime.getInstance().milliseconds() - startTime);
     } else {
       replicationMetrics.intraColoProcessMetadataResponseTime
@@ -535,17 +536,14 @@ class ReplicaThread implements Runnable {
    * @param replicaMetadataResponseInfo The replica metadata response from the remote node
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that is being replicated from
-   * @param remoteColo True, if the remote node belongs to a remote colo, False otherwise
    * @throws InterruptedException
    */
-  private void checkNeedWaitTime(ReplicaMetadataResponseInfo replicaMetadataResponseInfo, DataNodeId remoteNode,
-      RemoteReplicaInfo remoteReplicaInfo, boolean remoteColo)
+  private void waitIfRequired(ReplicaMetadataResponseInfo replicaMetadataResponseInfo, DataNodeId remoteNode,
+      RemoteReplicaInfo remoteReplicaInfo)
       throws InterruptedException {
     long remoteReplicaLag = replicaMetadataResponseInfo.getRemoteReplicaLagInBytes();
-
     long startTime = SystemTime.getInstance().milliseconds();
-    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes && needToWaitForReplicaLag
-        && !remoteColo) {
+    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes) {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote replica lag: {} "
           + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(),
@@ -555,13 +553,15 @@ class ReplicaThread implements Runnable {
       // from the client. This is done only when the replication lag with that node is less than
       // replicationMaxLagForWaitTimeInBytes
       Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
-      needToWaitForReplicaLag = false;
+      waitEnabled = false;
     }
-    if (remoteColo) {
-      replicationMetrics.interColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
-    } else {
-      replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
-    }
+    //TODO do we need interColo metrics here?
+//    if (remoteColo) {
+//      replicationMetrics.interColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
+//    } else {
+//      replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
+//    }
+    replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
   }
 
   /**
@@ -570,14 +570,13 @@ class ReplicaThread implements Runnable {
    * @param exchangeMetadataResponseList The list of metadata response from the remote node
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
-   * @param remoteColo True, if the remote node is in remote colo, False otherwise
    * @return The response that contains the missing messages
    * @throws ReplicationException
    * @throws IOException
    */
   private GetResponse getMessagesForMissingKeys(ConnectedChannel connectedChannel,
       List<ExchangeMetadataResponse> exchangeMetadataResponseList, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      DataNodeId remoteNode, boolean remoteColo, boolean sslEnabled)
+      DataNodeId remoteNode)
       throws ReplicationException, IOException {
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
@@ -605,13 +604,15 @@ class ReplicaThread implements Runnable {
       ChannelOutput channelOutput = connectedChannel.receive();
       GetResponse getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
       long getRequestTime = SystemTime.getInstance().milliseconds() - startTime;
-      replicationMetrics.updateGetRequestTime(getRequestTime, remoteColo, sslEnabled);
+      replicationMetrics
+          .updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
       if (getResponse.getError() != ServerErrorCode.No_Error) {
         logger.error("Remote node: " + remoteNode +
             " Thread name: " + threadName +
             " Remote replicas: " + replicasToReplicatePerNode +
             " GetResponse from replication: " + getResponse.getError());
-        throw new ReplicationException(" Get Request returned error when trying to get missing keys " + getResponse.getError());
+        throw new ReplicationException(
+            " Get Request returned error when trying to get missing keys " + getResponse.getError());
       }
       return getResponse;
     } catch (IOException e) {
@@ -626,11 +627,9 @@ class ReplicaThread implements Runnable {
    * @param getResponse The getResponse that contains the messages
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
-   * @param remoteColo True, if the remote node is in a remote colo, False otherwise
    */
   private void writeMessagesToLocalStore(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
-      GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode,
-      boolean remoteColo, boolean sslEnabled)
+      GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
       throws IOException {
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
@@ -719,7 +718,8 @@ class ReplicaThread implements Runnable {
     }
     long batchStoreWriteTime = SystemTime.getInstance().milliseconds() - startTime;
     replicationMetrics
-        .updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed, remoteColo, sslEnabled);
+        .updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed, replicatingFromRemoteColo,
+            replicatingOverSsl, datacenterName);
   }
 
   class ExchangeMetadataResponse {

@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
  * </p>
  * Multipart decoding also creates copies of the data. This affects latency and increases memory pressure.
  */
-public class NettyMultipartRequest extends NettyRequest {
+class NettyMultipartRequest extends NettyRequest {
   private final Queue<HttpContent> rawRequestContents = new LinkedBlockingQueue<HttpContent>();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 

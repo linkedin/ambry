@@ -225,8 +225,17 @@ public class NettyClient implements Closeable {
       // Make sure that we increase refCnt because we are going to process it async. The other end has to release
       // after processing.
       responseParts.offer(ReferenceCountUtil.retain(in));
-      if (in instanceof HttpResponse) {
+      if (in instanceof HttpResponse && in.getDecoderResult().isSuccess()) {
         isKeepAlive = HttpHeaders.isKeepAlive((HttpResponse) in);
+      } else if (in.getDecoderResult().isFailure()) {
+        Throwable cause = in.getDecoderResult().cause();
+        if (cause instanceof Exception) {
+          exception = (Exception) cause;
+        } else {
+          exception =
+              new Exception("Encountered Throwable when trying to decode response. Message: " + cause.getMessage());
+        }
+        invokeFutureAndCallback();
       }
       if (in instanceof LastHttpContent) {
         if (isKeepAlive) {

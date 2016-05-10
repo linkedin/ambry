@@ -11,9 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.coordinator;
-
-import com.github.ambry.network.Send;
+package com.github.ambry.network;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -24,7 +22,7 @@ import java.nio.channels.WritableByteChannel;
  * A byte buffer version of Send that sends a materialized byte buffer. This breaks the contract of Send (only
  * materialize onto the network) and so is only suitable for use in tests.
  */
-class ByteBufferSend implements Send {
+public class ByteBufferSend implements Send {
   private final ByteBuffer buffer;
 
   public ByteBufferSend(ByteBuffer byteBuffer)

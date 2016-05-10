@@ -31,12 +31,12 @@ import java.util.List;
 public class PartitionRequestInfo {
 
   private final PartitionId partitionId;
-  private final ArrayList<BlobId> blobIds;
+  private final List<BlobId> blobIds;
   private long totalIdSize;
 
   private static final int Blob_Id_Count_Size_InBytes = 4;
 
-  public PartitionRequestInfo(PartitionId partitionId, ArrayList<BlobId> blobIds) {
+  public PartitionRequestInfo(PartitionId partitionId, List<BlobId> blobIds) {
     this.partitionId = partitionId;
     this.blobIds = blobIds;
     totalIdSize = 0;

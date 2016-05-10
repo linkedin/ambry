@@ -40,11 +40,11 @@ import java.util.concurrent.Future;
 class AmbrySecurityService implements SecurityService {
 
   private boolean isOpen;
-  private final long cacheValidityInSecs;
+  private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
 
   public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics) {
-    cacheValidityInSecs = frontendConfig.frontendCacheValiditySeconds;
+    this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     isOpen = true;
   }
@@ -98,6 +98,7 @@ class AmbrySecurityService implements SecurityService {
                 && RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs())
                 <= ifModifiedSinceMs) {
               responseChannel.setStatus(ResponseStatus.NotModified);
+              responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
             } else {
               responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
@@ -166,6 +167,9 @@ class AmbrySecurityService implements SecurityService {
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
+    if (blobProperties.getBlobSize() < frontendConfig.frontendChunkedGetResponseThresholdInBytes) {
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
+    }
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
       // Ensure browsers do not execute html with embedded exploits.
@@ -179,8 +183,9 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.PRAGMA, "no-cache");
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
-          new Date(System.currentTimeMillis() + cacheValidityInSecs * Time.MsPerSec));
-      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + cacheValidityInSecs);
+          new Date(System.currentTimeMillis() + frontendConfig.frontendCacheValiditySeconds * Time.MsPerSec));
+      restResponseChannel
+          .setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.frontendCacheValiditySeconds);
     }
   }
 

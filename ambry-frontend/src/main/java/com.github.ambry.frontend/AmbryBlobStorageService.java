@@ -14,8 +14,8 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.Histogram;
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.BlobStorageService;
@@ -64,11 +64,11 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static final String OPERATION_TYPE_DELETE = "DELETE";
   private static final String OPERATION_TYPE_POST = "POST";
 
-  private final ClusterMap clusterMap;
   private final RestResponseHandler responseHandler;
   private final Router router;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
+  private final FrontendConfig frontendConfig;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
 
   private IdConverter idConverter = null;
@@ -78,19 +78,19 @@ class AmbryBlobStorageService implements BlobStorageService {
   /**
    * Create a new instance of AmbryBlobStorageService by supplying it with config, metrics, cluster map, a
    * response handler controller and a router.
+   * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
    * @param frontendMetrics the metrics instance to use in the form of {@link FrontendMetrics}.
-   * @param clusterMap the {@link ClusterMap} to be used for operations.
    * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
    *                        out.
    * @param router the {@link Router} instance to use to perform blob operations.
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter}.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService}.
    */
-  public AmbryBlobStorageService(FrontendMetrics frontendMetrics, ClusterMap clusterMap,
+  public AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory) {
+    this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
-    this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.router = router;
     this.idConverterFactory = idConverterFactory;
@@ -460,13 +460,17 @@ class AmbryBlobStorageService implements BlobStorageService {
           logger.trace("Forwarding {} to the IdConverter/Router", restMethod);
           switch (restMethod) {
             case GET:
-              String receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
+              String receivedId = RestUtils
+                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                      frontendConfig.frontendPathPrefixesToRemove);
               InboundIdConverterCallback idConverterCallback =
                   new InboundIdConverterCallback(restRequest, restResponseChannel, headForGetCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
             case HEAD:
-              receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
+              receivedId = receivedId = RestUtils
+                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                      frontendConfig.frontendPathPrefixesToRemove);
               idConverterCallback = new InboundIdConverterCallback(restRequest, restResponseChannel, headCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
@@ -475,7 +479,9 @@ class AmbryBlobStorageService implements BlobStorageService {
               router.putBlob(blobProperties, userMetadata, restRequest, postCallback);
               break;
             case DELETE:
-              receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
+              receivedId = receivedId = RestUtils
+                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                      frontendConfig.frontendPathPrefixesToRemove);
               idConverterCallback = new InboundIdConverterCallback(restRequest, restResponseChannel, deleteCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
@@ -515,7 +521,8 @@ class AmbryBlobStorageService implements BlobStorageService {
       this.operationType = operationType;
       this.operationTimeTracker = operationTimeTracker;
       this.callbackProcessingTimeTracker = callbackProcessingTimeTracker;
-      blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
+      blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+          frontendConfig.frontendPathPrefixesToRemove);
     }
 
     /**
@@ -574,7 +581,8 @@ class AmbryBlobStorageService implements BlobStorageService {
       callbackTracker =
           new CallbackTracker(restRequest, OPERATION_TYPE_HEAD_BEFORE_GET, frontendMetrics.headForGetTimeInMs,
               frontendMetrics.headForGetCallbackProcessingTimeInMs);
-      blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest);
+      blobId =
+          RestUtils.getOperationOrBlobIdFromUri(restRequest, subResource, frontendConfig.frontendPathPrefixesToRemove);
     }
 
     /**

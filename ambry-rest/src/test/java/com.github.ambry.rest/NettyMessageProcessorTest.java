@@ -183,7 +183,6 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
-    assertFalse("Channel is still active", channel.isActive());
 
     // content without request on a channel that was kept alive
     channel = createChannel();
@@ -201,7 +200,6 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
-    assertFalse("Channel is still active", channel.isActive());
 
     // content when no content is expected.
     channel = createChannel();
@@ -209,14 +207,12 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
-    assertFalse("Channel is still active", channel.isActive());
 
     // wrong HTTPObject.
     channel = createChannel();
     channel.writeInbound(new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK));
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
-    assertFalse("Channel is still active", channel.isActive());
   }
 
   /**
@@ -316,6 +312,7 @@ public class NettyMessageProcessorTest {
       fail("Post did not succeed after 100ms. There is an error or timeout needs to increase");
     }
     assertNotNull("Blob id operated on cannot be null", notificationSystem.blobIdOperatedOn);
+    assertTrue("Channel should be active", channel.isActive());
     return router.getActiveBlobs().get(notificationSystem.blobIdOperatedOn).getBlob();
   }
 
