@@ -604,11 +604,19 @@ class AmbryBlobStorageService implements BlobStorageService {
             public void onCompletion(Void securityResult, Exception securityException) {
               securityCallbackTracker.markOperationEnd();
               ReadableStreamChannel response = null;
+              boolean blobNotModified = false;
               try {
                 if (securityException == null) {
                   if (subResource == null) {
-                    logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
-                    router.getBlob(blobId, new GetCallback(restRequest, restResponseChannel));
+                    Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
+                    if (ifModifiedSinceMs != null
+                        && RestUtils.toSecondsPrecisionInMs(routerResult.getBlobProperties().getCreationTimeInMs())
+                        <= ifModifiedSinceMs) {
+                      blobNotModified = true;
+                    } else {
+                      logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
+                      router.getBlob(blobId, new GetCallback(restRequest, restResponseChannel));
+                    }
                   } else {
                     Map<String, String> userMetadata = RestUtils.buildUserMetadata(routerResult.getUserMetadata());
                     if (userMetadata == null) {
@@ -628,7 +636,7 @@ class AmbryBlobStorageService implements BlobStorageService {
                 securityException = e;
               } finally {
                 securityCallbackTracker.markCallbackProcessingEnd();
-                if (response != null || securityException != null) {
+                if (response != null || securityException != null || blobNotModified) {
                   submitResponse(restRequest, restResponseChannel, response, securityException);
                 }
               }
@@ -644,6 +652,18 @@ class AmbryBlobStorageService implements BlobStorageService {
           submitResponse(restRequest, restResponseChannel, null, routerException);
         }
       }
+    }
+
+    /**
+     * Fetches the {@link RestUtils.Headers#IF_MODIFIED_SINCE} value in epoch time if present
+     * @param restRequest the {@link RestRequest} that needs to be parsed
+     * @return the {@link RestUtils.Headers#IF_MODIFIED_SINCE} value in epoch time if present
+     */
+    private Long getIfModifiedSinceMs(RestRequest restRequest) {
+      if (restRequest.getArgs().get(RestUtils.Headers.IF_MODIFIED_SINCE) != null) {
+        return RestUtils.getTimeFromDateString((String) restRequest.getArgs().get(RestUtils.Headers.IF_MODIFIED_SINCE));
+      }
+      return null;
     }
 
     /**

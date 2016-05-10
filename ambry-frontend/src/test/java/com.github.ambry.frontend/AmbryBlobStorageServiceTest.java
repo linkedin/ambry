@@ -47,17 +47,21 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import io.netty.handler.codec.http.HttpHeaders;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
@@ -69,6 +73,8 @@ import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 
 
 /**
@@ -349,6 +355,7 @@ public class AmbryBlobStorageServiceTest {
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
+    getNotModifiedBlobAndVerify(blobId);
     getUserMetadataAndVerify(blobId, headers);
     getBlobInfoAndVerify(blobId, headers);
     getHeadAndVerify(blobId, headers);
@@ -704,6 +711,30 @@ public class AmbryBlobStorageServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertArrayEquals("GET content does not match original content", expectedContent.array(),
         restResponseChannel.getResponseBody());
+  }
+
+  /**
+   * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
+   * @param blobId the blob ID of the blob to GET.
+   * @throws Exception
+   */
+  public void getNotModifiedBlobAndVerify(String blobId)
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
+    Date date = new Date(System.currentTimeMillis());
+    String dateStr = dateFormat.format(date);
+    headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, headers, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.NotModified, restResponseChannel.getResponseStatus());
+    assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
+    assertNull("No Last-Modified header expected", restResponseChannel.getHeader("Last-Modified"));
+    assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
+        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+    assertNull("Content-Type should have been null", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("No content expected as blob is not modified", 0, restResponseChannel.getResponseBody().length);
   }
 
   /**

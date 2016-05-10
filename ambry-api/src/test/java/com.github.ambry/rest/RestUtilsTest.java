@@ -20,7 +20,10 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import org.json.JSONException;
@@ -633,5 +636,25 @@ public class RestUtilsTest {
     for (String key : userMetadata.keySet()) {
       headers.put(key, userMetadata.get(key));
     }
+  }
+
+  @Test
+  public void toSecondsPrecisionInMsTest() {
+    assertEquals(0, RestUtils.toSecondsPrecisionInMs(999));
+    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1000));
+    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1001));
+  }
+
+  @Test
+  public void getTimeFromDateStringTest() {
+    SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
+    long curTime = System.currentTimeMillis();
+    Date curDate = new Date(curTime);
+    String dateStr = dateFormatter.format(curDate);
+    long epochTime = RestUtils.getTimeFromDateString(dateStr);
+    long actualExpectedTime = (curTime / 1000L) * 1000;
+    // Note http time is kept in Seconds so last three digits will be 000
+    assertEquals("Time mismatch ", actualExpectedTime, epochTime);
+    assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString("abc"));
   }
 }

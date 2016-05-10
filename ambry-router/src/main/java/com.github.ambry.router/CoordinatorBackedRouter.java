@@ -236,6 +236,14 @@ public class CoordinatorBackedRouter implements Router {
     } catch (Exception e) {
       metrics.futureCallbackError.inc();
       logger.error("Exception caught during future and callback completion", e);
+      if (operationResult instanceof ReadableStreamChannel) {
+        try {
+          logger.trace("Closing readable stream channel due to exception");
+          ((ReadableStreamChannel) operationResult).close();
+        } catch (IOException e1) {
+          logger.error("Ignoring IOException thrown during closing of readable stream channel on exception");
+        }
+      }
     } finally {
       metrics.operationPostProcessingTimeInMs.update(System.currentTimeMillis() - postProcessingStartTime);
     }

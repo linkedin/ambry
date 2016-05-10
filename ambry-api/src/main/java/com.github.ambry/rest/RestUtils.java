@@ -18,7 +18,10 @@ import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,6 +110,10 @@ public class RestUtils {
      * Header to contain the Cookies
      */
     public final static String COOKIE = "Cookie";
+    /**
+     * {@code "If-Modified-Since"}
+     */
+    public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
   }
 
   /**
@@ -130,6 +137,7 @@ public class RestUtils {
 
   private static final int Crc_Size = 8;
   private static final short UserMetadata_Version_V1 = 1;
+  public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
 
   // Max size of a value for user metadata as key value pairs
   protected static final int Max_UserMetadata_Value_Size = 1024 * 8;
@@ -393,5 +401,31 @@ public class RestUtils {
       }
     }
     return subResource;
+  }
+
+  /**
+   * @return Time in ms since epoch. Note http time is kept in Seconds so last three digits will be
+   *         000. Returns null in case of parse exception
+   */
+  public static Long getTimeFromDateString(String dataString) {
+    SimpleDateFormat dateFormatter = new SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US);
+    try {
+      return new Long(dateFormatter.parse(dataString).getTime());
+    } catch (ParseException e) {
+      logger.warn("Could not parse milliseconds from an HTTP date header (" + dataString + ").");
+      return null;
+    }
+  }
+
+  /**
+   * Reduces the precision of a time in milliseconds to seconds precision. Result returned is in milliseconds with last
+   * three digits 000. Useful for comparing times kept in milliseconds that get converted to seconds and back (as is
+   * done with HTTP date format).
+   *
+   * @param ms
+   * @return milliseconds with seconds precision (last three digits 000).
+   */
+  public static long toSecondsPrecisionInMs(long ms) {
+    return ms -= ms % 1000;
   }
 }

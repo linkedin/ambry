@@ -31,6 +31,11 @@ public enum ResponseStatus {
    */
   Accepted,
 
+  // 3xx
+  /**
+   * 304 Not Modified
+   */
+  NotModified,
   // 4xx
   /**
    * 400 - Request was not correct.

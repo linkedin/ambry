@@ -18,7 +18,11 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.NettyClient;
+import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
@@ -47,12 +51,17 @@ import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
+import junit.framework.Assert;
+import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -60,6 +69,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 
 /**
@@ -87,7 +97,7 @@ public class FrontendIntegrationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[5][0]);
+    return Arrays.asList(new Object[1][0]);
   }
 
   /**
@@ -123,7 +133,7 @@ public class FrontendIntegrationTest {
    */
   @Test
   public void postGetHeadDeleteTest()
-      throws ExecutionException, InterruptedException {
+      throws Exception {
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
@@ -136,6 +146,7 @@ public class FrontendIntegrationTest {
 
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
+    getNotModifiedBlobAndVerify(blobId);
     getUserMetadataAndVerify(blobId, headers, null);
     getBlobInfoAndVerify(blobId, headers, null);
     getHeadAndVerify(blobId, headers);
@@ -235,6 +246,21 @@ public class FrontendIntegrationTest {
       ReferenceCountUtil.release(content);
     }
     return buffer;
+  }
+
+  /**
+   * Verifies that no content has been sent as part of the response
+   * @param contents the content of the response.
+   */
+  private void assertNoContent(Queue<HttpObject> contents) {
+    boolean endMarkerFound = false;
+    for (HttpObject object : contents) {
+      assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
+      HttpContent content = (HttpContent) object;
+      System.out.println("Readable bytes " + content.content().readableBytes());
+      endMarkerFound = object instanceof LastHttpContent;
+      ReferenceCountUtil.release(content);
+    }
   }
 
   /**
@@ -349,6 +375,30 @@ public class FrontendIntegrationTest {
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     ByteBuffer responseContent = getContent(response, responseParts);
     assertArrayEquals("GET content does not match original content", expectedContent.array(), responseContent.array());
+  }
+
+  /**
+   * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
+   * @param blobId the blob ID of the blob to GET.
+   * @throws Exception
+   */
+  public void getNotModifiedBlobAndVerify(String blobId)
+      throws Exception {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
+    Date date = new Date(System.currentTimeMillis());
+    String dateStr = dateFormat.format(date);
+    headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.NOT_MODIFIED, response.getStatus());
+    assertTrue("No Date header", response.headers().get(RestUtils.Headers.DATE) != null);
+    assertNull("No Last-Modified header expected", response.headers().get("Last-Modified"));
+    assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    assertNoContent(responseParts);
   }
 
   /**
