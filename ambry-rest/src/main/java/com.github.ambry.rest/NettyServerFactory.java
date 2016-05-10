@@ -58,8 +58,10 @@ public class NettyServerFactory implements NioServerFactory {
         @Override
         protected void initChannel(SocketChannel ch) {
           ch.pipeline()
-              // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-              // to go here.
+              // connection stats handler to track connection related metrics
+              .addLast("ConnectionStatsHandler", ConnectionStatsHandler.getInstance(nettyMetrics))
+                  // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+                  // to go here.
               .addLast("codec", new HttpServerCodec())
                   // for health check request handling
               .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))

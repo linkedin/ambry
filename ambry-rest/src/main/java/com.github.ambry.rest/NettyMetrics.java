@@ -14,9 +14,11 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -25,6 +27,8 @@ import com.codahale.metrics.MetricRegistry;
  * Exports metrics that are triggered by Netty to the provided {@link MetricRegistry}.
  */
 public class NettyMetrics {
+
+  private final MetricRegistry metricRegistry;
 
   // Rates
   // NettyMessageProcessor
@@ -108,7 +112,11 @@ public class NettyMetrics {
   // NettyServer
   public final Histogram nettyServerShutdownTimeInMs;
   public final Histogram nettyServerStartTimeInMs;
-  // PublicAccessLogHandler
+  // ConnectionStatsHandler
+  public final Counter connectionsConnectedCount;
+  public final Counter connectionsDisconnectedCount;
+
+  // PublicAccessLogRequestHandler
   public final Counter publicAccessLogRequestDisconnectWhileInProgressCount;
   public final Counter publicAccessLogRequestCloseWhileRequestInProgressCount;
   // HealthCheckRequestHandler
@@ -119,6 +127,7 @@ public class NettyMetrics {
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
   public NettyMetrics(MetricRegistry metricRegistry) {
+    this.metricRegistry = metricRegistry;
     // Rates
     // NettyMessageProcessor
     bytesReadRate = metricRegistry.meter(MetricRegistry.name(NettyMessageProcessor.class, "BytesReadRate"));
@@ -240,5 +249,24 @@ public class NettyMetrics {
     // NettyServer
     nettyServerShutdownTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "ShutdownTimeInMs"));
     nettyServerStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyServer.class, "StartTimeInMs"));
+    // ConnectionStatsHandler
+    connectionsConnectedCount =
+        metricRegistry.counter(MetricRegistry.name(ConnectionStatsHandler.class, "ConnectionsConnectedCount"));
+    connectionsDisconnectedCount =
+        metricRegistry.counter(MetricRegistry.name(ConnectionStatsHandler.class, "ConnectionsDisconnectedCount"));
+  }
+
+  /**
+   * Registers the {@link ConnectionStatsHandler} to track open connections
+   * @param openConnectionsCount open connections count to be tracked
+   */
+  public void registerConnectionsStatsHandler(AtomicLong openConnectionsCount) {
+    Gauge<Long> openConnections = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return openConnectionsCount.get();
+      }
+    };
+    metricRegistry.register(MetricRegistry.name(ConnectionStatsHandler.class, "OpenConnections"), openConnections);
   }
 }
