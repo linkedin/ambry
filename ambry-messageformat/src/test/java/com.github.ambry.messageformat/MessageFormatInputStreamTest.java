@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
@@ -17,22 +30,44 @@ public class MessageFormatInputStreamTest {
   @Test
   public void messageFormatBlobPropertiesTest()
       throws IOException, MessageFormatException {
+    messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
+    messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
+    messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
+  }
+
+  private void messageFormatBlobPropertiesTest(short blobVersion, BlobType blobType)
+      throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     BlobProperties prop = new BlobProperties(10, "servid");
     byte[] usermetadata = new byte[1000];
     new Random().nextBytes(usermetadata);
-    byte[] data = new byte[2000];
+    int blobContentSize = 2000;
+    byte[] data = new byte[blobContentSize];
     new Random().nextBytes(data);
+    long blobSize = -1;
+
+    if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
+      blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobContentSize);
+    } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
+      blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
+    } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
+      ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
+      data = byteBufferBlob.array();
+      blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
+    }
+
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
 
     MessageFormatInputStream messageFormatStream =
-        new PutMessageFormatInputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, 2000);
+        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key, prop,
+            ByteBuffer.wrap(usermetadata), stream, blobContentSize, blobType)
+            : new PutMessageFormatBlobV2InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
+                blobType);
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop);
     int userMetadataSize =
         MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata));
-    long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(2000);
 
     Assert.assertEquals(messageFormatStream.getSize(), headerSize + blobPropertiesRecordSize +
         userMetadataSize + blobSize + key.sizeInBytes());
@@ -56,7 +91,7 @@ public class MessageFormatInputStreamTest {
     byte[] handleOutput = new byte[key.sizeInBytes()];
     ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
     messageFormatStream.read(handleOutput);
-    ;
+
     byte[] dest = new byte[key.sizeInBytes()];
     handleOutputBuf.get(dest);
     Assert.assertArrayEquals(dest, key.toBytes());
@@ -90,9 +125,12 @@ public class MessageFormatInputStreamTest {
     // verify blob
     CrcInputStream crcstream = new CrcInputStream(messageFormatStream);
     DataInputStream streamData = new DataInputStream(crcstream);
-    Assert.assertEquals(streamData.readShort(), 1);
-    Assert.assertEquals(streamData.readLong(), 2000);
-    for (int i = 0; i < 2000; i++) {
+    Assert.assertEquals(streamData.readShort(), blobVersion);
+    if (blobVersion == MessageFormatRecord.Blob_Version_V2) {
+      Assert.assertEquals(streamData.readShort(), blobType.ordinal());
+    }
+    Assert.assertEquals(streamData.readLong(), blobContentSize);
+    for (int i = 0; i < blobContentSize; i++) {
       Assert.assertEquals((byte) streamData.read(), data[i]);
     }
     long crcVal = crcstream.getValue();

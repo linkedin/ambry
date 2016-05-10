@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.HardDeleteInfo;
@@ -183,6 +196,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
             short userMetadataVersion;
             int userMetadataSize;
             short blobRecordVersion;
+            BlobType blobType;
             long blobStreamSize;
             DeserializedUserMetadata userMetadataInfo;
             DeserializedBlob blobRecordInfo;
@@ -197,22 +211,32 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
               blobRecordInfo = getBlobRecordInfo(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
                   headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
                       .getBlobPropertiesRecordRelativeOffset()));
-              blobStreamSize = blobRecordInfo.getBlobOutput().getSize();
+              blobStreamSize = blobRecordInfo.getBlobData().getSize();
               blobRecordVersion = blobRecordInfo.getVersion();
+              if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+                blobType = blobRecordInfo.getBlobData().getBlobType();
+              } else {
+                blobType = BlobType.DataBlob;
+              }
               hardDeleteRecoveryMetadata =
                   new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize,
-                      blobRecordVersion, blobStreamSize, storeKey);
+                      blobRecordVersion, blobType, blobStreamSize, storeKey);
             } else {
               logger.trace("Skipping crc check for user metadata and blob stream fields for key {}", storeKey);
               userMetadataVersion = hardDeleteRecoveryMetadata.getUserMetadataVersion();
               blobRecordVersion = hardDeleteRecoveryMetadata.getBlobRecordVersion();
+              if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+                blobType = hardDeleteRecoveryMetadata.getBlobType();
+              } else {
+                blobType = BlobType.DataBlob;
+              }
               userMetadataSize = hardDeleteRecoveryMetadata.getUserMetadataSize();
               blobStreamSize = hardDeleteRecoveryMetadata.getBlobStreamSize();
             }
 
             HardDeleteMessageFormatInputStream hardDeleteStream =
                 new HardDeleteMessageFormatInputStream(userMetadataRelativeOffset, userMetadataVersion,
-                    userMetadataSize, blobRecordVersion, blobStreamSize);
+                    userMetadataSize, blobRecordVersion, blobType, blobStreamSize);
 
             hardDeleteInfo = new HardDeleteInfo(Channels.newChannel(hardDeleteStream), hardDeleteStream.getSize(),
                 hardDeleteStream.getHardDeleteStreamRelativeOffset(), hardDeleteRecoveryMetadata.toBytes());
@@ -272,11 +296,12 @@ class HardDeleteRecoveryMetadata {
   private short userMetadataVersion;
   private int userMetadataSize;
   private short blobRecordVersion;
+  private BlobType blobType;
   private long blobStreamSize;
   private StoreKey storeKey;
 
   HardDeleteRecoveryMetadata(short headerVersion, short userMetadataVersion, int userMetadataSize,
-      short blobRecordVersion, long blobStreamSize, StoreKey storeKey)
+      short blobRecordVersion, BlobType blobType, long blobStreamSize, StoreKey storeKey)
       throws IOException {
     if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) ||
         !MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion) ||
@@ -289,6 +314,7 @@ class HardDeleteRecoveryMetadata {
     this.userMetadataVersion = userMetadataVersion;
     this.userMetadataSize = userMetadataSize;
     this.blobRecordVersion = blobRecordVersion;
+    this.blobType = blobType;
     this.blobStreamSize = blobStreamSize;
     this.storeKey = storeKey;
   }
@@ -300,13 +326,18 @@ class HardDeleteRecoveryMetadata {
     userMetadataVersion = stream.readShort();
     userMetadataSize = stream.readInt();
     blobRecordVersion = stream.readShort();
+    if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+      blobType = BlobType.values()[stream.readShort()];
+    } else {
+      blobType = BlobType.DataBlob;
+    }
     blobStreamSize = stream.readLong();
     if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) ||
         !MessageFormatRecord.isValidUserMetadataVersion(userMetadataVersion) ||
         !MessageFormatRecord.isValidBlobRecordVersion(blobRecordVersion)) {
       throw new IOException(
           "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
-              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion);
+              + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion + " blobType " + blobType);
     }
     storeKey = factory.getStoreKey(stream);
   }
@@ -331,17 +362,22 @@ class HardDeleteRecoveryMetadata {
     return blobRecordVersion;
   }
 
+  BlobType getBlobType() {
+    return blobType;
+  }
+
   long getBlobStreamSize() {
     return blobStreamSize;
   }
 
   byte[] toBytes() {
     // create a byte array to hold the headerVersion + userMetadataVersion + userMetadataSize + blobRecordVersion +
-    // blobRecordSize + storeKey.
+    // blobType + blobRecordSize + storeKey.
     byte[] bytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
         Integer.SIZE / 8 +
         MessageFormatRecord.Version_Field_Size_In_Bytes +
+        (blobRecordVersion == MessageFormatRecord.Blob_Version_V2 ? (Short.SIZE / 8) : 0) +
         Long.SIZE / 8 +
         storeKey.sizeInBytes()];
 
@@ -350,6 +386,9 @@ class HardDeleteRecoveryMetadata {
     bufWrap.putShort(userMetadataVersion);
     bufWrap.putInt(userMetadataSize);
     bufWrap.putShort(blobRecordVersion);
+    if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+      bufWrap.putShort((short) blobType.ordinal());
+    }
     bufWrap.putLong(blobStreamSize);
     bufWrap.put(storeKey.toBytes());
     return bytes;

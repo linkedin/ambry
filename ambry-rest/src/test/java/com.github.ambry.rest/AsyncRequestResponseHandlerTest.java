@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
@@ -15,7 +28,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -145,7 +157,8 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void edgeCaseWorkerCountsTest()
       throws Exception {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    RestServerMetrics serverMetrics =
+        new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
     AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
     noRequestHandlersTest(requestResponseHandler);
 
@@ -155,7 +168,8 @@ public class AsyncRequestResponseHandlerTest {
 
   @Test
   public void setFunctionsBadArgumentsTest() {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    RestServerMetrics serverMetrics =
+        new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
     AsyncRequestResponseHandler requestResponseHandler = new AsyncRequestResponseHandler(serverMetrics);
 
     // set request workers < 0
@@ -353,7 +367,7 @@ public class AsyncRequestResponseHandlerTest {
       MockRestResponseChannel restResponseChannel = null;
       ReadableStreamChannel response = null;
       for (int i = 0; i < EXPECTED_QUEUE_SIZE; i++) {
-        data = getRandomBytes(32);
+        data = RestTestUtils.getRandomBytes(32);
         response = new HaltingRSC(ByteBuffer.wrap(data), releaseRead, executorService);
         restRequest = createRestRequest(RestMethod.GET, "/", null, null);
         restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
@@ -420,18 +434,22 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void multipleRequestsInQueueTest()
       throws Exception {
-    final int EXPECTED_QUEUE_SIZE = 5;
+    final int EXPECTED_MIN_QUEUE_SIZE = 5;
     blobStorageService.blockAllOperations();
-    // the first request that each worker processes will block.
-    for (int i = 0; i < EXPECTED_QUEUE_SIZE + asyncRequestResponseHandler.getWorkersAlive(); i++) {
-      MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
-      restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
-      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel(restRequest);
-      asyncRequestResponseHandler.handleRequest(restRequest, restResponseChannel);
+    try {
+      // the first request that each worker processes will block.
+      for (int i = 0; i < EXPECTED_MIN_QUEUE_SIZE + asyncRequestResponseHandler.getWorkersAlive(); i++) {
+        MockRestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
+        restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
+        MockRestResponseChannel restResponseChannel = new MockRestResponseChannel(restRequest);
+        asyncRequestResponseHandler.handleRequest(restRequest, restResponseChannel);
+      }
+      assertTrue(
+          "Request queue size should be at least " + EXPECTED_MIN_QUEUE_SIZE + ". Is " + asyncRequestResponseHandler
+              .getRequestQueueSize(), asyncRequestResponseHandler.getRequestQueueSize() >= EXPECTED_MIN_QUEUE_SIZE);
+    } finally {
+      blobStorageService.releaseAllOperations();
     }
-    assertEquals("Request queue size unexpected", EXPECTED_QUEUE_SIZE,
-        asyncRequestResponseHandler.getRequestQueueSize());
-    blobStorageService.releaseAllOperations();
   }
 
   // helpers
@@ -458,17 +476,6 @@ public class AsyncRequestResponseHandlerTest {
       data.put(MockRestRequest.HEADERS_KEY, headers);
     }
     return new MockRestRequest(data, contents);
-  }
-
-  /**
-   * Gets a byte array of length {@code size} with random bytes.
-   * @param size the required length of the random byte array.
-   * @return a byte array of length {@code size} with random bytes.
-   */
-  private byte[] getRandomBytes(int size) {
-    byte[] bytes = new byte[size];
-    new Random().nextBytes(bytes);
-    return bytes;
   }
 
   /**
@@ -555,7 +562,7 @@ public class AsyncRequestResponseHandlerTest {
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
-    ByteBuffer responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
+    ByteBuffer responseBuffer = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
     ByteBufferRSC response = new ByteBufferRSC(responseBuffer);
     EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =
         new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
@@ -580,7 +587,7 @@ public class AsyncRequestResponseHandlerTest {
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
-    responseBuffer = ByteBuffer.wrap(getRandomBytes(1024));
+    responseBuffer = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
     response = new ByteBufferRSC(responseBuffer);
     responseCloseMonitor = new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
     response.addListener(responseCloseMonitor);
@@ -603,7 +610,8 @@ public class AsyncRequestResponseHandlerTest {
    */
   private static AsyncRequestResponseHandler getAsyncRequestResponseHandler(int requestWorkers)
       throws IOException {
-    RestServerMetrics serverMetrics = new RestServerMetrics(new MetricRegistry());
+    RestServerMetrics serverMetrics =
+        new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
     AsyncRequestResponseHandler handler = new AsyncRequestResponseHandler(serverMetrics);
     if (requestWorkers > 0) {
       if (blobStorageService == null) {
@@ -796,13 +804,6 @@ class HaltingRSC implements ReadableStreamChannel {
   }
 
   @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
   public Future<Long> readInto(final AsyncWritableChannel asyncWritableChannel, final Callback<Long> callback) {
     if (!isOpen()) {
       throw new IllegalStateException("Channel is not open");
@@ -889,13 +890,6 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
     return futureResult;
   }
 
-  @Deprecated
-  @Override
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
-  }
-
   @Override
   public boolean isOpen() {
     return channelOpen.get();
@@ -930,8 +924,13 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  public Map<String, List<String>> getArgs() {
+  public Map<String, Object> getArgs() {
     return null;
+  }
+
+  @Override
+  public void prepare() {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
@@ -953,13 +952,6 @@ class BadRestRequest implements RestRequest {
   @Override
   public long getSize() {
     throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IOException("Not implemented");
   }
 
   @Override

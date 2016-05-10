@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
@@ -185,6 +198,10 @@ public class RestRequestMetricsTracker {
     return totalCpuTimeInMs.addAndGet(delta);
   }
 
+  public void markFailure() {
+    metrics.operationError.inc();
+  }
+
   /**
    * Injects a {@link RestRequestMetrics} that can be used to track the metrics of the {@link RestRequest} that this
    * instance of RestRequestMetricsTracker is attached to.
@@ -194,6 +211,7 @@ public class RestRequestMetricsTracker {
   public void injectMetrics(RestRequestMetrics restRequestMetrics) {
     if (restRequestMetrics != null) {
       metrics = restRequestMetrics;
+      metrics.operationRate.mark();
     } else {
       throw new IllegalArgumentException("RestRequestMetrics provided cannot be null");
     }
@@ -219,6 +237,10 @@ public class RestRequestMetricsTracker {
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
 
         metrics.totalCpuTimeInMs.update(totalCpuTimeInMs.get());
+        if (metrics == defaultMetrics) {
+          // track unknown requests rate.
+          metrics.operationRate.mark();
+        }
       }
     } else {
       throw new IllegalStateException("Could not record metrics because there is no metrics tracker");

@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.admin;
 
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -8,7 +21,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -45,6 +57,7 @@ class EchoHandler {
     try {
       String echoStr = echo(restRequest, adminMetrics).toString();
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, echoStr.length());
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(echoStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;
@@ -64,9 +77,9 @@ class EchoHandler {
    */
   private static JSONObject echo(RestRequest restRequest, AdminMetrics adminMetrics)
       throws RestServiceException {
-    Map<String, List<String>> parameters = restRequest.getArgs();
+    Map<String, Object> parameters = restRequest.getArgs();
     if (parameters != null && parameters.containsKey(TEXT_KEY)) {
-      String text = parameters.get(TEXT_KEY).get(0);
+      String text = parameters.get(TEXT_KEY).toString();
       logger.trace("Text to echo for request {} is {}", restRequest.getUri(), text);
       try {
         return packageResult(text);

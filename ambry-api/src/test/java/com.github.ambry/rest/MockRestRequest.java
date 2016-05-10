@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.router.AsyncWritableChannel;
@@ -10,7 +23,6 @@ import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -42,7 +54,7 @@ public class MockRestRequest implements RestRequest {
   /**
    * List of "events" (function calls) that can occur inside MockRestRequest.
    */
-  public static enum Event {
+  public enum Event {
     GetRestMethod,
     GetPath,
     GetUri,
@@ -71,6 +83,8 @@ public class MockRestRequest implements RestRequest {
     public void onEventComplete(MockRestRequest mockRestRequest, Event event);
   }
 
+  public static final JSONObject DUMMY_DATA = new JSONObject();
+
   // main fields
   public static String REST_METHOD_KEY = "restMethod";
   public static String URI_KEY = "uri";
@@ -81,7 +95,7 @@ public class MockRestRequest implements RestRequest {
 
   private final RestMethod restMethod;
   private final URI uri;
-  private final Map<String, List<String>> args = new HashMap<String, List<String>>();
+  private final Map<String, Object> args = new HashMap<String, Object>();
   private final ReentrantLock contentLock = new ReentrantLock();
   private final List<ByteBuffer> requestContents;
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
@@ -90,6 +104,17 @@ public class MockRestRequest implements RestRequest {
 
   private volatile AsyncWritableChannel writeChannel = null;
   private volatile ReadIntoCallbackWrapper callbackWrapper = null;
+
+  private static String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
+
+  static {
+    try {
+      DUMMY_DATA.put(REST_METHOD_KEY, RestMethod.GET);
+      DUMMY_DATA.put(URI_KEY, "/");
+    } catch (JSONException e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   /**
    * Create a MockRestRequest.
@@ -135,9 +160,14 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
-  public Map<String, List<String>> getArgs() {
+  public Map<String, Object> getArgs() {
     onEventComplete(Event.GetArgs);
     return args;
+  }
+
+  @Override
+  public void prepare() {
+    // no op.
   }
 
   /**
@@ -152,20 +182,14 @@ public class MockRestRequest implements RestRequest {
   public long getSize() {
     long contentLength;
     if (args.get(RestUtils.Headers.BLOB_SIZE) != null) {
-      contentLength = Long.parseLong(args.get(RestUtils.Headers.BLOB_SIZE).get(0));
+      contentLength = Long.parseLong(args.get(RestUtils.Headers.BLOB_SIZE).toString());
     } else {
       contentLength =
-          args.get(CONTENT_LENGTH_HEADER_KEY) != null ? Long.parseLong(args.get(CONTENT_LENGTH_HEADER_KEY).get(0)) : 0;
+          args.get(CONTENT_LENGTH_HEADER_KEY) != null ? Long.parseLong(args.get(CONTENT_LENGTH_HEADER_KEY).toString())
+              : 0;
     }
     onEventComplete(Event.GetSize);
     return contentLength;
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
   }
 
   @Override
@@ -282,7 +306,7 @@ public class MockRestRequest implements RestRequest {
       Iterator<String> headerKeys = headers.keys();
       while (headerKeys.hasNext()) {
         String headerKey = headerKeys.next();
-        String headerValue = JSONObject.NULL.equals(headers.get(headerKey)) ? null : headers.getString(headerKey);
+        Object headerValue = JSONObject.NULL.equals(headers.get(headerKey)) ? null : headers.get(headerKey);
         addOrUpdateArg(headerKey, headerValue);
       }
     }
@@ -296,6 +320,14 @@ public class MockRestRequest implements RestRequest {
         addOrUpdateArg(key, value);
       }
     }
+
+    // convert all StringBuilders to String
+    for (Map.Entry<String, Object> e : args.entrySet()) {
+      Object value = e.getValue();
+      if (value != null && value instanceof StringBuilder) {
+        args.put(e.getKey(), (e.getValue()).toString());
+      }
+    }
   }
 
   /**
@@ -305,16 +337,24 @@ public class MockRestRequest implements RestRequest {
    * @param value the value of the argument.
    * @throws UnsupportedEncodingException if {@code key} or {@code value} cannot be URL decoded.
    */
-  private void addOrUpdateArg(String key, String value)
+  private void addOrUpdateArg(String key, Object value)
       throws UnsupportedEncodingException {
     key = URLDecoder.decode(key, "UTF-8");
-    if (value != null) {
-      value = URLDecoder.decode(value, "UTF-8");
+    if (value != null && value instanceof String) {
+      String valueStr = URLDecoder.decode((String) value, "UTF-8");
+      StringBuilder sb;
+      if (args.get(key) == null) {
+        sb = new StringBuilder(valueStr);
+        args.put(key, sb);
+      } else {
+        sb = (StringBuilder) args.get(key);
+        sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(value);
+      }
+    } else if (value != null && args.containsKey(key)) {
+      throw new IllegalStateException("Value of key [" + key + "] is not a string and it already exists in the args");
+    } else {
+      args.put(key, value);
     }
-    if (!args.containsKey(key)) {
-      args.put(key, new LinkedList<String>());
-    }
-    args.get(key).add(value);
   }
 
   /**
@@ -335,83 +375,83 @@ public class MockRestRequest implements RestRequest {
       }
     }
   }
-}
-
-/**
- * Callback for each write into the given {@link AsyncWritableChannel}.
- */
-class ContentWriteCallback implements Callback<Long> {
-  private final boolean isLast;
-  private final ReadIntoCallbackWrapper callbackWrapper;
 
   /**
-   * Creates a new instance of ContentWriteCallback.
-   * @param isLast if this is the last piece of content for this request.
-   * @param callbackWrapper the {@link ReadIntoCallbackWrapper} that will receive updates of bytes read and one that
-   *                        should be invoked in {@link #onCompletion(Long, Exception)} if {@code isLast} is
-   *                        {@code true} or exception passed is not null.
+   * Callback for each write into the given {@link AsyncWritableChannel}.
    */
-  public ContentWriteCallback(boolean isLast, ReadIntoCallbackWrapper callbackWrapper) {
-    this.isLast = isLast;
-    this.callbackWrapper = callbackWrapper;
-  }
+  private class ContentWriteCallback implements Callback<Long> {
+    private final boolean isLast;
+    private final ReadIntoCallbackWrapper callbackWrapper;
 
-  /**
-   * Updates the number of bytes read and invokes {@link ReadIntoCallbackWrapper#invokeCallback(Exception)} if
-   * {@code exception} is not {@code null} or if this is the last piece of content in the request.
-   * @param result The result of the request. This would be non null when the request executed successfully
-   * @param exception The exception that was reported on execution of the request
-   */
-  @Override
-  public void onCompletion(Long result, Exception exception) {
-    callbackWrapper.updateBytesRead(result);
-    if (exception != null || isLast) {
-      callbackWrapper.invokeCallback(exception);
+    /**
+     * Creates a new instance of ContentWriteCallback.
+     * @param isLast if this is the last piece of content for this request.
+     * @param callbackWrapper the {@link ReadIntoCallbackWrapper} that will receive updates of bytes read and one that
+     *                        should be invoked in {@link #onCompletion(Long, Exception)} if {@code isLast} is
+     *                        {@code true} or exception passed is not null.
+     */
+    public ContentWriteCallback(boolean isLast, ReadIntoCallbackWrapper callbackWrapper) {
+      this.isLast = isLast;
+      this.callbackWrapper = callbackWrapper;
+    }
+
+    /**
+     * Updates the number of bytes read and invokes {@link ReadIntoCallbackWrapper#invokeCallback(Exception)} if
+     * {@code exception} is not {@code null} or if this is the last piece of content in the request.
+     * @param result The result of the request. This would be non null when the request executed successfully
+     * @param exception The exception that was reported on execution of the request
+     */
+    @Override
+    public void onCompletion(Long result, Exception exception) {
+      callbackWrapper.updateBytesRead(result);
+      if (exception != null || isLast) {
+        callbackWrapper.invokeCallback(exception);
+      }
     }
   }
-}
-
-/**
- * Wrapper for callbacks provided to {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)}.
- */
-class ReadIntoCallbackWrapper {
-  /**
-   * The {@link Future} where the result of {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)} will
-   * eventually be updated.
-   */
-  public final FutureResult<Long> futureResult = new FutureResult<Long>();
-
-  private final Callback<Long> callback;
-  private final AtomicLong totalBytesRead = new AtomicLong(0);
-  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
   /**
-   * Creates an instance of ReadIntoCallbackWrapper with the given {@code callback}.
-   * @param callback the {@link Callback} to invoke on operation completion.
+   * Wrapper for callbacks provided to {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)}.
    */
-  public ReadIntoCallbackWrapper(Callback<Long> callback) {
-    this.callback = callback;
-  }
+  private class ReadIntoCallbackWrapper {
+    /**
+     * The {@link Future} where the result of {@link MockRestRequest#readInto(AsyncWritableChannel, Callback)} will
+     * eventually be updated.
+     */
+    public final FutureResult<Long> futureResult = new FutureResult<Long>();
 
-  /**
-   * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
-   * @param delta the number of bytes read in the current invocation.
-   * @return the total number of bytes read until now.
-   */
-  public long updateBytesRead(long delta) {
-    return totalBytesRead.addAndGet(delta);
-  }
+    private final Callback<Long> callback;
+    private final AtomicLong totalBytesRead = new AtomicLong(0);
+    private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
-  /**
-   * Invokes the callback and updates the future once this is called. This function ensures that the callback is invoked
-   * just once.
-   * @param exception the {@link Exception}, if any, to pass to the callback.
-   */
-  public void invokeCallback(Exception exception) {
-    if (callbackInvoked.compareAndSet(false, true)) {
-      futureResult.done(totalBytesRead.get(), exception);
-      if (callback != null) {
-        callback.onCompletion(totalBytesRead.get(), exception);
+    /**
+     * Creates an instance of ReadIntoCallbackWrapper with the given {@code callback}.
+     * @param callback the {@link Callback} to invoke on operation completion.
+     */
+    public ReadIntoCallbackWrapper(Callback<Long> callback) {
+      this.callback = callback;
+    }
+
+    /**
+     * Updates the number of bytes that have been successfully read into the given {@link AsyncWritableChannel}.
+     * @param delta the number of bytes read in the current invocation.
+     * @return the total number of bytes read until now.
+     */
+    public long updateBytesRead(long delta) {
+      return totalBytesRead.addAndGet(delta);
+    }
+
+    /**
+     * Invokes the callback and updates the future once this is called. This function ensures that the callback is invoked
+     * just once.
+     * @param exception the {@link Exception}, if any, to pass to the callback.
+     */
+    public void invokeCallback(Exception exception) {
+      if (callbackInvoked.compareAndSet(false, true)) {
+        futureResult.done(totalBytesRead.get(), exception);
+        if (callback != null) {
+          callback.onCompletion(totalBytesRead.get(), exception);
+        }
       }
     }
   }

@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.DataNodeId;
@@ -26,8 +39,7 @@ public class ServerPlaintextTest {
       throws Exception {
     coordinatorProps = new Properties();
     notificationSystem = new MockNotificationSystem(9);
-    plaintextCluster =
-        new MockCluster(notificationSystem, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
   }
 
@@ -36,7 +48,8 @@ public class ServerPlaintextTest {
   }
 
   @AfterClass
-  public static void cleanup() {
+  public static void cleanup()
+      throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
@@ -57,20 +70,8 @@ public class ServerPlaintextTest {
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil
-        .endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null, null, coordinatorProps);
-  }
-
-  @Test
-  public void endToEndReplicationWithMultiNodeSinglePartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
-    List<DataNodeId> dataNodes = plaintextCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
-    ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
-        new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null,
-        null, notificationSystem, coordinatorProps);
+        .endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null, null,
+            coordinatorProps);
   }
 
   @Test
@@ -82,8 +83,8 @@ public class ServerPlaintextTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null,
-        null, null, null, null, notificationSystem);
+        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, null, null, null, null,
+        notificationSystem);
   }
 
   @Test

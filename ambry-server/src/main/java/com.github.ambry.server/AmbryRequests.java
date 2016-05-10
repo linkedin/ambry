@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
@@ -214,6 +227,12 @@ public class AmbryRequests implements RequestAPI {
       responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataResponseQueueTimeInMs);
       responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataSendTimeInMs);
       responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobUserMetadataTotalTimeInMs);
+    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
+      metrics.getBlobInfoRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.getBlobInfoRequestRate.mark();
+      responseQueueTimeMeasurement = new HistogramMeasurement(metrics.getBlobInfoResponseQueueTimeInMs);
+      responseSendTimeMeasurement = new HistogramMeasurement(metrics.getBlobInfoSendTimeInMs);
+      responseTotalTimeMeasurement = new HistogramMeasurement(metrics.getBlobInfoTotalTimeInMs);
     } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
       metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
       metrics.getBlobAllRequestRate.mark();
@@ -310,6 +329,8 @@ public class AmbryRequests implements RequestAPI {
         metrics.getBlobPropertiesProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
         metrics.getBlobUserMetadataProcessingTimeInMs.update(processingTime);
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
+        metrics.getBlobInfoProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
         metrics.getBlobAllProcessingTimeInMs.update(processingTime);
       }

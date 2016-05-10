@@ -1,8 +1,19 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
-import java.io.IOException;
 import java.nio.channels.Channel;
-import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.Future;
 
 
@@ -34,27 +45,4 @@ public interface ReadableStreamChannel extends Channel {
    * @return the {@link Future} that will eventually contain the result of the operation.
    */
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback);
-
-  /**
-   * This function is deprecated and will be removed in the future. The following documentation might not be up to date.
-   * <p/>
-   * Reads a sequence of bytes into the {@link WritableByteChannel} provided.
-   * <p/>
-   * This operation might read all the bytes in the channel or might not read any bytes at all. Its behavior depends
-   * upon the nature and state of this ReadableStreamChannel and the {@link WritableByteChannel}. It is guaranteed,
-   * however, that if this channel is in blocking mode, then this method will block until at least one byte is read into
-   * the {@link WritableByteChannel}.
-   * <p/>
-   * This method may be invoked at any time.  However, if another thread has already initiated another read operation
-   * upon this channel, an invocation of this method will block until the first operation is complete.
-   * <p/>
-   * When there is no more data left to read, a call to this function will return -1 (end of stream).
-   * @param channel the {@link WritableByteChannel} to read into.
-   * @return the actual number of bytes read (can be 0). If -1 is returned, there is no more data to read (end of
-   *          stream).
-   * @throws IOException if write to the {@link WritableByteChannel} failed or if any other I/O error occurred.
-   */
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException;
 }

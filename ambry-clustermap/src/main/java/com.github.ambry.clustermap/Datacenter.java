@@ -1,6 +1,20 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import java.util.Iterator;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -21,6 +35,7 @@ public class Datacenter {
   private final String name;
   private final ArrayList<DataNode> dataNodes;
   private final long rawCapacityInBytes;
+  private boolean rackAware = false;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -64,6 +79,14 @@ public class Datacenter {
     return dataNodes;
   }
 
+  /**
+   * Returns {@code true} if all nodes in the datacenter have rack IDs
+   * @return {@code true} if all nodes in the datacenter have rack IDs, {@code false} otherwise
+   */
+  public boolean isRackAware() {
+    return rackAware;
+  }
+
   protected void validateHardwareLayout() {
     if (hardwareLayout == null) {
       throw new IllegalStateException("HardwareLayout cannot be null");
@@ -78,10 +101,32 @@ public class Datacenter {
     }
   }
 
+  /**
+   * A datacenter can be marked as rack-aware if all nodes have defined rack IDs. This method throws an exception
+   * if some nodes have rack IDs and some do not.  It also sets the {@code rackAware} flag to {@code true} if all
+   * nodes have rack IDs.
+   *
+   * @throws IllegalStateException if some nodes have defined rack IDs and some do not.
+   */
+  private void validateRackAwareness() {
+    if (dataNodes.size() > 0) {
+      Iterator<DataNode> dataNodeIter = dataNodes.iterator();
+      boolean hasRackId = (dataNodeIter.next().getRackId() >= 0);
+      while (dataNodeIter.hasNext()) {
+        if (hasRackId != (dataNodeIter.next().getRackId() >= 0)) {
+          throw new IllegalStateException("dataNodes in datacenter: " + name
+              + " must all have defined rack IDs or none at all");
+        }
+      }
+      this.rackAware = hasRackId;
+    }
+  }
+
   protected void validate() {
     logger.trace("begin validate.");
     validateHardwareLayout();
     validateName();
+    validateRackAwareness();
     logger.trace("complete validate.");
   }
 

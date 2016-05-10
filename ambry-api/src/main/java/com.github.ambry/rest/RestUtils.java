@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
@@ -89,16 +102,35 @@ public class RestUtils {
     /**
      * prefix for any header to be set as user metadata for the given blob
      */
-    public final static String UserMetaData_Header_Prefix = "x-ambry-um-";
+    public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
 
-    // prefix for old style user metadata that will be served as headers
-    protected final static String UserMetaData_OldStyle_Prefix = "x-ambry-oldstyle-um-";
+    /**
+     * Header to contain the Cookies
+     */
+    public final static String COOKIE = "Cookie";
+  }
+
+  /**
+   * Permitted sub-resources of a blob.
+   */
+  public enum SubResource {
+    /**
+     * User metadata and BlobProperties i.e., blob properties returned in headers and user metadata as content/headers.
+     */
+    BlobInfo,
+    /**
+     * User metadata on its own i.e., no "blob properties" headers returned with response.
+     */
+    UserMetadata
+  }
+
+  public static final class MultipartPost {
+    public final static String BLOB_PART = "Blob";
+    public final static String USER_METADATA_PART = "UserMetadata";
   }
 
   private static final int Crc_Size = 8;
   private static final short UserMetadata_Version_V1 = 1;
-  // Max size of a value for user metadata as key value pairs
-  protected static final int Max_UserMetadata_Value_Size = 1024 * 8;
 
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
@@ -111,7 +143,7 @@ public class RestUtils {
    */
   public static BlobProperties buildBlobProperties(RestRequest restRequest)
       throws RestServiceException {
-    Map<String, List<String>> args = restRequest.getArgs();
+    Map<String, Object> args = restRequest.getArgs();
 
     String blobSizeStr = null;
     long blobSize;
@@ -197,61 +229,65 @@ public class RestUtils {
    */
   public static byte[] buildUsermetadata(RestRequest restRequest)
       throws RestServiceException {
-    Map<String, List<String>> args = restRequest.getArgs();
-    Map<String, String> userMetadataMap = new HashMap<String, String>();
-    int sizeToAllocate = 0;
-    for (Map.Entry<String, List<String>> entry : args.entrySet()) {
-      String key = entry.getKey();
-      if (key.startsWith(Headers.UserMetaData_Header_Prefix)) {
-        // key size
-        sizeToAllocate += 4;
-        String keyToStore = key.substring(Headers.UserMetaData_Header_Prefix.length());
-        sizeToAllocate += keyToStore.length();
-        String value = getHeader(args, key, true);
-        userMetadataMap.put(keyToStore, value);
-        // value size
-        sizeToAllocate += 4;
-        sizeToAllocate += value.getBytes().length;
-      }
-    }
-    ByteBuffer userMetadata = null;
-    if (sizeToAllocate == 0) {
-      userMetadata = ByteBuffer.allocate(0);
+    ByteBuffer userMetadata;
+    Map<String, Object> args = restRequest.getArgs();
+    if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
+      userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
     } else {
-      // version
-      sizeToAllocate += 2;
-      // size excluding version and crc
-      sizeToAllocate += 4;
-      // total number of entries
-      sizeToAllocate += 4;
-      // crc size
-      sizeToAllocate += Crc_Size;
-      userMetadata = ByteBuffer.allocate(sizeToAllocate);
-      userMetadata.putShort(UserMetadata_Version_V1);
-      // total size = sizeToAllocate - version size - sizeToAllocate size - crc size
-      userMetadata.putInt(sizeToAllocate - 6 - Crc_Size);
-      userMetadata.putInt(userMetadataMap.size());
-      for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
+      Map<String, String> userMetadataMap = new HashMap<String, String>();
+      int sizeToAllocate = 0;
+      for (Map.Entry<String, Object> entry : args.entrySet()) {
         String key = entry.getKey();
-        Utils.serializeString(userMetadata, key, StandardCharsets.US_ASCII);
-        Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
+        if (key.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
+          // key size
+          sizeToAllocate += 4;
+          String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
+          sizeToAllocate += keyToStore.length();
+          String value = getHeader(args, key, true);
+          userMetadataMap.put(keyToStore, value);
+          // value size
+          sizeToAllocate += 4;
+          sizeToAllocate += value.getBytes().length;
+        }
       }
-      Crc32 crc = new Crc32();
-      crc.update(userMetadata.array(), 0, sizeToAllocate - Crc_Size);
-      userMetadata.putLong(crc.getValue());
+      if (sizeToAllocate == 0) {
+        userMetadata = ByteBuffer.allocate(0);
+      } else {
+        // version
+        sizeToAllocate += 2;
+        // size excluding version and crc
+        sizeToAllocate += 4;
+        // total number of entries
+        sizeToAllocate += 4;
+        // crc size
+        sizeToAllocate += Crc_Size;
+        userMetadata = ByteBuffer.allocate(sizeToAllocate);
+        userMetadata.putShort(UserMetadata_Version_V1);
+        // total size = sizeToAllocate - version size - sizeToAllocate size - crc size
+        userMetadata.putInt(sizeToAllocate - 6 - Crc_Size);
+        userMetadata.putInt(userMetadataMap.size());
+        for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
+          String key = entry.getKey();
+          Utils.serializeString(userMetadata, key, StandardCharsets.US_ASCII);
+          Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
+        }
+        Crc32 crc = new Crc32();
+        crc.update(userMetadata.array(), 0, sizeToAllocate - Crc_Size);
+        userMetadata.putLong(crc.getValue());
+      }
     }
     return userMetadata.array();
   }
 
   /**
-   * Fetches user metadata from the byte array
+   * Gets deserialized metadata from the byte array if possible
    * @param userMetadata the byte array which has the user metadata
-   * @return Map<String,String> the user metadata that is read from the byte array
+   * @return Map<String,String> the user metadata that is read from the byte array, or {@code null} incase
+   * the {@code userMetadata} cannot be parsed in expected format
    */
   public static Map<String, String> buildUserMetadata(byte[] userMetadata)
       throws RestServiceException {
-    Map<String, String> toReturn = new HashMap<String, String>();
-    boolean oldStyle = false;
+    Map<String, String> toReturn = null;
     if (userMetadata.length > 0) {
       try {
         ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
@@ -260,15 +296,17 @@ public class RestUtils {
           case UserMetadata_Version_V1:
             int sizeToRead = userMetadataBuffer.getInt();
             if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
-              logger.trace("Size didn't match. Returning as old format");
-              oldStyle = true;
+              logger.trace("Size didn't match. Returning null");
             } else {
               int entryCount = userMetadataBuffer.getInt();
               int counter = 0;
+              if (entryCount > 0) {
+                toReturn = new HashMap<>();
+              }
               while (counter++ < entryCount) {
                 String key = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
                 String value = Utils.deserializeString(userMetadataBuffer, StandardCharsets.US_ASCII);
-                toReturn.put(Headers.UserMetaData_Header_Prefix + key, value);
+                toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
               }
               long actualCRC = userMetadataBuffer.getLong();
               Crc32 crc32 = new Crc32();
@@ -277,41 +315,17 @@ public class RestUtils {
               if (actualCRC != expectedCRC) {
                 logger.trace("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC "
                     + actualCRC);
-                oldStyle = true;
+                toReturn = null;
               }
             }
             break;
           default:
-            logger.trace("Failed to parse version in new format. Returning as old format");
-            oldStyle = true;
+            logger.trace("Failed to parse version in new format. Returning null");
         }
       } catch (RuntimeException e) {
-        logger.trace("Runtime Exception on parsing user metadata. Returning as old format");
-        oldStyle = true;
+        logger.trace("Runtime Exception on parsing user metadata. Returning null");
+        toReturn = null;
       }
-    }
-    if (oldStyle) {
-      toReturn = getOldStyleUserMetadataAsHashMap(userMetadata);
-    }
-    return toReturn;
-  }
-
-  /**
-   * Returns a default representation of user metadata that is not in the expected format
-   * @param userMetadata byte[] which contains the user metadata in old style
-   * @return Map<String, String> user metadata in the form of Map<String, String>
-   */
-  private static Map<String, String> getOldStyleUserMetadataAsHashMap(byte[] userMetadata) {
-    int totalSize = userMetadata.length;
-    Map<String, String> toReturn = new HashMap<String, String>();
-    int sizeRead = 0;
-    int counter = 0;
-    while (sizeRead < totalSize) {
-      String key = Headers.UserMetaData_OldStyle_Prefix + counter++;
-      int sizeToRead = Math.min(totalSize - sizeRead, Max_UserMetadata_Value_Size);
-      String value = new String(userMetadata, sizeRead, sizeToRead, StandardCharsets.US_ASCII);
-      toReturn.put(key, value);
-      sizeRead += sizeToRead;
     }
     return toReturn;
   }
@@ -328,19 +342,14 @@ public class RestUtils {
    *                                    {@code args} or if there is more than one value for {@code header} in
    *                                    {@code args}.
    */
-  private static String getHeader(Map<String, List<String>> args, String header, boolean required)
+  private static String getHeader(Map<String, Object> args, String header, boolean required)
       throws RestServiceException {
     String value = null;
     if (args.containsKey(header)) {
-      List<String> values = args.get(header);
-      if (values.size() == 1) {
-        value = values.get(0);
-        if (value == null && required) {
-          throw new RestServiceException("Request has null value for header: " + header,
-              RestServiceErrorCode.InvalidArgs);
-        }
-      } else {
-        throw new RestServiceException("Request has too many values for header: " + header,
+      Object valueObj = args.get(header);
+      value = valueObj != null ? valueObj.toString() : null;
+      if (value == null && required) {
+        throw new RestServiceException("Request has null value for header: " + header,
             RestServiceErrorCode.InvalidArgs);
       }
     } else if (required) {
@@ -348,5 +357,63 @@ public class RestUtils {
           RestServiceErrorCode.MissingArgs);
     }
     return value;
+  }
+
+  /**
+   * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
+   * performed on.
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
+   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
+   * @return extracted operation type or blob ID from the URI.
+   */
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
+      List<String> prefixesToRemove) {
+    String path = restRequest.getPath();
+    int startIndex = 0;
+
+    // remove query string.
+    int endIndex = path.indexOf("?");
+    if (endIndex == -1) {
+      endIndex = path.length();
+    }
+
+    // remove prefix.
+    if (prefixesToRemove != null) {
+      for (String prefix : prefixesToRemove) {
+        if (path.startsWith(prefix)) {
+          startIndex = prefix.length();
+          break;
+        }
+      }
+    }
+
+    // remove subresource if present.
+    if (subResource != null) {
+      // "- 1" removes the "slash" that precedes the sub-resource.
+      endIndex = endIndex - subResource.name().length() - 1;
+    }
+    return path.substring(startIndex, endIndex);
+  }
+
+  /**
+   * Determines if URI is for a blob sub-resource, and if so, returns that sub-resource
+   * @param restRequest {@link RestRequest} containing metadata about the request.
+   * @return sub-resource if the URI includes one; null otherwise.
+   */
+  public static RestUtils.SubResource getBlobSubResource(RestRequest restRequest) {
+    String path = restRequest.getPath();
+    final int minSegmentsRequired = path.startsWith("/") ? 3 : 2;
+    String[] segments = path.split("/");
+    RestUtils.SubResource subResource = null;
+    if (segments.length >= minSegmentsRequired) {
+      try {
+        subResource = RestUtils.SubResource.valueOf(segments[segments.length - 1]);
+      } catch (IllegalArgumentException e) {
+        // nothing to do.
+      }
+    }
+    return subResource;
   }
 }

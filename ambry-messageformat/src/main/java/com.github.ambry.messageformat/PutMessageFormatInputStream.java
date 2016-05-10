@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
@@ -33,6 +46,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
     long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(streamSize);
+    // TODO: Uncomment below lines when switching to blob format version 2
+    // long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
 
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize +
         (int) (blobSize - streamSize - MessageFormatRecord.Crc_Size));
@@ -47,6 +62,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
     MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(buffer, streamSize);
+    // TODO: Uncomment below lines when switching to blob format version 2
+    // MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
     Crc32 crc = new Crc32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);

@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.router.Callback;
@@ -24,10 +37,12 @@ import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
@@ -47,6 +62,10 @@ import org.slf4j.LoggerFactory;
  * will be accepted and all scheduled writes will be notified of the failure.
  */
 class NettyResponseChannel implements RestResponseChannel {
+  // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
+  // for a POST, we always close the connection on error because we expect the channel to be in a bad state.
+  static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
+
   private final ChannelHandlerContext ctx;
   private final NettyMetrics nettyMetrics;
   private final ChannelProgressivePromise writeFuture;
@@ -56,7 +75,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private final HttpResponse responseMetadata = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
   // tracks whether onResponseComplete() has been called. Helps make it idempotent and also treats response channel as
   // closed if this is true.
-  private final AtomicBoolean responseComplete = new AtomicBoolean(false);
+  private final AtomicBoolean responseCompleteCalled = new AtomicBoolean(false);
   // tracks whether any response metadata has been written to the channel. Rejects any more attempts at writing
   // metadata after this has been set to true.
   private final AtomicBoolean responseMetadataWritten = new AtomicBoolean(false);
@@ -68,6 +87,8 @@ class NettyResponseChannel implements RestResponseChannel {
   private final AtomicLong chunksToWriteCount = new AtomicLong(0);
 
   private NettyRequest request = null;
+  // marked as true once response sending is *completely* finished. Signifies that this instance is no longer useful.
+  private volatile boolean responseComplete = false;
 
   /**
    * Create an instance of NettyResponseChannel that will use {@code ctx} to return responses.
@@ -110,7 +131,7 @@ class NettyResponseChannel implements RestResponseChannel {
 
   @Override
   public boolean isOpen() {
-    return !responseComplete.get() && ctx.channel().isActive();
+    return !responseCompleteCalled.get() && ctx.channel().isActive();
   }
 
   /**
@@ -131,7 +152,7 @@ class NettyResponseChannel implements RestResponseChannel {
   public void onResponseComplete(Exception exception) {
     long responseCompleteStartTime = System.currentTimeMillis();
     try {
-      if (responseComplete.compareAndSet(false, true)) {
+      if (responseCompleteCalled.compareAndSet(false, true)) {
         logger.trace("Finished responding to current request on channel {}", ctx.channel());
         nettyMetrics.requestCompletionRate.mark();
         if (exception == null) {
@@ -140,19 +161,23 @@ class NettyResponseChannel implements RestResponseChannel {
             chunkedWriteHandler.resumeTransfer();
           }
         } else {
+          if (request != null) {
+            request.getMetricsTracker().markFailure();
+          }
           // need to set writeFuture as failed in case writes have started or chunks have been queued.
           if (!writeFuture.isDone()) {
             writeFuture.setFailure(exception);
           }
           if (!maybeSendErrorResponse(exception)) {
-            maybeCloseNetworkChannel(true);
-            closeRequest();
+            completeRequest(true);
           }
         }
       } else if (exception != null) {
         // this is probably an attempt to force close the channel *after* the response is already complete.
-        maybeCloseNetworkChannel(true);
-        closeRequest();
+        if (!writeFuture.isDone()) {
+          writeFuture.setFailure(exception);
+        }
+        completeRequest(true);
       }
       long responseFinishProcessingTime = System.currentTimeMillis() - responseCompleteStartTime;
       nettyMetrics.responseFinishProcessingTimeInMs.update(responseFinishProcessingTime);
@@ -162,6 +187,10 @@ class NettyResponseChannel implements RestResponseChannel {
     } catch (Exception e) {
       logger.error("Swallowing exception encountered during onResponseComplete tasks", e);
       nettyMetrics.responseCompleteTasksError.inc();
+      if (!writeFuture.isDone()) {
+        writeFuture.setFailure(exception);
+      }
+      completeRequest(true);
     }
   }
 
@@ -187,6 +216,7 @@ class NettyResponseChannel implements RestResponseChannel {
     if (request != null) {
       if (this.request == null) {
         this.request = request;
+        HttpHeaders.setKeepAlive(responseMetadata, request.isKeepAlive());
       } else {
         throw new IllegalStateException(
             "Request has already been set inside NettyResponseChannel for channel {} " + ctx.channel());
@@ -197,17 +227,21 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
+   * Provides information on whether the response that needs to be sent through this RestResponseChannel has been
+   * completed.
+   * @return {@code true} if response sending is complete. {@code false} otherwise.
+   */
+  protected boolean isResponseComplete() {
+    return responseComplete;
+  }
+
+  /**
    * Closes the request associated with this NettyResponseChannel.
    */
   private void closeRequest() {
     if (request != null && request.isOpen()) {
-      try {
-        request.getMetricsTracker().nioMetricsTracker.markRequestCompleted();
-        request.close();
-      } catch (IOException e) {
-        nettyMetrics.resourceReleaseError.inc();
-        logger.error("Error closing request", e);
-      }
+      request.getMetricsTracker().nioMetricsTracker.markRequestCompleted();
+      request.close();
     }
   }
 
@@ -278,7 +312,8 @@ class NettyResponseChannel implements RestResponseChannel {
     boolean responseSent = false;
     logger.trace("Sending error response to client on channel {}", ctx.channel());
     FullHttpResponse errorResponse = getErrorResponse(exception);
-    if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
+    if (maybeWriteResponseMetadata(errorResponse,
+        new ErrorResponseWriteListener(HttpHeaders.isKeepAlive(errorResponse)))) {
       logger.trace("Successfully sent error response on channel {}", ctx.channel());
       responseSent = true;
       long processingTime = System.currentTimeMillis() - processingStartTime;
@@ -310,10 +345,21 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     String fullMsg = "Failure: " + status + errReason;
     logger.trace("Constructed error response for the client - [{}]", fullMsg);
-    FullHttpResponse response =
-        new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
-    HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+    FullHttpResponse response;
+    if (request != null && !request.getRestMethod().equals(RestMethod.HEAD)) {
+      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
+    } else {
+      // for HEAD, we cannot send the actual body but we need to return what the length would have been if this was GET.
+      // https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html (Section 9.4)
+      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
+    }
+    HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setContentLength(response, fullMsg.length());
+    HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+    boolean keepAlive =
+        request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES
+            .contains(status);
+    HttpHeaders.setKeepAlive(response, keepAlive);
     return response;
   }
 
@@ -338,6 +384,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.badRequestCount.inc();
         status = HttpResponseStatus.BAD_REQUEST;
         break;
+      case Unauthorized:
+        nettyMetrics.unauthorizedCount.inc();
+        status = HttpResponseStatus.UNAUTHORIZED;
+        break;
       case NotFound:
         nettyMetrics.notFoundCount.inc();
         status = HttpResponseStatus.NOT_FOUND;
@@ -345,6 +395,14 @@ class NettyResponseChannel implements RestResponseChannel {
       case Gone:
         nettyMetrics.goneCount.inc();
         status = HttpResponseStatus.GONE;
+        break;
+      case Forbidden:
+        nettyMetrics.forbiddenCount.inc();
+        status = HttpResponseStatus.FORBIDDEN;
+        break;
+      case ProxyAuthenticationRequired:
+        nettyMetrics.proxyAuthRequiredCount.inc();
+        status = HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED;
         break;
       case InternalServerError:
         nettyMetrics.internalServerErrorCount.inc();
@@ -359,24 +417,16 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * May close the underlying network channel depending on whether it has been forced or depending on the value of
-   * keep-alive.
-   * @param forceClose if {@code true}, closes channel despite keep-alive or any other concerns.
-   * @return {@code true} if a close was initiated on the channel. Otherwise {@code false}.
+   * Completes the request by closing the request and network channel (if {@code closeNetworkChannel} is {@code true})
+   * @param closeNetworkChannel network channel is closed if {@code true}.
    */
-  private boolean maybeCloseNetworkChannel(boolean forceClose) {
-    boolean closedThisTime = false;
-    if (ctx.channel().isOpen()) {
-      if (forceClose) {
-        ctx.close();
-      } else {
-        // TODO: handle keep-alive here.
-        writeFuture.addListener(ChannelFutureListener.CLOSE);
-        logger.trace("Requested closing of channel {}", ctx.channel());
-      }
-      closedThisTime = true;
+  private void completeRequest(boolean closeNetworkChannel) {
+    if (closeNetworkChannel && ctx.channel().isOpen()) {
+      writeFuture.addListener(ChannelFutureListener.CLOSE);
+      logger.trace("Requested closing of channel {}", ctx.channel());
     }
-    return closedThisTime;
+    closeRequest();
+    responseComplete = true;
   }
 
   /**
@@ -493,12 +543,13 @@ class NettyResponseChannel implements RestResponseChannel {
     private boolean sentLastChunk = false;
 
     /**
-     * Determines if input has ended by examining response state and size of chunks pending for write.
-     * @return {@code false} if there are no more chunks to write. {@code true} otherwise.
+     * Determines if input has ended by examining response state and number of chunks pending for write.
+     * @return {@code true} if there are no more chunks to write and the end marker has been sent. {@code false}
+     *         otherwise.
      */
     @Override
     public boolean isEndOfInput() {
-      return responseComplete.get() && !writeFuture.isDone() && chunksToWriteCount.get() == 0;
+      return allChunksWritten() && sentLastChunk;
     }
 
     @Override
@@ -524,7 +575,7 @@ class NettyResponseChannel implements RestResponseChannel {
         chunk.writeCompleteThreshold = totalBytesWritten.addAndGet(chunk.bytesToBeWritten);
         chunksAwaitingCallback.add(chunk);
         content = new DefaultHttpContent(buf);
-      } else if (isEndOfInput() && !sentLastChunk) {
+      } else if (allChunksWritten() && !sentLastChunk) {
         // Send last chunk for this input
         sentLastChunk = true;
         content = LastHttpContent.EMPTY_LAST_CONTENT;
@@ -532,6 +583,14 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       nettyMetrics.chunkDispenseTimeInMs.update(System.currentTimeMillis() - chunkDispenseStartTime);
       return content;
+    }
+
+    /**
+     * Determines if input has ended by examining response state and number of chunks pending for write.
+     * @return {@code true} if there are no more chunks to write. {@code false} otherwise.
+     */
+    private boolean allChunksWritten() {
+      return responseCompleteCalled.get() && !writeFuture.isDone() && chunksToWriteCount.get() == 0;
     }
   }
 
@@ -553,7 +612,7 @@ class NettyResponseChannel implements RestResponseChannel {
      */
     @Override
     public void operationProgressed(ChannelProgressiveFuture future, long progress, long total) {
-      logger.trace("{} bytes of response written on channel {}", ctx.channel());
+      logger.trace("{} bytes of response written on channel {}", progress, ctx.channel());
       while (chunksAwaitingCallback.peek() != null && progress >= chunksAwaitingCallback
           .peek().writeCompleteThreshold) {
         chunksAwaitingCallback.poll().resolveChunk(null);
@@ -568,8 +627,8 @@ class NettyResponseChannel implements RestResponseChannel {
     @Override
     public void operationComplete(ChannelProgressiveFuture future) {
       if (future.isSuccess()) {
-        maybeCloseNetworkChannel(false);
-        closeRequest();
+        logger.trace("Response sending complete on channel {}", ctx.channel());
+        completeRequest(request == null || !request.isKeepAlive());
       } else {
         handleChannelWriteFailure(future.cause(), true);
       }
@@ -603,6 +662,15 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private class ErrorResponseWriteListener implements GenericFutureListener<ChannelFuture> {
     private final long responseWriteStartTime = System.currentTimeMillis();
+    private final boolean keepAlive;
+
+    /**
+     * Constructs a channel write listener for error responses.
+     * @param keepAlive {@code true} if the channel needs to be kept open. {@code false} otherwise.
+     */
+    ErrorResponseWriteListener(boolean keepAlive) {
+      this.keepAlive = keepAlive;
+    }
 
     @Override
     public void operationComplete(ChannelFuture future)
@@ -617,8 +685,7 @@ class NettyResponseChannel implements RestResponseChannel {
       if (request != null) {
         request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(channelWriteTime);
       }
-      maybeCloseNetworkChannel(true);
-      closeRequest();
+      completeRequest(!keepAlive || !future.isSuccess());
     }
   }
 

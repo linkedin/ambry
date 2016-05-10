@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
@@ -7,6 +20,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -615,7 +629,8 @@ public class ReplicationTest {
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
-              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost");
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost",
+              new ResponseHandler(clusterMap));
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId));
@@ -870,7 +885,8 @@ public class ReplicationTest {
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
-              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost");
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost",
+              new ResponseHandler(clusterMap));
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId));
@@ -1100,7 +1116,8 @@ public class ReplicationTest {
           new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
               new AtomicInteger(0), clusterMap.getDataNodeId("localhost", dataNode1.getPort()),
               new MockConnectionPool(replicaStores, replicaBuffers, 3), config, replicationMetrics, null,
-              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost");
+              storeKeyFactory, true, clusterMap.getMetricRegistry(), false, "localhost",
+              new ResponseHandler(clusterMap));
       List<ReplicaThread.ExchangeMetadataResponse> response = replicaThread.exchangeMetadata(
           new MockConnection("localhost", dataNode2.getPort(), replicaStores.get("localhost" + dataNode2.getPort()),
               replicaBuffers.get("localhost" + dataNode2.getPort()), 5), replicasToReplicate.get(dataNodeId));

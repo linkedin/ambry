@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.router.RouterErrorCode;
@@ -12,6 +25,9 @@ import com.github.ambry.router.RouterErrorCode;
  * {@link ResponseStatus#NotFound}
  * {@link ResponseStatus#BadRequest}
  * {@link ResponseStatus#InternalServerError}
+ * {@link ResponseStatus#Forbidden}
+ * {@link ResponseStatus#ProxyAuthenticationRequired}
+ * {@link ResponseStatus#Unauthorized}
  * <p/>
  * About logging:
  * Generally, error codes not belonging to the group {@link #InternalServerError} are logged at DEBUG level.
@@ -26,6 +42,21 @@ public enum RestServiceErrorCode {
    * Resource was not found.
    */
   NotFound,
+
+  /**
+   * Resource scan still in progress and result not yet available
+   */
+  ResourceScanInProgress,
+
+  /**
+   * Resource scan has deducted that the resource is not safe for serving
+   */
+  ResourceDirty,
+
+  /**
+   * Client has sent a request that cannot be processed due to authorization failure.
+   */
+  Unauthorized,
 
   /**
    * Generic BadRequest error code when a client provides a request that is not fit for processing.
@@ -70,6 +101,10 @@ public enum RestServiceErrorCode {
    */
   InternalServerError,
   /**
+   * Indicates that {@link IdConverter} encountered some exception during ID conversion
+   */
+  IdConverterServiceError,
+  /**
    * Indicates that an object that is needed for the request could not be created due to an internal server error.
    */
   InternalObjectCreationError,
@@ -105,6 +140,7 @@ public enum RestServiceErrorCode {
       case BlobTooLarge:
       case InvalidBlobId:
       case InvalidPutArgument:
+      case BadInputChannel:
         return BadRequest;
       case BlobDeleted:
       case BlobExpired:

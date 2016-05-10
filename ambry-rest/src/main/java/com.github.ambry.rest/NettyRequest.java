@@ -1,30 +1,45 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import io.netty.handler.codec.http.CookieDecoder;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.util.ReferenceCountUtil;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.servlet.http.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,28 +50,44 @@ import org.slf4j.LoggerFactory;
  * A wrapper over {@link HttpRequest} and all the {@link HttpContent} associated with the request.
  */
 class NettyRequest implements RestRequest {
-  private final NettyMetrics nettyMetrics;
-  private final QueryStringDecoder query;
-  private final HttpRequest request;
-  private final RestMethod restMethod;
-  private final Map<String, List<String>> args;
+  private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
 
-  private final ReentrantLock contentLock = new ReentrantLock();
-  private final Queue<HttpContent> requestContents = new LinkedBlockingQueue<HttpContent>();
+  protected final HttpRequest request;
+  protected final NettyMetrics nettyMetrics;
+  protected final Map<String, Object> allArgs = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
+  protected final Queue<HttpContent> requestContents = new LinkedBlockingQueue<HttpContent>();
+  protected final ReentrantLock contentLock = new ReentrantLock();
+
+  protected volatile ReadIntoCallbackWrapper callbackWrapper = null;
+  protected volatile Map<String, Object> allArgsReadOnly = null;
+
+  private final long size;
+  private final QueryStringDecoder query;
+  private final RestMethod restMethod;
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final AtomicLong bytesReceived = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private volatile AsyncWritableChannel writeChannel = null;
-  private volatile ReadIntoCallbackWrapper callbackWrapper = null;
+  private volatile Exception channelException = CLOSED_CHANNEL_EXCEPTION;
+
+  protected static String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
 
   /**
    * Wraps the {@code request} in an implementation of {@link RestRequest} so that other layers can understand the
    * request.
+   * <p/>
+   * Note on content size: The content size is deduced in the following order:-
+   * 1. From the {@link RestUtils.Headers#BLOB_SIZE} header.
+   * 2. If 1 fails, from the {@link HttpHeaders.Names#CONTENT_LENGTH} header.
+   * 3. If 2 fails, it is set to -1 which means that the content size is unknown.
+   * If content size is set in the header (i.e. not -1), the actual content size should match that value. Otherwise, an
+   * exception will be thrown.
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @throws IllegalArgumentException if {@code request} is null.
-   * @throws RestServiceException if the HTTP method defined in {@code request} is not recognized as a
+   * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
    *                                {@link RestMethod}.
    */
   public NettyRequest(HttpRequest request, NettyMetrics nettyMetrics)
@@ -83,15 +114,59 @@ class NettyRequest implements RestRequest {
     this.query = new QueryStringDecoder(request.getUri());
     this.nettyMetrics = nettyMetrics;
 
-    Map<String, List<String>> allArgs = new HashMap<String, List<String>>();
-    allArgs.putAll(query.parameters());
-    for (Map.Entry<String, String> e : request.headers()) {
-      if (!allArgs.containsKey(e.getKey())) {
-        allArgs.put(e.getKey(), new LinkedList<String>());
-      }
-      allArgs.get(e.getKey()).add(e.getValue());
+    if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
+      size = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
+    } else {
+      size = HttpHeaders.getContentLength(request, -1);
     }
-    args = Collections.unmodifiableMap(allArgs);
+
+    // query params.
+    for (Map.Entry<String, List<String>> e : query.parameters().entrySet()) {
+      StringBuilder value = null;
+      if (e.getValue() != null) {
+        StringBuilder combinedValues = combineVals(new StringBuilder(), e.getValue());
+        if (combinedValues.length() > 0) {
+          value = combinedValues;
+        }
+      }
+      allArgs.put(e.getKey(), value);
+    }
+
+    Set<io.netty.handler.codec.http.Cookie> nettyCookies = null;
+    // headers.
+    for (Map.Entry<String, String> e : request.headers()) {
+      StringBuilder sb;
+      if (e.getKey().equals(HttpHeaders.Names.COOKIE)) {
+        String value = e.getValue();
+        if (value != null) {
+          nettyCookies = CookieDecoder.decode(value);
+        }
+      } else {
+        boolean valueNull = request.headers().get(e.getKey()) == null;
+        if (!valueNull && allArgs.get(e.getKey()) == null) {
+          sb = new StringBuilder(e.getValue());
+          allArgs.put(e.getKey(), sb);
+        } else if (!valueNull) {
+          sb = (StringBuilder) allArgs.get(e.getKey());
+          sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(e.getValue());
+        } else if (!allArgs.containsKey(e.getKey())) {
+          allArgs.put(e.getKey(), null);
+        }
+      }
+    }
+
+    // turn all StringBuilders into String
+    for (Map.Entry<String, Object> e : allArgs.entrySet()) {
+      if (allArgs.get(e.getKey()) != null) {
+        allArgs.put(e.getKey(), (e.getValue()).toString());
+      }
+    }
+    // add cookies to the args as java cookies
+    if (nettyCookies != null) {
+      Set<javax.servlet.http.Cookie> cookies = convertHttpToJavaCookies(nettyCookies);
+      allArgs.put(RestUtils.Headers.COOKIE, cookies);
+    }
+    allArgsReadOnly = Collections.unmodifiableMap(allArgs);
   }
 
   @Override
@@ -110,8 +185,14 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
-  public Map<String, List<String>> getArgs() {
-    return args;
+  public Map<String, Object> getArgs() {
+    return allArgsReadOnly;
+  }
+
+  @Override
+  public void prepare()
+      throws RestServiceException {
+    // no op.
   }
 
   @Override
@@ -120,21 +201,22 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() {
     if (channelOpen.compareAndSet(true, false)) {
       contentLock.lock();
       try {
         logger.trace("Closing NettyRequest {} with {} content chunks unread", getUri(), requestContents.size());
         // For non-POST we usually have one content chunk unread - this the LastHttpContent chunk. This is OK.
-        while (requestContents.peek() != null) {
-          ReferenceCountUtil.release(requestContents.poll());
+        HttpContent content = requestContents.poll();
+        while (content != null) {
+          ReferenceCountUtil.release(content);
+          content = requestContents.poll();
         }
       } finally {
         contentLock.unlock();
         restRequestMetricsTracker.recordMetrics();
         if (callbackWrapper != null) {
-          callbackWrapper.invokeCallback(new ClosedChannelException());
+          callbackWrapper.invokeCallback(channelException);
         }
       }
     }
@@ -165,20 +247,7 @@ class NettyRequest implements RestRequest {
    */
   @Override
   public long getSize() {
-    long contentLength;
-    if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
-      contentLength = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
-    } else {
-      contentLength = HttpHeaders.getContentLength(request, 0);
-    }
-    return contentLength;
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IllegalStateException("Not implemented");
+    return size;
   }
 
   @Override
@@ -186,14 +255,20 @@ class NettyRequest implements RestRequest {
     ReadIntoCallbackWrapper tempWrapper = new ReadIntoCallbackWrapper(callback);
     contentLock.lock();
     try {
-      if (!channelOpen.get()) {
+      if (!isOpen()) {
+        nettyMetrics.requestAlreadyClosedError.inc();
         tempWrapper.invokeCallback(new ClosedChannelException());
       } else if (writeChannel != null) {
         throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
       }
-      while (requestContents.peek() != null) {
-        writeContent(asyncWritableChannel, tempWrapper, requestContents.peek());
-        ReferenceCountUtil.release(requestContents.poll());
+      HttpContent content = requestContents.poll();
+      while (content != null) {
+        try {
+          writeContent(asyncWritableChannel, tempWrapper, content);
+        } finally {
+          ReferenceCountUtil.release(content);
+        }
+        content = requestContents.poll();
       }
       callbackWrapper = tempWrapper;
       writeChannel = asyncWritableChannel;
@@ -206,27 +281,27 @@ class NettyRequest implements RestRequest {
   /**
    * Adds some content in the form of {@link HttpContent} to this RestRequest. This content will be available to read
    * through the read operations.
+   * @param httpContent the {@link HttpContent} that needs to be added.
    * @throws IllegalStateException if content is being added when it is not expected (GET, DELETE, HEAD).
-   * @throws ClosedChannelException if request channel has been closed.
-   * @throws IllegalArgumentException if {@code httpContent} is null.
+   * @throws RestServiceException if request channel has been closed.
    */
-  public void addContent(HttpContent httpContent)
-      throws ClosedChannelException {
+  protected void addContent(HttpContent httpContent)
+      throws RestServiceException {
     if (!getRestMethod().equals(RestMethod.POST) && (!(httpContent instanceof LastHttpContent)
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
-    } else if (!isOpen()) {
-      throw new ClosedChannelException();
     } else {
+      validateState(httpContent);
       contentLock.lock();
       try {
         if (!isOpen()) {
-          throw new ClosedChannelException();
+          nettyMetrics.requestAlreadyClosedError.inc();
+          throw new RestServiceException("The request has been closed and is not accepting content",
+              RestServiceErrorCode.RequestChannelClosed);
         } else if (writeChannel != null) {
           writeContent(writeChannel, callbackWrapper, httpContent);
         } else {
-          ReferenceCountUtil.retain(httpContent);
-          requestContents.add(httpContent);
+          requestContents.add(ReferenceCountUtil.retain(httpContent));
         }
       } finally {
         contentLock.unlock();
@@ -235,41 +310,118 @@ class NettyRequest implements RestRequest {
   }
 
   /**
+   * Provides info on whether this request desires keep-alive or not.
+   * @return {@code true} if keep-alive. {@code false} otherwise.
+   */
+  protected boolean isKeepAlive() {
+    return HttpHeaders.isKeepAlive(request);
+  }
+
+  /**
+   * Provides info on whether this request is multipart or not.
+   * @return {@code true} if multipart. {@code false} otherwise.
+   */
+  protected boolean isMultipart() {
+    return HttpPostRequestDecoder.isMultipart(request);
+  }
+
+  /**
    * Writes the data in the provided {@code httpContent} to the given {@code writeChannel}.
    * @param writeChannel the {@link AsyncWritableChannel} to write the data of {@code httpContent} to.
    * @param callbackWrapper the {@link ReadIntoCallbackWrapper} for the read operation.
    * @param httpContent the piece of {@link HttpContent} that needs to be written to the {@code writeChannel}.
    */
-  private void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
+  protected void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
       HttpContent httpContent) {
     boolean retained = false;
-    ByteBuffer contentBuffer;
-    Callback<Long> writeCallback;
+    ByteBuffer[] contentBuffers;
+    Callback<Long>[] writeCallbacks;
     // LastHttpContent in the end marker in netty http world.
     boolean isLast = httpContent instanceof LastHttpContent;
     if (httpContent.content().nioBufferCount() > 0) {
       // not a copy.
-      ReferenceCountUtil.retain(httpContent);
+      httpContent = ReferenceCountUtil.retain(httpContent);
       retained = true;
-      contentBuffer = httpContent.content().nioBuffer();
-      writeCallback = new ContentWriteCallback(httpContent, isLast, callbackWrapper);
+      contentBuffers = httpContent.content().nioBuffers();
+      writeCallbacks = new ContentWriteCallback[contentBuffers.length];
+      int i = 0;
+      for (; i < contentBuffers.length - 1; i++) {
+        writeCallbacks[i] = new ContentWriteCallback(null, false, callbackWrapper);
+      }
+      writeCallbacks[i] = new ContentWriteCallback(httpContent, isLast, callbackWrapper);
     } else {
       // this will not happen (looking at current implementations of ByteBuf in Netty), but if it does, we cannot avoid
       // a copy (or we can introduce a read(GatheringByteChannel) method in ReadableStreamChannel if required).
       nettyMetrics.contentCopyCount.inc();
       logger.warn("HttpContent had to be copied because ByteBuf did not have a backing ByteBuffer");
-      contentBuffer = ByteBuffer.allocate(httpContent.content().capacity());
+      ByteBuffer contentBuffer = ByteBuffer.allocate(httpContent.content().readableBytes());
       httpContent.content().readBytes(contentBuffer);
       // no need to retain httpContent since we have a copy.
-      writeCallback = new ContentWriteCallback(null, isLast, callbackWrapper);
+      ContentWriteCallback writeCallback = new ContentWriteCallback(null, isLast, callbackWrapper);
+      contentBuffers = new ByteBuffer[]{contentBuffer};
+      writeCallbacks = new ContentWriteCallback[]{writeCallback};
     }
-    boolean asyncWriteCalled = false;
+    boolean asyncWritesCalled = false;
     try {
-      writeChannel.write(contentBuffer, writeCallback);
-      asyncWriteCalled = true;
+      for (int i = 0; i < contentBuffers.length; i++) {
+        writeChannel.write(contentBuffers[i], writeCallbacks[i]);
+      }
+      asyncWritesCalled = true;
     } finally {
-      if (retained && !asyncWriteCalled) {
+      if (retained && !asyncWritesCalled) {
         ReferenceCountUtil.release(httpContent);
+      }
+    }
+  }
+
+  /**
+   * Converts the Set of {@link javax.servlet.http.Cookie}s to equivalent {@link javax.servlet.http.Cookie}s
+   * @param httpCookies Set of {@link javax.servlet.http.Cookie}s that needs to be converted
+   * @return Set of {@link javax.servlet.http.Cookie}s equivalent to the passed in {@link javax.servlet.http.Cookie}s
+   */
+  private Set<Cookie> convertHttpToJavaCookies(Set<io.netty.handler.codec.http.Cookie> httpCookies) {
+    Set<javax.servlet.http.Cookie> cookies = new HashSet<Cookie>();
+    for (io.netty.handler.codec.http.Cookie cookie : httpCookies) {
+      javax.servlet.http.Cookie javaCookie = new javax.servlet.http.Cookie(cookie.getName(), cookie.getValue());
+      cookies.add(javaCookie);
+    }
+    return cookies;
+  }
+
+  /**
+   * Combines {@code values} into {@code currValue} by creating a comma seperated string.
+   * @param currValue the value to which {@code values} have to be appeneded to.
+   * @param values the values that need to be appended to @code currValue}.
+   * @return the updated @code currValue}.
+   */
+  private StringBuilder combineVals(StringBuilder currValue, List<String> values) {
+    for (String value : values) {
+      if (currValue.length() > 0) {
+        currValue.append(MULTIPLE_HEADER_VALUE_DELIMITER);
+      }
+      currValue.append(value);
+    }
+    return currValue;
+  }
+
+  /**
+   * Validates the stream by checking that the size in the headers matches the size of the actual data.
+   * @param httpContent the {@link HttpContent} that was just received.
+   * @throws RestServiceException if {@code httpContent} is the last piece of content and the size of data does
+   *                              not match the size in the header.
+   */
+  private void validateState(HttpContent httpContent)
+      throws RestServiceException {
+    long bytesReceivedTillNow = bytesReceived.addAndGet(httpContent.content().readableBytes());
+    if (size > 0) {
+      if (bytesReceivedTillNow > size) {
+        channelException = new RestServiceException("Size of content is more than the size provided in headers",
+            RestServiceErrorCode.BadRequest);
+        throw (RestServiceException) channelException;
+      } else if (httpContent instanceof LastHttpContent && bytesReceivedTillNow != size) {
+        channelException = new RestServiceException("Size of content is less than the size provided in headers",
+            RestServiceErrorCode.BadRequest);
+        throw (RestServiceException) channelException;
       }
     }
   }

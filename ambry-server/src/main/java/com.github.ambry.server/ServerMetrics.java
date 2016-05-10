@@ -1,9 +1,22 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.server;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.metrics.MetricsHistogram;
 
 
@@ -70,6 +83,12 @@ public class ServerMetrics {
   public final Histogram getBlobAllSendTimeInMs;
   public final Histogram getBlobAllTotalTimeInMs;
 
+  public final Histogram getBlobInfoRequestQueueTimeInMs;
+  public final Histogram getBlobInfoProcessingTimeInMs;
+  public final Histogram getBlobInfoResponseQueueTimeInMs;
+  public final Histogram getBlobInfoSendTimeInMs;
+  public final Histogram getBlobInfoTotalTimeInMs;
+
   public final Histogram deleteBlobRequestQueueTimeInMs;
   public final Histogram deleteBlobProcessingTimeInMs;
   public final Histogram deleteBlobResponseQueueTimeInMs;
@@ -99,6 +118,7 @@ public class ServerMetrics {
   public final Meter getBlobPropertiesRequestRate;
   public final Meter getBlobUserMetadataRequestRate;
   public final Meter getBlobAllRequestRate;
+  public final Meter getBlobInfoRequestRate;
   public final Meter deleteBlobRequestRate;
   public final Meter ttlBlobRequestRate;
   public final Meter replicaMetadataRequestRate;
@@ -206,6 +226,15 @@ public class ServerMetrics {
     getBlobAllSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllSendTime"));
     getBlobAllTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobAllTotalTime"));
 
+    getBlobInfoRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoRequestQueueTime"));
+    getBlobInfoProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoProcessingTime"));
+    getBlobInfoResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoResponseQueueTime"));
+    getBlobInfoSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoSendTime"));
+    getBlobInfoTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoTotalTime"));
+
     deleteBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestQueueTime"));
     deleteBlobProcessingTimeInMs =
@@ -247,6 +276,7 @@ public class ServerMetrics {
     getBlobUserMetadataRequestRate =
         registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobUserMetadataRequestRate"));
     getBlobAllRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobAllRequestRate"));
+    getBlobInfoRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoRequestRate"));
     deleteBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestRate"));
     ttlBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestRate"));

@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.commons;
 
 import com.github.ambry.router.Callback;
@@ -37,7 +50,7 @@ public class ByteBufferAsyncWritableChannelTest {
       byte[] readChunk = new byte[writtenChunk.length];
       chunk.get(readChunk);
       assertArrayEquals("Data unequal", writtenChunk, readChunk);
-      channel.resolveChunk(chunk, null);
+      channel.resolveOldestChunk(null);
       assertEquals("Unexpected write size (future)", chunkSize, writeData.future.get().longValue());
       assertEquals("Unexpected write size (callback)", chunkSize, writeData.writeCallback.bytesWritten);
       chunkCount++;
@@ -51,6 +64,27 @@ public class ByteBufferAsyncWritableChannelTest {
   }
 
   @Test
+  public void checkoutMultipleChunksAndResolveTest()
+      throws Exception {
+    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
+    ChannelWriter channelWriter = new ChannelWriter(channel);
+    channelWriter.writeToChannel(5);
+
+    // get all chunks without resolving any
+    ByteBuffer chunk = channel.getNextChunk(0);
+    while (chunk != null) {
+      chunk = channel.getNextChunk(0);
+    }
+
+    // now resolve them one by one and check that ordering is respected.
+    for (int i = 0; i < channelWriter.writes.size(); i++) {
+      channel.resolveOldestChunk(null);
+      ensureCallbackOrder(channelWriter, i);
+    }
+    channel.close();
+  }
+
+  @Test
   public void closeBeforeFullReadTest()
       throws Exception {
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
@@ -61,7 +95,8 @@ public class ByteBufferAsyncWritableChannelTest {
     // read some chunks
     int i = 0;
     for (; i < 3; i++) {
-      channel.resolveChunk(channel.getNextChunk(), null);
+      channel.getNextChunk(0);
+      channel.resolveOldestChunk(null);
     }
     channel.close();
     assertFalse("Channel is still open", channel.isOpen());
@@ -91,10 +126,11 @@ public class ByteBufferAsyncWritableChannelTest {
     }
 
     // exception should be piped correctly.
-    WriteCallback writeCallback = new WriteCallback();
+    WriteCallback writeCallback = new WriteCallback(0);
     Future<Long> future = channel.write(ByteBuffer.allocate(1), writeCallback);
     String errMsg = "@@randomMsg@@";
-    channel.resolveChunk(channel.getNextChunk(), new Exception(errMsg));
+    channel.getNextChunk(0);
+    channel.resolveOldestChunk(new Exception(errMsg));
 
     try {
       future.get();
@@ -103,32 +139,6 @@ public class ByteBufferAsyncWritableChannelTest {
       assertEquals("Unexpected exception message (future)", errMsg, exception.getMessage());
       assertEquals("Unexpected exception message (callback)", errMsg, writeCallback.exception.getMessage());
     }
-  }
-
-  @Test
-  public void resolveChunkExceptionTest()
-      throws InterruptedException {
-    ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
-    ByteBuffer bogusChunk = ByteBuffer.allocate(5);
-    // before any chunks are added.
-    try {
-      channel.resolveChunk(bogusChunk, null);
-      fail("Resolving unknown chunks should throw exception");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
-    ByteBuffer validChunk = ByteBuffer.allocate(5);
-    channel.write(validChunk, null);
-    channel.getNextChunk();
-    // resolving an unknown chunk.
-    try {
-      channel.resolveChunk(bogusChunk, null);
-      fail("Resolving unknown chunks should throw exception");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-    channel.close();
   }
 
   /**
@@ -140,7 +150,7 @@ public class ByteBufferAsyncWritableChannelTest {
       throws Exception {
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     channel.write(ByteBuffer.allocate(5), null);
-    ByteBuffer chunk = channel.getNextChunk();
+    channel.getNextChunk();
     channel.close();
     assertFalse("Channel is still open", channel.isOpen());
 
@@ -148,10 +158,10 @@ public class ByteBufferAsyncWritableChannelTest {
     channel.close();
 
     // ok to resolve chunk
-    channel.resolveChunk(chunk, null);
+    channel.resolveOldestChunk(null);
 
     // not ok to write.
-    WriteCallback writeCallback = new WriteCallback();
+    WriteCallback writeCallback = new WriteCallback(0);
     try {
       channel.write(ByteBuffer.allocate(0), writeCallback).get();
       fail("Write should have failed");
@@ -181,8 +191,28 @@ public class ByteBufferAsyncWritableChannelTest {
     }
     return exception;
   }
+
+  // checkoutMultipleChunksAndResolveTest() helpers.
+
+  /**
+   * Ensures that the callback with {@code expectedCallbackId} is invoked but callbacks for chunks younger than the
+   * expected one (i.e. id > {@code expectedCallbackId}) have not been invoked.
+   * @param channelWriter the {@link ChannelWriter} that wrote to the channel.
+   * @param expectedCallbackId the id of the callback expected to be invoked.
+   */
+  private void ensureCallbackOrder(ChannelWriter channelWriter, int expectedCallbackId) {
+    WriteCallback writeCallback = channelWriter.writes.get(expectedCallbackId).writeCallback;
+    assertTrue("Callback for the expected oldest chunk not invoked", writeCallback.callbackInvoked.get());
+    for (int i = expectedCallbackId + 1; i < channelWriter.writes.size(); i++) {
+      writeCallback = channelWriter.writes.get(i).writeCallback;
+      assertFalse("Callback for a chunk younger than the expected is invoked", writeCallback.callbackInvoked.get());
+    }
+  }
 }
 
+/**
+ * Writes some random data to the provided {@link ByteBufferAsyncWritableChannel}.
+ */
 class ChannelWriter {
   public final List<WriteData> writes = new ArrayList<WriteData>();
   private final ByteBufferAsyncWritableChannel channel;
@@ -192,9 +222,13 @@ class ChannelWriter {
     this.channel = channel;
   }
 
+  /**
+   * Writes {@code writeCount} number of random chunks to the given {@link ByteBufferAsyncWritableChannel}.
+   * @param writeCount the number of chunks to write.
+   */
   public void writeToChannel(int writeCount) {
     for (int i = 0; i < writeCount; i++) {
-      WriteCallback writeCallback = new WriteCallback();
+      WriteCallback writeCallback = new WriteCallback(i);
       byte[] data = new byte[100];
       random.nextBytes(data);
       ByteBuffer chunk = ByteBuffer.wrap(data);
@@ -204,6 +238,9 @@ class ChannelWriter {
   }
 }
 
+/**
+ * Represents the data associated with a write.
+ */
 class WriteData {
   public final byte[] writtenChunk;
   public final Future<Long> future;
@@ -220,9 +257,18 @@ class WriteData {
  * Callback for all write operations on {@link ByteBufferAsyncWritableChannel}.
  */
 class WriteCallback implements Callback<Long> {
+  public volatile int writeId;
   public volatile long bytesWritten;
   public volatile Exception exception;
-  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+  public final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+
+  /**
+   * Create a write callback.
+   * @param writeId the id to attach to the callback.
+   */
+  public WriteCallback(int writeId) {
+    this.writeId = writeId;
+  }
 
   @Override
   public void onCompletion(Long result, Exception exception) {

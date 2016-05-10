@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.messageformat;
 
 import com.codahale.metrics.Histogram;
@@ -159,7 +172,7 @@ public class MessageSievingInputStream extends InputStream {
     boolean isValid = false;
     BlobProperties props = null;
     ByteBuffer metadata = null;
-    BlobOutput output = null;
+    BlobData blobData = null;
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       int availableBeforeParsing = byteArrayInputStream.available();
@@ -181,7 +194,7 @@ public class MessageSievingInputStream extends InputStream {
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
           props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
           metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
-          output = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
+          blobData = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
         } else {
           throw new IllegalStateException("Message cannot be a deleted record ");
         }
@@ -198,7 +211,7 @@ public class MessageSievingInputStream extends InputStream {
                 header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
                 header.getBlobRecordRelativeOffset(), header.getDeleteRecordRelativeOffset(), header.getCrc());
             logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
-                props.getBlobSize(), metadata.capacity(), output.getSize());
+                props.getBlobSize(), metadata.capacity(), blobData.getSize());
           }
           if (msgInfo.getStoreKey().equals(storeKey)) {
             isValid = true;

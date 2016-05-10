@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.tools.admin;
 
 import com.codahale.metrics.MetricRegistry;
@@ -10,12 +23,11 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
@@ -153,9 +165,8 @@ public class BlobValidator {
         }
       }
 
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt,
-          sslKeystoreTypeOpt, sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt,
-          sslTruststorePasswordOpt);
+      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
+          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
       String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
       Properties sslProperties;
       if (sslEnabledDatacenters.length() != 0) {
@@ -539,14 +550,14 @@ public class BlobValidator {
           return serverResponseCode;
         }
       } else {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
-        byte[] blobFromAmbry = new byte[(int) blobOutput.getSize()];
-        int blobSizeToRead = (int) blobOutput.getSize();
+        BlobData blobData = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
+        byte[] blobFromAmbry = new byte[(int) blobData.getSize()];
+        int blobSizeToRead = (int) blobData.getSize();
         int blobSizeRead = 0;
         while (blobSizeRead < blobSizeToRead) {
-          blobSizeRead += blobOutput.getStream().read(blobFromAmbry, blobSizeRead, blobSizeToRead - blobSizeRead);
+          blobSizeRead += blobData.getStream().read(blobFromAmbry, blobSizeRead, blobSizeToRead - blobSizeRead);
         }
-        System.out.println("BlobContent deserialized. Size " + blobOutput.getSize());
+        System.out.println("BlobContent deserialized. Size " + blobData.getSize());
       }
       return ServerErrorCode.No_Error;
     } catch (MessageFormatException mfe) {

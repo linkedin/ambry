@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.Utils;
@@ -5,7 +18,6 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.IllegalFormatException;
 
 
 // A class that derives from blob properties. It is mainly used to set
@@ -23,7 +35,7 @@ class SystemMetadata extends BlobProperties {
  */
 public class BlobPropertiesSerDe {
 
-  private static final short Current_Version = 1;
+  private static final short Version1 = 1;
   private static final int Version_Field_Size_In_Bytes = 2;
   private static final int TTL_Field_Size_In_Bytes = 8;
   private static final int Private_Field_Size_In_Bytes = 1;
@@ -45,7 +57,7 @@ public class BlobPropertiesSerDe {
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream)
       throws IOException {
     long version = stream.readShort();
-    if (version == 1) {
+    if (version == Version1) {
       long ttl = stream.readLong();
       boolean isPrivate = stream.readByte() == 1 ? true : false;
       long creationTime = stream.readLong();
@@ -60,7 +72,7 @@ public class BlobPropertiesSerDe {
   }
 
   public static void putBlobPropertiesToBuffer(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putShort(Current_Version);
+    outputBuffer.putShort(Version1);
     outputBuffer.putLong(properties.getTimeToLiveInSeconds());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
     outputBuffer.putLong(properties.getCreationTimeInMs());

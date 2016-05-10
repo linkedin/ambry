@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
@@ -52,6 +65,7 @@ class GetReplicasForBlobIdHandler {
     try {
       String replicaStr = getReplicasForBlobId(restRequest, clusterMap, adminMetrics).toString();
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, replicaStr.length());
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;
@@ -74,9 +88,9 @@ class GetReplicasForBlobIdHandler {
   private static JSONObject getReplicasForBlobId(RestRequest restRequest, ClusterMap clusterMap,
       AdminMetrics adminMetrics)
       throws RestServiceException {
-    Map<String, List<String>> parameters = restRequest.getArgs();
+    Map<String, Object> parameters = restRequest.getArgs();
     if (parameters != null && parameters.containsKey(BLOB_ID_KEY)) {
-      String blobIdStr = parameters.get(BLOB_ID_KEY).get(0);
+      String blobIdStr = parameters.get(BLOB_ID_KEY).toString();
       logger.trace("BlobId for request {} is {}", restRequest.getUri(), blobIdStr);
       try {
         PartitionId partitionId = new BlobId(blobIdStr, clusterMap).getPartition();

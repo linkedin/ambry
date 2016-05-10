@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
@@ -17,6 +30,7 @@ import com.github.ambry.coordinator.Coordinator;
 import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.coordinator.OperationContext;
 import com.github.ambry.coordinator.PutOperation;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -115,7 +129,7 @@ public final class ServerTestUtil {
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive().getInputStream();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response.getError());
 
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
@@ -123,7 +137,7 @@ public final class ServerTestUtil {
       channel.send(putRequest2);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
@@ -131,7 +145,7 @@ public final class ServerTestUtil {
       channel.send(putRequest3);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 4 that is expired
       BlobProperties propertiesExpired = new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0);
@@ -140,7 +154,7 @@ public final class ServerTestUtil {
       channel.send(putRequest4);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response4 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response4.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response4.getError());
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -156,10 +170,10 @@ public final class ServerTestUtil {
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
-        Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
-        Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+        Assert.assertEquals(31870, propertyOutput.getBlobSize());
+        Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // get blob properties with expired flag set
@@ -176,10 +190,10 @@ public final class ServerTestUtil {
       resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
-        Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
-        Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+        Assert.assertEquals(31870, propertyOutput.getBlobSize());
+        Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // get blob properties for expired blob
@@ -196,8 +210,7 @@ public final class ServerTestUtil {
       channel.send(getRequestExpired);
       InputStream streamExpired = channel.receive().getInputStream();
       GetResponse respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
-      Assert
-          .assertEquals(respExpired.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Expired);
+      Assert.assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // 2. With Include_Expired flag
       idsExpired = new ArrayList<BlobId>();
@@ -214,11 +227,11 @@ public final class ServerTestUtil {
       respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(respExpired.getInputStream());
-        Assert.assertEquals(propertyOutput.getBlobSize(), 31870);
-        Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
-        Assert.assertEquals(propertyOutput.getOwnerId(), "ownerid");
+        Assert.assertEquals(31870, propertyOutput.getBlobSize());
+        Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
+        Assert.assertEquals("ownerid", propertyOutput.getOwnerId());
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // get user metadata
@@ -230,10 +243,25 @@ public final class ServerTestUtil {
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
-        Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
+        Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
       } catch (MessageFormatException e) {
         Assert.assertEquals(false, true);
       }
+
+      // get blob info
+      GetRequest getRequest3 =
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOptions.None);
+      channel.send(getRequest3);
+      stream = channel.receive().getInputStream();
+      GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+      InputStream responseStream = resp3.getInputStream();
+      // verify blob properties.
+      BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(responseStream);
+      Assert.assertEquals(31870, propertyOutput.getBlobSize());
+      Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
+      // verify user metadata
+      ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(responseStream);
+      Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
 
       try {
         // get blob data
@@ -242,14 +270,14 @@ public final class ServerTestUtil {
         coordinatorProperties.putAll(coordinatorProps);
         Coordinator coordinator = new HelperCoordinator(new VerifiableProperties(coordinatorProperties), clusterMap);
         BlobOutput output = coordinator.getBlob(blobId1.getID());
-        Assert.assertEquals(output.getSize(), 31870);
+        Assert.assertEquals(31870, output.getSize());
         byte[] dataOutputStream = new byte[(int) output.getSize()];
         output.getStream().read(dataOutputStream);
-        Assert.assertArrayEquals(dataOutputStream, data);
+        Assert.assertArrayEquals(data, dataOutputStream);
         coordinator.close();
       } catch (CoordinatorException e) {
         e.printStackTrace();
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // fetch blob that does not exist
@@ -265,11 +293,11 @@ public final class ServerTestUtil {
       channel.send(getRequest4);
       stream = channel.receive().getInputStream();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp4.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Not_Found);
+      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, resp4.getPartitionResponseInfoList().get(0).getErrorCode());
       channel.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      Assert.assertEquals(true, false);
+      Assert.fail();
     }
   }
 
@@ -356,10 +384,10 @@ public final class ServerTestUtil {
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           try {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
-            Assert.assertEquals(propertyOutput.getBlobSize(), 100);
-            Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+            Assert.assertEquals(100, propertyOutput.getBlobSize());
+            Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
           } catch (MessageFormatException e) {
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
 
           // get user metadata
@@ -375,10 +403,10 @@ public final class ServerTestUtil {
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           try {
             ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-            Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
+            Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
           } catch (MessageFormatException e) {
             e.printStackTrace();
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
 
           // get blob
@@ -394,16 +422,16 @@ public final class ServerTestUtil {
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
           //System.out.println("response from get " + resp.getError());
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-            byte[] blobout = new byte[(int) blobOutput.getSize()];
+            BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            byte[] blobout = new byte[(int) blobData.getSize()];
             int readsize = 0;
-            while (readsize < blobOutput.getSize()) {
-              readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+            while (readsize < blobData.getSize()) {
+              readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
             }
-            Assert.assertArrayEquals(blobout, data);
+            Assert.assertArrayEquals(data, blobout);
           } catch (MessageFormatException e) {
             e.printStackTrace();
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
         }
       }
@@ -427,7 +455,7 @@ public final class ServerTestUtil {
           channel.send(deleteRequest);
           InputStream deleteResponseStream = channel.receive().getInputStream();
           DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
-          Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
+          Assert.assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
           blobsDeleted.add(blobIds.get(i));
         }
       }
@@ -456,7 +484,7 @@ public final class ServerTestUtil {
           channel.send(getRequest);
           InputStream stream = channel.receive().getInputStream();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-          Assert.assertEquals(resp.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Deleted);
+          Assert.assertEquals(ServerErrorCode.Blob_Deleted, resp.getPartitionResponseInfoList().get(0).getErrorCode());
         }
       }
 
@@ -513,10 +541,10 @@ public final class ServerTestUtil {
         } else {
           try {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
-            Assert.assertEquals(propertyOutput.getBlobSize(), 100);
-            Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+            Assert.assertEquals(100, propertyOutput.getBlobSize());
+            Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
           } catch (MessageFormatException e) {
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
         }
 
@@ -537,9 +565,9 @@ public final class ServerTestUtil {
         } else {
           try {
             ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-            Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
+            Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
           } catch (MessageFormatException e) {
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
         }
 
@@ -561,19 +589,19 @@ public final class ServerTestUtil {
           blobsChecked.add(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-            byte[] blobout = new byte[(int) blobOutput.getSize()];
+            BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            byte[] blobout = new byte[(int) blobData.getSize()];
             int readsize = 0;
-            while (readsize < blobOutput.getSize()) {
-              readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+            while (readsize < blobData.getSize()) {
+              readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
             }
-            Assert.assertArrayEquals(blobout, data);
+            Assert.assertArrayEquals(data, blobout);
           } catch (MessageFormatException e) {
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
         }
       }
-      Assert.assertEquals(blobsDeleted.size(), 0);
+      Assert.assertEquals(0, blobsDeleted.size());
       // take a server down, clean all contents, start and ensure replication fixes it
       serverList.get(0).shutdown();
       serverList.get(0).awaitShutdown();
@@ -623,10 +651,10 @@ public final class ServerTestUtil {
         } else {
           try {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
-            Assert.assertEquals(propertyOutput.getBlobSize(), 100);
-            Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+            Assert.assertEquals(100, propertyOutput.getBlobSize());
+            Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
           } catch (MessageFormatException e) {
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
         }
 
@@ -647,9 +675,9 @@ public final class ServerTestUtil {
         } else {
           try {
             ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp.getInputStream());
-            Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
+            Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
           } catch (MessageFormatException e) {
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
         }
 
@@ -670,26 +698,26 @@ public final class ServerTestUtil {
           blobsChecked.remove(blobIds.get(j));
         } else {
           try {
-            BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-            byte[] blobout = new byte[(int) blobOutput.getSize()];
+            BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+            byte[] blobout = new byte[(int) blobData.getSize()];
             int readsize = 0;
-            while (readsize < blobOutput.getSize()) {
-              readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+            while (readsize < blobData.getSize()) {
+              readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
             }
-            Assert.assertArrayEquals(blobout, data);
+            Assert.assertArrayEquals(data, blobout);
           } catch (MessageFormatException e) {
-            Assert.assertEquals(false, true);
+            Assert.fail();
           }
         }
       }
-      Assert.assertEquals(blobsChecked.size(), 0);
+      Assert.assertEquals(0, blobsChecked.size());
 
       channel1.disconnect();
       channel2.disconnect();
       channel3.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      Assert.assertTrue(false);
+      Assert.fail();
     }
   }
 
@@ -786,21 +814,21 @@ public final class ServerTestUtil {
       channel1.send(putRequest);
       InputStream putResponseStream = channel1.receive().getInputStream();
       PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response.getError());
       // put blob 2
       PutRequest putRequest2 = new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response2.getError());
       // put blob 3
       PutRequest putRequest3 = new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 4
       putRequest = new PutRequest(1, "client1", blobId4, properties, ByteBuffer.wrap(usermetadata),
@@ -808,7 +836,7 @@ public final class ServerTestUtil {
       channel1.send(putRequest);
       putResponseStream = channel1.receive().getInputStream();
       response = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response.getError());
 
       // put blob 5
       putRequest2 = new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata),
@@ -816,7 +844,7 @@ public final class ServerTestUtil {
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 6
       putRequest3 = new PutRequest(1, "client1", blobId6, properties, ByteBuffer.wrap(usermetadata),
@@ -824,7 +852,7 @@ public final class ServerTestUtil {
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response3.getError());
       // wait till replication can complete
       notificationSystem.awaitBlobCreations(blobId1.getID());
       notificationSystem.awaitBlobCreations(blobId2.getID());
@@ -845,14 +873,14 @@ public final class ServerTestUtil {
       channel2.send(getRequest1);
       InputStream stream = channel2.receive().getInputStream();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp1.getError(), ServerErrorCode.No_Error);
-      Assert.assertEquals(resp1.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, resp1.getError());
+      Assert.assertEquals(ServerErrorCode.No_Error, resp1.getPartitionResponseInfoList().get(0).getErrorCode());
       try {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
-        Assert.assertEquals(propertyOutput.getBlobSize(), 1000);
-        Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+        Assert.assertEquals(1000, propertyOutput.getBlobSize());
+        Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
       // get user metadata
       ids.clear();
@@ -863,13 +891,13 @@ public final class ServerTestUtil {
       channel1.send(getRequest2);
       stream = channel1.receive().getInputStream();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp2.getError(), ServerErrorCode.No_Error);
-      Assert.assertEquals(resp2.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, resp2.getError());
+      Assert.assertEquals(ServerErrorCode.No_Error, resp2.getPartitionResponseInfoList().get(0).getErrorCode());
       try {
         ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(resp2.getInputStream());
-        Assert.assertArrayEquals(userMetadataOutput.array(), usermetadata);
+        Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // get blob
@@ -882,15 +910,15 @@ public final class ServerTestUtil {
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       //System.out.println("response from get " + resp3.getError());
       try {
-        BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
-        byte[] blobout = new byte[(int) blobOutput.getSize()];
+        BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
+        byte[] blobout = new byte[(int) blobData.getSize()];
         int readsize = 0;
-        while (readsize < blobOutput.getSize()) {
-          readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+        while (readsize < blobData.getSize()) {
+          readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
         }
-        Assert.assertArrayEquals(blobout, data);
+        Assert.assertArrayEquals(data, blobout);
       } catch (MessageFormatException e) {
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       try {
@@ -909,7 +937,7 @@ public final class ServerTestUtil {
         coordinator.close();
       } catch (CoordinatorException e) {
         e.printStackTrace();
-        Assert.assertEquals(false, true);
+        Assert.fail();
       }
 
       // fetch blob that does not exist
@@ -925,15 +953,15 @@ public final class ServerTestUtil {
       channel3.send(getRequest4);
       stream = channel3.receive().getInputStream();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp4.getError(), ServerErrorCode.No_Error);
-      Assert.assertEquals(resp4.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Not_Found);
+      Assert.assertEquals(ServerErrorCode.No_Error, resp4.getError());
+      Assert.assertEquals(ServerErrorCode.Blob_Not_Found, resp4.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
-      Assert.assertEquals(deleteResponse.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
       notificationSystem.awaitBlobDeletions(blobId1.getID());
       ids = new ArrayList<BlobId>();
@@ -946,76 +974,23 @@ public final class ServerTestUtil {
       channel3.send(getRequest5);
       stream = channel3.receive().getInputStream();
       GetResponse resp5 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      Assert.assertEquals(resp5.getError(), ServerErrorCode.No_Error);
-      Assert.assertEquals(resp5.getPartitionResponseInfoList().get(0).getErrorCode(), ServerErrorCode.Blob_Deleted);
+      Assert.assertEquals(ServerErrorCode.No_Error, resp5.getError());
+      Assert.assertEquals(ServerErrorCode.Blob_Deleted, resp5.getPartitionResponseInfoList().get(0).getErrorCode());
 
-      // persist and restore to check state
+      // get the data node to inspect replication tokens on
+      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
+      // read the replica file and check correctness
+      // The token offset value of 13062 was derived as followed:
+      // - Up to this point we have done 6 puts and 1 delete
+      // - Each put takes up 2177 bytes in the log (1000 data, 1000 user metadata, 177 ambry metadata)
+      // - Each delete takes up 97 bytes in the log
+      // - The offset stored in the token will be the position of the last entry in the log (the delete, in this case)
+      // - Thus, it will be at the end of the 6 puts: 6 * 2177 = 13062
+      checkReplicaTokens(clusterMap, dataNodeId, 13062, "0");
+
+      // Shut down server 1
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
-      // read the replica file and check correctness
-      DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
-      List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
-      Set<String> setToCheck = new HashSet<String>();
-
-      // we should have an entry for each partition - remote replica pair
-      List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
-      for (ReplicaId replicaId : replicaIds) {
-        List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
-        for (ReplicaId peerReplica : peerReplicas) {
-          setToCheck.add(replicaId.getPartitionId().toString() +
-              peerReplica.getDataNodeId().getHostname() +
-              peerReplica.getDataNodeId().getPort());
-        }
-      }
-      for (String mountPath : mountPaths) {
-        File replicaTokenFile = new File(mountPath, "replicaTokens");
-        if (replicaTokenFile.exists()) {
-          CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
-          DataInputStream dataInputStream = new DataInputStream(crcStream);
-          try {
-            short version = dataInputStream.readShort();
-            Assert.assertEquals(version, 0);
-            StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
-            FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
-
-            System.out.println("setToCheck" + setToCheck.size());
-            while (dataInputStream.available() > 8) {
-              // read partition id
-              PartitionId partitionId = clusterMap.getPartitionIdFromStream(dataInputStream);
-              // read remote node host name
-              String hostname = Utils.readIntString(dataInputStream);
-              // read remote replica path
-              Utils.readIntString(dataInputStream);
-
-              // read remote port
-              int port = dataInputStream.readInt();
-              Assert.assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
-              setToCheck.remove(partitionId.toString() + hostname + port);
-              // read total bytes read from local store
-              dataInputStream.readLong();
-              // read replica token
-              FindToken token = factory.getFindToken(dataInputStream);
-              System.out.println(
-                  "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
-              ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
-              Assert.assertEquals(bytebufferToken.getShort(), 0);
-              int size = bytebufferToken.getInt();
-              bytebufferToken.position(bytebufferToken.position() + size);
-              long parsedToken = bytebufferToken.getLong();
-              System.out.println("The parsed token is " + parsedToken);
-              Assert.assertTrue(parsedToken == -1 || parsedToken == 13062);
-            }
-            long crc = crcStream.getValue();
-            Assert.assertEquals(crc, dataInputStream.readLong());
-          } catch (IOException e) {
-            Assert.assertTrue(false);
-          } finally {
-            dataInputStream.close();
-          }
-        } else {
-          Assert.assertTrue(false);
-        }
-      }
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
       putRequest2 = new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata),
@@ -1023,7 +998,7 @@ public final class ServerTestUtil {
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 8
       putRequest3 = new PutRequest(1, "client1", blobId8, properties, ByteBuffer.wrap(usermetadata),
@@ -1031,7 +1006,7 @@ public final class ServerTestUtil {
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 9
       putRequest2 = new PutRequest(1, "client1", blobId9, properties, ByteBuffer.wrap(usermetadata),
@@ -1039,7 +1014,7 @@ public final class ServerTestUtil {
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 10
       putRequest3 = new PutRequest(1, "client1", blobId10, properties, ByteBuffer.wrap(usermetadata),
@@ -1047,7 +1022,7 @@ public final class ServerTestUtil {
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response3.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 11
       putRequest2 = new PutRequest(1, "client1", blobId11, properties, ByteBuffer.wrap(usermetadata),
@@ -1055,7 +1030,7 @@ public final class ServerTestUtil {
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      Assert.assertEquals(response2.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       cluster.getServers().get(0).startup();
       // wait for server to recover
@@ -1081,7 +1056,7 @@ public final class ServerTestUtil {
         checkBlobContent(clusterMap, blobId10, channel1, data);
         checkBlobContent(clusterMap, blobId11, channel1, data);
       } catch (MessageFormatException e) {
-        Assert.assertFalse(true);
+        Assert.fail();
       }
 
       // Shutdown server 1. Remove all its data from all mount path. Recover server 1 and ensure node is built
@@ -1132,7 +1107,7 @@ public final class ServerTestUtil {
         checkBlobContent(clusterMap, blobId10, channel1, data);
         checkBlobContent(clusterMap, blobId11, channel1, data);
       } catch (MessageFormatException e) {
-        Assert.assertFalse(true);
+        Assert.fail();
       }
 
       channel1.disconnect();
@@ -1140,17 +1115,120 @@ public final class ServerTestUtil {
       channel3.disconnect();
     } catch (Exception e) {
       e.printStackTrace();
-      Assert.assertTrue(false);
+      Assert.fail();
+    }
+  }
+
+  /**
+   * Repeatedly check the replication token file until a certain offset value on all nodes on a certain
+   * partition is found.  Fail if {@code numTries} is exceeded or a token offset larger than the target
+   * is found.
+   * @param clusterMap the cluster map that contains the data node to inspect
+   * @param dataNodeId the data node to inspect
+   * @param targetOffset the token offset to look for in the {@code targetPartition}
+   * @param targetPartition the name of the partition to look for the {@code targetOffset}
+   * @throws Exception
+   */
+  private static void checkReplicaTokens(MockClusterMap clusterMap, DataNodeId dataNodeId, long targetOffset,
+      String targetPartition)
+      throws Exception {
+    List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
+
+    // we should have an entry for each partition - remote replica pair
+    Set<String> completeSetToCheck = new HashSet<>();
+    List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
+    int numRemoteNodes = 0;
+    for (ReplicaId replicaId : replicaIds) {
+      List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+      if (replicaId.getPartitionId().isEqual(targetPartition)) {
+        numRemoteNodes = peerReplicas.size();
+      }
+      for (ReplicaId peerReplica : peerReplicas) {
+        completeSetToCheck.add(replicaId.getPartitionId().toString() +
+            peerReplica.getDataNodeId().getHostname() +
+            peerReplica.getDataNodeId().getPort());
+      }
+    }
+
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
+
+    int numTries = 4;
+    boolean foundTarget = false;
+    while (!foundTarget && numTries > 0) {
+      Thread.sleep(5000);
+      numTries--;
+      Set<String> setToCheck = new HashSet<String>(completeSetToCheck);
+      int numFound = 0;
+      for (String mountPath : mountPaths) {
+        File replicaTokenFile = new File(mountPath, "replicaTokens");
+        if (replicaTokenFile.exists()) {
+          CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
+          DataInputStream dataInputStream = new DataInputStream(crcStream);
+          try {
+            short version = dataInputStream.readShort();
+            Assert.assertEquals(0, version);
+
+            System.out.println("setToCheck" + setToCheck.size());
+            while (dataInputStream.available() > 8) {
+              // read partition id
+              PartitionId partitionId = clusterMap.getPartitionIdFromStream(dataInputStream);
+              // read remote node host name
+              String hostname = Utils.readIntString(dataInputStream);
+              // read remote replica path
+              Utils.readIntString(dataInputStream);
+
+              // read remote port
+              int port = dataInputStream.readInt();
+              Assert.assertTrue(setToCheck.contains(partitionId.toString() + hostname + port));
+              setToCheck.remove(partitionId.toString() + hostname + port);
+              // read total bytes read from local store
+              dataInputStream.readLong();
+              // read replica token
+              FindToken token = factory.getFindToken(dataInputStream);
+              System.out.println(
+                  "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
+              ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
+              Assert.assertEquals(0, bytebufferToken.getShort());
+              int size = bytebufferToken.getInt();
+              bytebufferToken.position(bytebufferToken.position() + size);
+              long parsedToken = bytebufferToken.getLong();
+              System.out.println("The parsed token is " + parsedToken);
+              if (partitionId.isEqual(targetPartition)) {
+                Assert.assertFalse("Parsed offset must not be larger than target value: " + targetOffset,
+                    parsedToken > targetOffset);
+                if (parsedToken == targetOffset) {
+                  numFound++;
+                }
+              } else {
+                Assert.assertEquals("Tokens should remain at -1 offsets on unmodified partitions", -1, parsedToken);
+              }
+            }
+            long crc = crcStream.getValue();
+            Assert.assertEquals(crc, dataInputStream.readLong());
+          } catch (IOException e) {
+            Assert.fail();
+          } finally {
+            dataInputStream.close();
+          }
+        }
+      }
+      if (numFound == numRemoteNodes) {
+        foundTarget = true;
+      }
+    }
+    if (!foundTarget) {
+      Assert.fail("Could not find target token offset: " + targetOffset);
     }
   }
 
   private static void checkBlobId(Coordinator coordinator, BlobId blobId, byte[] data)
       throws CoordinatorException, IOException {
     BlobOutput output = coordinator.getBlob(blobId.getID());
-    Assert.assertEquals(output.getSize(), 1000);
+    Assert.assertEquals(1000, output.getSize());
     byte[] dataOutputStream = new byte[(int) output.getSize()];
     output.getStream().read(dataOutputStream);
-    Assert.assertArrayEquals(dataOutputStream, data);
+    Assert.assertArrayEquals(data, dataOutputStream);
   }
 
   private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, BlockingChannel channel,
@@ -1167,14 +1245,14 @@ public final class ServerTestUtil {
     channel.send(getRequest3);
     InputStream stream = channel.receive().getInputStream();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-    Assert.assertEquals(resp.getError(), ServerErrorCode.No_Error);
-    BlobOutput blobOutput = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-    byte[] blobout = new byte[(int) blobOutput.getSize()];
+    Assert.assertEquals(ServerErrorCode.No_Error, resp.getError());
+    BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
+    byte[] blobout = new byte[(int) blobData.getSize()];
     int readsize = 0;
-    while (readsize < blobOutput.getSize()) {
-      readsize += blobOutput.getStream().read(blobout, readsize, (int) blobOutput.getSize() - readsize);
+    while (readsize < blobData.getSize()) {
+      readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
     }
-    Assert.assertArrayEquals(blobout, dataToCheck);
+    Assert.assertArrayEquals(dataToCheck, blobout);
   }
 
   private static Properties getCoordinatorProperties(String coordinatorDatacenter, String sslEnabledDatacenters) {

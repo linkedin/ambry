@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.github.ambry.router.Callback;
@@ -34,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * These are the scaling units of the {@link RestServer} and can be scaled up and down independently of any other
  * component of the {@link RestServer}.
  */
-public class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
+class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
   private final RestServerMetrics restServerMetrics;
 
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<AsyncRequestWorker>();
@@ -397,8 +410,10 @@ class AsyncRequestWorker implements Runnable {
    * Processes the {@code asyncRequestInfo}. Discerns the type of {@link RestMethod} in the request and calls the right
    * function of the {@link BlobStorageService}.
    * @param asyncRequestInfo the currently dequeued {@link AsyncRequestInfo}.
+   * @throws RestServiceException if the request cannot be prepared for hand-off to the {@link BlobStorageService}.
    */
-  private void processRequest(AsyncRequestInfo asyncRequestInfo) {
+  private void processRequest(AsyncRequestInfo asyncRequestInfo)
+      throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     // needed to avoid double counting.
     long blobStorageProcessingTime = 0;
@@ -407,6 +422,7 @@ class AsyncRequestWorker implements Runnable {
       onRequestDequeue(asyncRequestInfo);
       RestResponseChannel restResponseChannel = asyncRequestInfo.restResponseChannel;
       RestMethod restMethod = restRequest.getRestMethod();
+      restRequest.prepare();
       logger.trace("Processing request {} with RestMethod {}", restRequest.getUri(), restMethod);
       long blobStorageProcessingStartTime = System.currentTimeMillis();
       switch (restMethod) {
@@ -451,7 +467,7 @@ class AsyncRequestWorker implements Runnable {
       }
       residualRequestInfo = requests.poll();
     }
-    if(discardCount > 0) {
+    if (discardCount > 0) {
       restServerMetrics.residualRequestQueueSize.inc(discardCount);
       logger.info("There were {} requests in flight during shutdown", discardCount);
     }

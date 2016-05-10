@@ -1,8 +1,22 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.coordinator;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -92,7 +106,8 @@ final class GetBlobOperationRequest extends GetOperationRequest {
   @Override
   protected void deserializeBody(InputStream inputStream)
       throws IOException, MessageFormatException {
-    getBlobOperation.setBlobOutput(MessageFormatRecord.deserializeBlob(inputStream));
+    BlobData blobData = MessageFormatRecord.deserializeBlob(inputStream);
+    getBlobOperation.setBlobOutput(new BlobOutput(blobData.getSize(), blobData.getStream()));
   }
 }
 

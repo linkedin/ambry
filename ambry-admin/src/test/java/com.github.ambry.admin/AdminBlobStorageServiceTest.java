@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.admin;
 
 import com.codahale.metrics.MetricRegistry;
@@ -6,6 +19,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -19,31 +33,30 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
-import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -230,7 +243,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void submitResponseTest()
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.shutdown();
     // handleResponse of AdminTestResponseHandler throws exception because it has been shutdown.
     try {
@@ -321,15 +334,15 @@ public class AdminBlobStorageServiceTest {
   public void postGetHeadDeleteTest()
       throws Exception {
     final int CONTENT_LENGTH = 1024;
-    ByteBuffer content = ByteBuffer.wrap(getRandomBytes(CONTENT_LENGTH));
+    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(CONTENT_LENGTH));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
     Map<String, String> userMetadata = new HashMap<String, String>();
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key1", "value1");
-    userMetadata.put(RestUtils.Headers.UserMetaData_Header_Prefix + "key2", "value2");
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
     getBlobAndVerify(blobId, headers, content);
@@ -349,6 +362,7 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
     String echoedText = getJsonizedResponseBody(channel).getString(EchoHandler.TEXT_KEY);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     assertEquals("Unexpected Content-Type", "application/json",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertEquals("Did not get expected response", inputText, echoedText);
@@ -374,7 +388,7 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests the {@link AdminBlobStorageService#ECHO} admin operation.
+   * Tests the {@link AdminBlobStorageService#GET_REPLICAS_FOR_BLOB_ID} admin operation.
    * <p/>
    * For the each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created.
    * The string representation is sent to the {@link AdminBlobStorageService} as a part of getReplicasForBlobId request.
@@ -391,6 +405,7 @@ public class AdminBlobStorageServiceTest {
       RestRequest restRequest = createGetReplicasForBlobIdRestRequest(blobId.getID());
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
+      assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
       assertEquals("Unexpected Content-Type", "application/json",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       String returnedReplicasStr =
@@ -484,7 +499,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void headForGetCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -551,7 +566,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void getCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -619,7 +634,7 @@ public class AdminBlobStorageServiceTest {
   public void postCallbackTest()
       throws Exception {
     BlobProperties blobProperties = new BlobProperties(0, "test-serviceId");
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
 
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
@@ -674,7 +689,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void deleteCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result null, exception null)
     // Exception is not null.
@@ -725,7 +740,7 @@ public class AdminBlobStorageServiceTest {
   @Test
   public void headCallbackTest()
       throws Exception {
-    String exceptionMsg = new String(getRandomBytes(10));
+    String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.reset();
     // the good case is tested through the postGetHeadDeleteTest() (result non-null, exception null)
     // Both arguments null
@@ -810,17 +825,6 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Gets a byte array of length {@code size} with random bytes.
-   * @param size the required length of the random byte array.
-   * @return a byte array of length {@code size} with random bytes.
-   */
-  private byte[] getRandomBytes(int size) {
-    byte[] bytes = new byte[size];
-    new Random().nextBytes(bytes);
-    return bytes;
-  }
-
-  /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param headers the {@link JSONObject} where the headers should be set.
@@ -857,14 +861,13 @@ public class AdminBlobStorageServiceTest {
    * Reads the response received from the {@link AdminBlobStorageService} and decodes it into a {@link JSONObject}.
    * @param channel the {@link ReadableStreamChannel} that was received from the {@link AdminBlobStorageService}.
    * @return the response decoded into a {@link JSONObject}.
-   * @throws IOException
-   * @throws JSONException
+   * @throws Exception
    */
   private JSONObject getJsonizedResponseBody(ReadableStreamChannel channel)
-      throws IOException, JSONException {
-    ByteBuffer responseBuffer = ByteBuffer.allocate((int) channel.getSize());
-    channel.read(new ByteBufferChannel(responseBuffer));
-    return new JSONObject(new String(responseBuffer.array()));
+      throws Exception {
+    CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel((int) channel.getSize());
+    channel.readInto(asyncWritableChannel, null).get();
+    return new JSONObject(new String(asyncWritableChannel.getData()));
   }
 
   /**
@@ -1079,10 +1082,9 @@ public class AdminBlobStorageServiceTest {
     ReadableStreamChannel response = doGet(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
-    ByteBuffer channelBuffer = ByteBuffer.allocate((int) response.getSize());
-    WritableByteChannel channel = new ByteBufferChannel(channelBuffer);
-    response.read(channel);
-    assertArrayEquals("GET content does not match original content", expectedContent.array(), channelBuffer.array());
+    CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel((int) response.getSize());
+    response.readInto(channel, null).get();
+    assertArrayEquals("GET content does not match original content", expectedContent.array(), channel.getData());
   }
 
   /**
@@ -1100,6 +1102,8 @@ public class AdminBlobStorageServiceTest {
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
     assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertEquals("Blob size does not match ", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
         expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
         restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
@@ -1118,25 +1122,6 @@ public class AdminBlobStorageServiceTest {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match",
           expectedHeaders.getString(RestUtils.Headers.OWNER_ID),
           restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
-    }
-    verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
-  }
-
-  /**
-   * Verifies User metadata headers from output, to that sent in during input
-   * @param expectedHeaders the expected headers in the response.
-   * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
-   * @throws JSONException
-   */
-  private void verifyUserMetadataHeaders(JSONObject expectedHeaders, MockRestResponseChannel restResponseChannel)
-      throws JSONException {
-    Iterator itr = expectedHeaders.keys();
-    while (itr.hasNext()) {
-      String key = (String) itr.next();
-      if (key.startsWith(RestUtils.Headers.UserMetaData_Header_Prefix)) {
-        String outValue = restResponseChannel.getHeader(key);
-        assertEquals("Value for " + key + "does not match in user metadata", expectedHeaders.getString(key), outValue);
-      }
     }
   }
 
@@ -1300,7 +1285,12 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  public Map<String, List<String>> getArgs() {
+  public Map<String, Object> getArgs() {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void prepare() {
     throw new IllegalStateException("Not implemented");
   }
 
@@ -1326,13 +1316,6 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IOException("Not implemented");
-  }
-
-  @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     throw new IllegalStateException("Not implemented");
   }
@@ -1346,13 +1329,6 @@ class BadRSC implements ReadableStreamChannel {
   @Override
   public long getSize() {
     return -1;
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    throw new IOException("Not implemented");
   }
 
   @Override

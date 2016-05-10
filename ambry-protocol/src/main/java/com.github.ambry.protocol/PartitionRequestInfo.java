@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
@@ -18,12 +31,12 @@ import java.util.List;
 public class PartitionRequestInfo {
 
   private final PartitionId partitionId;
-  private final ArrayList<BlobId> blobIds;
+  private final List<BlobId> blobIds;
   private long totalIdSize;
 
   private static final int Blob_Id_Count_Size_InBytes = 4;
 
-  public PartitionRequestInfo(PartitionId partitionId, ArrayList<BlobId> blobIds) {
+  public PartitionRequestInfo(PartitionId partitionId, List<BlobId> blobIds) {
     this.partitionId = partitionId;
     this.blobIds = blobIds;
     totalIdSize = 0;

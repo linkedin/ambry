@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
@@ -699,7 +712,8 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testRollingIndex() {
+  public void testRollingIndex()
+      throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -833,7 +847,8 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testExistsWithFileSpan() {
+  public void testExistsWithFileSpan()
+      throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -976,7 +991,8 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testFindEntries() {
+  public void testFindEntries()
+      throws IOException {
     // provide empty token and ensure we get everything till max
     StoreFindToken token = new StoreFindToken();
     MockClusterMap map = null;
@@ -1130,7 +1146,8 @@ public class PersistentIndexTest {
    * read from the latest segment.
    */
   @Test
-  public void testFindEntriesAdditional() {
+  public void testFindEntriesAdditional()
+      throws IOException {
     // provide token referencing an offset from before
     MockClusterMap map = null;
     try {
@@ -1489,7 +1506,8 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testFindDeletedEntries() {
+  public void testFindDeletedEntries()
+      throws IOException {
     // provide empty token and ensure we get everything till max
     StoreFindToken token = new StoreFindToken();
     MockClusterMap map = null;
@@ -1837,7 +1855,8 @@ public class PersistentIndexTest {
           public void remove() {
             throw new UnsupportedOperationException();
           }
-        };
+        }
+
         return new MockMessageStoreHardDeleteIterator(readSet);
       }
 

@@ -1,7 +1,21 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.codahale.metrics.JmxReporter;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
@@ -26,6 +40,8 @@ import org.slf4j.LoggerFactory;
  * 3. A {@link NioServer} - To receive requests and return responses via a REST protocol (HTTP).
  * 4. A {@link RestRequestHandler} and a {@link RestResponseHandler} - Scaling units that are responsible for
  * interfacing between the {@link NioServer} and the {@link BlobStorageService}.
+ * 5. A {@link PublicAccessLogger} - To assist in public access logging
+ * 6. A {@link RestServerState} - To maintain the health of the server
  * <p/>
  * Depending upon what is specified in the configuration file, the RestServer can start different implementations of
  * {@link NioServer} and {@link BlobStorageService} and behave accordingly.
@@ -48,6 +64,8 @@ public class RestServer {
   private final RestRequestHandler restRequestHandler;
   private final RestResponseHandler restResponseHandler;
   private final NioServer nioServer;
+  private final PublicAccessLogger publicAccessLogger;
+  private final RestServerState restServerState;
 
   /**
    * Creates an instance of RestServer.
@@ -75,7 +93,8 @@ public class RestServer {
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
     RestRequestMetricsTracker.setDefaults(clusterMap.getMetricRegistry());
-    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry());
+    restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
+    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry(), restServerState);
     try {
       RouterFactory routerFactory =
           Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
@@ -95,10 +114,11 @@ public class RestServer {
           .getObj(restServerConfig.restServerRequestHandlerFactory,
               restServerConfig.restServerRequestHandlerScalingUnitCount, restServerMetrics, blobStorageService);
       restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
-
+      publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
+          restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
       NioServerFactory nioServerFactory = Utils
           .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
-              restRequestHandler);
+              restRequestHandler, publicAccessLogger, restServerState);
       nioServer = nioServerFactory.getNioServer();
       if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
           || nioServer == null) {
@@ -150,6 +170,9 @@ public class RestServer {
       elapsedTime = System.currentTimeMillis() - restRequestHandlerStartTime;
       logger.info("NIO server start took {} ms", elapsedTime);
       restServerMetrics.nioServerStartTimeInMs.update(elapsedTime);
+
+      restServerState.markServiceUp();
+      logger.info("Service marked as up");
     } finally {
       long startupTime = System.currentTimeMillis() - startupBeginTime;
       logger.info("RestServer start took {} ms", startupTime);
@@ -165,6 +188,8 @@ public class RestServer {
     long shutdownBeginTime = System.currentTimeMillis();
     try {
       //ordering is important.
+      restServerState.markServiceDown();
+      logger.info("Service marked as down ");
       nioServer.shutdown();
       long nioServerShutdownTime = System.currentTimeMillis();
       long elapsedTime = nioServerShutdownTime - shutdownBeginTime;

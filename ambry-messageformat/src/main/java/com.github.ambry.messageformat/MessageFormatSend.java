@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.messageformat;
 
 import com.github.ambry.network.Send;
@@ -7,14 +20,14 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
-import java.io.InputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -149,6 +162,17 @@ public class MessageFormatSend implements Send {
                     SystemTime.getInstance().milliseconds() - startTime);
                 logger.trace("Sending user metadata for message relativeOffset : {} size : {}",
                     infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
+              } else if (flag == MessageFormatFlags.BlobInfo) {
+                int blobPropertiesRecordPlusUserMetadataRecordSize =
+                    headerFormat.getBlobRecordRelativeOffset() - headerFormat.getBlobPropertiesRecordRelativeOffset();
+
+                infoList.add(i, new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(),
+                    blobPropertiesRecordPlusUserMetadataRecordSize));
+                totalSizeToWrite += blobPropertiesRecordPlusUserMetadataRecordSize;
+                logger.trace("Calculate offsets, get total size of blob info time: {}",
+                    SystemTime.getInstance().milliseconds() - startTime);
+                logger.trace("Sending blob info (blob properties + user metadata) for message relativeOffset : {} "
+                    + "size : {}", infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
               } else if (flag == MessageFormatFlags.Blob) {
                 long blobRecordSize =
                     headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat

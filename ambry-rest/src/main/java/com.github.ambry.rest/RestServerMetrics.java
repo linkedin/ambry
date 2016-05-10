@@ -1,3 +1,16 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.rest;
 
 import com.codahale.metrics.Counter;
@@ -13,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p/>
  * Exports metrics that are triggered by Rest infrastructure to the provided {@link MetricRegistry}.
  */
-public class RestServerMetrics {
+class RestServerMetrics {
   private final MetricRegistry metricRegistry;
   private final AtomicInteger asyncRequestWorkerIndex = new AtomicInteger(0);
 
@@ -81,7 +94,7 @@ public class RestServerMetrics {
    * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
-  public RestServerMetrics(MetricRegistry metricRegistry) {
+  public RestServerMetrics(MetricRegistry metricRegistry, final RestServerState restServerState) {
     this.metricRegistry = metricRegistry;
 
     // Rates
@@ -176,6 +189,14 @@ public class RestServerMetrics {
     restServerStartTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
     routerCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
+
+    Gauge<Integer> restServerStatus = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return restServerState.isServiceUp() ? 1 : 0;
+      }
+    };
+    metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);
   }
 
   /**

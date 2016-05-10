@@ -1,14 +1,25 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
@@ -18,7 +29,7 @@ public class ByteBufferRSC implements ReadableStreamChannel {
   /**
    * List of "events" (function calls) that can occur inside ByteBufferRSC.
    */
-  public static enum Event {
+  public enum Event {
     GetSize,
     ReadInto,
     IsOpen,
@@ -44,7 +55,6 @@ public class ByteBufferRSC implements ReadableStreamChannel {
 
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean channelEmptied = new AtomicBoolean(false);
-  private final ReentrantLock bufferReadLock = new ReentrantLock();
   private final ByteBuffer buffer;
   private final List<EventListener> listeners = new ArrayList<EventListener>();
 
@@ -60,28 +70,6 @@ public class ByteBufferRSC implements ReadableStreamChannel {
   public long getSize() {
     onEventComplete(Event.GetSize);
     return buffer.capacity();
-  }
-
-  @Override
-  @Deprecated
-  public int read(WritableByteChannel channel)
-      throws IOException {
-    // NOTE: This function is deprecated and will be removed soon. Therefore no changes have been made here.
-    int bytesWritten = -1;
-    if (!channelOpen.get()) {
-      throw new ClosedChannelException();
-    } else {
-      bufferReadLock.lock();
-      try {
-        if (buffer.hasRemaining()) {
-          bytesWritten = channel.write(buffer);
-        }
-      } finally {
-        bufferReadLock.unlock();
-      }
-    }
-    onEventComplete(Event.ReadInto);
-    return bytesWritten;
   }
 
   @Override
