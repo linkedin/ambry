@@ -57,7 +57,7 @@ public class GetBlobInfoOperationTest {
 
   private int requestParallelism = 2;
   private int successTarget = 1;
-  private final RouterConfig routerConfig;
+  private RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap;
   private final MockServerLayout mockServerLayout;
   private final int replicasCount;
@@ -89,7 +89,7 @@ public class GetBlobInfoOperationTest {
 
   public GetBlobInfoOperationTest()
       throws Exception {
-    VerifiableProperties vprops = getNonBlockingRouterProperties();
+    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
@@ -338,6 +338,28 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testSuccessInThePresenceOfVariousErrors()
       throws Exception {
+    // The put for the blob being requested happened.
+    String dcWherePutHappened = routerConfig.routerDatacenterName;
+
+    // test requests coming in from local dc as well as cross-colo.
+    Properties props = getNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", "DC1");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+    testVariousErrors(dcWherePutHappened);
+
+    props = getNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", "DC2");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+    testVariousErrors(dcWherePutHappened);
+
+    props = getNonBlockingRouterProperties();
+    props.setProperty("router.datacenter.name", "DC3");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+    testVariousErrors(dcWherePutHappened);
+  }
+
+  private void testVariousErrors(String dcWherePutHappened)
+      throws Exception {
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, mockClusterMap, responseHandler, blobIdStr, operationFuture, null, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
@@ -355,11 +377,10 @@ public class GetBlobInfoOperationTest {
     mockServers.get(7).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
     mockServers.get(8).setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
 
-    // set the status of one of the servers in the local datacenter to success (we depend on an actual put of the blob
-    // in order to get back the BlobInfo, and the put would have gone only to the local datacenter).
+    // clear the hard error in one of the servers in the datacenter where the put happened.
     for (int i = 0; i < mockServers.size(); i++) {
       MockServer mockServer = mockServers.get(i);
-      if (mockServer.getDataCenter().equals(routerConfig.routerDatacenterName)) {
+      if (mockServer.getDataCenter().equals(dcWherePutHappened)) {
         mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
         break;
       }
@@ -417,13 +438,13 @@ public class GetBlobInfoOperationTest {
    * Get the properties for the {@link NonBlockingRouter}.
    * @return the constructed properties.
    */
-  private VerifiableProperties getNonBlockingRouterProperties() {
+  private Properties getNonBlockingRouterProperties() {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.get.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.get.success.target", Integer.toString(successTarget));
-    return new VerifiableProperties(properties);
+    return properties;
   }
 }
 

@@ -39,6 +39,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -66,12 +67,12 @@ class MockServer {
 
   /**
    * Take in a request in the form of {@link Send} and return a response in the form of a
-   * {@link MockBoundedByteBufferReceive}.
+   * {@link BoundedByteBufferReceive}.
    * @param send the request.
    * @return the response.
    * @throws IOException if there was an error in interpreting the request.
    */
-  public MockBoundedByteBufferReceive send(Send send)
+  public BoundedByteBufferReceive send(Send send)
       throws IOException {
     if (!shouldRespond) {
       return null;
@@ -97,12 +98,19 @@ class MockServer {
     response.writeTo(channel);
     ByteBuffer payload = channel.getBuffer();
     payload.flip();
-    // read the size off. the size is used by the client to allocate the buffer and then interpret the response.
-    // MockServer abstracts it away at a level above that and returns the "allocated buffer".
-    payload.getLong();
-    return new MockBoundedByteBufferReceive(payload);
+    BoundedByteBufferReceive boundedByteBufferReceive = new BoundedByteBufferReceive();
+    boundedByteBufferReceive.readFrom(Channels.newChannel(new ByteBufferInputStream(payload)));
+    return boundedByteBufferReceive;
   }
 
+  /**
+   * Make a {@link PutResponse} for the given {@link PutRequest} for which the given {@link ServerErrorCode} was
+   * encountered.
+   * @param putRequest the {@link PutRequest} for which the response is being constructed.
+   * @param putError the {@link ServerErrorCode} that was encountered.
+   * @return the created {@link PutResponse}
+   * @throws IOException if there was an error constructing the response.
+   */
   PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError)
       throws IOException {
     if (putError == ServerErrorCode.No_Error) {
@@ -111,6 +119,15 @@ class MockServer {
     return new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), putError);
   }
 
+  /**
+   * Make a {@link GetResponse} for the given {@link GetRequest} for which the given {@link ServerErrorCode} was
+   * encountered. The request could be for BlobInfo or for Blob (the only two options that the router would request
+   * for).
+   * @param getRequest the {@link GetRequest} for which the response is being constructed.
+   * @param getError the {@link ServerErrorCode} that was encountered.
+   * @return the constructed {@link GetResponse}
+   * @throws IOException if there was an error constructing the response.
+   */
   GetResponse makeGetResponse(GetRequest getRequest, ServerErrorCode getError)
       throws IOException {
     GetResponse getResponse;
@@ -194,11 +211,21 @@ class MockServer {
       getResponse = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,
           responseSend, serverError);
     } else {
-      getResponse = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), serverError);
+      getResponse = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+          new ArrayList<PartitionResponseInfo>(), new ByteBufferSend(ByteBuffer.allocate(0)), serverError);
     }
     return getResponse;
   }
 
+  /**
+   *
+   * Make a {@link DeleteResponse} for the given {@link DeleteRequest} for which the given {@link ServerErrorCode} was
+   * encountered.
+   * @param deleteRequest the {@link DeleteRequest} for which the response is being constructed.
+   * @param deleteError the {@link ServerErrorCode} that was encountered.
+   * @return the constructed {@link DeleteResponse}
+   * @throws IOException if there was an error constructing the response.
+   */
   DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError)
       throws IOException {
     String blobIdString = deleteRequest.getBlobId().getID();
@@ -289,37 +316,13 @@ class MockServer {
   }
 
   /**
-   * Set the mapping relationship between a {@code blobIdString} and the {@link ServerErrorCode} this server should return.
+   * Set the mapping relationship between a {@code blobIdString} and the {@link ServerErrorCode} this server should
+   * return.
    * @param blobIdString The key in this mapping relation.
    * @param code The {@link ServerErrorCode} for the {@code blobIdString}.
    */
   public void setBlobIdToServerErrorCode(String blobIdString, ServerErrorCode code) {
     blobIdToServerErrorCode.put(blobIdString, code);
-  }
-}
-
-/**
- * A mock implementation of {@link BoundedByteBufferReceive} that constructs a buffer with the passed in correlation
- * id and returns that buffer as part of {@link #getPayload()}.
- */
-class MockBoundedByteBufferReceive extends BoundedByteBufferReceive {
-  private final ByteBuffer buf;
-
-  /**
-   * Construct a MockBoundedByteBufferReceive with the given correlation id.
-   * @param buf the ByteBuffer that is the payload of this object.
-   */
-  public MockBoundedByteBufferReceive(ByteBuffer buf) {
-    this.buf = buf;
-  }
-
-  /**
-   * Return the buffer associated with this object.
-   * @return the buffer associated with this object.
-   */
-  @Override
-  public ByteBuffer getPayload() {
-    return buf;
   }
 }
 
