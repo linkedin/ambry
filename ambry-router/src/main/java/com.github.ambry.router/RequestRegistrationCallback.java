@@ -17,9 +17,10 @@ import com.github.ambry.network.RequestInfo;
 
 
 /**
- * The callback to be used when delete requests are created and needs to be sent out. The {@link DeleteManager} passes this
- * callback to the {@link DeleteOperation}.
+ * The callback to be used when requests are created and needs to be sent out. The operation manager passes this
+ * callback to the associated operation class and the operation uses this callback when requests are created and
+ * need to be sent out.
  */
-interface DeleteRequestRegistrationCallback {
-  public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo request);
+public interface RequestRegistrationCallback<T> {
+  public void registerRequestToSend(T routerOperation, RequestInfo request);
 }

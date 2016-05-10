@@ -154,6 +154,7 @@ project(':ambry-coordinator') {
                 project(':ambry-protocol'),
                 project(':ambry-network')
         testCompile project(':ambry-clustermap').sourceSets.test.output
+        testCompile project(':ambry-network').sourceSets.test.output
     }
 }
 
