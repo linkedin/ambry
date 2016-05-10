@@ -81,7 +81,8 @@ public class ServerSSLTest {
   }
 
   @AfterClass
-  public static void cleanup() {
+  public static void cleanup()
+      throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.

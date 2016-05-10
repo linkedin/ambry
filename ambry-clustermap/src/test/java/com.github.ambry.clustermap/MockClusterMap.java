@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.io.DataInputStream;
@@ -27,87 +26,76 @@ import java.util.Map;
 
 
 /**
- * Mock cluster map for unit tests. This sets up a three node cluster
- * with 3 mount points in each. Each mount point has three partitions
- * and each partition has 3 replicas on each node.
+ * Mock cluster map for unit tests.
  */
 public class MockClusterMap implements ClusterMap {
 
   private final Map<Long, PartitionId> partitions;
   private final List<MockDataNodeId> dataNodes;
-  private int currentPlainTextPort = 62000;
-  private int currentSSLPort = 63000;
+  private final int numMountPointsPerNode;
 
+  /**
+   * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 partitions/replicas per
+   * mount point which amount to a total of 9 replicas per node and 81 replicas across the cluster. If this cluster map
+   * is going to be used to start a cluster, use it judiciously to avoid resource consumption issues on the test
+   * machine.
+   */
   public MockClusterMap()
       throws IOException {
-    this(false);
+    this(false, 9, 3, 3);
   }
 
-  public MockClusterMap(boolean enableSSLPorts)
+  /**
+   * Creates and returns a mock cluster map.
+   * <p>
+   *
+   * In doing so, this actually creates the mock cluster itself, by setting up nodes,
+   * mount points and replicas for partitions on these nodes. (The mock nodes will not be started automatically,
+   * however).
+   * <p>
+   *
+   * The parameters to this method determine the number of mock datanodes that will be created in the cluster,
+   * the number of mount points that will be created on each of these mock datanodes,
+   * and the number of stores that will be created on each mount point. Stores correspond to replicas,
+   * so the number of stores also determines the number of replicas that will be created on a node (which is
+   * going to be the number of mount points per node multiplied by the number of stores per mount point). Since every
+   * partition will be present on every datanode, this is also the number of partitions that will be created across the
+   * cluster. The total number of replicas across the cluster will therefore be this number multiplied by the
+   * number of nodes. This is therefore the number of stores that will be created by the test on the machine on which
+   * it runs - and the resource consumption on the machine is a function of this number. Tests that start a cluster or
+   * a server should therefore keep these parameters to the minimum required for testing intended functionality
+   * correctly (however, tests that only create the MockClusterMap but do not start the cluster or servers will not
+   * end up using any significant resources, and should be fine).
+   *
+   * @param numNodes number of mock datanodes that will be created (every 3 of which will be put in a separate
+   *                 datacenter).
+   * @param numMountPointsPerNode number of mount points (mocking disks) that will be created in each datanode.
+   * @param numStoresPerMountPoint the number of stores that will be created on each mount point.
+   */
+  public MockClusterMap(boolean enableSSLPorts, int numNodes, int numMountPointsPerNode, int numStoresPerMountPoint)
       throws IOException {
-
-    dataNodes = new ArrayList<MockDataNodeId>(9);
-    // create 3 nodes with each having 3 mount paths
-    if (enableSSLPorts) {
-      MockDataNodeId dataNodeId1 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC1");
-      MockDataNodeId dataNodeId2 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC1");
-      MockDataNodeId dataNodeId3 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC1");
-
-      MockDataNodeId dataNodeId4 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC2");
-      MockDataNodeId dataNodeId5 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC2");
-      MockDataNodeId dataNodeId6 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC2");
-
-      MockDataNodeId dataNodeId7 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC3");
-      MockDataNodeId dataNodeId8 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC3");
-      MockDataNodeId dataNodeId9 =
-          createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC3");
-
-      dataNodes.add(dataNodeId1);
-      dataNodes.add(dataNodeId2);
-      dataNodes.add(dataNodeId3);
-      dataNodes.add(dataNodeId4);
-      dataNodes.add(dataNodeId5);
-      dataNodes.add(dataNodeId6);
-      dataNodes.add(dataNodeId7);
-      dataNodes.add(dataNodeId8);
-      dataNodes.add(dataNodeId9);
-    } else {
-      MockDataNodeId dataNodeId1 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC1");
-      MockDataNodeId dataNodeId2 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC1");
-      MockDataNodeId dataNodeId3 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC1");
-
-      MockDataNodeId dataNodeId4 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC2");
-      MockDataNodeId dataNodeId5 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC2");
-      MockDataNodeId dataNodeId6 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC2");
-
-      MockDataNodeId dataNodeId7 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC3");
-      MockDataNodeId dataNodeId8 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC3");
-      MockDataNodeId dataNodeId9 = createDataNode(getListOfPorts(currentPlainTextPort++), "DC3");
-
-      dataNodes.add(dataNodeId1);
-      dataNodes.add(dataNodeId2);
-      dataNodes.add(dataNodeId3);
-      dataNodes.add(dataNodeId4);
-      dataNodes.add(dataNodeId5);
-      dataNodes.add(dataNodeId6);
-      dataNodes.add(dataNodeId7);
-      dataNodes.add(dataNodeId8);
-      dataNodes.add(dataNodeId9);
+    this.numMountPointsPerNode = numMountPointsPerNode;
+    dataNodes = new ArrayList<MockDataNodeId>(numNodes);
+    //Every group of 3 nodes will be put in the same DC.
+    int dcIndex = 0;
+    int currentPlainTextPort = 62000;
+    int currentSSLPort = 63000;
+    for (int i = 0; i < numNodes; i++) {
+      if (i % 3 == 0) {
+        dcIndex++;
+      }
+      if (enableSSLPorts) {
+        dataNodes.add(createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), "DC" + dcIndex));
+      } else {
+        dataNodes.add(createDataNode(getListOfPorts(currentPlainTextPort++), "DC" + dcIndex));
+      }
     }
     partitions = new HashMap<Long, PartitionId>();
 
-    // create three partitions on each mount path
+    // create partitions
     long partitionId = 0;
     for (int i = 0; i < dataNodes.get(0).getMountPaths().size(); i++) {
-      for (int j = 0; j < 3; j++) {
+      for (int j = 0; j < numStoresPerMountPoint; j++) {
         PartitionId id = new MockPartitionId(partitionId, dataNodes, i);
         partitions.put(partitionId, id);
         partitionId++;
@@ -142,24 +130,15 @@ public class MockClusterMap implements ClusterMap {
     File f = null;
     int port = getPlainTextPort(ports);
     try {
-      List<String> mountPaths = new ArrayList<String>(3);
+      List<String> mountPaths = new ArrayList<String>(numMountPointsPerNode);
       f = File.createTempFile("ambry", ".tmp");
-      File mountFile1 = new File(f.getParent(), "mountpathfile" + port + "0");
-      mountFile1.mkdir();
-      String mountPath1 = mountFile1.getAbsolutePath();
-
-      File mountFile2 = new File(f.getParent(), "mountpathfile" + port + "1");
-      mountFile2.mkdir();
-      String mountPath2 = mountFile2.getAbsolutePath();
-
-      File mountFile3 = new File(f.getParent(), "mountpathfile" + port + "2");
-      mountFile3.mkdir();
-      String mountPath3 = mountFile3.getAbsolutePath();
-      mountPaths.add(mountPath1);
-      mountPaths.add(mountPath2);
-      mountPaths.add(mountPath3);
-      MockDataNodeId dataNode = new MockDataNodeId(ports, mountPaths, datacenter);
-      return dataNode;
+      for (int i = 0; i < numMountPointsPerNode; i++) {
+        File mountFile = new File(f.getParent(), "mountpathfile" + port + i);
+        deleteFileOrDirectory(mountFile);
+        mountFile.mkdir();
+        mountPaths.add(mountFile.getAbsolutePath());
+      }
+      return new MockDataNodeId(ports, mountPaths, datacenter);
     } finally {
       if (f != null) {
         f.delete();
@@ -229,7 +208,8 @@ public class MockClusterMap implements ClusterMap {
     return new MetricRegistry();
   }
 
-  public void cleanup() {
+  public void cleanup()
+      throws IOException {
     for (PartitionId partitionId : partitions.values()) {
       MockPartitionId mockPartition = (MockPartitionId) partitionId;
       mockPartition.cleanUp();
@@ -239,11 +219,29 @@ public class MockClusterMap implements ClusterMap {
       List<String> mountPaths = ((MockDataNodeId) dataNode).getMountPaths();
       for (String mountPath : mountPaths) {
         File mountPathDir = new File(mountPath);
-        for (File file : mountPathDir.listFiles()) {
-          file.delete();
-        }
-        mountPathDir.delete();
+        deleteFileOrDirectory(mountPathDir);
       }
+    }
+  }
+
+  private static boolean deleteFileOrDirectory(File f)
+      throws IOException {
+    if (f.exists()) {
+      if (f.isDirectory()) {
+        File[] children = f.listFiles();
+        if (children == null) {
+          throw new IOException("Error listing files of the directory");
+        }
+        for (File c : children) {
+          deleteFileOrDirectory(c);
+        }
+      }
+      if (!f.delete()) {
+        throw new IOException("Failed to delete file: " + f);
+      }
+      return true;
+    } else {
+      return false;
     }
   }
 
