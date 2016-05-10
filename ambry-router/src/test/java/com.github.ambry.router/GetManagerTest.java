@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.RouterConfig;
@@ -80,11 +81,11 @@ public class GetManagerTest {
   }
 
   /**
-   * Tests get blob info of simple blobs
+   * Tests getBlobInfo() and getBlob() of simple blobs
    * @throws Exception
    */
   @Test
-  public void testSimpleBlobGetBlobInfoSuccess()
+  public void testSimpleBlobGetSuccess()
       throws Exception {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize);
@@ -93,15 +94,16 @@ public class GetManagerTest {
     Assert.assertTrue("Blob properties should match",
         RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
+    getBlobAndCompareContent(blobId);
     router.close();
   }
 
   /**
-   * Tests get blob info of composite blobs
+   * Tests getBlobInfo() and getBlob() of composite blobs
    * @throws Exception
    */
   @Test
-  public void testCompositeBlobGetBlobInfoSuccess()
+  public void testCompositeBlobGetSuccess()
       throws Exception {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize * 6 + 11);
@@ -110,6 +112,7 @@ public class GetManagerTest {
     Assert.assertTrue("Blob properties should match",
         RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
+    getBlobAndCompareContent(blobId);
     router.close();
   }
 
@@ -133,6 +136,34 @@ public class GetManagerTest {
       Assert.assertEquals("Exception received should be router closed error", RouterErrorCode.RouterClosed,
           routerException.getErrorCode());
     }
+
+    try {
+      router.getBlob(blobId).get();
+      Assert.fail("operation should have thrown");
+    } catch (ExecutionException e) {
+      RouterException routerException = (RouterException) e.getCause();
+      Assert.assertEquals("Exception received should be router closed error", RouterErrorCode.RouterClosed,
+          routerException.getErrorCode());
+    }
+  }
+
+  /**
+   * Do a getBlob on the given blob id and ensure that all the data is fetched and is correct.
+   * @param blobId the id of the blob (simple or composite) that needs to be fetched and compared.
+   * @throws Exception
+   */
+  private void getBlobAndCompareContent(String blobId)
+      throws Exception {
+    ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
+    router.getBlob(blobId).get().readInto(getChannel, null);
+    int readBytes = 0;
+    do {
+      ByteBuffer buf = getChannel.getNextChunk();
+      while (buf.hasRemaining()) {
+        Assert.assertEquals("Get and Put blob content should match", putContent[readBytes++], buf.get());
+      }
+      getChannel.resolveOldestChunk(null);
+    } while (readBytes < putContent.length);
   }
 
   /**

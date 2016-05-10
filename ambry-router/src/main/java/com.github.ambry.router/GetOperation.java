@@ -27,6 +27,7 @@ import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.Time;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,8 +45,8 @@ abstract class GetOperation<T> {
   protected final Callback<T> operationCallback;
   protected final BlobId blobId;
   protected final Time time;
-  protected boolean operationCompleted = false;
-  protected Exception operationException;
+  protected volatile boolean operationCompleted = false;
+  protected final AtomicReference<Exception> operationException = new AtomicReference<>();
   protected T operationResult;
 
   private static final Logger logger = LoggerFactory.getLogger(GetOperation.class);
@@ -58,19 +59,20 @@ abstract class GetOperation<T> {
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blobId of the associated blob in string form.
    * @param futureResult the future that will contain the result of the operation.
-   * @param callback the callback that is to be called when the operation completes.
+   * @param operationCallback the callback that is to be called when the operation completes.
    * @param time the {@link Time} instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, FutureResult<T> futureResult, Callback<T> callback, Time time)
+      ResponseHandler responseHandler, String blobIdStr, FutureResult<T> futureResult, Callback<T> operationCallback,
+      Time time)
       throws RouterException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.operationFuture = futureResult;
-    this.operationCallback = callback;
+    this.operationCallback = operationCallback;
     this.time = time;
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
   }
@@ -96,7 +98,7 @@ abstract class GetOperation<T> {
    * @return exception associated with this operation if it failed; null otherwise.
    */
   Exception getOperationException() {
-    return operationException;
+    return operationException.get();
   }
 
   /**
@@ -143,29 +145,10 @@ abstract class GetOperation<T> {
   abstract void handleResponse(ResponseInfo responseInfo);
 
   /**
-   * Process the given {@link ServerErrorCode} and set operation status accordingly.
-   * @param errorCode the {@link ServerErrorCode} to process.
+   * Abort operation by invoking any callbacks and updating futures with an exception.
+   * @param abortCause the exception that is the cause for the abort.
    */
-  void processServerError(ServerErrorCode errorCode) {
-    switch (errorCode) {
-      case Blob_Deleted:
-        logger.trace("Requested blob was deleted");
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDeleted));
-        break;
-      case Blob_Expired:
-        logger.trace("Requested blob is expired");
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobExpired));
-        break;
-      case Blob_Not_Found:
-        logger.trace("Requested blob was not found on this server");
-        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
-        break;
-      default:
-        setOperationException(
-            new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
-        break;
-    }
-  }
+  abstract void abort(Exception abortCause);
 
   /**
    * Set the exception associated with this operation.
@@ -174,9 +157,9 @@ abstract class GetOperation<T> {
    * @param exception the {@link RouterException} to possibly set.
    */
   void setOperationException(RouterException exception) {
-    if (operationException == null || exception.getErrorCode() == RouterErrorCode.BlobDeleted
+    if (operationException.get() == null || exception.getErrorCode() == RouterErrorCode.BlobDeleted
         || exception.getErrorCode() == RouterErrorCode.BlobExpired) {
-      operationException = exception;
+      operationException.set(exception);
     }
   }
 

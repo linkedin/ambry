@@ -138,7 +138,7 @@ public class ChunkFillTest {
         if (putChunk.isFree()) {
           continue;
         }
-        Assert.assertEquals("Chunk should be ready.", ChunkState.Ready, putChunk.getState());
+        Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
         ByteBuffer buf = putChunk.buf;
         totalSizeWritten += buf.remaining();
         compositeBuffers[putChunk.getChunkIndex()] = ByteBuffer.allocate(buf.remaining()).put(buf);

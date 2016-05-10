@@ -99,10 +99,9 @@ class GetManager {
     try {
       GetBlobInfoOperation getBlobInfoOperation =
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, futureResult,
-              callback, time);
+              callback, operationCompleteCallback, time);
       getOperations.add(getBlobInfoOperation);
     } catch (RouterException e) {
-      // @todo: refactor after getBlob is implemented.
       routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
@@ -116,7 +115,15 @@ class GetManager {
    */
   void submitGetBlobOperation(String blobId, FutureResult<ReadableStreamChannel> futureResult,
       Callback<ReadableStreamChannel> callback) {
-    // @todo
+    try {
+      GetBlobOperation getBlobOperation =
+          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, futureResult, callback,
+              operationCompleteCallback, time);
+      getOperations.add(getBlobOperation);
+    } catch (RouterException e) {
+      routerMetrics.operationDequeuingRate.mark();
+      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
+    }
   }
 
   /**
@@ -131,25 +138,10 @@ class GetManager {
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (GetOperation op : getOperations) {
       op.poll(requestRegistrationCallback);
-      if (op.isOperationComplete() && getOperations.remove(op)) {
-        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
-        // operation actually gets removed from the set of operations. See comment within close().
-        onComplete(op);
+      if (op.isOperationComplete()) {
+        getOperations.remove(op);
       }
     }
-  }
-
-  /**
-   * Called for a {@link GetOperation} when the operation is complete. Any cleanup that the GetManager needs to do
-   * with respect to this operation will have to be done here. The GetManager also finishes the operation by
-   * performing the callback and notification.
-   * @param op the {@link PutOperation} that has completed.
-   */
-  void onComplete(GetOperation op) {
-    // @todo: refactor when getBlob is implemented.
-    routerMetrics.operationDequeuingRate.mark();
-    operationCompleteCallback
-        .completeOperation(op.getFuture(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
 
   /**
@@ -161,8 +153,9 @@ class GetManager {
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
       getOperation.handleResponse(responseInfo);
-      if (getOperation.isOperationComplete() && getOperations.remove(getOperation)) {
-        onComplete(getOperation);
+      if (getOperation.isOperationComplete()) {
+        getOperations.remove(getOperation);
+        routerMetrics.operationDequeuingRate.mark();
       }
     }
   }
@@ -177,10 +170,8 @@ class GetManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (getOperations.remove(op)) {
-        // @todo: refactor when getBlob is implemented.
         routerMetrics.operationDequeuingRate.mark();
-        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null,
-            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+        op.abort(new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
       }
     }
   }

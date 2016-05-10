@@ -16,13 +16,13 @@ package com.github.ambry.router;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
@@ -40,7 +40,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
@@ -48,37 +51,41 @@ import org.junit.Test;
 
 
 /**
- * Tests for {@link GetBlobInfoOperation}
+ * Tests for {@link GetBlobOperation}
  */
-public class GetBlobInfoOperationTest {
+public class GetBlobOperationTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
-  private static final int BLOB_SIZE = 100;
   private static final int BLOB_USER_METADATA_SIZE = 10;
+
+  private final MockTime time = new MockTime();
+  private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<>();
+  private final Random random = new Random();
+  private final FutureResult<ReadableStreamChannel> operationFuture = new FutureResult<>();
 
   private int requestParallelism = 2;
   private int successTarget = 1;
+  private int maxChunkSize;
+  private int blobSize = 1000;
   private RouterConfig routerConfig;
+  private MockClusterMap mockClusterMap;
   private NonBlockingRouterMetrics routerMetrics;
-  private final MockClusterMap mockClusterMap;
-  private final MockServerLayout mockServerLayout;
-  private final int replicasCount;
-  private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
-  private final ResponseHandler responseHandler;
-  private final MockNetworkClientFactory networkClientFactory;
-  private final NetworkClient networkClient;
-  private final MockTime time = new MockTime();
-  private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<>();
-  private final NonBlockingRouter router;
-  private final Random random = new Random();
-  private final String blobIdStr;
-  private final BlobProperties blobProperties;
-  private final byte[] userMetadata;
-  private final byte[] putContent;
+  private MockServerLayout mockServerLayout;
+  private int replicasCount;
+  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
+  private ResponseHandler responseHandler;
+  private MockNetworkClientFactory networkClientFactory;
+  private NetworkClient networkClient;
+  private VerifiableProperties vprops;
+  private NonBlockingRouter router;
+  private String blobIdStr;
+  private BlobProperties blobProperties;
+  private byte[] userMetadata;
+  private byte[] putContent;
+
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
-  private final FutureResult<BlobInfo> operationFuture = new FutureResult<>();
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;
@@ -93,28 +100,10 @@ public class GetBlobInfoOperationTest {
   private final AtomicInteger operationsCount = new AtomicInteger(0);
   private final OperationCompleteCallback operationCompleteCallback = new OperationCompleteCallback(operationsCount);
 
-  public GetBlobInfoOperationTest()
-      throws Exception {
-    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
-    routerConfig = new RouterConfig(vprops);
-    mockClusterMap = new MockClusterMap();
-    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
-    mockServerLayout = new MockServerLayout(mockClusterMap);
-    replicasCount = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
-    responseHandler = new ResponseHandler(mockClusterMap);
-    networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-        CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
-    router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(new MetricRegistry()),
-        networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, time);
-    blobProperties = new BlobProperties(BLOB_SIZE, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    userMetadata = new byte[BLOB_USER_METADATA_SIZE];
-    random.nextBytes(userMetadata);
-    putContent = new byte[BLOB_SIZE];
-    random.nextBytes(putContent);
-    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-    blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel).get();
-    router.close();
-    networkClient = networkClientFactory.getNetworkClient();
+  public GetBlobOperationTest() {
+    // Defaults. Tests should override these as appropriate.
+    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
   }
 
   @After
@@ -126,67 +115,141 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
-   * Test {@link GetBlobInfoOperation} instantiation and validate the get methods.
+   * Instantiate a router, perform a put, close the router. The blob that was put will be saved in the MockServer,
+   * and can be queried by the getBlob operations in the test.
+   */
+  private void doPut()
+      throws Exception {
+    requestParallelism = 3;
+    successTarget = 2;
+    mockSelectorState.set(MockSelectorState.Good);
+    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
+    routerConfig = new RouterConfig(vprops);
+    mockClusterMap = new MockClusterMap();
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
+    mockServerLayout = new MockServerLayout(mockClusterMap);
+    replicasCount = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
+    responseHandler = new ResponseHandler(mockClusterMap);
+    networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+        CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
+    router =
+        new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(new MetricRegistry()), networkClientFactory,
+            new LoggingNotificationSystem(), mockClusterMap, time);
+    blobProperties = new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    userMetadata = new byte[BLOB_USER_METADATA_SIZE];
+    random.nextBytes(userMetadata);
+    putContent = new byte[blobSize];
+    random.nextBytes(putContent);
+    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+    blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel).get();
+    router.close();
+    networkClient = networkClientFactory.getNetworkClient();
+    resetConfigsForGet();
+  }
+
+  /**
+   * Recreate the configs for the router to be used by gets.
+   */
+  private void resetConfigsForGet() {
+    requestParallelism = 2;
+    successTarget = 1;
+    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
+    routerConfig = new RouterConfig(vprops);
+  }
+
+  /**
+   * Test {@link GetBlobOperation} instantiation and validate the get methods.
    * @throws Exception
    */
   @Test
   public void testInstantiation()
       throws Exception {
+    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    blobSize = maxChunkSize * 5;
+    doPut();
     String blobIdStr = (new BlobId(mockClusterMap.getWritablePartitionIds().get(0))).getID();
-    Callback<BlobInfo> operationCallback = new Callback<BlobInfo>() {
+    Callback<ReadableStreamChannel> operationCallback = new Callback<ReadableStreamChannel>() {
       @Override
-      public void onCompletion(BlobInfo result, Exception exception) {
+      public void onCompletion(ReadableStreamChannel result, Exception exception) {
         // no op.
       }
     };
 
     // test a bad case
     try {
-      new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id",
-          operationFuture, operationCallback, operationCompleteCallback, time);
-      Assert.fail("Instantiation of GetBlobInfo operation with an invalid blob id must fail");
+      new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", operationFuture,
+          operationCallback, operationCompleteCallback, time);
+      Assert.fail("Instantiation of GetReadableStreamChannel operation with an invalid blob id must fail");
     } catch (RouterException e) {
-      Assert
-          .assertEquals("Unexpected exception received on creating GetBlobInfoOperation", RouterErrorCode.InvalidBlobId,
-              e.getErrorCode());
+      Assert.assertEquals("Unexpected exception received on creating GetBlobOperation", RouterErrorCode.InvalidBlobId,
+          e.getErrorCode());
     }
 
     // test a good case
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, operationCallback, operationCompleteCallback, time);
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
+            operationCallback, operationCompleteCallback, time);
 
-    Assert.assertEquals("Callback must match", operationCallback, op.getCallback());
+    Assert.assertEquals("Callbacks must match", operationCallback, op.getCallback());
     Assert.assertEquals("Futures must match", operationFuture, op.getFuture());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
   }
 
   /**
-   * Test basic successful operation completion, by polling and handing over responses to the BlobInfo operation.
-   * @throws Exception
+   * Put blobs that result in a single chunk; perform gets of the blob and ensure success.
    */
   @Test
-  public void testPollAndResponseHandling()
+  public void testSimpleBlobGetSuccess()
       throws Exception {
-    operationsCount.incrementAndGet();
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, operationCompleteCallback, time);
-    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
-    op.poll(requestRegistrationCallback);
-    Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
-        correlationIdToGetOperation.size());
-
-    List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-    for (ResponseInfo response : responses) {
-      op.handleResponse(response);
-      if (op.isOperationComplete()) {
-        break;
-      }
+    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    for (int i = 0; i < 10; i++) {
+      // blobSize in the range [1, maxChunkSize]
+      blobSize = random.nextInt(maxChunkSize) + 1;
+      doPut();
+      getAndAssertSuccess();
     }
-    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
-    assertSuccess(op);
+  }
+
+  /**
+   * Put a blob with no data, perform get and ensure success.
+   */
+  @Test
+  public void testZeroSizedBlobGetSuccess()
+      throws Exception {
+    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    blobSize = 0;
+    doPut();
+    getAndAssertSuccess();
+  }
+
+  /**
+   * Put blobs that result in multiple chunks and at chunk boundaries; perform gets and ensure success.
+   */
+  @Test
+  public void testCompositeBlobChunkSizeMultipleGetSuccess()
+      throws Exception {
+    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    for (int i = 2; i < 10; i++) {
+      blobSize = maxChunkSize * i;
+      doPut();
+      getAndAssertSuccess();
+    }
+  }
+
+  /**
+   * Put blobs that result in multiple chunks with the last chunk less than max chunk size; perform gets and ensure
+   * success.
+   */
+  @Test
+  public void testCompositeBlobNotChunkSizeMultipleGetSuccess()
+      throws Exception {
+
+    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    for (int i = 0; i < 10; i++) {
+      blobSize = maxChunkSize * i + random.nextInt(maxChunkSize - 1) + 1;
+      doPut();
+      getAndAssertSuccess();
+    }
   }
 
   /**
@@ -196,10 +259,11 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testRouterRequestTimeoutAllFailure()
       throws Exception {
+    doPut();
     operationsCount.incrementAndGet();
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, operationCompleteCallback, time);
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
+            null, operationCompleteCallback, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
@@ -210,7 +274,6 @@ public class GetBlobInfoOperationTest {
     // and cross-colo proxying is enabled by default.
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
-    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     RouterException routerException = (RouterException) op.getOperationException();
     Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
   }
@@ -222,10 +285,11 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testNetworkClientTimeoutAllFailure()
       throws Exception {
+    doPut();
     operationsCount.incrementAndGet();
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, operationCompleteCallback, time);
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
+            null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -259,10 +323,11 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testBlobNotFoundCase()
       throws Exception {
+    doPut();
     operationsCount.incrementAndGet();
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, operationCompleteCallback, time);
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
+            null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -296,6 +361,7 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testErrorPrecedenceWithBlobDeletedAndExpiredCase()
       throws Exception {
+    doPut();
     ServerErrorCode[] serverErrorCodesToTest = {ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired};
     RouterErrorCode[] routerErrorCodesToExpect = {RouterErrorCode.BlobDeleted, RouterErrorCode.BlobExpired};
     for (int i = 0; i < serverErrorCodesToTest.length; i++) {
@@ -321,9 +387,9 @@ public class GetBlobInfoOperationTest {
   private void testErrorPrecedence(ServerErrorCode[] serverErrorCodesInOrder, RouterErrorCode expectedErrorCode)
       throws Exception {
     operationsCount.incrementAndGet();
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, operationCompleteCallback, time);
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
+            null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -355,6 +421,7 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testSuccessInThePresenceOfVariousErrors()
       throws Exception {
+    doPut();
     // The put for the blob being requested happened.
     String dcWherePutHappened = routerConfig.routerDatacenterName;
 
@@ -377,13 +444,6 @@ public class GetBlobInfoOperationTest {
 
   private void testVariousErrors(String dcWherePutHappened)
       throws Exception {
-    operationsCount.incrementAndGet();
-    GetBlobInfoOperation op =
-        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, operationCompleteCallback, time);
-    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
-
     ArrayList<MockServer> mockServers = new ArrayList<>(mockServerLayout.getMockServers());
     // set the status to various server level or partition level errors (not Blob_Deleted or Blob_Expired).
     mockServers.get(0).setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
@@ -404,20 +464,98 @@ public class GetBlobInfoOperationTest {
         break;
       }
     }
+    getAndAssertSuccess();
+  }
 
+  // @todo: test the case where read is not called before chunks come in.
+  // @todo: test the case where read comes in immediately after callback, and chunks come in delayed.
+  // @todo: test the case where operation callback is called with exception.
+  // @todo: test the case where async write results in an exception. - read should be notified,
+  //        operation should get completed.
+  // @todo: test the case where a subsequent chunk fails at the router. the read should fail in that case.
+  // @todo: maybe a test for legacy blobs.
+
+  /**
+   * Construct GetBlob operations with appropriate callbacks, then poll those operations until they complete,
+   * and ensure that the whole blob data is read out and the contents match.
+   */
+  private void getAndAssertSuccess()
+      throws Exception {
+    final CountDownLatch readCompleteLatch = new CountDownLatch(1);
+    final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
+    final AtomicLong readCompleteResult = new AtomicLong(0);
+    final AtomicReference<Exception> operationException = new AtomicReference<>(null);
+
+    Callback<ReadableStreamChannel> callback = new Callback<ReadableStreamChannel>() {
+      @Override
+      public void onCompletion(final ReadableStreamChannel result, final Exception exception) {
+        if (exception != null) {
+          operationException.set(exception);
+          readCompleteLatch.countDown();
+        } else {
+          Utils.newThread(new Runnable() {
+            @Override
+            public void run() {
+              assertSuccess(result, readCompleteLatch, readCompleteResult, readCompleteException);
+            }
+          }, false).start();
+        }
+      }
+    };
+
+    operationsCount.incrementAndGet();
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
+            callback, operationCompleteCallback, time);
+    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.requestListToFill = requestListToFill;
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
       for (ResponseInfo response : responses) {
         op.handleResponse(response);
-        if (op.isOperationComplete()) {
-          break;
-        }
       }
     }
 
+    readCompleteLatch.await();
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
-    assertSuccess(op);
+    Assert.assertNull("Operation exception should be null, was:" + operationException.get(), operationException.get());
+    Assert.assertNull("Read complete exception should be null", readCompleteException.get());
+    Assert.assertEquals("Size read must equal size written", blobSize, readCompleteResult.get());
+  }
+
+  /**
+   * Assert that the operation is complete and successful. Note that the future completion and callback invocation
+   * happens outside of the GetOperation, so those are not checked here. But at this point, the operation result should
+   * be ready.
+   */
+  private void assertSuccess(ReadableStreamChannel readableStreamChannel, CountDownLatch readCompleteLatch,
+      AtomicLong readCompleteResult, AtomicReference<Exception> readCompleteException) {
+    try {
+      ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
+      long written;
+      Future<Long> readFuture = readableStreamChannel.readInto(asyncWritableChannel, null);
+      // Compare byte by byte.
+      int readBytes = 0;
+      do {
+        ByteBuffer buf = asyncWritableChannel.getNextChunk();
+        while (buf.hasRemaining()) {
+          if (putContent[readBytes++] != buf.get()) {
+            Exception e = new Exception("Content mismatch");
+            readCompleteException.set(e);
+            asyncWritableChannel.resolveOldestChunk(e);
+            return;
+          }
+        }
+        asyncWritableChannel.resolveOldestChunk(null);
+      } while (readBytes < blobSize);
+      written = readFuture.get();
+      readCompleteResult.set(written);
+    } catch (Exception e) {
+      readCompleteException.set(e);
+    } finally {
+      readCompleteLatch.countDown();
+    }
   }
 
   /**
@@ -429,29 +567,16 @@ public class GetBlobInfoOperationTest {
    */
   private List<ResponseInfo> sendAndWaitForResponses(List<RequestInfo> requestList)
       throws IOException {
-    List<ResponseInfo> responseList = new ArrayList<>();
     int sendCount = requestList.size();
+    // Shuffle the replicas to introduce randomness in the order in which responses arrive.
     Collections.shuffle(requestList);
+    List<ResponseInfo> responseList = new ArrayList<>();
     responseList.addAll(networkClient.sendAndPoll(requestList));
     requestList.clear();
     while (responseList.size() < sendCount) {
       responseList.addAll(networkClient.sendAndPoll(requestList));
     }
     return responseList;
-  }
-
-  /**
-   * Assert that the operation is complete and successful. Note that the future completion and callback invocation
-   * happens outside of the GetOperation, so those are not checked here. But at this point, the operation result should
-   * be ready.
-   * @param op the {@link GetBlobInfoOperation} that should have completed.
-   */
-  private void assertSuccess(GetBlobInfoOperation op) {
-    Assert.assertEquals("Null expected", null, op.getOperationException());
-    BlobInfo blobInfo = op.getOperationResult();
-    Assert.assertTrue("Blob properties must be the same",
-        RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
-    Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
   }
 
   /**
@@ -464,7 +589,7 @@ public class GetBlobInfoOperationTest {
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.get.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.get.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxChunkSize));
     return properties;
   }
 }
-

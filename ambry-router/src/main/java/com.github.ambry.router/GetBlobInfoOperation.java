@@ -45,6 +45,7 @@ import org.slf4j.LoggerFactory;
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
 class GetBlobInfoOperation extends GetOperation<BlobInfo> {
+  private final OperationCompleteCallback operationCompleteCallback;
   private final SimpleOperationTracker operationTracker;
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
@@ -60,17 +61,28 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    * @param blobIdStr the blob id associated with the operation in string form.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
+   * @param operationCompleteCallback the {@link OperationCompleteCallback} to use to complete operations.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, FutureResult<BlobInfo> futureResult,
-      Callback<BlobInfo> callback, Time time)
+      Callback<BlobInfo> callback, OperationCompleteCallback operationCompleteCallback, Time time)
       throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
+    this.operationCompleteCallback = operationCompleteCallback;
     operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
         routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
         routerConfig.routerGetRequestParallelism);
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  void abort(Exception abortCause) {
+    operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
+    operationCompleted = true;
   }
 
   /**
@@ -170,7 +182,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
           operationTracker.onResponse(getRequestInfo.replicaId, false);
           // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
         } else {
-          processGetResponse(getRequestInfo, getResponse);
+          processGetBlobInfoResponse(getRequestInfo, getResponse);
         }
       } catch (IOException | MessageFormatException e) {
         // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
@@ -184,13 +196,13 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   }
 
   /**
-   * Process the actual GetResponse extracted from a {@link ResponseInfo}
+   * Process the GetResponse extracted from a {@link ResponseInfo}
    * @param getRequestInfo the associated {@link RequestInfo} for which this response was received.
-   * @param getResponse the {@link GetResponse} extracted the {@link ResponseInfo}
+   * @param getResponse the {@link GetResponse} extracted from the {@link ResponseInfo}
    * @throws IOException if there is an error during deserialization of the GetResponse.
    * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
    */
-  void processGetResponse(GetRequestInfo getRequestInfo, GetResponse getResponse)
+  private void processGetBlobInfoResponse(GetRequestInfo getRequestInfo, GetResponse getResponse)
       throws IOException, MessageFormatException {
     ServerErrorCode getError = getResponse.getError();
     if (getError == ServerErrorCode.No_Error) {
@@ -244,14 +256,44 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   }
 
   /**
+   * Process the given {@link ServerErrorCode} and set operation status accordingly.
+   * @param errorCode the {@link ServerErrorCode} to process.
+   */
+  private void processServerError(ServerErrorCode errorCode) {
+    switch (errorCode) {
+      case Blob_Deleted:
+        logger.trace("Requested blob was deleted");
+        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDeleted));
+        break;
+      case Blob_Expired:
+        logger.trace("Requested blob has expired");
+        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobExpired));
+        break;
+      case Blob_Not_Found:
+        logger.trace("Requested blob was not found on this server");
+        setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
+        break;
+      default:
+        setOperationException(
+            new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
+        break;
+    }
+  }
+
+  /**
    * Check whether the operation can be completed, if so complete it.
    */
   private void checkAndMaybeComplete() {
     if (operationTracker.isDone()) {
       if (operationTracker.hasSucceeded()) {
-        operationException = null;
+        operationException.set(null);
       }
       operationCompleted = true;
+    }
+
+    if (operationCompleted) {
+      operationCompleteCallback
+          .completeOperation(operationFuture, operationCallback, operationResult, operationException.get());
     }
   }
 }
