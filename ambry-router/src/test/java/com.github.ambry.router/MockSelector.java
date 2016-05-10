@@ -59,7 +59,7 @@ class MockSelector extends Selector {
     // we don't need the actual selector, close it.
     super.close();
     this.serverLayout = serverLayout;
-    this.state = state == null ? new AtomicReference(MockSelectorState.Good) : state;
+    this.state = state == null ? new AtomicReference<MockSelectorState>(MockSelectorState.Good) : state;
     this.time = time;
   }
 
@@ -203,7 +203,7 @@ enum MockSelectorState {
    */
   ThrowExceptionOnSend,
   /**
-   * A state that causes all poll calls to throw an IOException regardless of whethere there are sends to perform or
+   * A state that causes all poll calls to throw an IOException regardless of whether there are sends to perform or
    * not.
    */
   ThrowExceptionOnAllPoll,

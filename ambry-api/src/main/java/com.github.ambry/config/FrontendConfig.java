@@ -13,6 +13,9 @@
  */
 package com.github.ambry.config;
 
+import java.util.Arrays;
+import java.util.List;
+
 
 /**
  * Configuration parameters required by the Ambry frontend.
@@ -34,12 +37,18 @@ public class FrontendConfig {
   public final String frontendIdConverterFactory;
 
   /**
-   * The SecurityServiceFactory that needs to be used by AmbryBlobStorageService
-   * to validate requests.
+   * The SecurityServiceFactory that needs to be used by AmbryBlobStorageService to validate requests.
    */
   @Config("frontend.security.service.factory")
   @Default("com.github.ambry.frontend.AmbryIdConverterFactory")
   public final String frontendSecurityServiceFactory;
+
+  /**
+   * The comma separated list of prefixes to remove from paths.
+   */
+  @Config("frontend.path.prefixes.to.remove")
+  @Default("")
+  public final List<String> frontendPathPrefixesToRemove;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -47,5 +56,7 @@ public class FrontendConfig {
         .getString("frontend.id.converter.factory", "com.github.ambry.frontend.AmbryIdConverterFactory");
     frontendSecurityServiceFactory = verifiableProperties
         .getString("frontend.security.service.factory", "com.github.ambry.frontend.AmbrySecurityServiceFactory");
+    frontendPathPrefixesToRemove =
+        Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
   }
 }

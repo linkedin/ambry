@@ -25,11 +25,9 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.Time;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +41,6 @@ class DeleteManager {
   private final HashMap<Integer, DeleteOperation> correlationIdToDeleteOperation;
   private final NotificationSystem notificationSystem;
   private final Time time;
-  private final AtomicBoolean isOpen = new AtomicBoolean(true);
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
@@ -54,7 +51,7 @@ class DeleteManager {
   /**
    * Used by a {@link DeleteOperation} to associate a {@code CorrelationId} to a {@link DeleteOperation}.
    */
-  private class DeleteRequestRegistrationCallbackImpl implements DeleteRequestRegistrationCallback {
+  private class DeleteRequestRegistrationCallbackImpl implements RequestRegistrationCallback<DeleteOperation> {
     private List<RequestInfo> requestListToFill;
 
     @Override
@@ -112,13 +109,12 @@ class DeleteManager {
    * @param requestListToFill list to be filled with the requests created.
    */
   public void poll(List<RequestInfo> requestListToFill) {
-    Iterator<DeleteOperation> deleteOperationIterator = deleteOperations.iterator();
     requestRegistrationCallback.requestListToFill = requestListToFill;
-    while (deleteOperationIterator.hasNext()) {
-      DeleteOperation op = deleteOperationIterator.next();
+    for (DeleteOperation op : deleteOperations) {
       op.poll(requestRegistrationCallback);
-      if (op.isOperationComplete()) {
-        deleteOperationIterator.remove();
+      if (op.isOperationComplete() && deleteOperations.remove(op)) {
+        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+        // operation actually gets removed from the set of operations. See comment within close().
         onComplete(op);
       }
     }
@@ -126,7 +122,7 @@ class DeleteManager {
 
   /**
    * Handles responses received for each of the {@link DeleteOperation} within this delete manager.
-   * @param responseInfo A response from {@link com.github.ambry.network.NetworkClient}
+   * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
     int correlationId = ((DeleteRequest) responseInfo.getRequest()).getCorrelationId();
@@ -134,8 +130,7 @@ class DeleteManager {
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (deleteOperations.contains(deleteOperation)) {
       deleteOperation.handleResponse(responseInfo);
-      if (deleteOperation.isOperationComplete()) {
-        deleteOperations.remove(deleteOperation);
+      if (deleteOperation.isOperationComplete() && deleteOperations.remove(deleteOperation)) {
         onComplete(deleteOperation);
       }
     }
@@ -144,7 +139,7 @@ class DeleteManager {
   /**
    * Called when the delete operation is completed. The {@code DeleteManager} also finishes the delete operation
    * by performing the callback and notification.
-   * @param op The {@lilnk DeleteOperation} that has completed.
+   * @param op The {@link DeleteOperation} that has completed.
    */
   void onComplete(DeleteOperation op) {
     if (op.getOperationException() == null) {
@@ -159,13 +154,13 @@ class DeleteManager {
    * will have no effect.
    */
   void close() {
-    if (isOpen.compareAndSet(true, false)) {
-      Iterator<DeleteOperation> iter = deleteOperations.iterator();
-      while (iter.hasNext()) {
-        DeleteOperation deleteOperation = iter.next();
-        NonBlockingRouter.completeOperation(deleteOperation.getFutureResult(), deleteOperation.getCallback(), null,
+    for (DeleteOperation op : deleteOperations) {
+      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+      // from happening twice, complete it here only if the remove was successful.
+      if (deleteOperations.remove(op)) {
+        NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null,
             new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed));
-        iter.remove();
       }
     }
   }

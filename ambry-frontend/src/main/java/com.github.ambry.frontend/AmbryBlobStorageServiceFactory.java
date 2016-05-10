@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getBlobStorageService()}.
  */
 public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory {
+  private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final ClusterMap clusterMap;
   private final RestResponseHandler responseHandler;
@@ -57,7 +58,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
     if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
       throw new IllegalArgumentException("Null arguments were provided during instantiation!");
     } else {
-      FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
+      frontendConfig = new FrontendConfig(verifiableProperties);
       frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
       this.clusterMap = clusterMap;
       this.responseHandler = responseHandler;
@@ -76,7 +77,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new AmbryBlobStorageService(frontendMetrics, clusterMap, responseHandler, router, idConverterFactory,
+    return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, idConverterFactory,
         securityServiceFactory);
   }
 }

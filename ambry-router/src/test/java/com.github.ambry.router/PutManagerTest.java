@@ -187,7 +187,7 @@ public class PutManagerTest {
    * Tests a failure scenario where selector poll throws an exception when there is anything to send.
    */
   @Test
-  public void testFailureOnAllSend()
+  public void testFailureOnAllPollThatSends()
       throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
@@ -202,7 +202,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler threads should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
   }
 
   /**
@@ -237,7 +237,7 @@ public class PutManagerTest {
       String host = dataNodeIds.get(i).getHostname();
       int port = dataNodeIds.get(i).getPort();
       MockServer server = mockServerLayout.getMockServer(host, port);
-      server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
+      server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
     submitPutsAndAssertFailure(expectedException, true, false);
@@ -264,7 +264,7 @@ public class PutManagerTest {
         String host = dataNodeIds.get(i).getHostname();
         int port = dataNodeIds.get(i).getPort();
         MockServer server = mockServerLayout.getMockServer(host, port);
-        server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
+        server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
       }
     }
     submitPutsAndAssertSuccess(true);
@@ -286,7 +286,7 @@ public class PutManagerTest {
         String host = dataNodeIds.get(i).getHostname();
         int port = dataNodeIds.get(i).getPort();
         MockServer server = mockServerLayout.getMockServer(host, port);
-        server.setPutErrorForAllRequests(ServerErrorCode.Unknown_Error);
+        server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
       }
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
@@ -315,7 +315,7 @@ public class PutManagerTest {
     serverErrorList.add(ServerErrorCode.No_Error);
     for (DataNodeId dataNodeId : dataNodeIds) {
       MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
-      server.setPutErrors(serverErrorList);
+      server.setServerErrors(serverErrorList);
     }
     submitPutsAndAssertSuccess(true);
   }
@@ -341,7 +341,7 @@ public class PutManagerTest {
     }
     for (DataNodeId dataNodeId : dataNodeIds) {
       MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
-      server.setPutErrors(serverErrorList);
+      server.setServerErrors(serverErrorList);
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
     submitPutsAndAssertFailure(expectedException, true, false);
@@ -483,7 +483,7 @@ public class PutManagerTest {
 
     // Ensure that the existing operation was completed.
     requestAndResultsList.get(0).result.await();
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
     Assert.assertTrue("Router should still be open", router.isOpen());
 
     // Now submit another job and ensure that the router gets closed.
@@ -501,7 +501,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
   }
 
   /**
@@ -540,7 +540,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
   }
 
   // Methods used by the tests
@@ -774,7 +774,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
   }
 
   private class RequestAndResult {

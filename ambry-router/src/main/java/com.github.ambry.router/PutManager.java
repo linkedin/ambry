@@ -60,7 +60,7 @@ class PutManager {
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
 
-  private class PutRequestRegistrationCallbackImpl implements PutRequestRegistrationCallback {
+  private class PutRequestRegistrationCallbackImpl implements RequestRegistrationCallback<PutOperation> {
     private List<RequestInfo> requestListToFill;
 
     @Override
@@ -70,7 +70,6 @@ class PutManager {
     }
   }
 
-  ;
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to the PutOperations, every time.
   private final PutRequestRegistrationCallbackImpl requestRegistrationCallback =
@@ -128,21 +127,19 @@ class PutManager {
    * @param requestListToFill list to be filled with the requests created
    */
   void poll(List<RequestInfo> requestListToFill) {
-    Iterator<PutOperation> putOperationIterator = putOperations.iterator();
     requestRegistrationCallback.requestListToFill = requestListToFill;
-    while (putOperationIterator.hasNext()) {
-      PutOperation op = putOperationIterator.next();
+    for (PutOperation op : putOperations) {
       op.poll(requestRegistrationCallback);
-      if (op.isOperationComplete()) {
-        // Operation is done.
-        putOperationIterator.remove();
+      if (op.isOperationComplete() && putOperations.remove(op)) {
+        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+        // operation actually gets removed from the set of operations. See comment within closePendingOperations().
         onComplete(op);
       }
     }
   }
 
   /**
-   * Hands over the response to the associated PutChunk that issued the request.
+   * Hands over the response to the associated PutOperation that issued the request.
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
@@ -152,8 +149,7 @@ class PutManager {
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (putOperations.contains(putOperation)) {
       putOperation.handleResponse(responseInfo);
-      if (putOperation.isOperationComplete()) {
-        putOperations.remove(putOperation);
+      if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
         onComplete(putOperation);
       }
     }
@@ -161,14 +157,13 @@ class PutManager {
 
   /**
    * Returns a list of ids of successfully put chunks that were part of unsuccessful put operations.
-   * @return list of ids to delete.
    */
   void getIdsToDelete(List<String> idsToDelete) {
     // @todo save and return ids of failed puts.
   }
 
   /**
-   * Called by a {@link PutOperation} when the operation is complete. Any cleanup that the PutManager needs to do
+   * Called for a {@link PutOperation} when the operation is complete. Any cleanup that the PutManager needs to do
    * with respect to this operation will have to be done here. The PutManager also finishes the operation by
    * performing the callback and notification.
    * @param op the {@link PutOperation} that has completed.
@@ -213,12 +208,14 @@ class PutManager {
    * 2. By the {@link ChunkFiller} thread when it exits abnormally.
    */
   void completePendingOperations() {
-    Iterator<PutOperation> iter = putOperations.iterator();
-    while (iter.hasNext()) {
-      PutOperation op = iter.next();
-      NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
-          new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
-      iter.remove();
+    for (PutOperation op : putOperations) {
+      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+      // from happening twice, complete it here only if the remove was successful.
+      if (putOperations.remove(op)) {
+        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
+            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+      }
     }
   }
 

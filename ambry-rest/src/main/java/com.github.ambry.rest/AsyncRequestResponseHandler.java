@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * These are the scaling units of the {@link RestServer} and can be scaled up and down independently of any other
  * component of the {@link RestServer}.
  */
-public class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
+class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
   private final RestServerMetrics restServerMetrics;
 
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<AsyncRequestWorker>();

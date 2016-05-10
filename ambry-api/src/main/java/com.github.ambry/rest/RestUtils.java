@@ -19,6 +19,7 @@ import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,9 +131,6 @@ public class RestUtils {
 
   private static final int Crc_Size = 8;
   private static final short UserMetadata_Version_V1 = 1;
-
-  // Max size of a value for user metadata as key value pairs
-  protected static final int Max_UserMetadata_Value_Size = 1024 * 8;
 
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
@@ -365,14 +363,38 @@ public class RestUtils {
    * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
    * performed on.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @return extracted operation type or blob ID from the uri.
+   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
+   * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
+   *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
+   * @return extracted operation type or blob ID from the URI.
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest) {
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
+      List<String> prefixesToRemove) {
     String path = restRequest.getPath();
-    int searchStartIndex = path.startsWith("/") ? 1 : 0;
-    int endIndex = path.indexOf("/", searchStartIndex);
-    endIndex = endIndex > 0 ? endIndex : path.length();
-    return path.substring(0, endIndex);
+    int startIndex = 0;
+
+    // remove query string.
+    int endIndex = path.indexOf("?");
+    if (endIndex == -1) {
+      endIndex = path.length();
+    }
+
+    // remove prefix.
+    if (prefixesToRemove != null) {
+      for (String prefix : prefixesToRemove) {
+        if (path.startsWith(prefix)) {
+          startIndex = prefix.length();
+          break;
+        }
+      }
+    }
+
+    // remove subresource if present.
+    if (subResource != null) {
+      // "- 1" removes the "slash" that precedes the sub-resource.
+      endIndex = endIndex - subResource.name().length() - 1;
+    }
+    return path.substring(startIndex, endIndex);
   }
 
   /**

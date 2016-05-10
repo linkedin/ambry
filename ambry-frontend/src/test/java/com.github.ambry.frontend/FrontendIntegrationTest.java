@@ -325,6 +325,7 @@ public class FrontendIntegrationTest {
       fail("postBlobAndVerify did not return a blob ID");
     }
     discardContent(responseParts, 1);
+    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
     return blobId;
   }
 
@@ -349,6 +350,7 @@ public class FrontendIntegrationTest {
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     ByteBuffer responseContent = getContent(response, responseParts);
     assertArrayEquals("GET content does not match original content", expectedContent.array(), responseContent.array());
+    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
   }
 
   /**
@@ -368,6 +370,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     checkCommonGetHeadHeaders(response.headers());
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts);
+    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
   }
 
   /**
@@ -388,6 +391,7 @@ public class FrontendIntegrationTest {
     checkCommonGetHeadHeaders(response.headers());
     verifyBlobProperties(expectedHeaders, response);
     verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts);
+    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
   }
 
   /**
@@ -411,6 +415,7 @@ public class FrontendIntegrationTest {
         HttpHeaders.getHeader(response, HttpHeaders.Names.CONTENT_TYPE));
     verifyBlobProperties(expectedHeaders, response);
     discardContent(responseParts, 1);
+    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
   }
 
   /**
@@ -516,6 +521,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected response status", expectedStatusCode, response.getStatus());
     assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
     discardContent(responseParts, 1);
+    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
   }
 
   /**
@@ -552,6 +558,7 @@ public class FrontendIntegrationTest {
       fail("postBlobAndVerify did not return a blob ID");
     }
     discardContent(responseParts, 1);
+    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
     return blobId;
   }
 

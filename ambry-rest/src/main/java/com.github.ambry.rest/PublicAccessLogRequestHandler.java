@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * Captures headers and other required info from request and responses, to make public access log entries
  * {@link PublicAccessLogger} assists in logging the required information
  */
-public class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
+class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private final PublicAccessLogger publicAccessLogger;
   private final NettyMetrics nettyMetrics;
   private long requestArrivalTimeInMs;

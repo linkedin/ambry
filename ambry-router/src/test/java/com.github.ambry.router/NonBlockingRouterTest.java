@@ -163,7 +163,7 @@ public class NonBlockingRouterTest {
     if (expectedCount == 0) {
       Assert.assertFalse("Router should be closed if there are no worker threads running", router.isOpen());
       Assert
-          .assertEquals("All operations should have completed if the router is closed", 0, router.getOperationsCount());
+          .assertEquals("All operations should have completed if the router is closed", 0, NonBlockingRouter.getOperationsCount());
     }
   }
 
