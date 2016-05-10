@@ -24,18 +24,22 @@ import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 
-public class ServerPlaintextTest {
-  private static Properties coordinatorProps;
-  private static MockNotificationSystem notificationSystem;
-  private static MockCluster plaintextCluster;
+/**
+ * The multi node single partition test needs to run with clean stores as it checks replication token offset values
+ * so it has been put into a separate class with per-test initialization and cleanup
+ */
+public class ServerPlaintextTokenTest {
+  private Properties coordinatorProps;
+  private MockNotificationSystem notificationSystem;
+  private MockCluster plaintextCluster;
 
-  @BeforeClass
-  public static void initializeTests()
+  @Before
+  public void initializeTests()
       throws Exception {
     coordinatorProps = new Properties();
     notificationSystem = new MockNotificationSystem(9);
@@ -43,16 +47,9 @@ public class ServerPlaintextTest {
     plaintextCluster.startServers();
   }
 
-  public ServerPlaintextTest()
-      throws Exception {
-  }
-
-  @AfterClass
-  public static void cleanup()
-      throws IOException {
+  @After
+  public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
-    // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
-    // and reliable.
     System.out.println("About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {
       plaintextCluster.cleanup();
@@ -61,37 +58,15 @@ public class ServerPlaintextTest {
   }
 
   @Test
-  public void startStopTest()
-      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-  }
-
-  @Test
-  public void endToEndTest()
+  public void endToEndReplicationWithMultiNodeSinglePartitionTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil
-        .endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null, null,
-            coordinatorProps);
-  }
-
-  @Test
-  public void endToEndReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = plaintextCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
-    ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
+    ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, null, null, null, null,
-        notificationSystem);
-  }
-
-  @Test
-  public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws Exception {
-    ServerTestUtil
-        .endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT, plaintextCluster,
-            notificationSystem, coordinatorProps);
+        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null,
+        null, notificationSystem, coordinatorProps);
   }
 }
