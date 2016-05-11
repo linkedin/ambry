@@ -424,7 +424,7 @@ public class DeleteManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**

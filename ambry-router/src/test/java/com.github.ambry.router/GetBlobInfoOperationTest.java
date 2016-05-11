@@ -115,7 +115,7 @@ public class GetBlobInfoOperationTest {
     if (networkClient != null) {
       networkClient.close();
     }
-    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**

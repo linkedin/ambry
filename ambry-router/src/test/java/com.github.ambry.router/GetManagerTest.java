@@ -76,7 +76,7 @@ public class GetManagerTest {
   @After
   public void postCheck() {
     Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
-    Assert.assertEquals("Router operations count must be zero", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("Router operations count must be zero", 0, router.getOperationsCount());
   }
 
   /**

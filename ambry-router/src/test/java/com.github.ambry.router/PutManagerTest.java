@@ -202,7 +202,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler threads should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**
@@ -483,7 +483,7 @@ public class PutManagerTest {
 
     // Ensure that the existing operation was completed.
     requestAndResultsList.get(0).result.await();
-    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
     Assert.assertTrue("Router should still be open", router.isOpen());
 
     // Now submit another job and ensure that the router gets closed.
@@ -501,7 +501,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**
@@ -540,7 +540,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   // Methods used by the tests
@@ -774,7 +774,7 @@ public class PutManagerTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, NonBlockingRouter.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   private class RequestAndResult {

@@ -53,6 +53,7 @@ class PutManager {
   // get cleaned up periodically.
   private final Map<Integer, PutOperation> correlationIdToPutOperation;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
+  private final OperationCompleteCallback operationCompleteCallback;
 
   // shared by all PutOperations
   private final ClusterMap clusterMap;
@@ -82,15 +83,18 @@ class PutManager {
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob creations.
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, Time time) {
+      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      OperationCompleteCallback operationCompleteCallback, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
+    this.operationCompleteCallback = operationCompleteCallback;
     this.time = time;
     putOperations = Collections.newSetFromMap(new ConcurrentHashMap<PutOperation, Boolean>());
     correlationIdToPutOperation = new HashMap<Integer, PutOperation>();
@@ -114,7 +118,7 @@ class PutManager {
               futureResult, callback, time);
       putOperations.add(putOperation);
     } catch (RouterException e) {
-      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
+      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
 
@@ -174,7 +178,7 @@ class PutManager {
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
     }
-    NonBlockingRouter
+    operationCompleteCallback
         .completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(), op.getOperationException());
   }
 
@@ -213,7 +217,7 @@ class PutManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (putOperations.remove(op)) {
-        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
+        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null,
             new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
       }
     }
