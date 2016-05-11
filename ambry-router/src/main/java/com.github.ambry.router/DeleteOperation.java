@@ -114,7 +114,7 @@ class DeleteOperation {
     while (replicaIterator.hasNext()) {
       ReplicaId replica = replicaIterator.next();
       String hostname = replica.getDataNodeId().getHostname();
-      Port port = new Port(replica.getDataNodeId().getPort(), PortType.PLAINTEXT);
+      Port port = replica.getDataNodeId().getPortToConnectTo();
       DeleteRequest deleteRequest = createDeleteRequest();
       inflightRequestInfos.put(deleteRequest.getCorrelationId(), new InflightRequestInfo(time.milliseconds(), replica));
       RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest);
