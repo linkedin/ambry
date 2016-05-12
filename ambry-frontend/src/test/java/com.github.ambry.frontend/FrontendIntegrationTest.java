@@ -392,10 +392,7 @@ public class FrontendIntegrationTest {
   private void getNotModifiedBlobAndVerify(String blobId)
       throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
-    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
-    Date date = new Date(System.currentTimeMillis());
-    String dateStr = dateFormat.format(date);
-    headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
+    headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
