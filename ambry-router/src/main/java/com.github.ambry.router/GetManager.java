@@ -52,6 +52,7 @@ class GetManager {
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
+  private final OperationCompleteCallback operationCompleteCallback;
 
   private class GetRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;
@@ -74,14 +75,16 @@ class GetManager {
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
    * @param time The {@link Time} instance to use.
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
-      NonBlockingRouterMetrics routerMetrics, Time time) {
+      NonBlockingRouterMetrics routerMetrics, OperationCompleteCallback operationCompleteCallback, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
+    this.operationCompleteCallback = operationCompleteCallback;
     this.time = time;
     getOperations = Collections.newSetFromMap(new ConcurrentHashMap<GetOperation, Boolean>());
   }
@@ -98,7 +101,7 @@ class GetManager {
           new GetBlobInfoOperation(routerConfig, clusterMap, responseHandler, blobId, futureResult, callback, time);
       getOperations.add(getBlobInfoOperation);
     } catch (RouterException e) {
-      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
+      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
 
@@ -140,7 +143,7 @@ class GetManager {
    * @param op the {@link PutOperation} that has completed.
    */
   void onComplete(GetOperation op) {
-    NonBlockingRouter
+    operationCompleteCallback
         .completeOperation(op.getFuture(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
 
@@ -169,7 +172,7 @@ class GetManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (getOperations.remove(op)) {
-        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null,
+        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null,
             new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
       }
     }

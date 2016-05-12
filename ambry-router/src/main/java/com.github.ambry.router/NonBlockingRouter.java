@@ -57,7 +57,9 @@ class NonBlockingRouter implements Router {
   private final List<String> idsToDelete = new ArrayList<String>();
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
-  private static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
+  private final AtomicInteger currentOperationsCount = new AtomicInteger(0);
+  private final OperationCompleteCallback operationCompleteCallback =
+      new OperationCompleteCallback(currentOperationsCount);
 
   static final int MAX_IN_MEM_CHUNKS = 4;
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
@@ -123,7 +125,7 @@ class NonBlockingRouter implements Router {
     if (isOpen.get()) {
       getOperationController().getBlobInfo(blobId, futureResult, callback);
     } else {
-      completeOperation(futureResult, callback, null,
+      operationCompleteCallback.completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
@@ -153,7 +155,7 @@ class NonBlockingRouter implements Router {
     if (isOpen.get()) {
       getOperationController().getBlob(blobId, futureResult, callback);
     } else {
-      completeOperation(futureResult, callback, null,
+      operationCompleteCallback.completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
@@ -188,7 +190,7 @@ class NonBlockingRouter implements Router {
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, futureResult, callback);
     } else {
-      completeOperation(futureResult, callback, null,
+      operationCompleteCallback.completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
@@ -218,7 +220,7 @@ class NonBlockingRouter implements Router {
     if (isOpen.get()) {
       getOperationController().deleteBlob(blobId, futureResult, callback);
     } else {
-      completeOperation(futureResult, callback, null,
+      operationCompleteCallback.completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     }
     return futureResult;
@@ -278,30 +280,8 @@ class NonBlockingRouter implements Router {
    * Return an approximate count of the number of operations submitted to the router that are not yet completed.
    * @return (approximate) number of operations being handled at the time of this call.
    */
-  static int getOperationsCount() {
+  int getOperationsCount() {
     return currentOperationsCount.get();
-  }
-
-  /**
-   * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with
-   * {@code operationResult} (if any) and {@code exception} (if any).
-   * @param futureResult the {@link FutureResult} that needs to be set.
-   * @param callback that {@link Callback} that needs to be invoked. Can be null.
-   * @param operationResult the result of the operation (if any).
-   * @param exception {@link Exception} encountered while performing the operation (if any).
-   * @param <T> the type of the operation result, which depends on the kind of operation.
-   */
-  static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
-      Exception exception) {
-    currentOperationsCount.decrementAndGet();
-    try {
-      futureResult.done(operationResult, exception);
-      if (callback != null) {
-        callback.onCompletion(operationResult, exception);
-      }
-    } catch (Exception e) {
-      logger.error("Exception caught during future and callback completion", e);
-    }
   }
 
   /**
@@ -327,10 +307,12 @@ class NonBlockingRouter implements Router {
     OperationController()
         throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
-      putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, time);
-      getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, time);
-      deleteManager =
-          new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, time);
+      putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
+          operationCompleteCallback, time);
+      getManager =
+          new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback, time);
+      deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
+          operationCompleteCallback, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread", this, true);
       requestResponseHandlerThread.start();
     }
@@ -368,7 +350,7 @@ class NonBlockingRouter implements Router {
     private void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
       if (!putManager.isOpen()) {
-        NonBlockingRouter.completeOperation(futureResult, callback, null,
+        operationCompleteCallback.completeOperation(futureResult, callback, null,
             new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
         // Close so that any existing operations are also disposed off.
         close();
@@ -470,6 +452,44 @@ class NonBlockingRouter implements Router {
         // Close the router.
         shutDownOperationControllers();
       }
+    }
+  }
+}
+
+/**
+ * An object of this class is passed by the router to the operation managers to use to complete operations.
+ */
+class OperationCompleteCallback {
+  private final AtomicInteger operationsCount;
+  private static final Logger logger = LoggerFactory.getLogger(OperationCompleteCallback.class);
+
+  /**
+   * Construct an OperationCompleteCallback object
+   * @param operationsCount the operationsCount to decrement whenever an operation is completed.
+   */
+  OperationCompleteCallback(AtomicInteger operationsCount) {
+    this.operationsCount = operationsCount;
+  }
+
+  /**
+   * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with
+   * {@code operationResult} (if any) and {@code exception} (if any).
+   * @param futureResult the {@link FutureResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   * @param operationResult the result of the operation (if any).
+   * @param exception {@link Exception} encountered while performing the operation (if any).
+   * @param <T> the type of the operation result, which depends on the kind of operation.
+   */
+  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
+      Exception exception) {
+    operationsCount.decrementAndGet();
+    try {
+      futureResult.done(operationResult, exception);
+      if (callback != null) {
+        callback.onCompletion(operationResult, exception);
+      }
+    } catch (Exception e) {
+      logger.error("Exception caught during future and callback completion", e);
     }
   }
 }
