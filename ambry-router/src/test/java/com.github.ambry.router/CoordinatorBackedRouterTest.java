@@ -77,16 +77,6 @@ public class CoordinatorBackedRouterTest {
       // expected. nothing to do.
     }
 
-    Properties properties = new Properties();
-    properties.setProperty("router.scaling.unit.count", "0");
-    verifiableProperties = getVProps(properties);
-    routerConfig = new RouterConfig(verifiableProperties);
-    try {
-      new CoordinatorBackedRouter(routerConfig, metrics, coordinator);
-    } catch (IllegalArgumentException e) {
-      // expected. nothing to do.
-    }
-
     // CoordinatorOperation instantiation test
     verifiableProperties = getVProps(new Properties());
     routerConfig = new RouterConfig(verifiableProperties);

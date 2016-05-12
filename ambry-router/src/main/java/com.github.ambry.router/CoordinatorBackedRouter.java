@@ -59,8 +59,7 @@ public class CoordinatorBackedRouter implements Router {
    * @param routerConfig the {@link RouterConfig} to refer to.
    * @param metrics the {@link CoordinatorBackedRouterMetrics} instance to use for metrics.
    * @param coordinator the {@link Coordinator} that will back this router.
-   * @throws IllegalArgumentException if any of the arguments received are null or if
-   * {@link RouterConfig#routerScalingUnitCount} is less than or equal to 0.
+   * @throws IllegalArgumentException if any of the arguments received are null.
    */
   public CoordinatorBackedRouter(RouterConfig routerConfig, CoordinatorBackedRouterMetrics metrics,
       Coordinator coordinator) {
@@ -78,12 +77,7 @@ public class CoordinatorBackedRouter implements Router {
       }
       throw new IllegalArgumentException(errorMessage.toString());
     }
-    if (routerConfig.routerScalingUnitCount > 0) {
-      this.operationPool = Executors.newFixedThreadPool(routerConfig.routerScalingUnitCount);
-    } else {
-      throw new IllegalArgumentException(
-          "Router scaling unit count defined in config should be > 0 (is " + routerConfig.routerScalingUnitCount + ")");
-    }
+    this.operationPool = Executors.newFixedThreadPool(routerConfig.routerScalingUnitCount);
     this.metrics = metrics;
     this.coordinator = coordinator;
     logger.trace("Instantiated CoordinatorBackedRouter");
