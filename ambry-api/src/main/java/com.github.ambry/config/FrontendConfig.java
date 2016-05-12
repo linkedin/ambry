@@ -66,6 +66,6 @@ public class FrontendConfig {
     frontendPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =
-        verifiableProperties.getInt("ffrontend.chunked.get.response.threshold.in.bytes", 8192);
+        verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
   }
 }

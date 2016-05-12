@@ -46,7 +46,6 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
-import io.netty.handler.codec.http.HttpHeaders;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
@@ -63,6 +62,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -72,8 +72,6 @@ import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
 
 
 /**
@@ -712,7 +710,8 @@ public class AmbryBlobStorageServiceTest {
   public void getNotModifiedBlobAndVerify(String blobId)
       throws Exception {
     JSONObject headers = new JSONObject();
-    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
+    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
+    dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
     Date date = new Date(System.currentTimeMillis());
     String dateStr = dateFormat.format(date);
     headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);

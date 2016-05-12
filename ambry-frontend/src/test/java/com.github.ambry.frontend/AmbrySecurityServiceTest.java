@@ -38,6 +38,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,8 +54,7 @@ import org.junit.Test;
 public class AmbrySecurityServiceTest {
 
   private SecurityService securityService;
-  private final static FrontendConfig frontendConfig = new FrontendConfig(new VerifiableProperties(new Properties()));
-  private final long cacheValidityInSecs = frontendConfig.frontendCacheValiditySeconds;
+  private final static FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
 
   public AmbrySecurityServiceTest()
       throws InstantiationException {
@@ -171,7 +171,9 @@ public class AmbrySecurityServiceTest {
     }
 
     // Head for a public blob with a diff TTL
-    blobInfo = new BlobInfo(getBlobProperties(100, false, 10000, "image/gif"), null);
+    blobInfo = new BlobInfo(
+        getBlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, false, 10000, "image/gif"),
+        null);
     callback.reset();
     restResponseChannel = new MockRestResponseChannel();
     restRequest = createRestRequest(RestMethod.HEAD, "/", null);
@@ -209,7 +211,9 @@ public class AmbrySecurityServiceTest {
     testExceptionCasesProcessResponse(RestMethod.GET, callback, blobInfo);
 
     // test Get of a large blob
-    blobInfo = new BlobInfo(getBlobProperties(100000, false, 10000, "image/gif"), null);
+    blobInfo = new BlobInfo(
+        getBlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 2, false, 10000, "image/gif"),
+        null);
     testGetBlob(callback, blobInfo);
 
     // security service closed
@@ -287,7 +291,8 @@ public class AmbrySecurityServiceTest {
     callback.reset();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers = new JSONObject();
-    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
+    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
+    dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
     Date date = new Date(System.currentTimeMillis());
     String dateStr = dateFormat.format(date);
     headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
@@ -385,7 +390,7 @@ public class AmbrySecurityServiceTest {
     Assert.assertNull("TTL value should not be set", restResponseChannel.getHeader(RestUtils.Headers.TTL));
     Assert.assertNull("ServiceID value should not be set", restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
     Assert.assertNull("OwnerId value should not be set", restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
-    if (blobProperties.getBlobSize() < frontendConfig.frontendChunkedGetResponseThresholdInBytes) {
+    if (blobProperties.getBlobSize() < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
       Assert.assertEquals("Content length value mismatch", blobProperties.getBlobSize(),
           Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     } else {
@@ -404,7 +409,8 @@ public class AmbrySecurityServiceTest {
     } else {
       Assert.assertNotSame("Expires value not as expected", new Date(0),
           restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
-      Assert.assertEquals("Cache-Control value not as expected", "max-age=" + cacheValidityInSecs,
+      Assert.assertEquals("Cache-Control value not as expected",
+          "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert
           .assertNull("Pragma value should not have been set", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));

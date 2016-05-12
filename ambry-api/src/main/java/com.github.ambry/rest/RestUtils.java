@@ -20,7 +20,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -436,8 +435,7 @@ public class RestUtils {
   public static Long getTimeFromDateString(String dateString) {
     try {
       SimpleDateFormat dateFormatter = new SimpleDateFormat(HTTP_DATE_FORMAT, Locale.US);
-      Date date = dateFormatter.parse(dateString);
-      return date.getTime();
+      return dateFormatter.parse(dateString).getTime();
     } catch (ParseException e) {
       logger.warn("Could not parse milliseconds from an HTTP date header (" + dateString + ").");
       return null;
