@@ -36,7 +36,9 @@ import org.junit.Test;
 
 
 public class ServerSSLTest {
-  private static SSLFactory sslFactory;
+  private static SSLFactory sslFactory1;
+  private static SSLFactory sslFactory2;
+  private static SSLFactory sslFactory3;
   private static SSLConfig clientSSLConfig1;
   private static SSLConfig clientSSLConfig2;
   private static SSLConfig clientSSLConfig3;
@@ -65,15 +67,9 @@ public class ServerSSLTest {
         new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
-    sslFactory = new SSLFactory(clientSSLConfig1);
-    SSLContext sslContext = sslFactory.getSSLContext();
-    clientSSLSocketFactory1 = sslContext.getSocketFactory();
-    sslFactory = new SSLFactory(clientSSLConfig2);
-    sslContext = sslFactory.getSSLContext();
-    clientSSLSocketFactory2 = sslContext.getSocketFactory();
-    sslFactory = new SSLFactory(clientSSLConfig3);
-    sslContext = sslFactory.getSSLContext();
-    clientSSLSocketFactory3 = sslContext.getSocketFactory();
+    sslFactory1 = new SSLFactory(clientSSLConfig1);
+    sslFactory2 = new SSLFactory(clientSSLConfig2);
+    sslFactory3 = new SSLFactory(clientSSLConfig3);
   }
 
   public ServerSSLTest()
@@ -103,8 +99,8 @@ public class ServerSSLTest {
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
     ServerTestUtil
-        .endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster, clientSSLConfig1,
-            clientSSLSocketFactory1, coordinatorProps);
+        .endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster, sslFactory1,
+            coordinatorProps);
   }
 
   @Test
@@ -115,8 +111,7 @@ public class ServerSSLTest {
     List<DataNodeId> dataNodes = sslCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
-        new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster, clientSSLConfig1, clientSSLConfig2,
-        clientSSLConfig3, clientSSLSocketFactory1, clientSSLSocketFactory2, clientSSLSocketFactory3,
+        new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster, sslFactory1, sslFactory2, sslFactory3,
         notificationSystem);
   }
 

@@ -255,7 +255,7 @@ public class ServerHardDeleteTest {
             new ByteBufferInputStream(ByteBuffer.wrap(data.get(0))), properties.get(0).getBlobSize(),
             BlobType.DataBlob);
     BlockingChannel channel = ServerTestUtil
-        .getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "localhost", null, null);
+        .getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "localhost", null);
     channel.connect();
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();

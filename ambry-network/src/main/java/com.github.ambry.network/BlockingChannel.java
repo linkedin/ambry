@@ -38,7 +38,7 @@ public class BlockingChannel implements ConnectedChannel {
   protected boolean connected = false;
   protected InputStream readChannel = null;
   protected WritableByteChannel writeChannel = null;
-  protected Object lock = new Object();
+  protected final Object lock = new Object();
   protected Logger logger = LoggerFactory.getLogger(getClass());
   private SocketChannel channel = null;
 

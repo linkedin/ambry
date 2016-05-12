@@ -48,7 +48,8 @@ public class ServerPlaintextTokenTest {
   }
 
   @After
-  public void cleanup() throws IOException {
+  public void cleanup()
+      throws IOException {
     long start = System.currentTimeMillis();
     System.out.println("About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {
@@ -66,7 +67,7 @@ public class ServerPlaintextTokenTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null,
-        null, notificationSystem, coordinatorProps);
+        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, notificationSystem,
+        coordinatorProps);
   }
 }
