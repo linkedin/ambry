@@ -292,7 +292,7 @@ public class ReplicationMetrics {
           .histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-GetRequestTime"));
       plainTextInterColoGetRequestTime.put(datacenter, plainTextInterColoGetRequestTimePerDC);
       Histogram sslInterColoGetRequestTimePerDC =
-          registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInterColoGetRequestTime"));
+          registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslInter-" + datacenter + "-GetRequestTime"));
       sslInterColoGetRequestTime.put(datacenter, sslInterColoGetRequestTimePerDC);
       Histogram interColoBatchStoreWriteTimePerDC =
           registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-BatchStoreWriteTime"));
