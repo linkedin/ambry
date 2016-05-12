@@ -16,7 +16,14 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
+import io.netty.channel.ChannelHandler;
+import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.handler.timeout.IdleStateHandler;
 import java.io.IOException;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -116,6 +123,40 @@ public class NettyServerTest {
     RestRequestHandler requestHandler = new MockRestRequestResponseHandler();
     PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
     RestServerState restServerState = new RestServerState("/healthCheck");
-    return new NettyServer(nettyConfig, nettyMetrics, requestHandler, publicAccessLogger, restServerState);
+    return new NettyServer(nettyConfig, nettyMetrics,
+        initializeChannelHandlers(nettyMetrics, nettyConfig, requestHandler, publicAccessLogger, restServerState));
+  }
+
+  /**
+   * Initialize the {@link ChannelHandler}s to be used in the netty pipeline
+   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
+   * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
+   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
+   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
+   *                              to respond to health check requests
+   */
+  private ArrayList<Map.Entry<String, ChannelHandler>> initializeChannelHandlers(NettyMetrics nettyMetrics,
+      NettyConfig nettyConfig, RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger,
+      RestServerState restServerState) {
+    ArrayList<Map.Entry<String, ChannelHandler>> channelHandlers = new ArrayList<>();
+    // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+    // to go here.
+    channelHandlers.add(new AbstractMap.SimpleEntry<String, ChannelHandler>("codec", new HttpServerCodec()));
+    // for health check request handling
+    channelHandlers.add(new AbstractMap.SimpleEntry<String, ChannelHandler>("HealthCheckHandler",
+        new HealthCheckHandler(restServerState, nettyMetrics)));
+    // for public access logging
+    channelHandlers.add(new AbstractMap.SimpleEntry<String, ChannelHandler>("PublicAccessLogHandler",
+        new PublicAccessLogRequestHandler(publicAccessLogger, nettyMetrics)));
+    // for detecting connections that have been idle too long - probably because of an error.
+    channelHandlers.add(new AbstractMap.SimpleEntry<String, ChannelHandler>("idleStateHandler",
+        new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds)));
+    // for safe writing of chunks for responses
+    channelHandlers.add(new AbstractMap.SimpleEntry<String, ChannelHandler>("chunker", new ChunkedWriteHandler()));
+    // custom processing class that interfaces with a BlobStorageService.
+    channelHandlers.add(new AbstractMap.SimpleEntry<String, ChannelHandler>("processor",
+        new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler)));
+    return channelHandlers;
   }
 }

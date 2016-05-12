@@ -15,17 +15,18 @@ package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
-import io.netty.handler.stream.ChunkedWriteHandler;
-import io.netty.handler.timeout.IdleStateHandler;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,27 +50,20 @@ class NettyServer implements NioServer {
   private final NettyMetrics nettyMetrics;
   private final EventLoopGroup bossGroup;
   private final EventLoopGroup workerGroup;
-  private final RestRequestHandler requestHandler;
-  private final PublicAccessLogger publicAccessLogger;
-  private final RestServerState restServerState;
+  private final ArrayList<Map.Entry<String, ChannelHandler>> channelHandlers;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Creates a new instance of NettyServer.
    * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
-   * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
-   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
-   *                              to respond to health check requests
+   * @param channelHandlers list of {@link io.netty.channel.ChannelHandler}s to be used in the channel pipeline
    */
-  public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics, RestRequestHandler requestHandler,
-      PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
+  public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
+      ArrayList<Map.Entry<String, ChannelHandler>> channelHandlers) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    this.requestHandler = requestHandler;
-    this.publicAccessLogger = publicAccessLogger;
-    this.restServerState = restServerState;
+    this.channelHandlers = channelHandlers;
     bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
     workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
     logger.trace("Instantiated NettyServer");
@@ -90,20 +84,11 @@ class NettyServer implements NioServer {
         @Override
         public void initChannel(SocketChannel ch)
             throws Exception {
-          ch.pipeline()
-              // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-              // to go here.
-              .addLast("codec", new HttpServerCodec())
-                  // for health check request handling
-              .addLast("HealthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
-                  // for public access logging
-              .addLast("PublicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger, nettyMetrics))
-                  // for detecting connections that have been idle too long - probably because of an error.
-              .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-                  // for safe writing of chunks for responses
-              .addLast("chunker", new ChunkedWriteHandler())
-                  // custom processing class that interfaces with a BlobStorageService.
-              .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
+          Iterator<Map.Entry<String, ChannelHandler>> channelHandlerIter = channelHandlers.iterator();
+          while (channelHandlerIter.hasNext()) {
+            Map.Entry<String, ChannelHandler> entry = channelHandlerIter.next();
+            ch.pipeline().addLast(entry.getKey(), entry.getValue());
+          }
         }
       });
       b.bind(nettyConfig.nettyServerPort).sync();
