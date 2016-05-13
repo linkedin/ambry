@@ -24,8 +24,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -50,20 +49,21 @@ class NettyServer implements NioServer {
   private final NettyMetrics nettyMetrics;
   private final EventLoopGroup bossGroup;
   private final EventLoopGroup workerGroup;
-  private final ArrayList<Map.Entry<String, ChannelHandler>> channelHandlers;
+  private final LinkedHashMap<String, ChannelHandler> channelHandlerInfoList;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Creates a new instance of NettyServer.
    * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param channelHandlers list of {@link io.netty.channel.ChannelHandler}s to be used in the channel pipeline
+   * @param channelHandlerInfoList Linkedin list of pairs of {@link ChannelHandler} name and {@link ChannelHandler}s to
+   *                               be used in the channel pipeline
    */
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
-      ArrayList<Map.Entry<String, ChannelHandler>> channelHandlers) {
+      LinkedHashMap<String, ChannelHandler> channelHandlerInfoList) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    this.channelHandlers = channelHandlers;
+    this.channelHandlerInfoList = channelHandlerInfoList;
     bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
     workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
     logger.trace("Instantiated NettyServer");
@@ -84,9 +84,7 @@ class NettyServer implements NioServer {
         @Override
         public void initChannel(SocketChannel ch)
             throws Exception {
-          Iterator<Map.Entry<String, ChannelHandler>> channelHandlerIter = channelHandlers.iterator();
-          while (channelHandlerIter.hasNext()) {
-            Map.Entry<String, ChannelHandler> entry = channelHandlerIter.next();
+          for (Map.Entry<String, ChannelHandler> entry : channelHandlerInfoList.entrySet()) {
             ch.pipeline().addLast(entry.getKey(), entry.getValue());
           }
         }
