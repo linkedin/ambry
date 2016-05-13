@@ -198,7 +198,7 @@ public class SimpleByteBufferPoolTest {
    * t1: R1 timeout.
    * t2: R0 deallocated and R2 served.
    */
-  @Test
+  //@Test
   public void testOneExpiredAnotherServed()
       throws Exception {
     final int size = 1024;
