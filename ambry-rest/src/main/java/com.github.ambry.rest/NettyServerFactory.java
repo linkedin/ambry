@@ -36,14 +36,14 @@ public class NettyServerFactory implements NioServerFactory {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
   // linked hashmap as we need a deterministic order while iterating through the map
-  private LinkedHashMap<String, ChannelHandler> channelHandlerInfoList;
+  private final LinkedHashMap<String, ChannelHandler> channelHandlerInfoList = new LinkedHashMap<>();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Creates a new instance of NettyServerFactory.
    * @param verifiableProperties the in-memory {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
-   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   * @param requestHandler the {@link RestRequestHandler} that handles general requests.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to health check requests
@@ -81,8 +81,8 @@ public class NettyServerFactory implements NioServerFactory {
 
   /**
    * Initialize the {@link ChannelHandler}s to be used in the netty pipeline
-   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
+   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
@@ -90,7 +90,6 @@ public class NettyServerFactory implements NioServerFactory {
    */
   private void initializeChannelHandlers(NettyMetrics nettyMetrics, NettyConfig nettyConfig,
       RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
-    channelHandlerInfoList = new LinkedHashMap<>();
     // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
     // to go here.
     channelHandlerInfoList.put("codec", new HttpServerCodec());

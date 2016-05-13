@@ -127,9 +127,9 @@ public class NettyServerTest {
 
   /**
    * Initialize the {@link ChannelHandler}s to be used in the netty pipeline
-   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
+   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
+   * @param requestHandler the {@link RestRequestHandler} that handles general requests.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to health check requests
