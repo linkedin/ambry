@@ -56,7 +56,7 @@ class NettyServer implements NioServer {
    * Creates a new instance of NettyServer.
    * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param channelHandlerInfoList Linkedin list of pairs of {@link ChannelHandler} name and {@link ChannelHandler}s to
+   * @param channelHandlerInfoList Linked list of pairs of {@link ChannelHandler} name and {@link ChannelHandler}s to
    *                               be used in the channel pipeline
    */
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,

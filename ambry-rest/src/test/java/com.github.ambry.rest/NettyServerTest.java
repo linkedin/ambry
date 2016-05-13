@@ -133,7 +133,7 @@ public class NettyServerTest {
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to health check requests
-   * @return Linkedin list of pairs of {@link ChannelHandler} name and {@link ChannelHandler}s to
+   * @return Linked list of pairs of {@link ChannelHandler} name and {@link ChannelHandler}s to
    *                               be used in the channel pipeline
    */
   private LinkedHashMap<String, ChannelHandler> initializeChannelHandlers(NettyMetrics nettyMetrics,
