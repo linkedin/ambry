@@ -72,6 +72,8 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
+  private final List<Transmission> pendingSslHandshakes;
+  private final Map<String, Long> sslHandshakeTimer;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -90,10 +92,12 @@ public class Selector implements Selectable {
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
+    this.pendingSslHandshakes = new ArrayList<>();
+    this.sslHandshakeTimer = new HashMap<String, Long>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     this.activeConnections = new AtomicLong(0);
-    this.metrics.initializeSelectorMetricsIfRequired(activeConnections);
+    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, pendingSslHandshakes);
     this.sslFactory = sslFactory;
   }
 
@@ -316,6 +320,13 @@ public class Selector implements Selectable {
         try {
           if (key.isConnectable()) {
             handleConnect(key, transmission);
+            if (transmission.ready()) {
+              this.connected.add(transmission.getConnectionId());
+              this.metrics.selectorConnectionCreated.inc();
+            } else {
+              pendingSslHandshakes.add(transmission);
+              sslHandshakeTimer.put(transmission.getConnectionId(), System.currentTimeMillis());
+            }
           }
 
           /* if channel is not ready, finish prepare */
@@ -345,6 +356,24 @@ public class Selector implements Selectable {
           metrics.selectorKeyOperationErrorCount.inc();
           logger.error("closing key on exception remote host {}", channel(key).socket().getRemoteSocketAddress(), e);
           close(key);
+        }
+      }
+
+      Iterator<Transmission> sslTransIter = pendingSslHandshakes.iterator();
+      while (sslTransIter.hasNext()) {
+        Transmission sslTransmission = sslTransIter.next();
+        if (sslTransmission != null && sslTransmission.ready()) {
+          connected.add(sslTransmission.getConnectionId());
+          this.metrics.selectorConnectionCreated.inc();
+          Long handshakeStartTime = sslHandshakeTimer.remove(sslTransmission.getConnectionId());
+          if (handshakeStartTime != null) {
+            this.metrics.selectorPerceivedSslHandshakeTime
+                .update(System.currentTimeMillis() - handshakeStartTime.longValue());
+          }
+          sslTransIter.remove();
+        } else if (sslTransmission == null || !keyMap.containsKey(sslTransmission.getConnectionId())) {
+          // transmission was closed for some reason
+          sslTransIter.remove();
         }
       }
       this.metrics.selectorIORate.inc();
@@ -489,8 +518,6 @@ public class Selector implements Selectable {
   private void handleConnect(SelectionKey key, Transmission transmission)
       throws IOException {
     transmission.finishConnect();
-    this.connected.add(transmission.getConnectionId());
-    this.metrics.selectorConnectionCreated.inc();
   }
 
   /**

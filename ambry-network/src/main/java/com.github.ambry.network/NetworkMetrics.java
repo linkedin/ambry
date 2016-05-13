@@ -38,6 +38,7 @@ public class NetworkMetrics {
   public final Histogram selectorSelectTime;
   public final Counter selectorIORate;
   public final Histogram selectorIOTime;
+  public final Histogram selectorPerceivedSslHandshakeTime;
   public final Counter selectorNioCloseErrorCount;
   public final Counter selectorDisconnectedErrorCount;
   public final Counter selectorIOErrorCount;
@@ -45,6 +46,7 @@ public class NetworkMetrics {
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
   public Gauge<Long> selectorActiveConnections;
+  public Gauge<Integer> selectorPendingHandshakes;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
   // Plaintext metrics
@@ -87,6 +89,8 @@ public class NetworkMetrics {
     selectorIORate = registry.counter(MetricRegistry.name(Selector.class, "SelectorIORate"));
     selectorSelectTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorSelectTime"));
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
+    selectorPerceivedSslHandshakeTime =
+        registry.histogram(MetricRegistry.name(Selector.class, "SelectorSslHandshakeTime"));
     selectorNioCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorNioCloseErrorCount"));
     selectorDisconnectedErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorDisconnectedErrorCount"));
@@ -121,11 +125,23 @@ public class NetworkMetrics {
     selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
   }
 
-  public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections) {
+  /**
+   * Initializes few network metrics for the selector
+   * @param activeConnections count of current active connections
+   * @param pendingSslHandshakes List of {@link Transmission}s that are awaiting for handshake completion
+   */
+  public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections,
+      final List<Transmission> pendingSslHandshakes) {
     selectorActiveConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return activeConnections.get();
+      }
+    };
+    selectorPendingHandshakes = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return pendingSslHandshakes.size();
       }
     };
   }
