@@ -14,16 +14,6 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.SSLConfig;
-import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
-import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.utils.Time;
-import java.util.Arrays;
-import java.util.Set;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -33,6 +23,9 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.Store;
@@ -42,6 +35,7 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -50,12 +44,16 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 final class RemoteReplicaInfo {
@@ -259,7 +257,7 @@ public final class ReplicationManager {
   private final StoreKeyFactory storeKeyFactory;
   private final MetricRegistry metricRegistry;
   private final ArrayList<String> sslEnabledDatacenters;
-  private final Map<String, List<ReplicaThread>> replicaThreadPools;
+  private final Map<String, ArrayList<ReplicaThread>> replicaThreadPools;
   private final Map<String, Integer> numberOfReplicaThreads;
 
   private static final String replicaTokenFileName = "replicaTokens";
@@ -276,7 +274,7 @@ public final class ReplicationManager {
       this.replicationConfig = replicationConfig;
       this.storeKeyFactory = storeKeyFactory;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      this.replicaThreadPools = new HashMap<String, List<ReplicaThread>>();
+      this.replicaThreadPools = new HashMap<String, ArrayList<ReplicaThread>>();
       this.replicationMetrics = new ReplicationMetrics(metricRegistry, clusterMap.getReplicaIds(dataNode));
       this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
       this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
@@ -446,7 +444,7 @@ public final class ReplicationManager {
       throws ReplicationException {
     try {
       // stop all replica threads
-      for (Map.Entry<String, List<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
+      for (Map.Entry<String, ArrayList<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
         if (replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
           for (ReplicaThread replicaThread : replicaThreads.getValue()) {
             replicaThread.shutdown();
@@ -454,7 +452,7 @@ public final class ReplicationManager {
         }
       }
 
-      for (Map.Entry<String, List<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
+      for (Map.Entry<String, ArrayList<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
         if (!replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
           for (ReplicaThread replicaThread : replicaThreads.getValue()) {
             replicaThread.shutdown();
@@ -561,7 +559,7 @@ public final class ReplicationManager {
         if (replicaThreadPools.containsKey(datacenter)) {
           replicaThreadPools.get(datacenter).add(replicaThread);
         } else {
-          replicaThreadPools.put(datacenter, Arrays.asList(replicaThread));
+          replicaThreadPools.put(datacenter, new ArrayList<>(Arrays.asList(replicaThread)));
         }
       }
     }

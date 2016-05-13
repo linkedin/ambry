@@ -612,7 +612,7 @@ public class ReplicationTest {
       }
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
 
-      Map<String, List<ReplicaThread>> replicaThreadMap = new HashMap<String, List<ReplicaThread>>();
+      Map<String, ArrayList<ReplicaThread>> replicaThreadMap = new HashMap<String, ArrayList<ReplicaThread>>();
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
       replicationMetrics
@@ -868,7 +868,7 @@ public class ReplicationTest {
         }
       }
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
-      Map<String, List<ReplicaThread>> replicaThreadMap = new HashMap<String, List<ReplicaThread>>();
+      Map<String, ArrayList<ReplicaThread>> replicaThreadMap = new HashMap<String, ArrayList<ReplicaThread>>();
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
       replicationMetrics
@@ -1099,7 +1099,7 @@ public class ReplicationTest {
         }
       }
       ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(new Properties()));
-      Map<String, List<ReplicaThread>> replicaThreadMap = new HashMap<String, List<ReplicaThread>>();
+      Map<String, ArrayList<ReplicaThread>> replicaThreadMap = new HashMap<String, ArrayList<ReplicaThread>>();
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
       replicationMetrics
