@@ -78,17 +78,7 @@ public class RestServer {
       NotificationSystem notificationSystem)
       throws InstantiationException {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
-      StringBuilder errorMessage = new StringBuilder("Null arg(s) received during instantiation of RestServer -");
-      if (verifiableProperties == null) {
-        errorMessage.append(" [VerifiableProperties] ");
-      }
-      if (clusterMap == null) {
-        errorMessage.append(" [ClusterMap] ");
-      }
-      if (notificationSystem == null) {
-        errorMessage.append(" [NotificationSystem] ");
-      }
-      throw new IllegalArgumentException(errorMessage.toString());
+      throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
     reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();

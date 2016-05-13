@@ -305,6 +305,22 @@ public class UtilsTest {
     }
   }
 
+  @Test
+  /**
+   * Tests {@link Utils#getRootCause(Throwable)}.
+   */ public void getRootCauseTest() {
+    int nestingLevel = 5;
+    String innerExceptionMsg = "InnerException";
+    String outerExceptionMsgBase = "OuterException";
+    Exception innerException = new Exception(innerExceptionMsg);
+    Exception outerException = null;
+    for (int i = 0; i < nestingLevel; i++) {
+      outerException = new Exception(outerExceptionMsgBase + "-" + i, innerException);
+    }
+    assertEquals("Message should that of the innermost exception", innerExceptionMsg,
+        Utils.getRootCause(outerException).getMessage());
+  }
+
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   static Random random = new Random();
 

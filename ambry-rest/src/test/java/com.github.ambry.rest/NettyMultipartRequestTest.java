@@ -18,6 +18,7 @@ import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.CopyingAsyncWritableChannel;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpContent;
@@ -161,7 +162,7 @@ public class NettyMultipartRequestTest {
       request.readInto(new ByteBufferAsyncWritableChannel(), null).get();
       fail("Reading should have failed because request is closed");
     } catch (ExecutionException e) {
-      assertEquals("Unexpected exception", ClosedChannelException.class, getRootCause(e).getClass());
+      assertEquals("Unexpected exception", ClosedChannelException.class, Utils.getRootCause(e).getClass());
     }
 
     try {
@@ -368,19 +369,6 @@ public class NettyMultipartRequestTest {
   private void closeRequestAndValidate(NettyMultipartRequest request) {
     request.close();
     assertFalse("Request channel is not closed", request.isOpen());
-  }
-
-  /**
-   * Gets the root cause for {@code e}.
-   * @param e the {@link Exception} whose root cause is required.
-   * @return the root cause for {@code e}.
-   */
-  private Exception getRootCause(Exception e) {
-    Exception exception = e;
-    while (exception.getCause() != null) {
-      exception = (Exception) exception.getCause();
-    }
-    return exception;
   }
 
   // multipartRequestDecodeTest() helpers.

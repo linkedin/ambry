@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * {@link NettyMessageProcessor}, is responsible for processing the inbound requests and passing them to services that
  * can generate a response.
  */
-class NettyServer implements NioServer {
+public class NettyServer implements NioServer {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
   private final EventLoopGroup bossGroup;

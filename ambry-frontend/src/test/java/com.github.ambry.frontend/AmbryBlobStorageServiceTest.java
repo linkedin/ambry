@@ -349,6 +349,9 @@ public class AmbryBlobStorageServiceTest {
     getBlobInfoAndVerify(blobId, headers);
     getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
+
+    // check GET, HEAD and DELETE after delete.
+    verifyOperationsAfterDelete(blobId);
   }
 
   /**
@@ -844,6 +847,49 @@ public class AmbryBlobStorageServiceTest {
   private void deleteBlobAndVerify(String blobId)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
+    verifyDeleteAccepted(restRequest);
+  }
+
+  /**
+   * Verifies that the right {@link ResponseStatus} is returned for GET, HEAD and DELETE once a blob is deleted.
+   * @param blobId the ID of the blob that was deleted.
+   * @throws Exception
+   */
+  private void verifyOperationsAfterDelete(String blobId)
+      throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
+    verifyGone(restRequest);
+
+    restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
+    verifyGone(restRequest);
+
+    restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
+    verifyDeleteAccepted(restRequest);
+  }
+
+  /**
+   * Verifies that a blob is GONE after it is deleted.
+   * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
+   */
+  private void verifyGone(RestRequest restRequest)
+      throws Exception {
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Operation should have failed because blob is deleted");
+    } catch (RestServiceException e) {
+      assertEquals("AmbryBlobStorageService should have thrown a Deleted exception", RestServiceErrorCode.Deleted,
+          e.getErrorCode());
+    }
+  }
+
+  /**
+   * Verifies that a request returns the right response code  once the blob has been deleted.
+   * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
+   * @throws Exception
+   */
+  private void verifyDeleteAccepted(RestRequest restRequest)
+      throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
@@ -952,24 +998,11 @@ public class AmbryBlobStorageServiceTest {
           + " should have failed because an external service would have thrown an exception");
     } catch (RestServiceException e) {
       // catching RestServiceException because RouterException should have been converted.
-      assertEquals("Unexpected exception message", expectedExceptionMsg, getRootCause(e).getMessage());
+      assertEquals("Unexpected exception message", expectedExceptionMsg, Utils.getRootCause(e).getMessage());
       // Nothing should be closed.
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
       restRequest.close();
     }
-  }
-
-  /**
-   * Gets the root cause for {@code e}.
-   * @param e the {@link Exception} whose root cause is required.
-   * @return the root cause for {@code e}.
-   */
-  private Exception getRootCause(Exception e) {
-    Exception exception = e;
-    while (exception.getCause() != null) {
-      exception = (Exception) exception.getCause();
-    }
-    return exception;
   }
 }
 

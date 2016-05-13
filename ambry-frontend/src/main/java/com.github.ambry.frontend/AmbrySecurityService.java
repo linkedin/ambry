@@ -150,7 +150,6 @@ class AmbrySecurityService implements SecurityService {
   private void setHeadResponseHeaders(BlobInfo blobInfo, RestResponseChannel restResponseChannel)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());

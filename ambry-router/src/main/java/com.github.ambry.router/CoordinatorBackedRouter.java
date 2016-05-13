@@ -64,18 +64,7 @@ public class CoordinatorBackedRouter implements Router {
   public CoordinatorBackedRouter(RouterConfig routerConfig, CoordinatorBackedRouterMetrics metrics,
       Coordinator coordinator) {
     if (routerConfig == null || metrics == null || coordinator == null) {
-      StringBuilder errorMessage =
-          new StringBuilder("Null arg(s) received during instantiation of CoordinatorBackedRouter -");
-      if (routerConfig == null) {
-        errorMessage.append(" [RouterConfig] ");
-      }
-      if (metrics == null) {
-        errorMessage.append(" [CoordinatorBackedRouterMetrics] ");
-      }
-      if (coordinator == null) {
-        errorMessage.append(" [Coordinator] ");
-      }
-      throw new IllegalArgumentException(errorMessage.toString());
+      throw new IllegalArgumentException("Null arg(s) received during instantiation of CoordinatorBackedRouter");
     }
     this.operationPool = Executors.newFixedThreadPool(routerConfig.routerScalingUnitCount);
     this.metrics = metrics;

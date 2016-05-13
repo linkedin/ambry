@@ -24,7 +24,7 @@ import com.codahale.metrics.MetricRegistry;
  * <p/>
  * Exports metrics that are triggered by Netty to the provided {@link MetricRegistry}.
  */
-class NettyMetrics {
+public class NettyMetrics {
 
   // Rates
   // NettyMessageProcessor
@@ -36,7 +36,7 @@ class NettyMetrics {
   // NettyResponseChannel
   public final Meter bytesWriteRate;
   public final Meter requestCompletionRate;
-  // PublicAccessLogRequestHandler
+  // PublicAccessLogHandler
   public final Meter publicAccessLogRequestRate;
   // HealthCheckRequestHandler
   public final Meter healthCheckRequestRate;
@@ -54,12 +54,13 @@ class NettyMetrics {
   public final Histogram responseFinishProcessingTimeInMs;
   public final Histogram responseMetadataProcessingTimeInMs;
   public final Histogram writeProcessingTimeInMs;
-  // PublicAccessLogRequestHandler
+  // PublicAccessLogHandler
   public final Histogram publicAccessLogRequestProcessingTimeInMs;
   public final Histogram publicAccessLogResponseProcessingTimeInMs;
   // HealthCheckRequestHandler
   public final Histogram healthCheckRequestProcessingTimeInMs;
   public final Histogram healthCheckRequestRoundTripTimeInMs;
+  public final Histogram healthCheckResponseProcessingTimeInMs;
 
   // Errors
   // NettyMessageProcessor
@@ -107,7 +108,7 @@ class NettyMetrics {
   // NettyServer
   public final Histogram nettyServerShutdownTimeInMs;
   public final Histogram nettyServerStartTimeInMs;
-  // PublicAccessLogRequestHandler
+  // PublicAccessLogHandler
   public final Counter publicAccessLogRequestDisconnectWhileInProgressCount;
   public final Counter publicAccessLogRequestCloseWhileRequestInProgressCount;
   // HealthCheckRequestHandler
@@ -132,7 +133,7 @@ class NettyMetrics {
     requestCompletionRate =
         metricRegistry.meter(MetricRegistry.name(NettyResponseChannel.class, "RequestCompletionRate"));
     publicAccessLogRequestRate =
-        metricRegistry.meter(MetricRegistry.name(PublicAccessLogRequestHandler.class, "RequestArrivalRate"));
+        metricRegistry.meter(MetricRegistry.name(PublicAccessLogHandler.class, "RequestArrivalRate"));
     healthCheckRequestRate = metricRegistry.meter(MetricRegistry.name(HealthCheckHandler.class, "RequestArrivalRate"));
 
     // Latencies
@@ -158,13 +159,15 @@ class NettyMetrics {
     writeProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "WriteProcessingTimeInMs"));
     publicAccessLogRequestProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(PublicAccessLogRequestHandler.class, "RequestProcessingTimeInMs"));
-    publicAccessLogResponseProcessingTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(PublicAccessLogRequestHandler.class, "ResponseProcessingTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(PublicAccessLogHandler.class, "RequestProcessingTimeInMs"));
+    publicAccessLogResponseProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(PublicAccessLogHandler.class, "ResponseProcessingTimeInMs"));
     healthCheckRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "RequestProcessingTimeInMs"));
     healthCheckRequestRoundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "RequestRoundTripTimeInMs"));
+    healthCheckResponseProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "ResponseProcessingTimeInMs"));
 
     // Errors
     // NettyMessageProcessor

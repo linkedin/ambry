@@ -13,12 +13,6 @@
  */
 package com.github.ambry.utils;
 
-import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,8 +26,12 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 
 /**
@@ -681,5 +679,18 @@ public class Utils {
       return newBuffer;
     }
     return existingBuffer;
+  }
+
+  /**
+   * Gets the root cause for {@code t}.
+   * @param t the {@link Throwable} whose root cause is required.
+   * @return the root cause for {@code t}.
+   */
+  public static Throwable getRootCause(Throwable t) {
+    Throwable throwable = t;
+    while (throwable != null && throwable.getCause() != null) {
+      throwable = throwable.getCause();
+    }
+    return throwable;
   }
 }

@@ -16,6 +16,7 @@ package com.github.ambry.commons;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -63,7 +64,7 @@ public class ByteBufferReadableStreamChannelTest {
       readableStreamChannel.readInto(new BadAsyncWritableChannel(new IOException(errMsg)), callback).get();
       fail("Should have failed because BadAsyncWritableChannel would have thrown exception");
     } catch (ExecutionException e) {
-      Exception exception = getRootCause(e);
+      Exception exception = (Exception) Utils.getRootCause(e);
       assertEquals("Exception message does not match expected (future)", errMsg, exception.getMessage());
       assertEquals("Exception message does not match expected (callback)", errMsg, callback.exception.getMessage());
     }
@@ -88,7 +89,7 @@ public class ByteBufferReadableStreamChannelTest {
       readableStreamChannel.readInto(writeChannel, callback).get();
       fail("ByteBufferReadableStreamChannel has been closed, so read should have thrown ClosedChannelException");
     } catch (ExecutionException e) {
-      Exception exception = getRootCause(e);
+      Exception exception = (Exception) Utils.getRootCause(e);
       assertTrue("Exception is not ClosedChannelException", exception instanceof ClosedChannelException);
       assertEquals("Exceptions of callback and future differ", exception.getMessage(), callback.exception.getMessage());
     }
@@ -155,19 +156,6 @@ public class ByteBufferReadableStreamChannelTest {
   private byte[] fillRandomBytes(byte[] in) {
     new Random().nextBytes(in);
     return in;
-  }
-
-  /**
-   * Gets the root cause for {@code e}.
-   * @param e the {@link Exception} whose root cause is required.
-   * @return the root cause for {@code e}.
-   */
-  private Exception getRootCause(Exception e) {
-    Exception exception = e;
-    while (exception.getCause() != null) {
-      exception = (Exception) exception.getCause();
-    }
-    return exception;
   }
 
   // commonCaseTest() helpers
