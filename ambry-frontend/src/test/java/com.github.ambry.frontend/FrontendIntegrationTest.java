@@ -47,12 +47,16 @@ import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
+import junit.framework.Assert;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -118,31 +122,14 @@ public class FrontendIntegrationTest {
 
   /**
    * Tests blob POST, GET, HEAD and DELETE operations.
-   * @throws ExecutionException
-   * @throws InterruptedException
+   * @throws Exception
    */
   @Test
   public void postGetHeadDeleteTest()
-      throws ExecutionException, InterruptedException {
-    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
-    String serviceId = "postGetHeadDeleteServiceID";
-    String contentType = "application/octet-stream";
-    String ownerId = "postGetHeadDeleteOwnerID";
-    HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
-    headers.set(HttpHeaders.Names.CONTENT_LENGTH, content.capacity());
-    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
-    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
-
-    String blobId = postBlobAndVerify(headers, content);
-    getBlobAndVerify(blobId, headers, content);
-    getUserMetadataAndVerify(blobId, headers, null);
-    getBlobInfoAndVerify(blobId, headers, null);
-    getHeadAndVerify(blobId, headers);
-    deleteBlobAndVerify(blobId);
-
-    // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId);
+      throws Exception {
+    doPostGetHeadDeleteTest(1024);
+    doPostGetHeadDeleteTest(8192);
+    doPostGetHeadDeleteTest(10000);
   }
 
   /**
@@ -193,6 +180,35 @@ public class FrontendIntegrationTest {
   // general
 
   /**
+   * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
+   * @param contentSize the size of the blob to be tested
+   * @throws Exception
+   */
+  private void doPostGetHeadDeleteTest(int contentSize)
+      throws Exception {
+    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(contentSize));
+    String serviceId = "postGetHeadDeleteServiceID";
+    String contentType = "application/octet-stream";
+    String ownerId = "postGetHeadDeleteOwnerID";
+    HttpHeaders headers = new DefaultHttpHeaders();
+    setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
+    headers.set(HttpHeaders.Names.CONTENT_LENGTH, content.capacity());
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+
+    String blobId = postBlobAndVerify(headers, content);
+    getBlobAndVerify(blobId, headers, content);
+    getNotModifiedBlobAndVerify(blobId);
+    getUserMetadataAndVerify(blobId, headers, null);
+    getBlobInfoAndVerify(blobId, headers, null);
+    getHeadAndVerify(blobId, headers);
+    deleteBlobAndVerify(blobId);
+
+    // check GET, HEAD and DELETE after delete.
+    verifyOperationsAfterDelete(blobId);
+  }
+
+  /**
    * Method to easily create a request.
    * @param httpMethod the {@link HttpMethod} desired.
    * @param uri string representation of the desired URI.
@@ -235,6 +251,21 @@ public class FrontendIntegrationTest {
       ReferenceCountUtil.release(content);
     }
     return buffer;
+  }
+
+  /**
+   * Verifies that no content has been sent as part of the response or readable bytes is equivalent to 0
+   * @param contents the content of the response.
+   */
+  private void assertNoContent(Queue<HttpObject> contents) {
+    boolean endMarkerFound = false;
+    for (HttpObject object : contents) {
+      assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
+      HttpContent content = (HttpContent) object;
+      Assert.assertEquals("No content expected ", 0, content.content().readableBytes());
+      endMarkerFound = object instanceof LastHttpContent;
+      ReferenceCountUtil.release(content);
+    }
   }
 
   /**
@@ -351,6 +382,27 @@ public class FrontendIntegrationTest {
     ByteBuffer responseContent = getContent(response, responseParts);
     assertArrayEquals("GET content does not match original content", expectedContent.array(), responseContent.array());
     assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
+  }
+
+  /**
+   * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
+   * @param blobId the blob ID of the blob to GET.
+   * @throws Exception
+   */
+  private void getNotModifiedBlobAndVerify(String blobId)
+      throws Exception {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.NOT_MODIFIED, response.getStatus());
+    assertTrue("No Date header", response.headers().get(RestUtils.Headers.DATE) != null);
+    assertNull("No Last-Modified header expected", response.headers().get("Last-Modified"));
+    assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
+        response.headers().get(RestUtils.Headers.BLOB_SIZE));
+    assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    assertNoContent(responseParts);
   }
 
   /**

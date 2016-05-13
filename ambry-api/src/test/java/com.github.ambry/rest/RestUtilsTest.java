@@ -20,11 +20,15 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.TimeZone;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -608,7 +612,7 @@ public class RestUtilsTest {
       boolean keyFromInputMap = inputUserMetadata.containsKey(key);
       assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
       assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
-              + ", and output map value " + userMetadataMap.get(key),
+          + ", and output map value " + userMetadataMap.get(key),
           inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
     }
   }
@@ -665,5 +669,34 @@ public class RestUtilsTest {
     for (String key : userMetadata.keySet()) {
       headers.put(key, userMetadata.get(key));
     }
+  }
+
+  @Test
+  public void toSecondsPrecisionInMsTest() {
+    assertEquals(0, RestUtils.toSecondsPrecisionInMs(999));
+    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1000));
+    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1001));
+  }
+
+  @Test
+  public void getTimeFromDateStringTest() {
+    SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
+    dateFormatter.setTimeZone(TimeZone.getTimeZone("GMT"));
+    long curTime = System.currentTimeMillis();
+    Date curDate = new Date(curTime);
+    String dateStr = dateFormatter.format(curDate);
+    long epochTime = RestUtils.getTimeFromDateString(dateStr);
+    long actualExpectedTime = (curTime / 1000L) * 1000;
+    // Note http time is kept in Seconds so last three digits will be 000
+    assertEquals("Time mismatch ", actualExpectedTime, epochTime);
+
+    dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.CHINA);
+    curTime = System.currentTimeMillis();
+    curDate = new Date(curTime);
+    dateStr = dateFormatter.format(curDate);
+    // any other locale is not accepted
+    assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString(dateStr));
+
+    assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString("abc"));
   }
 }

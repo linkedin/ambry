@@ -50,6 +50,13 @@ public class FrontendConfig {
   @Default("")
   public final List<String> frontendPathPrefixesToRemove;
 
+  /**
+   * Specifies the blob size in bytes beyond which chunked response will be sent for a getBlob() call
+   */
+  @Config("frontend.chunked.get.response.threshold.in.bytes")
+  @Default("8192")
+  public final Integer frontendChunkedGetResponseThresholdInBytes;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     frontendIdConverterFactory = verifiableProperties
@@ -58,5 +65,7 @@ public class FrontendConfig {
         .getString("frontend.security.service.factory", "com.github.ambry.frontend.AmbrySecurityServiceFactory");
     frontendPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
+    frontendChunkedGetResponseThresholdInBytes =
+        verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
   }
 }

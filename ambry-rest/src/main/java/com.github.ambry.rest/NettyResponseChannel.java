@@ -380,6 +380,9 @@ class NettyResponseChannel implements RestResponseChannel {
       case Accepted:
         status = HttpResponseStatus.ACCEPTED;
         break;
+      case NotModified:
+        status = HttpResponseStatus.NOT_MODIFIED;
+        break;
       case BadRequest:
         nettyMetrics.badRequestCount.inc();
         status = HttpResponseStatus.BAD_REQUEST;

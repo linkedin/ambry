@@ -34,8 +34,11 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Properties;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,8 +54,7 @@ import org.junit.Test;
 public class AmbrySecurityServiceTest {
 
   private SecurityService securityService;
-  private final long cacheValidityInSecs =
-      new FrontendConfig(new VerifiableProperties(new Properties())).frontendCacheValiditySeconds;
+  private final static FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
 
   public AmbrySecurityServiceTest()
       throws InstantiationException {
@@ -169,7 +171,9 @@ public class AmbrySecurityServiceTest {
     }
 
     // Head for a public blob with a diff TTL
-    blobInfo = new BlobInfo(getBlobProperties(100, false, 10000, "image/gif"), null);
+    blobInfo = new BlobInfo(
+        getBlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, false, 10000, "image/gif"),
+        null);
     callback.reset();
     restResponseChannel = new MockRestResponseChannel();
     restRequest = createRestRequest(RestMethod.HEAD, "/", null);
@@ -192,6 +196,7 @@ public class AmbrySecurityServiceTest {
 
     // Get Blob
     testGetBlob(callback, blobInfo);
+    testGetNotModifiedBlob(callback, blobInfo);
     // Get blob for a private blob
     blobInfo = new BlobInfo(getBlobProperties(100, false, Utils.Infinite_Time, "image/gif"), null);
     testGetBlob(callback, blobInfo);
@@ -204,6 +209,12 @@ public class AmbrySecurityServiceTest {
     // Head and Get
     testExceptionCasesProcessResponse(RestMethod.HEAD, callback, blobInfo);
     testExceptionCasesProcessResponse(RestMethod.GET, callback, blobInfo);
+
+    // test Get of a large blob
+    blobInfo = new BlobInfo(
+        getBlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 2, false, 10000, "image/gif"),
+        null);
+    testGetBlob(callback, blobInfo);
 
     // security service closed
     callback = new SecurityServiceCallback();
@@ -266,6 +277,31 @@ public class AmbrySecurityServiceTest {
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
     verifyHeadersForGetBlob(blobInfo.getBlobProperties(), restResponseChannel);
+  }
+
+  /**
+   * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Get blob
+   * with the passed in {@link BlobInfo} for a not modified response
+   * @param callback {@link Callback} to be used with the security service
+   * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}
+   * @throws Exception
+   */
+  private void testGetNotModifiedBlob(SecurityServiceCallback callback, BlobInfo blobInfo)
+      throws Exception {
+    callback.reset();
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    JSONObject headers = new JSONObject();
+    SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
+    dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
+    Date date = new Date(System.currentTimeMillis());
+    String dateStr = dateFormat.format(date);
+    headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/abc", headers);
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
+    Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
+    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
+    verifyHeadersForGetBlobNotModified(restResponseChannel);
   }
 
   /**
@@ -354,8 +390,13 @@ public class AmbrySecurityServiceTest {
     Assert.assertNull("TTL value should not be set", restResponseChannel.getHeader(RestUtils.Headers.TTL));
     Assert.assertNull("ServiceID value should not be set", restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
     Assert.assertNull("OwnerId value should not be set", restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
-    Assert.assertNull("Content length value should not be set",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    if (blobProperties.getBlobSize() < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
+      Assert.assertEquals("Content length value mismatch", blobProperties.getBlobSize(),
+          Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    } else {
+      Assert.assertNull("Content length value should not be set",
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    }
     Assert.assertNull("Ambry Content Type should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
     Assert.assertNull("CreationTime should not be set", restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME));
@@ -368,11 +409,30 @@ public class AmbrySecurityServiceTest {
     } else {
       Assert.assertNotSame("Expires value not as expected", new Date(0),
           restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
-      Assert.assertEquals("Cache-Control value not as expected", "max-age=" + cacheValidityInSecs,
+      Assert.assertEquals("Cache-Control value not as expected",
+          "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert
           .assertNull("Pragma value should not have been set", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     }
+  }
+
+  /**
+   * Verify the headers from the response for a Not modified blob are as expected
+   * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
+   * @throws RestServiceException if there was any problem getting the headers.
+   */
+  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    Assert.assertNull("Blob Size should have been null", restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+    Assert.assertNull("Content Type should have been null",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    Assert.assertNull("Expires should have been null", restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
+    Assert.assertNull("Cache control should have been null",
+        restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
+    Assert.assertNull("Pragma should have been null", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
+    Assert.assertEquals("Content lenght should have been 0", "0",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
   }
 
   /**
