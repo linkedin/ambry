@@ -65,7 +65,8 @@ public class ServerSSLTokenTest {
   }
 
   @After
-  public void cleanup() throws IOException {
+  public void cleanup()
+      throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
@@ -84,7 +85,7 @@ public class ServerSSLTokenTest {
     List<DataNodeId> dataNodes = sslCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
     ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "DC2,DC3", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
-        new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster, clientSSLConfig, clientSSLSocketFactory,
-        notificationSystem, coordinatorProps);
+        new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster, sslFactory, notificationSystem,
+        coordinatorProps);
   }
 }

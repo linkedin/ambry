@@ -43,6 +43,7 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLBlockingChannel;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOptions;
@@ -105,8 +106,7 @@ class HelperCoordinator extends AmbryCoordinator {
 public final class ServerTestUtil {
 
   protected static void endToEndTest(Port targetPort, String coordinatorDatacenter, String sslEnabledDatacenters,
-      MockCluster cluster, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory,
-      Properties coordinatorProps)
+      MockCluster cluster, SSLFactory sslFactory, Properties coordinatorProps)
       throws InterruptedException, IOException, InstantiationException {
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -123,8 +123,7 @@ public final class ServerTestUtil {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
-      BlockingChannel channel =
-          getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
+      BlockingChannel channel = getBlockingChannelBasedOnPortType(targetPort, "localhost", sslFactory);
       channel.connect();
       channel.send(putRequest);
       InputStream putResponseStream = channel.receive().getInputStream();
@@ -210,7 +209,8 @@ public final class ServerTestUtil {
       channel.send(getRequestExpired);
       InputStream streamExpired = channel.receive().getInputStream();
       GetResponse respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
-      Assert.assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert
+          .assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // 2. With Include_Expired flag
       idsExpired = new ArrayList<BlobId>();
@@ -302,10 +302,8 @@ public final class ServerTestUtil {
   }
 
   protected static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber,
-      Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1,
-      SSLConfig clientSSLConfig2, SSLConfig clientSSLConfig3, SSLSocketFactory clientSSLSocketFactory1,
-      SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
-      MockNotificationSystem notificationSystem)
+      Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLFactory sslFactory1,
+      SSLFactory sslFactory2, SSLFactory sslFactory3, MockNotificationSystem notificationSystem)
       throws InterruptedException, IOException, InstantiationException {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainTextPort
     try {
@@ -318,12 +316,9 @@ public final class ServerTestUtil {
       new Random().nextBytes(data);
 
       // connect to all the servers
-      BlockingChannel channel1 =
-          getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
-      BlockingChannel channel2 =
-          getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory2, clientSSLConfig2);
-      BlockingChannel channel3 =
-          getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory3, clientSSLConfig3);
+      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", sslFactory1);
+      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", sslFactory2);
+      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", sslFactory3);
 
       // put all the blobs to random servers
       channel1.connect();
@@ -774,8 +769,8 @@ public final class ServerTestUtil {
 
   protected static void endToEndReplicationWithMultiNodeSinglePartitionTest(String coordinatorDatacenter,
       String sslEnabledDatacenters, int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port,
-      Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1, SSLSocketFactory clientSSLSocketFactory1,
-      MockNotificationSystem notificationSystem, Properties coordinatorProps)
+      Port dataNode3Port, MockCluster cluster, SSLFactory sslFactory, MockNotificationSystem notificationSystem,
+      Properties coordinatorProps)
       throws InterruptedException, IOException, InstantiationException {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainText port
     try {
@@ -801,12 +796,9 @@ public final class ServerTestUtil {
       // put blob 1
       PutRequest putRequest = new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(data)), properties.getBlobSize(), BlobType.DataBlob);
-      BlockingChannel channel1 =
-          getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
-      BlockingChannel channel2 =
-          getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
-      BlockingChannel channel3 =
-          getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
+      BlockingChannel channel1 = getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", sslFactory);
+      BlockingChannel channel2 = getBlockingChannelBasedOnPortType(dataNode2Port, "localhost", sslFactory);
+      BlockingChannel channel3 = getBlockingChannelBasedOnPortType(dataNode3Port, "localhost", sslFactory);
 
       channel1.connect();
       channel2.connect();
@@ -1287,13 +1279,13 @@ public final class ServerTestUtil {
    * @return BlockingChannel
    */
   protected static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
-      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+      SSLFactory sslFactory) {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
       channel = new BlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);
     } else if (targetPort.getPortType() == PortType.SSL) {
       channel = new SSLBlockingChannel(hostName, targetPort.getPort(), new MetricRegistry(), 10000, 10000, 10000, 4000,
-          sslSocketFactory, sslConfig);
+          sslFactory);
     }
     return channel;
   }

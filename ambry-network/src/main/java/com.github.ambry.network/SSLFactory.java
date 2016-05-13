@@ -182,6 +182,14 @@ public class SSLFactory {
     this.truststore = new SecurityStore(type, path, password);
   }
 
+  public String[] getSslEnabledProtocols() {
+    return enabledProtocols;
+  }
+
+  public String[] getCipherSuites() {
+    return cipherSuites;
+  }
+
   private class SecurityStore {
     private final String type;
     private final String path;

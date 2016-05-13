@@ -69,9 +69,8 @@ public class ServerPlaintextTest {
   public void endToEndTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil
-        .endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null, null,
-            coordinatorProps);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
+        coordinatorProps);
   }
 
   @Test
@@ -83,7 +82,7 @@ public class ServerPlaintextTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, null, null, null, null,
+        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, null,
         notificationSystem);
   }
 

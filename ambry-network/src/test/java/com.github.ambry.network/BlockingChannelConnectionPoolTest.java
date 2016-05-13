@@ -173,7 +173,7 @@ public class BlockingChannelConnectionPoolTest {
       throws InterruptedException, ConnectionPoolTimeoutException {
     BlockingChannelInfo channelInfo =
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
-            new MetricRegistry(), sslSocketFactory, sslConfig);
+            new MetricRegistry(), sslFactory);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
     BlockingChannel blockingChannel = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
@@ -187,7 +187,7 @@ public class BlockingChannelConnectionPoolTest {
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
     BlockingChannelInfo channelInfo =
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
-            new MetricRegistry(), sslSocketFactory, sslConfig);
+            new MetricRegistry(), sslFactory);
 
     CountDownLatch channelCount = new CountDownLatch(maxConnectionsPerHost);
     CountDownLatch shouldRelease = new CountDownLatch(1);
@@ -227,7 +227,7 @@ public class BlockingChannelConnectionPoolTest {
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
     BlockingChannelInfo channelInfo =
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
-            new MetricRegistry(), sslSocketFactory, sslConfig);
+            new MetricRegistry(), sslFactory);
     CountDownLatch channelCount = new CountDownLatch(underSubscriptionCount);
     CountDownLatch shouldRelease = new CountDownLatch(1);
     CountDownLatch releaseComplete = new CountDownLatch(underSubscriptionCount);

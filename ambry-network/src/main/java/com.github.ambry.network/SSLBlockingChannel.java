@@ -32,18 +32,20 @@ import javax.net.ssl.SSLSocketFactory;
 public class SSLBlockingChannel extends BlockingChannel {
   private SSLSocket sslSocket = null;
   private final SSLSocketFactory sslSocketFactory;
-  private final SSLConfig sslConfig;
+  private final String[] sslEnabledProtocols;
+  private final String[] sslCipherSuites;
   public final Counter sslClientHandshakeErrorCount;
   public final Counter sslClientHandshakeCount;
 
   public SSLBlockingChannel(String host, int port, MetricRegistry registry, int readBufferSize, int writeBufferSize,
-      int readTimeoutMs, int connectTimeoutMs, SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+      int readTimeoutMs, int connectTimeoutMs, SSLFactory sslFactory) {
     super(host, port, readBufferSize, writeBufferSize, readTimeoutMs, connectTimeoutMs);
-    if (sslSocketFactory == null) {
-      throw new IllegalArgumentException("sslSocketFactory is null when creating SSLBlockingChannel");
+    if (sslFactory == null) {
+      throw new IllegalArgumentException("sslFactory is null when creating SSLBlockingChannel");
     }
-    this.sslSocketFactory = sslSocketFactory;
-    this.sslConfig = sslConfig;
+    sslSocketFactory = sslFactory.getSSLContext().getSocketFactory();
+    sslEnabledProtocols = sslFactory.getSslEnabledProtocols();
+    sslCipherSuites = sslFactory.getCipherSuites();
     sslClientHandshakeErrorCount =
         registry.counter(MetricRegistry.name(SSLBlockingChannel.class, "SslClientHandshakeErrorCount"));
     sslClientHandshakeCount =
@@ -68,17 +70,12 @@ public class SSLBlockingChannel extends BlockingChannel {
         socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
         sslSocket = (SSLSocket) sslSocketFactory.createSocket(socket, host, port, true);
 
-        ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
-        if (protocolsList != null && protocolsList.size() > 0) {
-          String[] enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
-          sslSocket.setEnabledProtocols(enabledProtocols);
+        if (sslEnabledProtocols.length > 0) {
+          sslSocket.setEnabledProtocols(sslEnabledProtocols);
         }
 
-        ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
-        if (cipherSuitesList != null && cipherSuitesList.size() > 0 &&
-            !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
-          String[] cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
-          sslSocket.setEnabledCipherSuites(cipherSuites);
+        if (sslCipherSuites.length > 0) {
+          sslSocket.setEnabledCipherSuites(sslCipherSuites);
         }
 
         // handshake in a blocking way

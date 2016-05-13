@@ -95,7 +95,7 @@ public class SocketServerTest {
     if (targetPort.getPortType() == PortType.SSL) {
       channel =
           new SSLBlockingChannel("localhost", targetPort.getPort(), new MetricRegistry(), 10000, 10000, 1000, 2000,
-              clientSSLSocketFactory, clientSSLConfig);
+              clientSSLFactory);
     } else {
       channel = new BlockingChannel("localhost", targetPort.getPort(), 10000, 10000, 1000, 2000);
     }
