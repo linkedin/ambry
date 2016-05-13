@@ -143,7 +143,7 @@ public class BlockingChannelConnectionPoolTest {
     }
   }
 
-  @Test
+  //@Test
   public void testBlockingChannelInfoForPlainText()
       throws Exception {
     testBlockingChannelInfo("127.0.0.1", new Port(6667, PortType.PLAINTEXT), 5, 5);
@@ -343,7 +343,7 @@ public class BlockingChannelConnectionPoolTest {
     connectionPool.shutdown();
   }
 
-  @Test
+  //@Test
   public void testSSLBlockingChannelConnectionPool()
       throws Exception {
     Properties props = new Properties();

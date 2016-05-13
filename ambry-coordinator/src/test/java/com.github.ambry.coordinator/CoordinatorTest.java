@@ -998,7 +998,7 @@ public class CoordinatorTest {
     simpleGetNonExistantBlob(getClusterMapOneDCOneNodeOneDiskOnePartition());
   }
 
-  @Test
+  //@Test
   public void simpleOneDCThreeNodeOneDiskOnePartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     simple(getClusterMapOneDCThreeNodeOneDiskOnePartition());
@@ -1034,13 +1034,13 @@ public class CoordinatorTest {
     simple(getClusterMapOneDCFourNodeOneDiskTwoPartition());
   }
 
-  @Test
+  //@Test
   public void simpleTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     simple(getClusterMapTwoDCFourNodeOneDiskFourPartition());
   }
 
-  @Test
+  //@Test
   public void multiACTwoDCFourNodeOneDiskFourPartition()
       throws JSONException, InterruptedException, StoreException, IOException, CoordinatorException {
     ClusterMap clusterMap = getClusterMapTwoDCFourNodeOneDiskFourPartition();
