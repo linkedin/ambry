@@ -16,11 +16,11 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
-import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
-import java.util.LinkedHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,8 +35,7 @@ public class NettyServerFactory implements NioServerFactory {
 
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  // linked hashmap as we need a deterministic order while iterating through the map
-  private final LinkedHashMap<String, ChannelHandler> channelHandlerInfoList = new LinkedHashMap<>();
+  private final ChannelInitializer<SocketChannel> channelInitializer;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -50,12 +49,31 @@ public class NettyServerFactory implements NioServerFactory {
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
+      final RestRequestHandler requestHandler, final PublicAccessLogger publicAccessLogger,
+      final RestServerState restServerState) {
     if (verifiableProperties != null && metricRegistry != null && requestHandler != null && publicAccessLogger != null
         && restServerState != null) {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
-      initializeChannelHandlers(nettyMetrics, nettyConfig, requestHandler, publicAccessLogger, restServerState);
+      channelInitializer = new ChannelInitializer<SocketChannel>() {
+        @Override
+        protected void initChannel(SocketChannel ch) {
+          ch.pipeline()
+              // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+              // to go here.
+              .addLast("codec", new HttpServerCodec())
+                  // for health check request handling
+              .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
+                  // for public access logging
+              .addLast("publicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger, nettyMetrics))
+                  // for detecting connections that have been idle too long - probably because of an error.
+              .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
+                  // for safe writing of chunks for responses
+              .addLast("chunker", new ChunkedWriteHandler())
+                  // custom processing class that interfaces with a BlobStorageService.
+              .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
+        }
+      };
     } else {
       StringBuilder errorMessage =
           new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
@@ -80,38 +98,11 @@ public class NettyServerFactory implements NioServerFactory {
   }
 
   /**
-   * Initialize the {@link ChannelHandler}s to be used in the netty pipeline
-   * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
-   * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
-   * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
-   * @param restServerState the {@link RestServerState} that can be used to check the health of the system
-   *                              to respond to health check requests
-   */
-  private void initializeChannelHandlers(NettyMetrics nettyMetrics, NettyConfig nettyConfig,
-      RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
-    // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-    // to go here.
-    channelHandlerInfoList.put("codec", new HttpServerCodec());
-    // for health check request handling
-    channelHandlerInfoList.put("HealthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics));
-    // for public access logging
-    channelHandlerInfoList
-        .put("PublicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger, nettyMetrics));
-    // for detecting connections that have been idle too long - probably because of an error.
-    channelHandlerInfoList.put("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds));
-    // for safe writing of chunks for responses
-    channelHandlerInfoList.put("chunker", new ChunkedWriteHandler());
-    // custom processing class that interfaces with a BlobStorageService.
-    channelHandlerInfoList.put("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
-  }
-
-  /**
    * Returns a new instance of {@link NettyServer}.
    * @return a new instance of {@link NettyServer}.
    */
   @Override
   public NioServer getNioServer() {
-    return new NettyServer(nettyConfig, nettyMetrics, channelHandlerInfoList);
+    return new NettyServer(nettyConfig, nettyMetrics, channelInitializer);
   }
 }
