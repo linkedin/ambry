@@ -72,7 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final List<Transmission> pendingSslHandshakes;
+  private final List<SSLTransmission> pendingSslHandshakes;
   private final Map<String, Long> sslHandshakeTimer;
   private final Time time;
   private final NetworkMetrics metrics;
@@ -319,12 +319,12 @@ public class Selector implements Selectable {
         Transmission transmission = getTransmission(key);
         try {
           if (key.isConnectable()) {
-            handleConnect(key, transmission);
+            transmission.finishConnect();
             if (transmission.ready()) {
-              this.connected.add(transmission.getConnectionId());
-              this.metrics.selectorConnectionCreated.inc();
+              connected.add(transmission.getConnectionId());
+              metrics.selectorConnectionCreated.inc();
             } else {
-              pendingSslHandshakes.add(transmission);
+              pendingSslHandshakes.add((SSLTransmission) transmission);
               sslHandshakeTimer.put(transmission.getConnectionId(), System.currentTimeMillis());
             }
           }
@@ -358,28 +358,30 @@ public class Selector implements Selectable {
           close(key);
         }
       }
-
-      Iterator<Transmission> sslTransIter = pendingSslHandshakes.iterator();
-      while (sslTransIter.hasNext()) {
-        Transmission sslTransmission = sslTransIter.next();
-        if (sslTransmission != null && sslTransmission.ready()) {
-          connected.add(sslTransmission.getConnectionId());
-          this.metrics.selectorConnectionCreated.inc();
-          Long handshakeStartTime = sslHandshakeTimer.remove(sslTransmission.getConnectionId());
-          if (handshakeStartTime != null) {
-            this.metrics.selectorPerceivedSslHandshakeTime
-                .update(System.currentTimeMillis() - handshakeStartTime.longValue());
-          }
-          sslTransIter.remove();
-        } else if (sslTransmission == null || !keyMap.containsKey(sslTransmission.getConnectionId())) {
-          // transmission was closed for some reason
-          sslTransIter.remove();
-        }
-      }
+      completeSslHandshakes();
       this.metrics.selectorIORate.inc();
     }
     long endIo = time.milliseconds();
     this.metrics.selectorIOTime.update(endIo - endSelect);
+  }
+
+  /**
+   * Add those Ssl connections to connected list on handshake completion
+   */
+  private void completeSslHandshakes() {
+    Iterator<SSLTransmission> sslTransIter = pendingSslHandshakes.iterator();
+    while (sslTransIter.hasNext()) {
+      Transmission sslTransmission = sslTransIter.next();
+      if (sslTransmission != null && sslTransmission.ready()) {
+        connected.add(sslTransmission.getConnectionId());
+        metrics.selectorConnectionCreated.inc();
+        Long handshakeStartTime = sslHandshakeTimer.remove(sslTransmission.getConnectionId());
+        if (handshakeStartTime != null) {
+          metrics.selectorPerceivedSslHandshakeTime.update(System.currentTimeMillis() - handshakeStartTime.longValue());
+        }
+        sslTransIter.remove();
+      }
+    }
   }
 
   /**
@@ -484,6 +486,10 @@ public class Selector implements Selectable {
       activeConnections.set(this.keyMap.size());
       try {
         transmission.close();
+        if (pendingSslHandshakes.contains(transmission.getConnectionId())) {
+          pendingSslHandshakes.remove(transmission.getConnectionId());
+          sslHandshakeTimer.remove(transmission.getConnectionId());
+        }
       } catch (IOException e) {
         logger.error("IOException thrown during closing of transmission with connectionId {} :",
             transmission.getConnectionId(), e);
@@ -510,14 +516,6 @@ public class Selector implements Selectable {
    */
   private SelectionKey keyForId(String id) {
     return this.keyMap.get(id);
-  }
-
-  /**
-   * Process connections that have finished their handshake
-   */
-  private void handleConnect(SelectionKey key, Transmission transmission)
-      throws IOException {
-    transmission.finishConnect();
   }
 
   /**

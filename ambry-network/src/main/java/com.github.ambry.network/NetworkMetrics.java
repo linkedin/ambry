@@ -128,10 +128,10 @@ public class NetworkMetrics {
   /**
    * Initializes few network metrics for the selector
    * @param activeConnections count of current active connections
-   * @param pendingSslHandshakes List of {@link Transmission}s that are awaiting for handshake completion
+   * @param pendingSslHandshakes List of {@link SSLTransmission}s that are awaiting for handshake completion
    */
   public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections,
-      final List<Transmission> pendingSslHandshakes) {
+      final List<SSLTransmission> pendingSslHandshakes) {
     selectorActiveConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {
