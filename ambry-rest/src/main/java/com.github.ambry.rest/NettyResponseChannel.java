@@ -90,7 +90,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private NettyRequest request = null;
   // marked as true once response sending is *completely* finished. Signifies that this instance is no longer useful.
   private volatile boolean responseComplete = false;
-  // marked as true if force close is require because close() was called.
+  // marked as true if force close is required because close() was called.
   private volatile boolean forceClose = false;
 
   /**

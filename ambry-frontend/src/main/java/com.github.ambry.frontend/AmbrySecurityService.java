@@ -55,7 +55,7 @@ class AmbrySecurityService implements SecurityService {
     frontendMetrics.securityServiceProcessRequestRate.mark();
     long startTimeMs = System.currentTimeMillis();
     if (!isOpen) {
-      exception = new RestServiceException("Security service is closed", RestServiceErrorCode.ServiceUnavailable);
+      exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else {
       if (restRequest == null) {
         throw new IllegalArgumentException("RestRequest is null");
@@ -78,7 +78,7 @@ class AmbrySecurityService implements SecurityService {
     long startTimeMs = System.currentTimeMillis();
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!isOpen) {
-      exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
+      exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else {
       if (restRequest == null || responseChannel == null || blobInfo == null) {
         throw new IllegalArgumentException("One of the required params is null");

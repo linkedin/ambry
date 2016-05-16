@@ -472,9 +472,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
             case HEAD:
-              receivedId = receivedId = RestUtils
-                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
-                      frontendConfig.frontendPathPrefixesToRemove);
+              receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                  frontendConfig.frontendPathPrefixesToRemove);
               idConverterCallback = new InboundIdConverterCallback(restRequest, restResponseChannel, headCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
@@ -483,9 +482,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               router.putBlob(blobProperties, userMetadata, restRequest, postCallback);
               break;
             case DELETE:
-              receivedId = receivedId = RestUtils
-                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
-                      frontendConfig.frontendPathPrefixesToRemove);
+              receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                  frontendConfig.frontendPathPrefixesToRemove);
               idConverterCallback = new InboundIdConverterCallback(restRequest, restResponseChannel, deleteCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
