@@ -132,8 +132,7 @@ public abstract class Transmission {
   /**
    * Close the connection for the socket channel
    */
-  public abstract void close()
-      throws IOException;
+  public abstract void close();
 
   public String getConnectionId() {
     return connectionId;

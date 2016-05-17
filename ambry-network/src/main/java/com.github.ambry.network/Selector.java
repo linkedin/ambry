@@ -364,7 +364,7 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Add those Ssl connections to connected list on handshake completion
+   * Add Ssl connections to connected list on handshake completion
    */
   private void completeSslHandshakes() {
     Iterator<PendingHandshakeTransmission> pendingSslTransIter = pendingHandshakeTransmissions.values().iterator();
@@ -479,14 +479,9 @@ public class Selector implements Selectable {
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
-      try {
-        transmission.close();
-        if (pendingHandshakeTransmissions.get(transmission.getConnectionId()) != null) {
-          pendingHandshakeTransmissions.remove(transmission.getConnectionId());
-        }
-      } catch (IOException e) {
-        logger.error("IOException thrown during closing of transmission with connectionId {} :",
-            transmission.getConnectionId(), e);
+      transmission.close();
+      if (pendingHandshakeTransmissions.get(transmission.getConnectionId()) != null) {
+        pendingHandshakeTransmissions.remove(transmission.getConnectionId());
       }
     } else {
       key.attach(null);
