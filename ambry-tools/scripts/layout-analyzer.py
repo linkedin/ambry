@@ -111,6 +111,8 @@ class Layout(object):
             max_combo = max(node_combo_map,
                             key=lambda k: len(node_combo_map[k]))
             print("Num node combos used: {}".format(len(node_combo_map)))
+            print("Average partitions sharing a node combo: {}".format(
+                sum(len(partitions) for partitions in node_combo_map.values()) / float(len(node_combo_map))))
             print("Max partitions sharing a node combo: {} on the following nodes:".format(
                 len(node_combo_map[max_combo])))
             for node in max_combo:
@@ -125,18 +127,21 @@ class Layout(object):
                     if num_racks < min_racks:
                         min_racks = num_racks
             print("Min racks used: {}".format(min_racks))
-            print("Average racks used: {}".format(float(sum_racks) / n_partitions))
+            print("Average racks used: {}".format(
+                float(sum_racks) / n_partitions))
             partitions_per_node = [len(node.partitions) for node in self.node_map.values()
                                    if node.datacenter_name == dc]
 
             print("")
 
 
-
 def main():
-    parser = argparse.ArgumentParser(description='Analyze node distribution in a partition layout')
-    parser.add_argument('hardware_layout', help='the path to the hardware layout file')
-    parser.add_argument('partition_layout', help='the path to the partition layout file')
+    parser = argparse.ArgumentParser(
+        description='Analyze node distribution in a partition layout')
+    parser.add_argument('hardware_layout',
+                        help='the path to the hardware layout file')
+    parser.add_argument('partition_layout',
+                        help='the path to the partition layout file')
 
     args = parser.parse_args()
     layout = Layout(args.hardware_layout, args.partition_layout)
@@ -144,4 +149,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
