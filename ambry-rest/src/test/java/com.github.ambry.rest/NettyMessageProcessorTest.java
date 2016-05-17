@@ -312,7 +312,6 @@ public class NettyMessageProcessorTest {
       fail("Post did not succeed after 100ms. There is an error or timeout needs to increase");
     }
     assertNotNull("Blob id operated on cannot be null", notificationSystem.blobIdOperatedOn);
-    assertTrue("Channel should be active", channel.isActive());
     return router.getActiveBlobs().get(notificationSystem.blobIdOperatedOn).getBlob();
   }
 
