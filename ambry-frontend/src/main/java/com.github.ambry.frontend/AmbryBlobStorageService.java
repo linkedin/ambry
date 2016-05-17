@@ -455,11 +455,9 @@ class AmbryBlobStorageService implements BlobStorageService {
      */
     @Override
     public void onCompletion(Void result, Exception exception) {
-      try {
-        callbackTracker.markOperationEnd();
-        if (exception != null) {
-          submitResponse(restRequest, restResponseChannel, null, exception);
-        } else {
+      callbackTracker.markOperationEnd();
+      if (exception == null) {
+        try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Forwarding {} to the IdConverter/Router", restMethod);
           switch (restMethod) {
@@ -488,12 +486,17 @@ class AmbryBlobStorageService implements BlobStorageService {
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
             default:
-              throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
+              exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
+        } catch (Exception e) {
+          exception = e;
         }
-      } finally {
-        callbackTracker.markCallbackProcessingEnd();
       }
+
+      if (exception != null) {
+        submitResponse(restRequest, restResponseChannel, null, exception);
+      }
+      callbackTracker.markCallbackProcessingEnd();
     }
   }
 
