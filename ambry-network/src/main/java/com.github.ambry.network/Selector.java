@@ -72,8 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final List<SSLTransmission> pendingSslHandshakes;
-  private final Map<String, Long> sslHandshakeTimer;
+  private final Map<String, PendingHandshakeTransmission> pendingHandshakeTransmissions;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -92,12 +91,11 @@ public class Selector implements Selectable {
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
-    this.pendingSslHandshakes = new ArrayList<>();
-    this.sslHandshakeTimer = new HashMap<String, Long>();
+    this.pendingHandshakeTransmissions = new HashMap<>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     this.activeConnections = new AtomicLong(0);
-    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, pendingSslHandshakes);
+    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, pendingHandshakeTransmissions);
     this.sslFactory = sslFactory;
   }
 
@@ -324,8 +322,8 @@ public class Selector implements Selectable {
               connected.add(transmission.getConnectionId());
               metrics.selectorConnectionCreated.inc();
             } else {
-              pendingSslHandshakes.add((SSLTransmission) transmission);
-              sslHandshakeTimer.put(transmission.getConnectionId(), System.currentTimeMillis());
+              pendingHandshakeTransmissions.put(transmission.getConnectionId(),
+                  new PendingHandshakeTransmission((SSLTransmission) transmission));
             }
           }
 
@@ -369,17 +367,14 @@ public class Selector implements Selectable {
    * Add those Ssl connections to connected list on handshake completion
    */
   private void completeSslHandshakes() {
-    Iterator<SSLTransmission> sslTransIter = pendingSslHandshakes.iterator();
-    while (sslTransIter.hasNext()) {
-      Transmission sslTransmission = sslTransIter.next();
-      if (sslTransmission != null && sslTransmission.ready()) {
-        connected.add(sslTransmission.getConnectionId());
+    Iterator<PendingHandshakeTransmission> pendingSslTransIter = pendingHandshakeTransmissions.values().iterator();
+    while (pendingSslTransIter.hasNext()) {
+      PendingHandshakeTransmission pendingSslTrans = pendingSslTransIter.next();
+      if (pendingSslTrans.sslTransmission.ready()) {
+        connected.add(pendingSslTrans.sslTransmission.getConnectionId());
         metrics.selectorConnectionCreated.inc();
-        Long handshakeStartTime = sslHandshakeTimer.remove(sslTransmission.getConnectionId());
-        if (handshakeStartTime != null) {
-          metrics.selectorPerceivedSslHandshakeTime.update(System.currentTimeMillis() - handshakeStartTime.longValue());
-        }
-        sslTransIter.remove();
+        metrics.selectorPerceivedSslHandshakeTime.update(System.currentTimeMillis() - pendingSslTrans.pendingSinceMs);
+        pendingHandshakeTransmissions.remove(pendingSslTrans.sslTransmission.getConnectionId());
       }
     }
   }
@@ -486,9 +481,8 @@ public class Selector implements Selectable {
       activeConnections.set(this.keyMap.size());
       try {
         transmission.close();
-        if (pendingSslHandshakes.contains(transmission.getConnectionId())) {
-          pendingSslHandshakes.remove(transmission.getConnectionId());
-          sslHandshakeTimer.remove(transmission.getConnectionId());
+        if (pendingHandshakeTransmissions.get(transmission.getConnectionId()) != null) {
+          pendingHandshakeTransmissions.remove(transmission.getConnectionId());
         }
       } catch (IOException e) {
         logger.error("IOException thrown during closing of transmission with connectionId {} :",
@@ -571,5 +565,15 @@ public class Selector implements Selectable {
    */
   private SocketChannel channel(SelectionKey key) {
     return (SocketChannel) key.channel();
+  }
+}
+
+class PendingHandshakeTransmission {
+  SSLTransmission sslTransmission;
+  long pendingSinceMs;
+
+  PendingHandshakeTransmission(SSLTransmission sslTransmission) {
+    this.sslTransmission = sslTransmission;
+    pendingSinceMs = System.currentTimeMillis();
   }
 }
