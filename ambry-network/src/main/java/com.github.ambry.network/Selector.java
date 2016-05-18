@@ -77,6 +77,7 @@ public class Selector implements Selectable {
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
   private AtomicLong activeConnections;
+  private AtomicLong connectionsPendingHandshakeCount;
   private final SSLFactory sslFactory;
 
   /**
@@ -95,7 +96,8 @@ public class Selector implements Selectable {
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     this.activeConnections = new AtomicLong(0);
-    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, pendingSslTrans);
+    this.connectionsPendingHandshakeCount = new AtomicLong(0);
+    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, connectionsPendingHandshakeCount);
     this.sslFactory = sslFactory;
   }
 
@@ -324,6 +326,7 @@ public class Selector implements Selectable {
             } else {
               pendingSslTrans.put(transmission.getConnectionId(),
                   new TransmissionPendingHandshake((SSLTransmission) transmission));
+              connectionsPendingHandshakeCount.incrementAndGet();
             }
           }
 
@@ -377,6 +380,7 @@ public class Selector implements Selectable {
         metrics.selectorPerceivedSslHandshakeTime
             .update(System.currentTimeMillis() - transmissionInfo.getValue().pendingSinceMs);
         transmissionInfoIter.remove();
+        connectionsPendingHandshakeCount.decrementAndGet();
       }
     }
   }
@@ -482,7 +486,9 @@ public class Selector implements Selectable {
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
       transmission.close();
-      pendingSslTrans.remove(transmission.getConnectionId());
+      if (pendingSslTrans.remove(transmission.getConnectionId()) != null) {
+        connectionsPendingHandshakeCount.decrementAndGet();
+      }
     } else {
       key.attach(null);
       key.cancel();
