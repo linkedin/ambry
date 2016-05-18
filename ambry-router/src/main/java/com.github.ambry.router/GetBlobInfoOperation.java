@@ -76,9 +76,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
         routerConfig.routerGetRequestParallelism);
   }
 
-  /**
-   * {@inheritDoc}
-   */
   @Override
   void abort(Exception abortCause) {
     operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
@@ -196,8 +193,8 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   }
 
   /**
-   * Process the GetResponse extracted from a {@link ResponseInfo}
-   * @param getRequestInfo the associated {@link RequestInfo} for which this response was received.
+   * Process the {@link GetResponse} extracted from a {@link ResponseInfo}
+   * @param getRequestInfo the associated {@link GetRequestInfo} for which this response was received.
    * @param getResponse the {@link GetResponse} extracted from the {@link ResponseInfo}
    * @throws IOException if there is an error during deserialization of the GetResponse.
    * @throws MessageFormatException if there is an error during deserialization of the GetResponse.
