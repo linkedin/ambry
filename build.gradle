@@ -35,12 +35,37 @@ allprojects {
 subprojects {
     apply plugin: 'java'
 
+    sourceSets {
+      test {
+        java.srcDir file('src/integration-test/java')
+        resources.srcDir file('src/integration-test/resources')
+      }
+      unitTest {
+        java.srcDir file('src/test/java')
+        resources.srcDir file('src/test/resources')
+      }
+    }
+
     dependencies {
         compile "log4j:log4j:$log4jVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"
         compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
         testCompile "junit:junit:$junitVersion"
+        unitTestCompile sourceSets.main.output
+        unitTestCompile sourceSets.test.output
+        unitTestCompile configurations.testCompile
+        unitTestRuntime configurations.testRuntime
     }
+
+    task unitTest(type: Test) {
+      testClassesDir = sourceSets.unitTest.output.classesDir
+      classpath += sourceSets.unitTest.runtimeClasspath
+    }
+    
+    // only run unit tests when doing a standard build,
+    // but run integration tests too when running the test target
+    check.dependsOn -= test
+    check.dependsOn += unitTest
 }
 
 project(':ambry-utils') {
