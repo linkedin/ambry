@@ -72,7 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final Map<String, PendingHandshakeTransmission> pendingHandshakeTransmissions;
+  private final Map<String, PendingHandshakeTransmission> pendingSslTrans;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -91,11 +91,11 @@ public class Selector implements Selectable {
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
-    this.pendingHandshakeTransmissions = new HashMap<>();
+    this.pendingSslTrans = new HashMap<>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     this.activeConnections = new AtomicLong(0);
-    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, pendingHandshakeTransmissions);
+    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, pendingSslTrans);
     this.sslFactory = sslFactory;
   }
 
@@ -322,7 +322,7 @@ public class Selector implements Selectable {
               connected.add(transmission.getConnectionId());
               metrics.selectorConnectionCreated.inc();
             } else {
-              pendingHandshakeTransmissions.put(transmission.getConnectionId(),
+              pendingSslTrans.put(transmission.getConnectionId(),
                   new PendingHandshakeTransmission((SSLTransmission) transmission));
             }
           }
@@ -367,14 +367,16 @@ public class Selector implements Selectable {
    * Add Ssl connections to connected list on handshake completion
    */
   private void completeSslHandshakes() {
-    Iterator<PendingHandshakeTransmission> pendingSslTransIter = pendingHandshakeTransmissions.values().iterator();
+    Iterator<Map.Entry<String, PendingHandshakeTransmission>> pendingSslTransIter =
+        pendingSslTrans.entrySet().iterator();
     while (pendingSslTransIter.hasNext()) {
-      PendingHandshakeTransmission pendingSslTrans = pendingSslTransIter.next();
-      if (pendingSslTrans.sslTransmission.ready()) {
-        connected.add(pendingSslTrans.sslTransmission.getConnectionId());
+      Map.Entry<String, PendingHandshakeTransmission> pendingSslTrans = pendingSslTransIter.next();
+      if (pendingSslTrans.getValue().sslTransmission.ready()) {
+        connected.add(pendingSslTrans.getValue().sslTransmission.getConnectionId());
         metrics.selectorConnectionCreated.inc();
-        metrics.selectorPerceivedSslHandshakeTime.update(System.currentTimeMillis() - pendingSslTrans.pendingSinceMs);
-        pendingHandshakeTransmissions.remove(pendingSslTrans.sslTransmission.getConnectionId());
+        metrics.selectorPerceivedSslHandshakeTime
+            .update(System.currentTimeMillis() - pendingSslTrans.getValue().pendingSinceMs);
+        pendingSslTransIter.remove();
       }
     }
   }
@@ -480,9 +482,7 @@ public class Selector implements Selectable {
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
       transmission.close();
-      if (pendingHandshakeTransmissions.get(transmission.getConnectionId()) != null) {
-        pendingHandshakeTransmissions.remove(transmission.getConnectionId());
-      }
+      pendingSslTrans.remove(transmission.getConnectionId());
     } else {
       key.attach(null);
       key.cancel();
@@ -563,6 +563,9 @@ public class Selector implements Selectable {
   }
 }
 
+/**
+ * Class used to store {@link SSLTransmission} which are yet to complete its handshake, along with start time of the same
+ */
 class PendingHandshakeTransmission {
   SSLTransmission sslTransmission;
   long pendingSinceMs;

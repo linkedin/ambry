@@ -126,9 +126,9 @@ public class NetworkMetrics {
   }
 
   /**
-   * Initializes few network metrics for the selector
+   * Initializes a few network metrics for the selector
    * @param activeConnections count of current active connections
-   * @param pendingHandshakeTransmissions List of {@link Transmission}s that are awaiting for handshake completion
+   * @param pendingHandshakeTransmissions List of {@link Transmission}s that are awaiting handshake completion
    */
   public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections,
       final Map<String, PendingHandshakeTransmission> pendingHandshakeTransmissions) {
