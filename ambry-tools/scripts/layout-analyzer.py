@@ -134,10 +134,38 @@ class Layout(object):
 
             print("")
 
+    def interactive(self):
+        while True:
+            cmd = raw_input(">> ").split()
+            try:
+                if len(cmd) == 0:
+                    continue
+                elif cmd[0] == "report":
+                    self.print_report()
+                elif cmd[0] == "rack_id":
+                    print("Node {}:{} is on rack {}".format(
+                        cmd[1], cmd[2], self.rack_id(cmd[1], int(cmd[2]))))
+                elif cmd[0] == "racks_used":
+                    print("Partition {} in datacenter {} uses the following racks: {}".format(
+                        cmd[1], cmd[2], self.racks_used(int(cmd[1]), cmd[2])))
+                elif cmd[0] == "shared_partitions":
+                    args = [(cmd[i+1], int(cmd[i+2])) for i in range(0, len(cmd)-1, 2)]
+                    print("The following nodes:")
+                    for hostname, port in args:
+                        print("  {}:{}".format(hostname, port))
+                    print("share the following partitions:")
+                    print(self.shared_partitions(*args))
+                else:
+                    print("Command not recognized")
+            except Exception:
+                print("Invalid input")
+            print("")
+
 
 def main():
     parser = argparse.ArgumentParser(
         description='Analyze node distribution in a partition layout')
+    parser.add_argument("--interactive", "-i", action="store_true")
     parser.add_argument('hardware_layout',
                         help='the path to the hardware layout file')
     parser.add_argument('partition_layout',
@@ -145,7 +173,10 @@ def main():
 
     args = parser.parse_args()
     layout = Layout(args.hardware_layout, args.partition_layout)
-    layout.print_report()
+    if args.interactive:
+        layout.interactive()
+    else:
+        layout.print_report()
 
 if __name__ == "__main__":
     main()
