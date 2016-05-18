@@ -220,10 +220,7 @@ public class SSLSelectorTest {
       throws IOException {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
-    Assert.assertFalse("Channel should not be ready by now (until handshake completes)",
-        selector.isChannelReady(connectionId));
-    selector.poll(10000L);
-    Assert.assertFalse("Channel shouldn't have been added to connect list w/o handshake",
+    Assert.assertFalse("Channel shouldn't have been added to connect list w/o completing handshake",
         selector.connected().contains(connectionId));
     selector.close(connectionId);
     Assert.assertFalse("Channel should not have been added to connected list ",

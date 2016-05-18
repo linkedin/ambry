@@ -72,7 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final Map<String, PendingHandshakeTransmission> pendingSslTrans;
+  private final Map<String, TransmissionPendingHandshake> pendingSslTrans;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -323,7 +323,7 @@ public class Selector implements Selectable {
               metrics.selectorConnectionCreated.inc();
             } else {
               pendingSslTrans.put(transmission.getConnectionId(),
-                  new PendingHandshakeTransmission((SSLTransmission) transmission));
+                  new TransmissionPendingHandshake((SSLTransmission) transmission));
             }
           }
 
@@ -356,7 +356,7 @@ public class Selector implements Selectable {
           close(key);
         }
       }
-      completeSslHandshakes();
+      checkHandshakeStatus();
       this.metrics.selectorIORate.inc();
     }
     long endIo = time.milliseconds();
@@ -364,19 +364,19 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Add Ssl connections to connected list on handshake completion
+   * Check for handshake status and add to connected list on handshake completion
    */
-  private void completeSslHandshakes() {
-    Iterator<Map.Entry<String, PendingHandshakeTransmission>> pendingSslTransIter =
+  private void checkHandshakeStatus() {
+    Iterator<Map.Entry<String, TransmissionPendingHandshake>> transmissionInfoIter =
         pendingSslTrans.entrySet().iterator();
-    while (pendingSslTransIter.hasNext()) {
-      Map.Entry<String, PendingHandshakeTransmission> pendingSslTrans = pendingSslTransIter.next();
-      if (pendingSslTrans.getValue().sslTransmission.ready()) {
-        connected.add(pendingSslTrans.getValue().sslTransmission.getConnectionId());
+    while (transmissionInfoIter.hasNext()) {
+      Map.Entry<String, TransmissionPendingHandshake> transmissionInfo = transmissionInfoIter.next();
+      if (transmissionInfo.getValue().sslTransmission.ready()) {
+        connected.add(transmissionInfo.getKey());
         metrics.selectorConnectionCreated.inc();
         metrics.selectorPerceivedSslHandshakeTime
-            .update(System.currentTimeMillis() - pendingSslTrans.getValue().pendingSinceMs);
-        pendingSslTransIter.remove();
+            .update(System.currentTimeMillis() - transmissionInfo.getValue().pendingSinceMs);
+        transmissionInfoIter.remove();
       }
     }
   }
@@ -566,11 +566,11 @@ public class Selector implements Selectable {
 /**
  * Class used to store {@link SSLTransmission} which are yet to complete its handshake, along with start time of the same
  */
-class PendingHandshakeTransmission {
+class TransmissionPendingHandshake {
   SSLTransmission sslTransmission;
   long pendingSinceMs;
 
-  PendingHandshakeTransmission(SSLTransmission sslTransmission) {
+  TransmissionPendingHandshake(SSLTransmission sslTransmission) {
     this.sslTransmission = sslTransmission;
     pendingSinceMs = System.currentTimeMillis();
   }

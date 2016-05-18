@@ -131,7 +131,7 @@ public class NetworkMetrics {
    * @param pendingHandshakeTransmissions List of {@link Transmission}s that are awaiting handshake completion
    */
   public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections,
-      final Map<String, PendingHandshakeTransmission> pendingHandshakeTransmissions) {
+      final Map<String, TransmissionPendingHandshake> pendingHandshakeTransmissions) {
     selectorActiveConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {
