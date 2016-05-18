@@ -70,7 +70,7 @@ import org.slf4j.LoggerFactory;
  *
  * This class implements {@link ReadableStreamChannel} and passes itself as the result of this operation.
  */
-class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements ReadableStreamChannel {
+class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   // the callback to use to complete the operation.
   private final OperationCompleteCallback operationCompleteCallback;
   // whether the operationCompleteCallback has been called already.
@@ -96,36 +96,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements Re
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
 
   // ReadableStreamChannel implementation related variables:
-
-  // whether this ReadableStreamChannel is open.
-  private boolean isOpen = true;
-  // whether readInto() has been called yet by the caller on this ReadableStreamChannel.
-  private volatile boolean readCalled = false;
-  // The channel to write chunks of the blob into. This will be initialized when the caller calls the readInto().
-  private AsyncWritableChannel asyncWritableChannel;
-  // the callback to call when all the chunks are successfully written out into the asyncWritableChannel.
-  private Callback<Long> readIntoCallback;
-  // the future to mark as done when all the chunks are successfully written out into the asyncWritableChannel.
-  private FutureResult<Long> readIntoFuture;
-  // the number of bytes written out to the asyncWritableChannel. This would be the size of the blob eventually.
-  private Long bytesWritten = 0L;
-  // the number of chunks that have been written out to the asyncWritableChannel.
-  private final AtomicInteger numChunksWrittenOut = new AtomicInteger(0);
-  // the index of the next chunk that is to be written out to the asyncWritableChannel.
-  private int indexOfNextChunkToWriteOut = 0;
-  // whether this object has called the readIntoCallback yet.
-  private AtomicBoolean readIntoCallbackCalled = new AtomicBoolean(false);
-  // the callback that is passed into the asyncWritableChannel write() operation.
-  Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
-    @Override
-    public void onCompletion(Long result, Exception exception) {
-      bytesWritten += result;
-      if (exception != null) {
-        operationException.set(exception);
-      }
-      numChunksWrittenOut.incrementAndGet();
-    }
-  };
+  private GetBlobResult getBlobResult;
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
 
@@ -165,8 +136,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements Re
       operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
     } else {
       operationException.set(abortCause);
-      if (readCalled) {
-        completeRead();
+      if (getBlobResult != null && getBlobResult.readCalled) {
+        getBlobResult.completeRead();
       }
     }
     operationCompleted = true;
@@ -199,13 +170,15 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements Re
         // channel writes will need to happen and for that, this operation needs the GetManager to poll it
         // periodically. If any exception is encountered while processing subsequent chunks, those will be notified
         // during the channel read.
-        ReadableStreamChannel result = getOperationException() == null ? this : null;
+        getBlobResult = getOperationException() == null ? new GetBlobResult() : null;
         operationCompleteCallback
-            .completeOperation(operationFuture, operationCallback, result, getOperationException());
+            .completeOperation(operationFuture, operationCallback, getBlobResult, getOperationException());
       }
     }
     chunk.postCompletionCleanup();
-    maybeWriteToChannel();
+    if (getBlobResult != null) {
+      getBlobResult.maybeWriteToChannel();
+    }
   }
 
   /**
@@ -219,41 +192,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements Re
     getChunk.handleResponse(responseInfo);
     if (getChunk.isComplete()) {
       onChunkOperationComplete(getChunk);
-    }
-  }
-
-  /**
-   * Attempt to write the data associated with the blob to the channel passed in by the caller (if the caller has
-   * done so).
-   */
-  private void maybeWriteToChannel() {
-    // if there are chunks available to be written out, do now.
-    if (firstChunk.isComplete() && readCalled) {
-      while (indexOfNextChunkToWriteOut < numChunksTotal && chunkIndexToBuffer
-          .containsKey(indexOfNextChunkToWriteOut)) {
-        ByteBuffer chunkBuf = chunkIndexToBuffer.remove(indexOfNextChunkToWriteOut);
-        asyncWritableChannel.write(chunkBuf, chunkAsyncWriteCallback);
-        indexOfNextChunkToWriteOut++;
-      }
-      if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
-        completeRead();
-        operationCompleted = true;
-      }
-    }
-  }
-
-  /**
-   * Complete the read from this {@link ReadableStreamChannel} by invoking the callback and marking the future.
-   */
-  void completeRead() {
-    if (readIntoCallbackCalled.compareAndSet(false, true)) {
-      if (operationException.get() != null) {
-        bytesWritten = null;
-      }
-      readIntoFuture.done(bytesWritten, operationException.get());
-      if (readIntoCallback != null) {
-        readIntoCallback.onCompletion(bytesWritten, operationException.get());
-      }
     }
   }
 
@@ -276,7 +214,9 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements Re
       // Although an attempt is made to write to the channel as soon as a chunk is successfully retrieved,
       // the caller might not have called readInto() and passed in a channel at the time. So an attempt is always
       // made from within poll.
-      maybeWriteToChannel();
+      if (getBlobResult != null) {
+        getBlobResult.maybeWriteToChannel();
+      }
       // If this is a composite blob, poll for requests for subsequent chunks.
       if (dataChunks != null) {
         for (GetChunk dataChunk : dataChunks) {
@@ -284,7 +224,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements Re
             dataChunk.initialize(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
           }
           if (dataChunk.isInProgress() || (dataChunk.isReady()
-              && numChunksRetrieved - numChunksWrittenOut.get() < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
+              && numChunksRetrieved - getBlobResult.numChunksWrittenOut.get() < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
             dataChunk.poll(requestRegistrationCallback);
           }
         }
@@ -297,54 +237,121 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> implements Re
 
   // ReadableStreamChannel implementation:
 
-  /**
-   * {@inheritDoc}
-   * <br>
-   * The bytes that will be read from this channel is not known until the read is complete.
-   * @return -1.
-   */
-  @Override
-  public long getSize() {
-    return -1;
-  }
+  private class GetBlobResult implements ReadableStreamChannel {
+    // whether this ReadableStreamChannel is open.
+    private boolean isOpen = true;
+    // whether readInto() has been called yet by the caller on this ReadableStreamChannel.
+    private volatile boolean readCalled = false;
+    // The channel to write chunks of the blob into. This will be initialized when the caller calls the readInto().
+    private AsyncWritableChannel asyncWritableChannel;
+    // the callback to call when all the chunks are successfully written out into the asyncWritableChannel.
+    private Callback<Long> readIntoCallback;
+    // the future to mark as done when all the chunks are successfully written out into the asyncWritableChannel.
+    private FutureResult<Long> readIntoFuture;
+    // the number of bytes written out to the asyncWritableChannel. This would be the size of the blob eventually.
+    private Long bytesWritten = 0L;
+    // the number of chunks that have been written out to the asyncWritableChannel.
+    private final AtomicInteger numChunksWrittenOut = new AtomicInteger(0);
+    // the index of the next chunk that is to be written out to the asyncWritableChannel.
+    private int indexOfNextChunkToWriteOut = 0;
+    // whether this object has called the readIntoCallback yet.
+    private AtomicBoolean readIntoCallbackCalled = new AtomicBoolean(false);
+    // the callback that is passed into the asyncWritableChannel write() operation.
+    Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
+      @Override
+      public void onCompletion(Long result, Exception exception) {
+        bytesWritten += result;
+        if (exception != null) {
+          operationException.set(exception);
+        }
+        numChunksWrittenOut.incrementAndGet();
+      }
+    };
 
-  /**
-   * {@inheritDoc}
-   * <br>
-   * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
-   * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
-   *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
-   * @return the {@link Future} that will eventually contain the result of the operation.
-   */
-  @Override
-  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
-    if (readCalled) {
-      throw new IllegalStateException("Cannot read the result of a GetBlob operation more than once");
+    /**
+     * {@inheritDoc}
+     * <br>
+     * The bytes that will be read from this channel is not known until the read is complete.
+     * @return -1.
+     */
+    @Override
+    public long getSize() {
+      return -1;
     }
-    this.asyncWritableChannel = asyncWritableChannel;
-    readIntoCallback = callback;
-    readIntoFuture = new FutureResult<>();
-    readCalled = true;
-    return readIntoFuture;
-  }
 
-  /**
-   * {@inheritDoc}
-   * @return true, unless the channel is closed.
-   */
-  @Override
-  public boolean isOpen() {
-    return isOpen;
-  }
+    /**
+     * {@inheritDoc}
+     * <br>
+     * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
+     * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
+     *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
+     * @return the {@link Future} that will eventually contain the result of the operation.
+     */
+    @Override
+    public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+      if (readCalled) {
+        throw new IllegalStateException("Cannot read the result of a GetBlob operation more than once");
+      }
+      this.asyncWritableChannel = asyncWritableChannel;
+      readIntoCallback = callback;
+      readIntoFuture = new FutureResult<>();
+      readCalled = true;
+      return readIntoFuture;
+    }
 
-  /**
-   * {@inheritDoc}
-   * @throws IOException
-   */
-  @Override
-  public void close()
-      throws IOException {
-    isOpen = false;
+    /**
+     * {@inheritDoc}
+     * @return true, unless the channel is closed.
+     */
+    @Override
+    public boolean isOpen() {
+      return isOpen;
+    }
+
+    /**
+     * {@inheritDoc}
+     * @throws IOException
+     */
+    @Override
+    public void close()
+        throws IOException {
+      isOpen = false;
+    }
+
+    /**
+     * Attempt to write the data associated with the blob to the channel passed in by the caller (if the caller has
+     * done so).
+     */
+    private void maybeWriteToChannel() {
+      // if there are chunks available to be written out, do now.
+      if (firstChunk.isComplete() && readCalled) {
+        while (indexOfNextChunkToWriteOut < numChunksTotal && chunkIndexToBuffer
+            .containsKey(indexOfNextChunkToWriteOut)) {
+          ByteBuffer chunkBuf = chunkIndexToBuffer.remove(indexOfNextChunkToWriteOut);
+          asyncWritableChannel.write(chunkBuf, chunkAsyncWriteCallback);
+          indexOfNextChunkToWriteOut++;
+        }
+        if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
+          completeRead();
+          operationCompleted = true;
+        }
+      }
+    }
+
+    /**
+     * Complete the read from this {@link ReadableStreamChannel} by invoking the callback and marking the future.
+     */
+    void completeRead() {
+      if (readIntoCallbackCalled.compareAndSet(false, true)) {
+        if (operationException.get() != null) {
+          bytesWritten = null;
+        }
+        readIntoFuture.done(bytesWritten, operationException.get());
+        if (readIntoCallback != null) {
+          readIntoCallback.onCompletion(bytesWritten, operationException.get());
+        }
+      }
+    }
   }
 
   /**
