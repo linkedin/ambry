@@ -375,7 +375,6 @@ public class NettyResponseChannelTest {
         if (!(response instanceof FullHttpResponse)) {
           // empty the channel
           while (channel.readOutbound() != null) {
-            ;
           }
         }
         boolean shouldBeAlive =
@@ -404,7 +403,6 @@ public class NettyResponseChannelTest {
 
     // drain the channel of content.
     while (channel.readOutbound() != null) {
-      ;
     }
     assertFalse("Channel should be closed", channel.isOpen());
   }
