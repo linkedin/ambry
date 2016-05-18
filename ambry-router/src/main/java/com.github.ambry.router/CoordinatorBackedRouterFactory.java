@@ -45,25 +45,14 @@ public class CoordinatorBackedRouterFactory implements RouterFactory {
    */
   public CoordinatorBackedRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem) {
-    if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
+    if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
+      throw new IllegalArgumentException("Null arg(s) received during instantiation of CoordinatorBackedRouterFactory");
+    } else {
       routerConfig = new RouterConfig(verifiableProperties);
       coordinatorBackedRouterMetrics = new CoordinatorBackedRouterMetrics(clusterMap.getMetricRegistry());
       coordinator = new AmbryCoordinator(verifiableProperties, clusterMap, notificationSystem);
-    } else {
-      StringBuilder errorMessage =
-          new StringBuilder("Null arg(s) received during instantiation of CoordinatorBackedRouterFactory -");
-      if (verifiableProperties == null) {
-        errorMessage.append(" [VerifiableProperties] ");
-      }
-      if (clusterMap == null) {
-        errorMessage.append(" [ClusterMap] ");
-      }
-      if (notificationSystem == null) {
-        errorMessage.append(" [NotificationSystem] ");
-      }
-      throw new IllegalArgumentException(errorMessage.toString());
+      logger.trace("Instantiated CoordinatorBackedRouterFactory");
     }
-    logger.trace("Instantiated CoordinatorBackedRouterFactory");
   }
 
   @Override

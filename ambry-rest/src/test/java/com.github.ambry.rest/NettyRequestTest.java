@@ -18,6 +18,7 @@ import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.Cookie;
 import io.netty.handler.codec.http.DefaultCookie;
@@ -180,7 +181,7 @@ public class NettyRequestTest {
       nettyRequest.readInto(writeChannel, callback).get();
       fail("Request channel has been closed, so read should have thrown ClosedChannelException");
     } catch (ExecutionException e) {
-      Exception exception = getRootCause(e);
+      Exception exception = (Exception) Utils.getRootCause(e);
       assertTrue("Exception is not ClosedChannelException", exception instanceof ClosedChannelException);
       assertEquals("Exceptions of callback and future differ", exception.getMessage(), callback.exception.getMessage());
     }
@@ -346,7 +347,7 @@ public class NettyRequestTest {
       future.get();
       fail("Future should have thrown exception");
     } catch (ExecutionException e) {
-      assertEquals("Exception message mismatch (future)", expectedMsg, getRootCause(e).getMessage());
+      assertEquals("Exception message mismatch (future)", expectedMsg, Utils.getRootCause(e).getMessage());
     }
     closeRequestAndValidate(nettyRequest);
 
@@ -600,19 +601,6 @@ public class NettyRequestTest {
   }
 
   /**
-   * Gets the root cause for {@code e}.
-   * @param e the {@link Exception} whose root cause is required.
-   * @return the root cause for {@code e}.
-   */
-  private Exception getRootCause(Exception e) {
-    Exception exception = e;
-    while (exception.getCause() != null) {
-      exception = (Exception) exception.getCause();
-    }
-    return exception;
-  }
-
-  /**
    * Convert a set of {@link Cookie} to a string that could be used as header value in http request
    * @param cookies that needs conversion
    * @return string representation of the set of cookies
@@ -849,7 +837,7 @@ public class NettyRequestTest {
       future.get();
       fail("Should have thrown exception because the future is expected to have been given one");
     } catch (ExecutionException e) {
-      RestServiceException restServiceException = (RestServiceException) getRootCause(e);
+      RestServiceException restServiceException = (RestServiceException) Utils.getRootCause(e);
       assertNotNull("There should be a RestServiceException in the future", restServiceException);
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest,
           restServiceException.getErrorCode());

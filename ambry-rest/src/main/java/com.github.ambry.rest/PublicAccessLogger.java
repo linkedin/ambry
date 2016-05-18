@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Logs requests and responses to public access log.
  */
-class PublicAccessLogger {
+public class PublicAccessLogger {
 
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
 

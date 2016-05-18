@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -89,6 +90,8 @@ class NettyResponseChannel implements RestResponseChannel {
   private NettyRequest request = null;
   // marked as true once response sending is *completely* finished. Signifies that this instance is no longer useful.
   private volatile boolean responseComplete = false;
+  // marked as true if force close is required because close() was called.
+  private volatile boolean forceClose = false;
 
   /**
    * Create an instance of NettyResponseChannel that will use {@code ctx} to return responses.
@@ -145,6 +148,7 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   @Override
   public void close() {
+    forceClose = true;
     onResponseComplete(new ClosedChannelException());
   }
 
@@ -161,6 +165,7 @@ class NettyResponseChannel implements RestResponseChannel {
             chunkedWriteHandler.resumeTransfer();
           }
         } else {
+          log(exception);
           if (request != null) {
             request.getMetricsTracker().markFailure();
           }
@@ -174,6 +179,7 @@ class NettyResponseChannel implements RestResponseChannel {
         }
       } else if (exception != null) {
         // this is probably an attempt to force close the channel *after* the response is already complete.
+        log(exception);
         if (!writeFuture.isDone()) {
           writeFuture.setFailure(exception);
         }
@@ -337,7 +343,7 @@ class NettyResponseChannel implements RestResponseChannel {
       RestServiceErrorCode restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
       status = getHttpResponseStatus(ResponseStatus.getResponseStatus(restServiceErrorCode));
       if (status == HttpResponseStatus.BAD_REQUEST) {
-        errReason.append(" [Reason - ").append(cause.getMessage()).append("]");
+        errReason.append(" [").append(Utils.getRootCause(cause).getMessage()).append("]");
       }
     } else {
       nettyMetrics.internalServerErrorCount.inc();
@@ -420,11 +426,13 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Completes the request by closing the request and network channel (if {@code closeNetworkChannel} is {@code true})
+   * Completes the request by closing the request and network channel (if {@code closeNetworkChannel} is {@code true}).
+   * </p>
+   * May also close the channel if the class internally is forcing a close (i.e. if {@link #close()} is called.
    * @param closeNetworkChannel network channel is closed if {@code true}.
    */
   private void completeRequest(boolean closeNetworkChannel) {
-    if (closeNetworkChannel && ctx.channel().isOpen()) {
+    if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
       writeFuture.addListener(ChannelFutureListener.CLOSE);
       logger.trace("Requested closing of channel {}", ctx.channel());
     }
@@ -471,6 +479,30 @@ class NettyResponseChannel implements RestResponseChannel {
     } finally {
       nettyMetrics.channelWriteFailureProcessingTimeInMs
           .update(System.currentTimeMillis() - writeFailureProcessingStartTime);
+    }
+  }
+
+  /**
+   * Logs the exception at the appropriate level.
+   * @param exception the {@link Exception} that has to be logged.
+   */
+  private void log(Exception exception) {
+    String uri = "unknown";
+    RestMethod restMethod = RestMethod.UNKNOWN;
+    if (request != null) {
+      uri = request.getUri();
+      restMethod = request.getRestMethod();
+    }
+    if (exception instanceof RestServiceException) {
+      RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
+      ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
+      if (responseStatus == ResponseStatus.InternalServerError) {
+        logger.error("Internal error handling request {} with method {}.", uri, restMethod, exception);
+      } else {
+        logger.trace("Error handling request {} with method {}.", uri, restMethod, exception);
+      }
+    } else {
+      logger.error("Unexpected error handling request {} with method {}.", uri, restMethod, exception);
     }
   }
 

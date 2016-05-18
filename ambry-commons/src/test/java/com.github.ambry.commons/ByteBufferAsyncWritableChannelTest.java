@@ -14,6 +14,7 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.router.Callback;
+import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayList;
@@ -105,7 +106,7 @@ public class ByteBufferAsyncWritableChannelTest {
       try {
         writeData.future.get();
       } catch (ExecutionException e) {
-        Exception exception = getRootCause(e);
+        Exception exception = (Exception) Utils.getRootCause(e);
         assertTrue("Unexpected exception (future)", exception instanceof ClosedChannelException);
         assertTrue("Unexpected exception (callback)",
             writeData.writeCallback.exception instanceof ClosedChannelException);
@@ -135,7 +136,7 @@ public class ByteBufferAsyncWritableChannelTest {
     try {
       future.get();
     } catch (ExecutionException e) {
-      Exception exception = getRootCause(e);
+      Exception exception = (Exception) Utils.getRootCause(e);
       assertEquals("Unexpected exception message (future)", errMsg, exception.getMessage());
       assertEquals("Unexpected exception message (callback)", errMsg, writeCallback.exception.getMessage());
     }
@@ -166,7 +167,7 @@ public class ByteBufferAsyncWritableChannelTest {
       channel.write(ByteBuffer.allocate(0), writeCallback).get();
       fail("Write should have failed");
     } catch (ExecutionException e) {
-      Exception exception = getRootCause(e);
+      Exception exception = (Exception) Utils.getRootCause(e);
       assertTrue("Unexpected exception (future)", exception instanceof ClosedChannelException);
       assertTrue("Unexpected exception (callback)", writeCallback.exception instanceof ClosedChannelException);
     }
@@ -177,20 +178,6 @@ public class ByteBufferAsyncWritableChannelTest {
   }
 
   // helpers
-  // general
-
-  /**
-   * Gets the root cause for {@code e}.
-   * @param e the {@link Exception} whose root cause is required.
-   * @return the root cause for {@code e}.
-   */
-  private Exception getRootCause(Exception e) {
-    Exception exception = e;
-    while (exception.getCause() != null) {
-      exception = (Exception) exception.getCause();
-    }
-    return exception;
-  }
 
   // checkoutMultipleChunksAndResolveTest() helpers.
 

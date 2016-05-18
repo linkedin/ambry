@@ -21,8 +21,6 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -36,7 +34,6 @@ public class NettyServerFactory implements NioServerFactory {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
   private final ChannelInitializer<SocketChannel> channelInitializer;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Creates a new instance of NettyServerFactory.
@@ -51,8 +48,10 @@ public class NettyServerFactory implements NioServerFactory {
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       final RestRequestHandler requestHandler, final PublicAccessLogger publicAccessLogger,
       final RestServerState restServerState) {
-    if (verifiableProperties != null && metricRegistry != null && requestHandler != null && publicAccessLogger != null
-        && restServerState != null) {
+    if (verifiableProperties == null || metricRegistry == null || requestHandler == null || publicAccessLogger == null
+        || restServerState == null) {
+      throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyServerFactory");
+    } else {
       this.nettyConfig = new NettyConfig(verifiableProperties);
       this.nettyMetrics = new NettyMetrics(metricRegistry);
       channelInitializer = new ChannelInitializer<SocketChannel>() {
@@ -65,7 +64,7 @@ public class NettyServerFactory implements NioServerFactory {
                   // for health check request handling
               .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
                   // for public access logging
-              .addLast("publicAccessLogHandler", new PublicAccessLogRequestHandler(publicAccessLogger, nettyMetrics))
+              .addLast("publicAccessLogHandler", new PublicAccessLogHandler(publicAccessLogger, nettyMetrics))
                   // for detecting connections that have been idle too long - probably because of an error.
               .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
                   // for safe writing of chunks for responses
@@ -74,27 +73,7 @@ public class NettyServerFactory implements NioServerFactory {
               .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
         }
       };
-    } else {
-      StringBuilder errorMessage =
-          new StringBuilder("Null arg(s) received during instantiation of NettyServerFactory -");
-      if (verifiableProperties == null) {
-        errorMessage.append(" [VerifiableProperties] ");
-      }
-      if (metricRegistry == null) {
-        errorMessage.append(" [MetricRegistry] ");
-      }
-      if (requestHandler == null) {
-        errorMessage.append(" [RestRequestHandler] ");
-      }
-      if (publicAccessLogger == null) {
-        errorMessage.append(" [PublicAccessLogger] ");
-      }
-      if (restServerState == null) {
-        errorMessage.append(" [RestServerState] ");
-      }
-      throw new IllegalArgumentException(errorMessage.toString());
     }
-    logger.trace("Instantiated NettyServerFactory");
   }
 
   /**

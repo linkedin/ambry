@@ -55,7 +55,7 @@ import org.slf4j.LoggerFactory;
  * keepalive, requests can follow one after the other. But at any point of time, only one request is actually "alive"
  * in the channel (i.e. there cannot be multiple requests in flight that are being actively served on the same channel).
  */
-class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
+public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> {
   private final NettyMetrics nettyMetrics;
   private final NettyConfig nettyConfig;
   private final RestRequestHandler requestHandler;

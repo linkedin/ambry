@@ -35,12 +35,13 @@ import org.slf4j.LoggerFactory;
  * Responsible for responding to health check requests
  * {@link RestServerState} assists in knowing the state of the system at any point in time
  */
-class HealthCheckHandler extends ChannelDuplexHandler {
+public class HealthCheckHandler extends ChannelDuplexHandler {
+  private static final byte[] GOOD = "GOOD".getBytes();
+  private static final byte[] BAD = "BAD".getBytes();
+
   private final String healthCheckUri;
   private final RestServerState restServerState;
   private final NettyMetrics nettyMetrics;
-  private final byte[] goodBytes = "GOOD".getBytes();
-  private final byte[] badBytes = "BAD".getBytes();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private HttpRequest request;
@@ -66,15 +67,15 @@ class HealthCheckHandler extends ChannelDuplexHandler {
         logger.trace("Handling health check request while in state " + restServerState.isServiceUp());
         request = (HttpRequest) obj;
         if (restServerState.isServiceUp()) {
-          response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
-              Unpooled.wrappedBuffer(goodBytes));
+          response =
+              new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(GOOD));
           HttpHeaders.setKeepAlive(response, HttpHeaders.isKeepAlive(request));
-          HttpHeaders.setContentLength(response, goodBytes.length);
+          HttpHeaders.setContentLength(response, GOOD.length);
         } else {
           response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.SERVICE_UNAVAILABLE,
-              Unpooled.wrappedBuffer(badBytes));
+              Unpooled.wrappedBuffer(BAD));
           HttpHeaders.setKeepAlive(response, false);
-          HttpHeaders.setContentLength(response, badBytes.length);
+          HttpHeaders.setContentLength(response, BAD.length);
         }
         nettyMetrics.healthCheckRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       } else {
