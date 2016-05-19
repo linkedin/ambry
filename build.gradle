@@ -45,7 +45,6 @@ subprojects {
             resources.srcDir file('src/test/resources')
         }
     }
-
     
     dependencies {
         compile "log4j:log4j:$log4jVersion"
