@@ -65,6 +65,7 @@ public class PutManagerTest {
   private int chunkSize;
   private int requestParallelism;
   private int successTarget;
+  private boolean instantiateNewRouterForPuts;
   private final Random random = new Random();
 
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
@@ -83,6 +84,7 @@ public class PutManagerTest {
     mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
+    instantiateNewRouterForPuts = true;
   }
 
   /**
@@ -221,6 +223,7 @@ public class PutManagerTest {
     for (int i = 0; i < 5; i++) {
       requestAndResultsList.add(new RequestAndResult(chunkSize + random.nextInt(5) * random.nextInt(chunkSize)));
     }
+    instantiateNewRouterForPuts = false;
     submitPutsAndAssertSuccess(true);
   }
 
@@ -614,23 +617,25 @@ public class PutManagerTest {
       throws Exception {
     final CountDownLatch doneLatch = new CountDownLatch(requestAndResultsList.size());
     // This check is here for certain tests (like testConcurrentPuts) that require using the same router.
-    if (router == null || !router.isOpen()) {
+    if (instantiateNewRouterForPuts) {
       router = getNonBlockingRouter();
     }
     for (final RequestAndResult requestAndResult : requestAndResultsList) {
       Utils.newThread(new Runnable() {
         @Override
         public void run() {
-          ReadableStreamChannel putChannel =
-              new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
-          requestAndResult.result = (FutureResult<String>) router
-              .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel,
-                  new Callback<String>() {
-                    @Override
-                    public void onCompletion(String result, Exception exception) {
-                      doneLatch.countDown();
-                    }
-                  });
+          try {
+            ReadableStreamChannel putChannel =
+                new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
+            requestAndResult.result = (FutureResult<String>) router
+                .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+            requestAndResult.result.await();
+          } catch (Exception e) {
+            requestAndResult.result = new FutureResult<>();
+            requestAndResult.result.done(null, e);
+          } finally {
+            doneLatch.countDown();
+          }
         }
       }, true).start();
     }
