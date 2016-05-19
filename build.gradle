@@ -35,6 +35,12 @@ allprojects {
 subprojects {
     apply plugin: 'java'
 
+    test {
+      testLogging {
+        exceptionFormat = 'full'
+      }
+    }
+
     dependencies {
         compile "log4j:log4j:$log4jVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"
