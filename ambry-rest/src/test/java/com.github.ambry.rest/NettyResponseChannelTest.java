@@ -288,7 +288,7 @@ public class NettyResponseChannelTest {
    */
   @Test
   public void setRequestTest() {
-    HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetRequestTest.toString());
+    HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetRequest.toString());
     HttpHeaders.setKeepAlive(request, false);
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
@@ -375,7 +375,6 @@ public class NettyResponseChannelTest {
         if (!(response instanceof FullHttpResponse)) {
           // empty the channel
           while (channel.readOutbound() != null) {
-            ;
           }
         }
         boolean shouldBeAlive =
@@ -390,6 +389,22 @@ public class NettyResponseChannelTest {
       }
     }
     channel.close();
+  }
+
+  /**
+   * Tests that the underlying network channel is closed when {@link NettyResponseChannel#close()} is called.
+   */
+  @Test
+  public void closeTest() {
+    // request is keep-alive by default.
+    HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.Close.toString());
+    EmbeddedChannel channel = createEmbeddedChannel();
+    channel.writeInbound(request);
+
+    // drain the channel of content.
+    while (channel.readOutbound() != null) {
+    }
+    assertFalse("Channel should be closed", channel.isOpen());
   }
 
   // helpers
@@ -570,6 +585,10 @@ public class NettyResponseChannelTest {
  */
 enum TestingUri {
   /**
+   * When this request is received, {@link NettyResponseChannel#close()} is called immediately.
+   */
+  Close,
+  /**
    * When this request is received, headers from the request are copied into the response channel.
    */
   CopyHeaders,
@@ -623,7 +642,7 @@ enum TestingUri {
   /**
    * Tests setting of a {@link NettyRequest} in {@link NettyResponseChannel}.
    */
-  SetRequestTest,
+  SetRequest,
   /**
    * Requests a certain status to be set.
    */
@@ -715,6 +734,10 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
     TestingUri uri = TestingUri.getTestingURI(request.getUri());
     switch (uri) {
+      case Close:
+        restResponseChannel.close();
+        assertFalse("Request channel is not closed", request.isOpen());
+        break;
       case CopyHeaders:
         copyHeaders(httpRequest);
         restResponseChannel.onResponseComplete(null);
@@ -756,8 +779,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         break;
       case ResponseFailureMidway:
         ChannelWriteCallback callback = new ChannelWriteCallback();
-        callback.compareWithFuture(
-            restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
+        callback.compareWithFuture(restResponseChannel
+            .write(ByteBuffer.wrap(TestingUri.ResponseFailureMidway.toString().getBytes()), callback));
         assertNull("There shouldn't have been any exceptions on the first write", callback.exception);
         restResponseChannel.onResponseComplete(new Exception());
         // this should close the channel and the test will check for that.
@@ -765,7 +788,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       case SetNullHeader:
         setNullHeaders();
         break;
-      case SetRequestTest:
+      case SetRequest:
         setRequestTest();
         break;
       case SetStatus:
@@ -785,8 +808,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         break;
       case WriteFailureWithThrowable:
         callback = new ChannelWriteCallback();
-        callback.compareWithFuture(
-            restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
+        callback.compareWithFuture(restResponseChannel
+            .write(ByteBuffer.wrap(TestingUri.WriteFailureWithThrowable.toString().getBytes()), callback));
         break;
     }
   }

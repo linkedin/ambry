@@ -137,8 +137,8 @@ public class RestUtils {
     public final static String USER_METADATA_PART = "UserMetadata";
   }
 
-  private static final int Crc_Size = 8;
-  private static final short UserMetadata_Version_V1 = 1;
+  private static final int CRC_SIZE = 8;
+  private static final short USER_METADATA_VERSION_V1 = 1;
   public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
 
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
@@ -269,11 +269,11 @@ public class RestUtils {
         // total number of entries
         sizeToAllocate += 4;
         // crc size
-        sizeToAllocate += Crc_Size;
+        sizeToAllocate += CRC_SIZE;
         userMetadata = ByteBuffer.allocate(sizeToAllocate);
-        userMetadata.putShort(UserMetadata_Version_V1);
+        userMetadata.putShort(USER_METADATA_VERSION_V1);
         // total size = sizeToAllocate - version size - sizeToAllocate size - crc size
-        userMetadata.putInt(sizeToAllocate - 6 - Crc_Size);
+        userMetadata.putInt(sizeToAllocate - 6 - CRC_SIZE);
         userMetadata.putInt(userMetadataMap.size());
         for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
           String key = entry.getKey();
@@ -281,7 +281,7 @@ public class RestUtils {
           Utils.serializeString(userMetadata, entry.getValue(), StandardCharsets.US_ASCII);
         }
         Crc32 crc = new Crc32();
-        crc.update(userMetadata.array(), 0, sizeToAllocate - Crc_Size);
+        crc.update(userMetadata.array(), 0, sizeToAllocate - CRC_SIZE);
         userMetadata.putLong(crc.getValue());
       }
     }
@@ -291,8 +291,8 @@ public class RestUtils {
   /**
    * Gets deserialized metadata from the byte array if possible
    * @param userMetadata the byte array which has the user metadata
-   * @return Map<String,String> the user metadata that is read from the byte array, or {@code null} incase
-   * the {@code userMetadata} cannot be parsed in expected format
+   * @return the user metadata that is read from the byte array, or {@code null} if the {@code userMetadata} cannot be
+   * parsed in expected format
    */
   public static Map<String, String> buildUserMetadata(byte[] userMetadata)
       throws RestServiceException {
@@ -302,7 +302,7 @@ public class RestUtils {
         ByteBuffer userMetadataBuffer = ByteBuffer.wrap(userMetadata);
         short version = userMetadataBuffer.getShort();
         switch (version) {
-          case UserMetadata_Version_V1:
+          case USER_METADATA_VERSION_V1:
             int sizeToRead = userMetadataBuffer.getInt();
             if (sizeToRead != (userMetadataBuffer.remaining() - 8)) {
               logger.trace("Size didn't match. Returning null");
@@ -319,7 +319,7 @@ public class RestUtils {
               }
               long actualCRC = userMetadataBuffer.getLong();
               Crc32 crc32 = new Crc32();
-              crc32.update(userMetadata, 0, userMetadata.length - Crc_Size);
+              crc32.update(userMetadata, 0, userMetadata.length - CRC_SIZE);
               long expectedCRC = crc32.getValue();
               if (actualCRC != expectedCRC) {
                 logger.trace("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC "
@@ -451,6 +451,6 @@ public class RestUtils {
    * @return milliseconds with seconds precision (last three digits 000).
    */
   public static long toSecondsPrecisionInMs(long ms) {
-    return ms -= ms % 1000;
+    return ms - (ms % 1000);
   }
 }

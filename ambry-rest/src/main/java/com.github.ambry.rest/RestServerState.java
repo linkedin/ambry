@@ -16,7 +16,7 @@ package com.github.ambry.rest;
 /**
  * Service that maintains the health of the server
  */
-class RestServerState {
+public class RestServerState {
   private volatile boolean serviceUp = false;
   private final String healthCheckUri;
 

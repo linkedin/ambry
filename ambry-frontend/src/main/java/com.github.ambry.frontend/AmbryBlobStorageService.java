@@ -345,16 +345,15 @@ class AmbryBlobStorageService implements BlobStorageService {
      * Forwards request to the {@link Router} once ID conversion is complete.
      * @param result The converted ID. This would be non null when the request executed successfully
      * @param exception The exception that was reported on execution of the request
+     * @throws IllegalStateException if both {@code result} and {@code exception} are null.
      */
     @Override
     public void onCompletion(String result, Exception exception) {
       callbackTracker.markOperationEnd();
-      try {
-        if (result == null && exception == null) {
-          throw new IllegalStateException("Both result and exception cannot be null");
-        } else if (exception != null) {
-          submitResponse(restRequest, restResponseChannel, null, exception);
-        } else {
+      if (result == null && exception == null) {
+        throw new IllegalStateException("Both result and exception cannot be null");
+      } else if (exception == null) {
+        try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Forwarding {} of {} to the router", restMethod, result);
           switch (restMethod) {
@@ -372,12 +371,17 @@ class AmbryBlobStorageService implements BlobStorageService {
               router.deleteBlob(result, deleteCallback);
               break;
             default:
-              throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
+              exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
+        } catch (Exception e) {
+          exception = e;
         }
-      } finally {
-        callbackTracker.markCallbackProcessingEnd();
       }
+
+      if (exception != null) {
+        submitResponse(restRequest, restResponseChannel, null, exception);
+      }
+      callbackTracker.markCallbackProcessingEnd();
     }
   }
 
@@ -451,11 +455,9 @@ class AmbryBlobStorageService implements BlobStorageService {
      */
     @Override
     public void onCompletion(Void result, Exception exception) {
-      try {
-        callbackTracker.markOperationEnd();
-        if (exception != null) {
-          submitResponse(restRequest, restResponseChannel, null, exception);
-        } else {
+      callbackTracker.markOperationEnd();
+      if (exception == null) {
+        try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Forwarding {} to the IdConverter/Router", restMethod);
           switch (restMethod) {
@@ -468,9 +470,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
             case HEAD:
-              receivedId = receivedId = RestUtils
-                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
-                      frontendConfig.frontendPathPrefixesToRemove);
+              receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                  frontendConfig.frontendPathPrefixesToRemove);
               idConverterCallback = new InboundIdConverterCallback(restRequest, restResponseChannel, headCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
@@ -479,19 +480,23 @@ class AmbryBlobStorageService implements BlobStorageService {
               router.putBlob(blobProperties, userMetadata, restRequest, postCallback);
               break;
             case DELETE:
-              receivedId = receivedId = RestUtils
-                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
-                      frontendConfig.frontendPathPrefixesToRemove);
+              receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                  frontendConfig.frontendPathPrefixesToRemove);
               idConverterCallback = new InboundIdConverterCallback(restRequest, restResponseChannel, deleteCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
             default:
-              throw new IllegalStateException("Unrecognized RestMethod: " + restMethod);
+              exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
+        } catch (Exception e) {
+          exception = e;
         }
-      } finally {
-        callbackTracker.markCallbackProcessingEnd();
       }
+
+      if (exception != null) {
+        submitResponse(restRequest, restResponseChannel, null, exception);
+      }
+      callbackTracker.markCallbackProcessingEnd();
     }
   }
 

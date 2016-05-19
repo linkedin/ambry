@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * Captures headers and other required info from request and responses, to make public access log entries
  * {@link PublicAccessLogger} assists in logging the required information
  */
-class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
+public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private final PublicAccessLogger publicAccessLogger;
   private final NettyMetrics nettyMetrics;
   private long requestArrivalTimeInMs;
@@ -42,7 +42,7 @@ class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   private static final long INIT_TIME = -1;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public PublicAccessLogRequestHandler(PublicAccessLogger publicAccessLogger, NettyMetrics nettyMetrics) {
+  public PublicAccessLogHandler(PublicAccessLogger publicAccessLogger, NettyMetrics nettyMetrics) {
     this.publicAccessLogger = publicAccessLogger;
     this.nettyMetrics = nettyMetrics;
     reset();
@@ -52,9 +52,9 @@ class PublicAccessLogRequestHandler extends ChannelDuplexHandler {
   public void channelRead(ChannelHandlerContext ctx, Object obj)
       throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
-    nettyMetrics.publicAccessLogRequestRate.mark();
     long startTimeInMs = System.currentTimeMillis();
     if (obj instanceof HttpRequest) {
+      nettyMetrics.publicAccessLogRequestRate.mark();
       if (request != null) {
         logDurations();
         logMessage.append(" : Received request while another request in progress. Resetting log message.");

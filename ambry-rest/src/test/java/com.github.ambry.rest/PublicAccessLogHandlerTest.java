@@ -32,9 +32,9 @@ import org.junit.Test;
 
 
 /**
- * Unit tests for {@link PublicAccessLogRequestHandler}
+ * Unit tests for {@link PublicAccessLogHandler}
  */
-public class PublicAccessLogRequestHandlerTest {
+public class PublicAccessLogHandlerTest {
   private final MockPublicAccessLogger publicAccessLogger;
   private static final String REQUEST_HEADERS = "Host,Content-Length,x-ambry-content-type";
   private static final String RESPONSE_HEADERS =
@@ -42,9 +42,9 @@ public class PublicAccessLogRequestHandlerTest {
   private static final String NOT_LOGGED_HEADER_KEY = "headerKey";
 
   /**
-   * Sets up the mock public access logger that {@link PublicAccessLogRequestHandler} can use.
+   * Sets up the mock public access logger that {@link PublicAccessLogHandler} can use.
    */
-  public PublicAccessLogRequestHandlerTest() {
+  public PublicAccessLogHandlerTest() {
     publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","));
   }
 
@@ -265,14 +265,13 @@ public class PublicAccessLogRequestHandlerTest {
   // general
 
   /**
-   * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link PublicAccessLogRequestHandler}
+   * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link PublicAccessLogHandler}
    * and {@link EchoMethodHandler}.
-   * @return an {@link EmbeddedChannel} that incorporates an instance of {@link PublicAccessLogRequestHandler}
+   * @return an {@link EmbeddedChannel} that incorporates an instance of {@link PublicAccessLogHandler}
    * nad {@link EchoMethodHandler}.
    */
   private EmbeddedChannel createChannel() {
-    return new EmbeddedChannel(
-        new PublicAccessLogRequestHandler(publicAccessLogger, new NettyMetrics(new MetricRegistry())),
+    return new EmbeddedChannel(new PublicAccessLogHandler(publicAccessLogger, new NettyMetrics(new MetricRegistry())),
         new EchoMethodHandler());
   }
 
