@@ -72,7 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final Map<String, TransmissionPendingHandshake> pendingSslTrans;
+  private final Map<String, UnreadyConnections> connectionPendingHandshake;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -92,12 +92,12 @@ public class Selector implements Selectable {
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
-    this.pendingSslTrans = new HashMap<>();
+    this.connectionPendingHandshake = new HashMap<>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
-    this.activeConnections = new AtomicLong(0);
-    this.connectionsPendingHandshakeCount = new AtomicLong(0);
-    this.metrics.initializeSelectorMetricsIfRequired(activeConnections, connectionsPendingHandshakeCount);
+    activeConnections = new AtomicLong(0);
+    connectionsPendingHandshakeCount = new AtomicLong(0);
+    metrics.initializeSelectorMetricsIfRequired(activeConnections, connectionsPendingHandshakeCount);
     this.sslFactory = sslFactory;
   }
 
@@ -324,8 +324,8 @@ public class Selector implements Selectable {
               connected.add(transmission.getConnectionId());
               metrics.selectorConnectionCreated.inc();
             } else {
-              pendingSslTrans.put(transmission.getConnectionId(),
-                  new TransmissionPendingHandshake((SSLTransmission) transmission));
+              connectionPendingHandshake
+                  .put(transmission.getConnectionId(), new UnreadyConnections((SSLTransmission) transmission));
               connectionsPendingHandshakeCount.incrementAndGet();
             }
           }
@@ -359,7 +359,7 @@ public class Selector implements Selectable {
           close(key);
         }
       }
-      checkHandshakeStatus();
+      checkUnreadyConnectionsStatus();
       this.metrics.selectorIORate.inc();
     }
     long endIo = time.milliseconds();
@@ -367,14 +367,14 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Check for handshake status and add to connected list on handshake completion
+   * Check readiness for unready connections and add to completed list if ready
    */
-  private void checkHandshakeStatus() {
-    Iterator<Map.Entry<String, TransmissionPendingHandshake>> transmissionInfoIter =
-        pendingSslTrans.entrySet().iterator();
+  private void checkUnreadyConnectionsStatus() {
+    Iterator<Map.Entry<String, UnreadyConnections>> transmissionInfoIter =
+        connectionPendingHandshake.entrySet().iterator();
     while (transmissionInfoIter.hasNext()) {
-      Map.Entry<String, TransmissionPendingHandshake> transmissionInfo = transmissionInfoIter.next();
-      if (transmissionInfo.getValue().sslTransmission.ready()) {
+      Map.Entry<String, UnreadyConnections> transmissionInfo = transmissionInfoIter.next();
+      if (transmissionInfo.getValue().transmission.ready()) {
         connected.add(transmissionInfo.getKey());
         metrics.selectorConnectionCreated.inc();
         metrics.selectorPerceivedSslHandshakeTime
@@ -485,10 +485,10 @@ public class Selector implements Selectable {
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
-      transmission.close();
-      if (pendingSslTrans.remove(transmission.getConnectionId()) != null) {
+      if (connectionPendingHandshake.remove(transmission.getConnectionId()) != null) {
         connectionsPendingHandshakeCount.decrementAndGet();
       }
+      transmission.close();
     } else {
       key.attach(null);
       key.cancel();
@@ -570,14 +570,14 @@ public class Selector implements Selectable {
 }
 
 /**
- * Class used to store {@link SSLTransmission} which are yet to complete its handshake, along with start time of the same
+ * Class used to store {@link Transmission} which are yet to complete its handshake, along with start time of the same
  */
-class TransmissionPendingHandshake {
-  SSLTransmission sslTransmission;
+class UnreadyConnections {
+  Transmission transmission;
   long pendingSinceMs;
 
-  TransmissionPendingHandshake(SSLTransmission sslTransmission) {
-    this.sslTransmission = sslTransmission;
+  UnreadyConnections(Transmission transmission) {
+    this.transmission = transmission;
     pendingSinceMs = System.currentTimeMillis();
   }
 }
