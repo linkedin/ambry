@@ -36,22 +36,17 @@ subprojects {
     apply plugin: 'java'
 
     sourceSets {
-      test {
-        java.srcDir file('src/integration-test/java')
-        resources.srcDir file('src/integration-test/resources')
-      }
-      unitTest {
-        java.srcDir file('src/test/java')
-        resources.srcDir file('src/test/resources')
-      }
+        test {
+            java.srcDir file('src/integration-test/java')
+            resources.srcDir file('src/integration-test/resources')
+        }
+        unitTest {
+            java.srcDir file('src/test/java')
+            resources.srcDir file('src/test/resources')
+        }
     }
 
-    test {
-      testLogging {
-        exceptionFormat = 'full'
-      }
-    }
-
+    
     dependencies {
         compile "log4j:log4j:$log4jVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"
@@ -63,9 +58,18 @@ subprojects {
         unitTestRuntime configurations.testRuntime
     }
 
+    test {
+        testLogging {
+            exceptionFormat = 'full'
+        }
+    }
+
     task unitTest(type: Test) {
-      testClassesDir = sourceSets.unitTest.output.classesDir
-      classpath += sourceSets.unitTest.runtimeClasspath
+        testLogging {
+            exceptionFormat = 'full'
+        }
+        testClassesDir = sourceSets.unitTest.output.classesDir
+        classpath += sourceSets.unitTest.runtimeClasspath
     }
     
     // only run unit tests when doing a standard build,
