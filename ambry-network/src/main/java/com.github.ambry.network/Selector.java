@@ -72,7 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final Map<String, UnreadyConnections> connectionPendingHandshake;
+  private final Map<String, Long> connectionPendingHandshakeTimer;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -92,7 +92,7 @@ public class Selector implements Selectable {
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
-    this.connectionPendingHandshake = new HashMap<>();
+    this.connectionPendingHandshakeTimer = new HashMap<>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     activeConnections = new AtomicLong(0);
@@ -324,8 +324,7 @@ public class Selector implements Selectable {
               connected.add(transmission.getConnectionId());
               metrics.selectorConnectionCreated.inc();
             } else {
-              connectionPendingHandshake
-                  .put(transmission.getConnectionId(), new UnreadyConnections((SSLTransmission) transmission));
+              connectionPendingHandshakeTimer.put(transmission.getConnectionId(), System.currentTimeMillis());
               connectionsPendingHandshakeCount.incrementAndGet();
             }
           }
@@ -370,16 +369,14 @@ public class Selector implements Selectable {
    * Check readiness for unready connections and add to completed list if ready
    */
   private void checkUnreadyConnectionsStatus() {
-    Iterator<Map.Entry<String, UnreadyConnections>> transmissionInfoIter =
-        connectionPendingHandshake.entrySet().iterator();
-    while (transmissionInfoIter.hasNext()) {
-      Map.Entry<String, UnreadyConnections> transmissionInfo = transmissionInfoIter.next();
-      if (transmissionInfo.getValue().transmission.ready()) {
-        connected.add(transmissionInfo.getKey());
+    Iterator<Map.Entry<String, Long>> iterator = connectionPendingHandshakeTimer.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<String, Long> entry = iterator.next();
+      if (isChannelReady(entry.getKey())) {
+        connected.add(entry.getKey());
         metrics.selectorConnectionCreated.inc();
-        metrics.selectorPerceivedSslHandshakeTime
-            .update(System.currentTimeMillis() - transmissionInfo.getValue().pendingSinceMs);
-        transmissionInfoIter.remove();
+        metrics.selectorPerceivedSslHandshakeTime.update(System.currentTimeMillis() - entry.getValue());
+        iterator.remove();
         connectionsPendingHandshakeCount.decrementAndGet();
       }
     }
@@ -485,7 +482,7 @@ public class Selector implements Selectable {
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
       activeConnections.set(this.keyMap.size());
-      if (connectionPendingHandshake.remove(transmission.getConnectionId()) != null) {
+      if (connectionPendingHandshakeTimer.remove(transmission.getConnectionId()) != null) {
         connectionsPendingHandshakeCount.decrementAndGet();
       }
       transmission.close();
@@ -566,18 +563,5 @@ public class Selector implements Selectable {
    */
   private SocketChannel channel(SelectionKey key) {
     return (SocketChannel) key.channel();
-  }
-}
-
-/**
- * Class used to store {@link Transmission} which are yet to complete its handshake, along with start time of the same
- */
-class UnreadyConnections {
-  Transmission transmission;
-  long pendingSinceMs;
-
-  UnreadyConnections(Transmission transmission) {
-    this.transmission = transmission;
-    pendingSinceMs = System.currentTimeMillis();
   }
 }
