@@ -13,12 +13,12 @@
  */
 package com.github.ambry.utils;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ReadOnlyBufferException;
+import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.nio.ByteBuffer;
-import java.util.Random;
-import java.io.IOException;
 
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -61,6 +61,23 @@ public class ByteBufferInputStreamTest {
       Assert.assertEquals(output[i], buf[i + 1001]);
     }
     Assert.assertEquals(stream3.read(), -1);
+
+    ByteBuffer byteBuf = ByteBuffer.wrap(buf);
+    ByteBufferInputStream stream4 = new ByteBufferInputStream(byteBuf.duplicate());
+    // ByteBuffer class overrides equal() to do content comparison.
+    Assert.assertEquals("The returned byte buffer must have the same content as the one initialized with", byteBuf,
+        stream4.getByteBuffer());
+    byteBuf.rewind();
+    ByteBufferInputStream stream5 = new ByteBufferInputStream(byteBuf.duplicate());
+    ByteBufferInputStream stream6 = new ByteBufferInputStream(stream5, 1024);
+    Assert.assertEquals("The returned byte buffer must have the same content as the one initialized with", byteBuf,
+        stream6.getByteBuffer());
+
+    try {
+      stream6.getByteBuffer().put((byte) 0);
+      Assert.fail("Returned ByteBuffer from a ByteBufferInputStream must be read-only");
+    } catch (ReadOnlyBufferException e) {
+    }
   }
 
   @Test
