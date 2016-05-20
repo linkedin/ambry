@@ -38,7 +38,6 @@ public class NetworkMetrics {
   public final Histogram selectorSelectTime;
   public final Counter selectorIORate;
   public final Histogram selectorIOTime;
-  public final Histogram selectorPerceivedSslHandshakeTime;
   public final Counter selectorNioCloseErrorCount;
   public final Counter selectorDisconnectedErrorCount;
   public final Counter selectorIOErrorCount;
@@ -89,8 +88,6 @@ public class NetworkMetrics {
     selectorIORate = registry.counter(MetricRegistry.name(Selector.class, "SelectorIORate"));
     selectorSelectTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorSelectTime"));
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
-    selectorPerceivedSslHandshakeTime =
-        registry.histogram(MetricRegistry.name(Selector.class, "SelectorSslHandshakeTime"));
     selectorNioCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorNioCloseErrorCount"));
     selectorDisconnectedErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorDisconnectedErrorCount"));
