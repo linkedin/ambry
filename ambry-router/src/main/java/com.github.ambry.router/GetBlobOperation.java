@@ -166,10 +166,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     if (chunk == firstChunk) {
       if (operationCallbackInvoked.compareAndSet(false, true)) {
         // Complete the operation from the caller's perspective, so that the caller can start reading from the
-        // channel. The operation will not be marked as complete internally as subsequent chunk retrievals and
-        // channel writes will need to happen and for that, this operation needs the GetManager to poll it
-        // periodically. If any exception is encountered while processing subsequent chunks, those will be notified
-        // during the channel read.
+        // channel if there is no exception. The operation will not be marked as complete internally as subsequent
+        // chunk retrievals and channel writes will need to happen and for that, this operation needs the GetManager to
+        // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
+        // notified during the channel read.
         getBlobResult = getOperationException() == null ? new GetBlobResult() : null;
         operationCompleteCallback
             .completeOperation(operationFuture, operationCallback, getBlobResult, getOperationException());
@@ -227,6 +227,12 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
             if (dataChunk.isInProgress() || (dataChunk.isReady()
                 && numChunksRetrieved - getBlobResult.getNumChunksWrittenOut() < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
               dataChunk.poll(requestRegistrationCallback);
+              if (dataChunk.isComplete()) {
+                onChunkOperationComplete(dataChunk);
+                if (operationCompleted) {
+                  break;
+                }
+              }
             }
           }
         }
@@ -275,8 +281,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     };
 
     /**
-     * {@inheritDoc}
-     * <br>
      * The bytes that will be read from this channel is not known until the read is complete.
      * @return -1.
      */
@@ -285,14 +289,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       return -1;
     }
 
-    /**
-     * {@inheritDoc}
-     * <br>
-     * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
-     * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
-     *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
-     * @return the {@link Future} that will eventually contain the result of the operation.
-     */
     @Override
     public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
       if (readCalled) {
@@ -302,22 +298,17 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       readIntoCallback = callback;
       readIntoFuture = new FutureResult<>();
       readCalled = true;
+      if (operationException.get() != null) {
+        completeRead();
+      }
       return readIntoFuture;
     }
 
-    /**
-     * {@inheritDoc}
-     * @return true, unless the channel is closed.
-     */
     @Override
     public boolean isOpen() {
       return isOpen;
     }
 
-    /**
-     * {@inheritDoc}
-     * @throws IOException
-     */
     @Override
     public void close()
         throws IOException {
@@ -352,7 +343,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         }
         if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
           completeRead();
-          operationCompleted = true;
         }
       }
     }
@@ -362,14 +352,12 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      */
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
-        if (operationException.get() != null) {
-          bytesWritten = null;
-        }
         readIntoFuture.done(bytesWritten, operationException.get());
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten, operationException.get());
         }
       }
+      operationCompleted = true;
     }
   }
 
