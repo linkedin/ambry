@@ -268,7 +268,6 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private void closeRequest() {
     if (request != null && request.isOpen()) {
-      request.getMetricsTracker().nioMetricsTracker.markRequestCompleted();
       request.close();
     }
   }

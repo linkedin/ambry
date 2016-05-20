@@ -214,6 +214,7 @@ class NettyRequest implements RestRequest {
         }
       } finally {
         contentLock.unlock();
+        restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
         restRequestMetricsTracker.recordMetrics();
         if (callbackWrapper != null) {
           callbackWrapper.invokeCallback(channelException);
