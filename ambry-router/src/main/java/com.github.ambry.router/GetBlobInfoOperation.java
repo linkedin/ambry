@@ -25,6 +25,7 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -135,7 +136,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       ReplicaId replicaId = replicaIterator.next();
       String hostname = replicaId.getDataNodeId().getHostname();
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
-      GetRequest getRequest = createGetRequest(blobId, getOperationFlag());
+      GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), GetOptions.None);
       RequestInfo request = new RequestInfo(hostname, port, getRequest);
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));

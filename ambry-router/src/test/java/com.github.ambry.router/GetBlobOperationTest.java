@@ -474,6 +474,7 @@ public class GetBlobOperationTest {
   //        operation should get completed.
   // @todo: test the case where a subsequent chunk fails at the router. the read should fail in that case.
   // @todo: maybe a test for legacy blobs.
+  // @todo: possibly tests where intermediate chunks get expired/deleted.
 
   /**
    * Construct GetBlob operations with appropriate callbacks, then poll those operations until they complete,

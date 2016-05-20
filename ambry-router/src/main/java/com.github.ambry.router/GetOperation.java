@@ -170,12 +170,12 @@ abstract class GetOperation<T> {
    * @param flag The {@link MessageFormatFlags} to be set with the GetRequest.
    * @return the created GetRequest.
    */
-  protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag) {
+  protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag, GetOptions getOptions) {
     List<BlobId> blobIds = Collections.singletonList(blobId);
     List<PartitionRequestInfo> partitionRequestInfoList =
         Collections.singletonList(new PartitionRequestInfo(blobId.getPartition(), blobIds));
     return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, flag,
-        partitionRequestInfoList, GetOptions.None);
+        partitionRequestInfoList, getOptions);
   }
 }
 

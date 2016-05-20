@@ -29,6 +29,7 @@ import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -404,6 +405,16 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     }
 
     /**
+     * @return the {@link GetOptions} to associate with the {@link GetRequest}s that will be issued by this GetChunk.
+     */
+    GetOptions getGetOptions() {
+      // Anything other than the first GetChunk should ignore Delete and Expired flags. This is to avoid errors due
+      // to the blob getting expired or deleted in the middle of a retrieval - after the metadata chunk was
+      // successfully retrieved.
+      return GetOptions.Include_All;
+    }
+
+    /**
      * Reset the state of this GetChunk.
      */
     void reset() {
@@ -487,7 +498,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         replicaIterator.remove();
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
-        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag());
+        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOptions());
         RequestInfo request = new RequestInfo(hostname, port, getRequest);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
@@ -695,6 +706,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     @Override
     void postCompletionCleanup() {
       correlationIdToGetRequestInfo.clear();
+    }
+
+    @Override
+    GetOptions getGetOptions() {
+      return GetOptions.None;
     }
 
     /**
