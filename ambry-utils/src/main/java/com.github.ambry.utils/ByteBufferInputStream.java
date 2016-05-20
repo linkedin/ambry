@@ -108,5 +108,16 @@ public class ByteBufferInputStream extends InputStream {
   public ByteBufferInputStream duplicate() {
     return new ByteBufferInputStream(byteBuffer.duplicate());
   }
+
+  /**
+   * Return the underlying read-only {@link ByteBuffer} associated with this ByteBufferInputStream.
+   * <br>
+   * Combining the reads from the returned {@link ByteBuffer} and the other read methods of this stream can lead to
+   * unexpected behavior.
+   * @return the underlying read-only {@link ByteBuffer} associated with this ByteBufferInputStream.
+   */
+  public ByteBuffer getByteBuffer() {
+    return byteBuffer.asReadOnlyBuffer();
+  }
 }
 

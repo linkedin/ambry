@@ -13,7 +13,7 @@
  */
 package com.github.ambry.messageformat;
 
-import java.io.InputStream;
+import com.github.ambry.utils.ByteBufferInputStream;
 
 
 /**
@@ -22,29 +22,38 @@ import java.io.InputStream;
 public class BlobData {
   private final BlobType blobType;
   private final long size;
-  private final InputStream stream;
+  private final ByteBufferInputStream stream;
 
   /**
    * The blob data contains the stream and other required info
    * @param blobType {@link BlobType} of the blob
-   * @param size The size of the blob
-   * @param stream The stream that contains the blob
+   * @param size The size of the blob content.
+   * @param stream The {@link ByteBufferInputStream} containing the blob content.
    */
-  public BlobData(BlobType blobType, long size, InputStream stream) {
+  public BlobData(BlobType blobType, long size, ByteBufferInputStream stream) {
     this.blobType = blobType;
     this.size = size;
     this.stream = stream;
   }
 
+  /**
+   * @return the type of the blob.
+   */
   public BlobType getBlobType() {
     return this.blobType;
   }
 
+  /**
+   * @return the size of the blob content.
+   */
   public long getSize() {
     return size;
   }
 
-  public InputStream getStream() {
+  /**
+   * @return the {@link ByteBufferInputStream} containing the blob content.
+   */
+  public ByteBufferInputStream getStream() {
     return stream;
   }
 }
