@@ -94,8 +94,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
-
-  // ReadableStreamChannel implementation related variables:
+  // The result of this operation. This is instantiated if/when the first bytes of the result arrive and just before
+  // the operation callback is invoked.
   private GetBlobResult getBlobResult;
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
@@ -136,7 +136,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
     } else {
       operationException.set(abortCause);
-      if (getBlobResult != null && getBlobResult.readCalled) {
+      if (getBlobResult != null && getBlobResult.isReadCalled()) {
         getBlobResult.completeRead();
       }
     }
@@ -207,25 +207,27 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     if (operationCompleted) {
       return;
     }
-    if (firstChunk.isReady() || firstChunk.isInProgress()) {
-      firstChunk.poll(requestRegistrationCallback);
-    }
-    if (firstChunk.isComplete()) {
-      // Although an attempt is made to write to the channel as soon as a chunk is successfully retrieved,
-      // the caller might not have called readInto() and passed in a channel at the time. So an attempt is always
-      // made from within poll.
-      if (getBlobResult != null) {
-        getBlobResult.maybeWriteToChannel();
+    if (operationException.get() == null) {
+      if (firstChunk.isReady() || firstChunk.isInProgress()) {
+        firstChunk.poll(requestRegistrationCallback);
       }
-      // If this is a composite blob, poll for requests for subsequent chunks.
-      if (dataChunks != null) {
-        for (GetChunk dataChunk : dataChunks) {
-          if (dataChunk.isFree() && chunkIdIterator.hasNext()) {
-            dataChunk.initialize(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
-          }
-          if (dataChunk.isInProgress() || (dataChunk.isReady()
-              && numChunksRetrieved - getBlobResult.numChunksWrittenOut.get() < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
-            dataChunk.poll(requestRegistrationCallback);
+      if (firstChunk.isComplete()) {
+        // Although an attempt is made to write to the channel as soon as a chunk is successfully retrieved,
+        // the caller might not have called readInto() and passed in a channel at the time. So an attempt is always
+        // made from within poll.
+        if (getBlobResult != null) {
+          getBlobResult.maybeWriteToChannel();
+        }
+        // If this is a composite blob, poll for requests for subsequent chunks.
+        if (dataChunks != null) {
+          for (GetChunk dataChunk : dataChunks) {
+            if (dataChunk.isFree() && chunkIdIterator.hasNext()) {
+              dataChunk.initialize(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+            }
+            if (dataChunk.isInProgress() || (dataChunk.isReady()
+                && numChunksRetrieved - getBlobResult.getNumChunksWrittenOut() < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
+              dataChunk.poll(requestRegistrationCallback);
+            }
           }
         }
       }
@@ -237,6 +239,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
 
   // ReadableStreamChannel implementation:
 
+  /**
+   * A class that implements the result of this GetBlobOperation. This is instantiated if/when the first data chunk of
+   * the blob arrives, when the operation callback is invoked.
+   */
   private class GetBlobResult implements ReadableStreamChannel {
     // whether this ReadableStreamChannel is open.
     private boolean isOpen = true;
@@ -319,14 +325,27 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     }
 
     /**
+     * @return whether readInto() has been called yet.
+     */
+    boolean isReadCalled() {
+      return readCalled;
+    }
+
+    /**
+     * @return the number of chunks that have been written out to the {@link AsyncWritableChannel}
+     */
+    int getNumChunksWrittenOut() {
+      return numChunksWrittenOut.get();
+    }
+
+    /**
      * Attempt to write the data associated with the blob to the channel passed in by the caller (if the caller has
      * done so).
      */
     private void maybeWriteToChannel() {
       // if there are chunks available to be written out, do now.
       if (firstChunk.isComplete() && readCalled) {
-        while (indexOfNextChunkToWriteOut < numChunksTotal && chunkIndexToBuffer
-            .containsKey(indexOfNextChunkToWriteOut)) {
+        while (operationException.get() == null && chunkIndexToBuffer.containsKey(indexOfNextChunkToWriteOut)) {
           ByteBuffer chunkBuf = chunkIndexToBuffer.remove(indexOfNextChunkToWriteOut);
           asyncWritableChannel.write(chunkBuf, chunkAsyncWriteCallback);
           indexOfNextChunkToWriteOut++;
