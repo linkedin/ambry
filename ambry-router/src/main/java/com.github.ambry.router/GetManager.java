@@ -98,9 +98,12 @@ class GetManager {
   void submitGetBlobInfoOperation(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
     try {
       GetBlobInfoOperation getBlobInfoOperation =
-          new GetBlobInfoOperation(routerConfig, clusterMap, responseHandler, blobId, futureResult, callback, time);
+          new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, futureResult,
+              callback, time);
       getOperations.add(getBlobInfoOperation);
     } catch (RouterException e) {
+      // @todo: refactor after getBlob is implemented.
+      routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -143,6 +146,8 @@ class GetManager {
    * @param op the {@link PutOperation} that has completed.
    */
   void onComplete(GetOperation op) {
+    // @todo: refactor when getBlob is implemented.
+    routerMetrics.operationDequeuingRate.mark();
     operationCompleteCallback
         .completeOperation(op.getFuture(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
@@ -172,6 +177,8 @@ class GetManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (getOperations.remove(op)) {
+        // @todo: refactor when getBlob is implemented.
+        routerMetrics.operationDequeuingRate.mark();
         operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null,
             new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
       }

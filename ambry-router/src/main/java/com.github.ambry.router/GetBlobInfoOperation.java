@@ -23,7 +23,6 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
@@ -55,6 +54,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   /**
    * Construct a GetBlobInfoOperation
    * @param routerConfig the {@link RouterConfig} containing the configs for get operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blob id associated with the operation in string form.
@@ -63,10 +63,11 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
-  GetBlobInfoOperation(RouterConfig routerConfig, ClusterMap clusterMap, ResponseHandler responseHandler,
-      String blobIdStr, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback, Time time)
+  GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      ResponseHandler responseHandler, String blobIdStr, FutureResult<BlobInfo> futureResult,
+      Callback<BlobInfo> callback, Time time)
       throws RouterException {
-    super(routerConfig, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
     operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
         routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
         routerConfig.routerGetRequestParallelism);
@@ -148,6 +149,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
     int correlationId = ((GetRequest) responseInfo.getRequest()).getCorrelationId();
     // Get the GetOperation that generated the request.
     GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
+    routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - getRequestInfo.startTimeMs);
     if (responseInfo.getError() != null) {
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
       responseHandler.onRequestResponseException(getRequestInfo.replicaId, new IOException("NetworkClient error"));

@@ -156,10 +156,10 @@ public class NonBlockingRouterTest {
    * @param expectedCount the expected number of ChunkFiller and RequestResponseHandler threads.
    */
   private void assertExpectedThreadCounts(int expectedCount) {
-    Assert.assertEquals("Number of chunkFiller threads running should be as expected", expectedCount,
-        TestUtils.numThreadsByThisName("ChunkFillerThread"));
     Assert.assertEquals("Number of RequestResponseHandler threads running should be as expected", expectedCount,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
+    Assert.assertEquals("Number of chunkFiller threads running should be as expected", expectedCount,
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
     if (expectedCount == 0) {
       Assert.assertFalse("Router should be closed if there are no worker threads running", router.isOpen());
       Assert

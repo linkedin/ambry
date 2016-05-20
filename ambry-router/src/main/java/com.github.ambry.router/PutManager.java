@@ -84,11 +84,12 @@ class PutManager {
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
+   * @param index the index of the {@link NonBlockingRouter.OperationController} in the {@link NonBlockingRouter}
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      OperationCompleteCallback operationCompleteCallback, Time time) {
+      OperationCompleteCallback operationCompleteCallback, int index, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
@@ -98,8 +99,9 @@ class PutManager {
     this.time = time;
     putOperations = Collections.newSetFromMap(new ConcurrentHashMap<PutOperation, Boolean>());
     correlationIdToPutOperation = new HashMap<Integer, PutOperation>();
-    chunkFillerThread = Utils.newThread("ChunkFillerThread", new ChunkFiller(), true);
+    chunkFillerThread = Utils.newThread("ChunkFillerThread-" + index, new ChunkFiller(), true);
     chunkFillerThread.start();
+    routerMetrics.initializePutManagerMetrics(chunkFillerThread);
   }
 
   /**
@@ -114,10 +116,11 @@ class PutManager {
       FutureResult<String> futureResult, Callback<String> callback) {
     try {
       PutOperation putOperation =
-          new PutOperation(routerConfig, clusterMap, responseHandler, blobProperties, userMetaData, channel,
-              futureResult, callback, time);
+          new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
+              channel, futureResult, callback, time);
       putOperations.add(putOperation);
     } catch (RouterException e) {
+      routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -178,6 +181,8 @@ class PutManager {
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
     }
+    routerMetrics.operationDequeuingRate.mark();
+    routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
     operationCompleteCallback
         .completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(), op.getOperationException());
   }
@@ -217,6 +222,7 @@ class PutManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (putOperations.remove(op)) {
+        routerMetrics.operationDequeuingRate.mark();
         operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null,
             new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
       }
