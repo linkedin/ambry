@@ -783,24 +783,14 @@ class EventMonitor<T> implements MockRestResponseChannel.EventListener, MockRest
 /**
  * Object that wraps another {@link ReadableStreamChannel} and simply blocks on read until released.
  */
-class HaltingRSC implements ReadableStreamChannel {
-  private final ByteBuffer buffer;
-  private final long size;
+class HaltingRSC extends ByteBufferRSC implements ReadableStreamChannel {
   private final CountDownLatch release;
   private final ExecutorService executorService;
 
-  private volatile boolean isOpen = true;
-
   public HaltingRSC(ByteBuffer buffer, CountDownLatch releaseRead, ExecutorService executorService) {
-    this.buffer = buffer;
-    size = buffer.remaining();
+    super(buffer);
     this.release = releaseRead;
     this.executorService = executorService;
-  }
-
-  @Override
-  public long getSize() {
-    return size;
   }
 
   @Override
@@ -829,16 +819,6 @@ class HaltingRSC implements ReadableStreamChannel {
       }
     });
     return future;
-  }
-
-  @Override
-  public boolean isOpen() {
-    return isOpen;
-  }
-
-  @Override
-  public void close() {
-    isOpen = false;
   }
 }
 
@@ -888,6 +868,15 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
       callback.onCompletion(bytesRead, exception);
     }
     return futureResult;
+  }
+
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm) {
+  }
+
+  @Override
+  public byte[] getDigest() {
+    return null;
   }
 
   @Override
@@ -956,6 +945,16 @@ class BadRestRequest implements RestRequest {
 
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public byte[] getDigest() {
     throw new IllegalStateException("Not implemented");
   }
 }

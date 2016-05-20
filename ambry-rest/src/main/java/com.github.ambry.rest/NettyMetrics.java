@@ -91,6 +91,7 @@ public class NettyMetrics {
   // Other
   // NettyRequest
   public final Counter contentCopyCount;
+  public final Histogram digestCalculationTimeInMs;
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
   public final Counter idleConnectionCloseCount;
@@ -215,6 +216,10 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseOnWriteCount"));
 
     // Other
+    // NettyRequest
+    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
+    digestCalculationTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyRequest.class, "DigestCalculationTimeInMs"));
     // NettyMessageProcessor
     channelReadIntervalInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));
@@ -222,8 +227,6 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionCloseCount"));
     processorExceptionCaughtCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtCount"));
-    // NettyRequest
-    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
     // NettyResponseChannel
     badRequestCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount"));
     unauthorizedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnauthorizedCount"));

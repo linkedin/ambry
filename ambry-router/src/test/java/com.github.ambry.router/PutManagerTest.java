@@ -34,6 +34,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -876,6 +877,17 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
     this.callback = callback;
     this.returnedFuture = new FutureResult<Long>();
     return returnedFuture;
+  }
+
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm)
+      throws NoSuchAlgorithmException {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public byte[] getDigest() {
+    throw new IllegalStateException("Not implemented");
   }
 
   /**

@@ -23,6 +23,8 @@ import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -102,8 +104,12 @@ public class MockRestRequest implements RestRequest {
   private final List<EventListener> listeners = new ArrayList<EventListener>();
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
 
+  private MessageDigest digest = null;
+  private byte[] digestBytes = null;
+
   private volatile AsyncWritableChannel writeChannel = null;
   private volatile ReadIntoCallbackWrapper callbackWrapper = null;
+  private volatile boolean allContentReceived = false;
 
   private static String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
 
@@ -218,6 +224,28 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
+  public void setDigestAlgorithm(String digestAlgorithm)
+      throws NoSuchAlgorithmException {
+    if (callbackWrapper != null) {
+      throw new IllegalStateException("Cannot create a digest because some content has already been discarded");
+    }
+    digest = MessageDigest.getInstance(digestAlgorithm);
+  }
+
+  @Override
+  public byte[] getDigest() {
+    if (digest == null) {
+      return null;
+    } else if (!allContentReceived) {
+      throw new IllegalStateException("Cannot calculate digest yet because all the content has not been processed");
+    }
+    if (digestBytes == null) {
+      digestBytes = digest.digest();
+    }
+    return digestBytes;
+  }
+
+  @Override
   public boolean isOpen() {
     onEventComplete(Event.IsOpen);
     return channelOpen.get();
@@ -286,10 +314,16 @@ public class MockRestRequest implements RestRequest {
       ByteBuffer content) {
     ContentWriteCallback writeCallback;
     if (content == null) {
+      allContentReceived = true;
       writeCallback = new ContentWriteCallback(true, callbackWrapper);
       content = ByteBuffer.allocate(0);
     } else {
       writeCallback = new ContentWriteCallback(false, callbackWrapper);
+      if (digest != null) {
+        int savedPosition = content.position();
+        digest.update(content);
+        content.position(savedPosition);
+      }
     }
     writeChannel.write(content, writeCallback);
   }

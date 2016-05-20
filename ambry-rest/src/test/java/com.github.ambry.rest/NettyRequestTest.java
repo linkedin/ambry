@@ -19,6 +19,9 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.Cookie;
 import io.netty.handler.codec.http.DefaultCookie;
@@ -35,6 +38,8 @@ import io.netty.handler.codec.http.LastHttpContent;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -59,6 +64,9 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link NettyRequest}.
  */
 public class NettyRequestTest {
+
+  private static final int GENERATED_CONTENT_SIZE = 10240;
+  private static final int GENERATED_CONTENT_PART_COUNT = 10;
 
   /**
    * Tests conversion of {@link HttpRequest} to {@link NettyRequest} given good input.
@@ -197,98 +205,17 @@ public class NettyRequestTest {
 
   /**
    * Tests {@link NettyRequest#addContent(HttpContent)} and
-   * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} by creating a {@link NettyRequest}, adding a few
-   * pieces of content to it and then reading from it to match the stream with the added content.
-   * <p/>
-   * The read happens at different points of time w.r.t content addition (before, during, after).
+   * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} with different digest algorithms (including a test
+   * with no digest algorithm).
    * @throws Exception
    */
   @Test
   public void contentAddAndReadTest()
       throws Exception {
-    // start reading before content added
-    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
-    List<HttpContent> httpContents = new ArrayList<HttpContent>();
-    ByteBuffer content = generateContent(httpContents);
-    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
-    ReadIntoCallback callback = new ReadIntoCallback();
-    Future<Long> future = nettyRequest.readInto(writeChannel, callback);
-
-    for (HttpContent httpContent : httpContents) {
-      nettyRequest.addContent(httpContent);
-      assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
+    String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
+    for (String digestAlgorithm : digestAlgorithms) {
+      contentAddAndReadTest(digestAlgorithm);
     }
-    readAndVerify(content.limit(), writeChannel, content);
-    verifyRefCnts(httpContents);
-    writeChannel.close();
-    if (callback.exception != null) {
-      throw callback.exception;
-    }
-    long futureBytesRead = future.get();
-    assertEquals("Total bytes read does not match (callback)", content.limit(), callback.bytesRead);
-    assertEquals("Total bytes read does not match (future)", content.limit(), futureBytesRead);
-    closeRequestAndValidate(nettyRequest);
-
-    // start reading in the middle of content add
-    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
-    httpContents = new ArrayList<HttpContent>();
-    content = generateContent(httpContents);
-    writeChannel = new ByteBufferAsyncWritableChannel();
-    callback = new ReadIntoCallback();
-
-    // add content initially
-    int bytesToVerify = 0;
-    int addedCount = 0;
-    for (; addedCount < httpContents.size() / 2; addedCount++) {
-      HttpContent httpContent = httpContents.get(addedCount);
-      bytesToVerify += httpContent.content().readableBytes();
-      nettyRequest.addContent(httpContent);
-      assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
-    }
-    future = nettyRequest.readInto(writeChannel, callback);
-    readAndVerify(bytesToVerify, writeChannel, content);
-
-    // add some more content
-    bytesToVerify = 0;
-    for (; addedCount < httpContents.size(); addedCount++) {
-      HttpContent httpContent = httpContents.get(addedCount);
-      bytesToVerify += httpContent.content().readableBytes();
-      nettyRequest.addContent(httpContent);
-      assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
-    }
-    readAndVerify(bytesToVerify, writeChannel, content);
-    verifyRefCnts(httpContents);
-    writeChannel.close();
-    if (callback.exception != null) {
-      throw callback.exception;
-    }
-    futureBytesRead = future.get();
-    assertEquals("Total bytes read does not match (callback)", content.limit(), callback.bytesRead);
-    assertEquals("Total bytes read does not match (future)", content.limit(), futureBytesRead);
-    closeRequestAndValidate(nettyRequest);
-
-    // start reading after all content added
-    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
-    httpContents = new ArrayList<HttpContent>();
-    content = generateContent(httpContents);
-    writeChannel = new ByteBufferAsyncWritableChannel();
-    callback = new ReadIntoCallback();
-
-    for (HttpContent httpContent : httpContents) {
-      nettyRequest.addContent(httpContent);
-      assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
-    }
-    future = nettyRequest.readInto(writeChannel, callback);
-    readAndVerify(content.limit(), writeChannel, content);
-    verifyRefCnts(httpContents);
-    writeChannel.close();
-    if (callback.exception != null) {
-      throw callback.exception;
-    }
-    futureBytesRead = future.get();
-    assertEquals("Total bytes read does not match (callback)", content.limit(), callback.bytesRead);
-    assertEquals("Total bytes read does not match (future)", content.limit(), futureBytesRead);
-    closeRequestAndValidate(nettyRequest);
   }
 
   /**
@@ -569,6 +496,20 @@ public class NettyRequestTest {
     assertEquals("Bytes read does not match", bytesRead, readIntoCallback.bytesRead);
   }
 
+  /**
+   * Tests for incorrect usage of {@link NettyRequest#setDigestAlgorithm(String)} and {@link NettyRequest#getDigest()}.
+   * @throws NoSuchAlgorithmException
+   * @throws RestServiceException
+   */
+  @Test
+  public void digestIncorrectUsageTest()
+      throws NoSuchAlgorithmException, RestServiceException {
+    setDigestAfterReadTest();
+    setBadAlgorithmTest();
+    getDigestWithoutSettingAlgorithmTest();
+    getDigestBeforeAllContentProcessedTest();
+  }
+
   // helpers
   // general
 
@@ -636,6 +577,8 @@ public class NettyRequestTest {
     assertEquals("Mismatch in rest method", restMethod, nettyRequest.getRestMethod());
     assertEquals("Mismatch in path", uri.substring(0, uri.indexOf("?")), nettyRequest.getPath());
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
+    assertNotNull("There should have been a RestRequestMetricsTracker", nettyRequest.getMetricsTracker());
+    assertFalse("Should not have been a multipart request", nettyRequest.isMultipart());
 
     Set<javax.servlet.http.Cookie> actualCookies =
         (Set<javax.servlet.http.Cookie>) nettyRequest.getArgs().get(HttpHeaders.Names.COOKIE);
@@ -711,18 +654,135 @@ public class NettyRequestTest {
   // contentAddAndReadTest() and readIntoExceptionsTest() helpers
 
   /**
+   * Tests {@link NettyRequest#addContent(HttpContent)} and
+   * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} by creating a {@link NettyRequest}, adding a few
+   * pieces of content to it and then reading from it to match the stream with the added content.
+   * <p/>
+   * The read happens at different points of time w.r.t content addition (before, during, after).
+   * @param digestAlgorithm the digest algorithm to use. Can be empty or {@code null} if digest checking is not
+   *                        required.
+   * @throws Exception
+   */
+  private void contentAddAndReadTest(String digestAlgorithm)
+      throws Exception {
+    // non composite content
+    // start reading before addition of content
+    List<HttpContent> httpContents = new ArrayList<HttpContent>();
+    ByteBuffer content = generateContent(httpContents);
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, 0);
+
+    // start reading in the middle of content add
+    httpContents.clear();
+    content = generateContent(httpContents);
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, httpContents.size() / 2);
+
+    // start reading after all content added
+    httpContents.clear();
+    content = generateContent(httpContents);
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, httpContents.size());
+
+    // composite content
+    httpContents.clear();
+    content = generateCompositeContent(httpContents);
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, 0);
+  }
+
+  /**
+   * Does the content addition and read verification based on the arguments provided.
+   * @param digestAlgorithm the digest algorithm to use. Can be empty or {@code null} if digest checking is not
+   *                        required.
+   * @param content the complete content.
+   * @param httpContents {@code content} in parts and as {@link HttpContent}. Should contain all the data in
+   * {@code content}.
+   * @param numContentsToAddBeforeRead the number of {@link HttpContent} to add before making the
+   * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} call.
+   * @throws Exception
+   */
+  private void doContentAddAndReadTest(String digestAlgorithm, ByteBuffer content, List<HttpContent> httpContents,
+      int numContentsToAddBeforeRead)
+      throws Exception {
+    if (numContentsToAddBeforeRead > httpContents.size()) {
+      throw new IllegalArgumentException("numContentsToAddBeforeRead is more than the pieces of content available");
+    }
+
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
+    byte[] wholeDigest = null;
+    if (digestAlgorithm != null && !digestAlgorithm.isEmpty()) {
+      MessageDigest digest = MessageDigest.getInstance(digestAlgorithm);
+      digest.update(content);
+      wholeDigest = digest.digest();
+      content.rewind();
+      nettyRequest.setDigestAlgorithm(digestAlgorithm);
+    }
+
+    int bytesToVerify = 0;
+    int addedCount = 0;
+    for (; addedCount < numContentsToAddBeforeRead; addedCount++) {
+      HttpContent httpContent = httpContents.get(addedCount);
+      bytesToVerify += httpContent.content().readableBytes();
+      nettyRequest.addContent(httpContent);
+      assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
+    }
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    Future<Long> future = nettyRequest.readInto(writeChannel, callback);
+    readAndVerify(bytesToVerify, writeChannel, content);
+
+    bytesToVerify = 0;
+    for (; addedCount < httpContents.size(); addedCount++) {
+      HttpContent httpContent = httpContents.get(addedCount);
+      bytesToVerify += httpContent.content().readableBytes();
+      nettyRequest.addContent(httpContent);
+      assertEquals("Reference count is not as expected", 2, httpContent.refCnt());
+    }
+    readAndVerify(bytesToVerify, writeChannel, content);
+    verifyRefCnts(httpContents);
+    writeChannel.close();
+    if (callback.exception != null) {
+      throw callback.exception;
+    }
+    long futureBytesRead = future.get();
+    assertEquals("Total bytes read does not match (callback)", content.limit(), callback.bytesRead);
+    assertEquals("Total bytes read does not match (future)", content.limit(), futureBytesRead);
+
+    // check twice to make sure the same digest is returned every time
+    for (int i = 0; i < 2; i++) {
+      assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, nettyRequest.getDigest());
+    }
+    closeRequestAndValidate(nettyRequest);
+  }
+
+  /**
    * Generates random content and fills it up (in parts) in {@code httpContents}.
    * @param httpContents the {@link List<HttpContent>} that will contain all the content in parts.
    * @return the whole content as a {@link ByteBuffer} - serves as a source of truth.
    */
   private ByteBuffer generateContent(List<HttpContent> httpContents) {
-    byte[] contentBytes = RestTestUtils.getRandomBytes(10240);
-    for (int addedContentCount = 0; addedContentCount < 9; addedContentCount++) {
-      HttpContent httpContent =
-          new DefaultHttpContent(Unpooled.wrappedBuffer(contentBytes, addedContentCount * 1024, 1024));
+    int individualPartSize = GENERATED_CONTENT_SIZE / GENERATED_CONTENT_PART_COUNT;
+    byte[] contentBytes = RestTestUtils.getRandomBytes(GENERATED_CONTENT_SIZE);
+    for (int addedContentCount = 0; addedContentCount < GENERATED_CONTENT_PART_COUNT - 1; addedContentCount++) {
+      HttpContent httpContent = new DefaultHttpContent(
+          Unpooled.wrappedBuffer(contentBytes, addedContentCount * individualPartSize, individualPartSize));
       httpContents.add(httpContent);
     }
-    httpContents.add(new DefaultLastHttpContent(Unpooled.wrappedBuffer(contentBytes, 9 * 1024, 1024)));
+    httpContents.add(new DefaultLastHttpContent(Unpooled
+        .wrappedBuffer(contentBytes, (GENERATED_CONTENT_PART_COUNT - 1) * individualPartSize, individualPartSize)));
+    return ByteBuffer.wrap(contentBytes);
+  }
+
+  /**
+   * Generates random content and fills it up in {@code httpContents} with a backing {@link CompositeByteBuf}.
+   * @param httpContents the {@link List<HttpContent>} that will contain all the content.
+   * @return the whole content as a {@link ByteBuffer} - serves as a source of truth.
+   */
+  private ByteBuffer generateCompositeContent(List<HttpContent> httpContents) {
+    int individualPartSize = GENERATED_CONTENT_SIZE / GENERATED_CONTENT_PART_COUNT;
+    byte[] contentBytes = RestTestUtils.getRandomBytes(GENERATED_CONTENT_SIZE);
+    ArrayList<ByteBuf> byteBufs = new ArrayList<>(GENERATED_CONTENT_PART_COUNT);
+    for (int addedContentCount = 0; addedContentCount < GENERATED_CONTENT_PART_COUNT; addedContentCount++) {
+      byteBufs.add(Unpooled.wrappedBuffer(contentBytes, addedContentCount * individualPartSize, individualPartSize));
+    }
+    httpContents.add(new DefaultLastHttpContent(new CompositeByteBuf(ByteBufAllocator.DEFAULT, false, 20, byteBufs)));
     return ByteBuffer.wrap(contentBytes);
   }
 
@@ -842,6 +902,122 @@ public class NettyRequestTest {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest,
           restServiceException.getErrorCode());
     }
+  }
+
+  // digestIncorrectUsageTest() helpers.
+
+  /**
+   * Tests for failure when {@link NettyRequest#setDigestAlgorithm(String)} after
+   * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} is called.
+   * @throws NoSuchAlgorithmException
+   * @throws RestServiceException
+   */
+  private void setDigestAfterReadTest()
+      throws NoSuchAlgorithmException, RestServiceException {
+    List<HttpContent> httpContents = new ArrayList<HttpContent>();
+    generateContent(httpContents);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+
+    try {
+      nettyRequest.setDigestAlgorithm("MD5");
+      fail("Setting a digest algorithm should have failed because readInto() has already been called");
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
+
+    writeChannel.close();
+    closeRequestAndValidate(nettyRequest);
+  }
+
+  /**
+   * Tests for failure when {@link NettyRequest#setDigestAlgorithm(String)} is called with an unrecognized algorithm.
+   * @throws RestServiceException
+   */
+  private void setBadAlgorithmTest()
+      throws RestServiceException {
+    List<HttpContent> httpContents = new ArrayList<HttpContent>();
+    generateContent(httpContents);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
+    try {
+      nettyRequest.setDigestAlgorithm("NonExistentAlgorithm");
+      fail("Setting a digest algorithm should have failed because the algorithm isn't valid");
+    } catch (NoSuchAlgorithmException e) {
+      // expected. Nothing to do.
+    }
+    closeRequestAndValidate(nettyRequest);
+  }
+
+  /**
+   * Tests for failure when {@link NettyRequest#getDigest()} is called without a call to
+   * {@link NettyRequest#setDigestAlgorithm(String)}.
+   * @throws RestServiceException
+   */
+  private void getDigestWithoutSettingAlgorithmTest()
+      throws RestServiceException {
+    List<HttpContent> httpContents = new ArrayList<HttpContent>();
+    generateContent(httpContents);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+
+    for (HttpContent httpContent : httpContents) {
+      nettyRequest.addContent(httpContent);
+    }
+    assertNull("Digest should be null because no digest algorithm was set", nettyRequest.getDigest());
+    closeRequestAndValidate(nettyRequest);
+  }
+
+  /**
+   * Tests for failure when {@link NettyRequest#getDigest()} is called before
+   * 1. All content is added.
+   * 2. All content is processed (i.e. before a call to {@link NettyRequest#readInto(AsyncWritableChannel, Callback)}).
+   * @throws NoSuchAlgorithmException
+   * @throws RestServiceException
+   */
+  private void getDigestBeforeAllContentProcessedTest()
+      throws NoSuchAlgorithmException, RestServiceException {
+    // all content not added test.
+    List<HttpContent> httpContents = new ArrayList<HttpContent>();
+    generateContent(httpContents);
+    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
+    nettyRequest.setDigestAlgorithm("MD5");
+
+    // add all except the LastHttpContent
+    for (int i = 0; i < httpContents.size() - 1; i++) {
+      nettyRequest.addContent(httpContents.get(i));
+    }
+
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    nettyRequest.readInto(writeChannel, callback);
+    try {
+      nettyRequest.getDigest();
+      fail("Getting a digest should have failed because all the content has not been added");
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
+    closeRequestAndValidate(nettyRequest);
+
+    // content not processed test.
+    httpContents.clear();
+    generateContent(httpContents);
+    nettyRequest = createNettyRequest(HttpMethod.POST, "/", null);
+    nettyRequest.setDigestAlgorithm("MD5");
+
+    for (HttpContent httpContent : httpContents) {
+      nettyRequest.addContent(httpContent);
+    }
+    try {
+      nettyRequest.getDigest();
+      fail("Getting a digest should have failed because the content has not been processed (readInto() not called)");
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
+    closeRequestAndValidate(nettyRequest);
   }
 }
 

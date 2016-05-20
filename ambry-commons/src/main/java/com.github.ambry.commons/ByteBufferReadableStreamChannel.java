@@ -20,6 +20,8 @@ import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -31,6 +33,11 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean channelEmptied = new AtomicBoolean(false);
   private final ByteBuffer buffer;
+  private final int size;
+  private final int startPos;
+
+  private MessageDigest digest = null;
+  private byte[] digestBytes = null;
 
   /**
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code buffer}.
@@ -38,11 +45,13 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
    */
   public ByteBufferReadableStreamChannel(ByteBuffer buffer) {
     this.buffer = buffer;
+    size = buffer.remaining();
+    startPos = buffer.position();
   }
 
   @Override
   public long getSize() {
-    return buffer.capacity();
+    return size;
   }
 
   @Override
@@ -62,6 +71,30 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
       future = asyncWritableChannel.write(buffer, callback);
     }
     return future;
+  }
+
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm)
+      throws NoSuchAlgorithmException {
+    if (digest != null && digest.getAlgorithm().equals(digestAlgorithm)) {
+      return;
+    }
+    digest = MessageDigest.getInstance(digestAlgorithm);
+    digestBytes = null;
+  }
+
+  @Override
+  public byte[] getDigest() {
+    if (digest == null) {
+      return null;
+    } else if (digestBytes == null) {
+      int savedPosition = buffer.position();
+      buffer.position(startPos);
+      digest.update(buffer);
+      buffer.position(savedPosition);
+      digestBytes = digest.digest();
+    }
+    return digestBytes;
   }
 
   @Override
