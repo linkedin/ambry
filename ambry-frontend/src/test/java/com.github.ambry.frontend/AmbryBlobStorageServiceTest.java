@@ -371,8 +371,7 @@ public class AmbryBlobStorageServiceTest {
       RestRequest restRequest = createRestRequest(RestMethod.GET, blobId + "/" + subResource, null, null);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       doOperation(restRequest, restResponseChannel);
-      assertEquals("Unexpected response status for " + subResource, ResponseStatus.Ok,
-          restResponseChannel.getResponseStatus());
+      assertEquals("Unexpected response status for " + subResource, ResponseStatus.Ok, restResponseChannel.getStatus());
       assertEquals("Unexpected Content-Type for " + subResource, "application/octet-stream",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       assertEquals("Unexpected Content-Length for " + subResource, usermetadata.length,
@@ -670,7 +669,7 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
         restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
@@ -694,7 +693,7 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
         expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
@@ -721,7 +720,7 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.NotModified, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.NotModified, restResponseChannel.getStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertNull("No Last-Modified header expected", restResponseChannel.getHeader("Last-Modified"));
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
@@ -742,7 +741,7 @@ public class AmbryBlobStorageServiceTest {
         createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
@@ -760,7 +759,7 @@ public class AmbryBlobStorageServiceTest {
         createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     verifyBlobProperties(expectedHeaders, restResponseChannel);
@@ -778,7 +777,7 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match " + RestUtils.Headers.BLOB_SIZE,
         expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
@@ -892,7 +891,7 @@ public class AmbryBlobStorageServiceTest {
       throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
   }

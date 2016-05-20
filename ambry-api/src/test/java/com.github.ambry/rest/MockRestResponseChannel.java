@@ -183,9 +183,36 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   @Override
+  public synchronized ResponseStatus getStatus() {
+    ResponseStatus status = null;
+    try {
+      if (responseMetadata.has(RESPONSE_STATUS_KEY)) {
+        status = ResponseStatus.valueOf(responseMetadata.getString(RESPONSE_STATUS_KEY));
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+    return status;
+  }
+
+  @Override
   public synchronized void setHeader(String headerName, Object headerValue)
       throws RestServiceException {
     setHeader(headerName, headerValue, Event.SetHeader);
+  }
+
+  @Override
+  public synchronized String getHeader(String headerName) {
+    String headerValue = null;
+    try {
+      if (responseMetadata.has(RESPONSE_HEADERS_KEY) && responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY)
+          .has(headerName)) {
+        headerValue = responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).getString(headerName);
+      }
+    } catch (JSONException e) {
+      throw new IllegalStateException(e);
+    }
+    return headerValue;
   }
 
   @Override
@@ -240,41 +267,6 @@ public class MockRestResponseChannel implements RestResponseChannel {
    */
   public synchronized byte[] getResponseBody() {
     return bodyBytes.toByteArray();
-  }
-
-  /**
-   * Gets the value of the header with {@code headerName} if it exists. If the response isn't finalized, headers can
-   * change.
-   * @param headerName the name of the header.
-   * @return the value of the header if it exists, null otherwise.
-   */
-  public synchronized String getHeader(String headerName) {
-    String headerValue = null;
-    try {
-      if (responseMetadata.has(RESPONSE_HEADERS_KEY) && responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY)
-          .has(headerName)) {
-        headerValue = responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).getString(headerName);
-      }
-    } catch (JSONException e) {
-      // too bad.
-    }
-    return headerValue;
-  }
-
-  /**
-   * Gets the response status. If the response isn't finalized, status can change.
-   * @return the response status.
-   */
-  public synchronized ResponseStatus getResponseStatus() {
-    ResponseStatus status = null;
-    try {
-      if (responseMetadata.has(RESPONSE_STATUS_KEY)) {
-        status = ResponseStatus.valueOf(responseMetadata.getString(RESPONSE_STATUS_KEY));
-      }
-    } catch (Exception e) {
-      // too bad.
-    }
-    return status;
   }
 
   /**

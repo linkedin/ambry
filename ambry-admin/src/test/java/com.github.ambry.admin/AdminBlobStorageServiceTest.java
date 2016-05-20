@@ -362,7 +362,7 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
     String echoedText = getJsonizedResponseBody(channel).getString(EchoHandler.TEXT_KEY);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Unexpected Content-Type", "application/json",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertEquals("Did not get expected response", inputText, echoedText);
@@ -405,7 +405,7 @@ public class AdminBlobStorageServiceTest {
       RestRequest restRequest = createGetReplicasForBlobIdRestRequest(blobId.getID());
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = doGet(restRequest, restResponseChannel);
-      assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+      assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
       assertEquals("Unexpected Content-Type", "application/json",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       String returnedReplicasStr =
@@ -1056,7 +1056,7 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doPost(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
         restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
@@ -1080,7 +1080,7 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     ReadableStreamChannel response = doGet(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
     CopyingAsyncWritableChannel channel = new CopyingAsyncWritableChannel((int) response.getSize());
     response.readInto(channel, null).get();
@@ -1098,7 +1098,7 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doHead(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel, expectedHeaders);
     assertEquals("Content-Length does not match blob size", expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
@@ -1135,7 +1135,7 @@ public class AdminBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doDelete(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getResponseStatus());
+    assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
   }
