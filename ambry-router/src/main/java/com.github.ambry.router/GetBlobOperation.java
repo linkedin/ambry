@@ -36,7 +36,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -535,8 +534,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
-        chunkIndexToBuffer.put(chunkIndex,
-            ByteBuffer.wrap(Utils.readBytesFromStream(blobData.getStream(), (int) blobData.getSize())));
+        chunkIndexToBuffer.put(chunkIndex, blobData.getStream().getByteBuffer());
         numChunksRetrieved++;
         successfullyDeserialized = true;
       } else {
@@ -727,8 +725,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         BlobType blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();
         if (blobType == BlobType.MetadataBlob) {
-          ByteBuffer serializedMetadataContent =
-              ByteBuffer.wrap(Utils.readBytesFromStream(blobData.getStream(), (int) blobData.getSize()));
+          ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
           List<StoreKey> keys =
               MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
           chunkIdIterator = keys.listIterator();
@@ -741,8 +738,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
           chunkIdIterator = null;
           numChunksTotal = 1;
           dataChunks = null;
-          chunkIndexToBuffer
-              .put(0, ByteBuffer.wrap(Utils.readBytesFromStream(blobData.getStream(), (int) blobData.getSize())));
+          chunkIndexToBuffer.put(0, blobData.getStream().getByteBuffer());
           numChunksRetrieved = 1;
         }
         successfullyDeserialized = true;
