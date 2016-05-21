@@ -72,7 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final List<String> connectionPendingHandshakes;
+  private final List<String> connectionsPendingHandshake;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -96,8 +96,8 @@ public class Selector implements Selectable {
     this.IdGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
     numConnectionsPendingHandshake = new AtomicLong(0);
-    connectionPendingHandshakes = new ArrayList<>();
-    metrics.initializeSelectorMetricsIfRequired(numActiveConnections, numConnectionsPendingHandshake);
+    connectionsPendingHandshake = new ArrayList<>();
+    metrics.initializeSelectorMetrics(numActiveConnections, numConnectionsPendingHandshake);
     this.sslFactory = sslFactory;
   }
 
@@ -324,7 +324,7 @@ public class Selector implements Selectable {
               connected.add(transmission.getConnectionId());
               metrics.selectorConnectionCreated.inc();
             } else {
-              connectionPendingHandshakes.add(transmission.getConnectionId());
+              connectionsPendingHandshake.add(transmission.getConnectionId());
               numConnectionsPendingHandshake.incrementAndGet();
             }
           }
@@ -369,7 +369,7 @@ public class Selector implements Selectable {
    * Check readiness for unready connections and add to completed list if ready
    */
   private void checkUnreadyConnectionsStatus() {
-    Iterator<String> iterator = connectionPendingHandshakes.iterator();
+    Iterator<String> iterator = connectionsPendingHandshake.iterator();
     while (iterator.hasNext()) {
       String connId = iterator.next();
       if (isChannelReady(connId)) {
@@ -480,9 +480,14 @@ public class Selector implements Selectable {
       logger.debug("Closing connection from {}", transmission.getConnectionId());
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
-      numActiveConnections.set(this.keyMap.size());
-      connectionPendingHandshakes.remove(transmission.getConnectionId());
-      transmission.close();
+      numActiveConnections.set(keyMap.size());
+      connectionsPendingHandshake.remove(transmission.getConnectionId());
+      try {
+        transmission.close();
+      } catch (IOException e) {
+        logger.error("IOException thrown during closing of transmission with connectionId {} :",
+            transmission.getConnectionId(), e);
+      }
     } else {
       key.attach(null);
       key.cancel();

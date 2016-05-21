@@ -127,7 +127,7 @@ public class NetworkMetrics {
    * @param activeConnections count of current active connections
    * @param connectionsPendingHandshake Count of connections that are awaiting handshake completion
    */
-  public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections,
+  public void initializeSelectorMetrics(final AtomicLong activeConnections,
       final AtomicLong connectionsPendingHandshake) {
     numActiveConnections = new Gauge<Long>() {
       @Override
