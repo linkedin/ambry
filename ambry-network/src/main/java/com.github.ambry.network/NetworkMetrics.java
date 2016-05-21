@@ -45,7 +45,7 @@ public class NetworkMetrics {
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
   public Gauge<Long> numActiveConnections;
-  public Gauge<Long> numConnectionsPendingHandhsake;
+  public Gauge<Long> numConnectionsPendingHandshake;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
   // Plaintext metrics
@@ -125,20 +125,20 @@ public class NetworkMetrics {
   /**
    * Initializes a few network metrics for the selector
    * @param activeConnections count of current active connections
-   * @param numConnectionsPendingHandhsake Count of connections that are awaiting handshake completion
+   * @param connectionsPendingHandshake Count of connections that are awaiting handshake completion
    */
   public void initializeSelectorMetricsIfRequired(final AtomicLong activeConnections,
-      final AtomicLong numConnectionsPendingHandhsake) {
+      final AtomicLong connectionsPendingHandshake) {
     numActiveConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return activeConnections.get();
       }
     };
-    this.numConnectionsPendingHandhsake = new Gauge<Long>() {
+    numConnectionsPendingHandshake = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return numConnectionsPendingHandhsake.get();
+        return connectionsPendingHandshake.get();
       }
     };
   }

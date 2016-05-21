@@ -76,8 +76,8 @@ public class Selector implements Selectable {
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
-  private AtomicLong activeConnections;
-  private AtomicLong connectionsPendingHandshakeCount;
+  private AtomicLong numActiveConnections;
+  private AtomicLong numConnectionsPendingHandshake;
   private final SSLFactory sslFactory;
 
   /**
@@ -94,10 +94,10 @@ public class Selector implements Selectable {
     this.disconnected = new ArrayList<String>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
-    activeConnections = new AtomicLong(0);
-    connectionsPendingHandshakeCount = new AtomicLong(0);
+    numActiveConnections = new AtomicLong(0);
+    numConnectionsPendingHandshake = new AtomicLong(0);
     connectionPendingHandshakes = new ArrayList<>();
-    metrics.initializeSelectorMetricsIfRequired(activeConnections, connectionsPendingHandshakeCount);
+    metrics.initializeSelectorMetricsIfRequired(numActiveConnections, numConnectionsPendingHandshake);
     this.sslFactory = sslFactory;
   }
 
@@ -167,7 +167,7 @@ public class Selector implements Selectable {
     }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
-    activeConnections.set(this.keyMap.size());
+    numActiveConnections.set(this.keyMap.size());
     return connectionId;
   }
 
@@ -194,7 +194,7 @@ public class Selector implements Selectable {
     }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
-    activeConnections.set(this.keyMap.size());
+    numActiveConnections.set(this.keyMap.size());
     return connectionId;
   }
 
@@ -325,7 +325,7 @@ public class Selector implements Selectable {
               metrics.selectorConnectionCreated.inc();
             } else {
               connectionPendingHandshakes.add(transmission.getConnectionId());
-              connectionsPendingHandshakeCount.incrementAndGet();
+              numConnectionsPendingHandshake.incrementAndGet();
             }
           }
 
@@ -376,7 +376,7 @@ public class Selector implements Selectable {
         connected.add(connId);
         iterator.remove();
         metrics.selectorConnectionCreated.inc();
-        connectionsPendingHandshakeCount.decrementAndGet();
+        numConnectionsPendingHandshake.decrementAndGet();
       }
     }
   }
@@ -425,8 +425,8 @@ public class Selector implements Selectable {
     return this.connected;
   }
 
-  public long getActiveConnections() {
-    return activeConnections.get();
+  public long getNumActiveConnections() {
+    return numActiveConnections.get();
   }
 
   /**
@@ -480,7 +480,7 @@ public class Selector implements Selectable {
       logger.debug("Closing connection from {}", transmission.getConnectionId());
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
-      activeConnections.set(this.keyMap.size());
+      numActiveConnections.set(this.keyMap.size());
       connectionPendingHandshakes.remove(transmission.getConnectionId());
       transmission.close();
     } else {
