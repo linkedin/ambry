@@ -159,6 +159,10 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
     int correlationId = ((GetRequest) responseInfo.getRequest()).getCorrelationId();
     // Get the GetOperation that generated the request.
     GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
+    if (getRequestInfo == null) {
+      // Ignore. The request must have timed out.
+      return;
+    }
     routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - getRequestInfo.startTimeMs);
     if (responseInfo.getError() != null) {
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
