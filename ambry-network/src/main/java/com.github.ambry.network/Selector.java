@@ -73,7 +73,7 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final Set<String> unreadycConnections;
+  private final Set<String> unreadyConnections;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
@@ -95,7 +95,7 @@ public class Selector implements Selectable {
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
-    unreadycConnections = new HashSet<>();
+    unreadyConnections = new HashSet<>();
     metrics.initializeSelectorMetrics(numActiveConnections);
     this.sslFactory = sslFactory;
   }
@@ -323,7 +323,7 @@ public class Selector implements Selectable {
               connected.add(transmission.getConnectionId());
               metrics.selectorConnectionCreated.inc();
             } else {
-              unreadycConnections.add(transmission.getConnectionId());
+              unreadyConnections.add(transmission.getConnectionId());
             }
           }
 
@@ -367,7 +367,7 @@ public class Selector implements Selectable {
    * Check readiness for unready connections and add to completed list if ready
    */
   private void checkUnreadyConnectionsStatus() {
-    Iterator<String> iterator = unreadycConnections.iterator();
+    Iterator<String> iterator = unreadyConnections.iterator();
     while (iterator.hasNext()) {
       String connId = iterator.next();
       if (isChannelReady(connId)) {
@@ -478,7 +478,7 @@ public class Selector implements Selectable {
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
       numActiveConnections.set(keyMap.size());
-      unreadycConnections.remove(transmission.getConnectionId());
+      unreadyConnections.remove(transmission.getConnectionId());
       try {
         transmission.close();
       } catch (IOException e) {

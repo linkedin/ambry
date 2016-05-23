@@ -214,7 +214,7 @@ public class SSLSelectorTest {
   }
 
   @Test
-  public void testCloseDuringSslHandshake()
+  public void testCloseAfterConnectCall()
       throws IOException {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
