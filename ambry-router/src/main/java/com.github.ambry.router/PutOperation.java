@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -254,7 +255,6 @@ class PutOperation {
     if (chunk.getChunkBlobId() == null) {
       // the overall operation has failed if any of the chunk fails.
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
-      routerMetrics.putBlobErrorCount.inc();
       operationCompleted = true;
     } else if (numDataChunks == 1 || chunk == metadataPutChunk) {
       blobId = chunk.getChunkBlobId();
@@ -696,9 +696,16 @@ class PutOperation {
           correlationIdToChunkPutRequestInfo.entrySet().iterator();
       while (inFlightRequestsIterator.hasNext()) {
         Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
-        if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
+        if (time.milliseconds() - entry.getValue().getStartTimeMs() > routerConfig.routerRequestTimeoutMs) {
           operationTracker.onResponse(entry.getValue().replicaId, false);
           chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
+          ReplicaId replica = entry.getValue().replicaId;
+          DataNodeId dataNodeId = replica.getDataNodeId();
+          NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
+              routerMetrics.getDataNodeBasedMetrics(dataNodeId);
+          dataNodeBasedMetrics.updateRequestTimeoutCount(NonBlockingRouter.RouterOperationType.PutBlob);
+          dataNodeBasedMetrics
+              .countError(RouterErrorCode.OperationTimedOut, NonBlockingRouter.RouterOperationType.PutBlob);
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -724,6 +731,8 @@ class PutOperation {
         correlationIdToPutChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
+        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId())
+            .uopdateRequestRate(NonBlockingRouter.RouterOperationType.DeleteBlob);
       }
     }
 
@@ -774,8 +783,12 @@ class PutOperation {
         // - the response is for an earlier chunk held by this PutChunk.
         return;
       } else {
-        routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - chunkPutRequestInfo.startTimeMs);
+        routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - chunkPutRequestInfo.getStartTimeMs());
       }
+      ReplicaId replica = chunkPutRequestInfo.replicaId;
+      DataNodeId dataNodeId = replica.getDataNodeId();
+      NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
+          routerMetrics.getDataNodeBasedMetrics(dataNodeId);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
@@ -804,6 +817,7 @@ class PutOperation {
               logger.trace("The putRequest was successful");
               isSuccessful = true;
             } else {
+              // chunkException will be set within processServerError.
               processServerError(putResponse.getError());
               isSuccessful = false;
               logger.trace("Server returned an error: ", putResponse.getError());
@@ -819,6 +833,9 @@ class PutOperation {
       }
       operationTracker.onResponse(chunkPutRequestInfo.replicaId, isSuccessful);
       checkAndMaybeComplete();
+      if(chunkException != null) {
+        updateRequestMetrics(dataNodeBasedMetrics, chunkException.getErrorCode(), chunkPutRequestInfo);
+      }
     }
 
     /**
@@ -846,6 +863,13 @@ class PutOperation {
           RouterErrorCode.AmbryUnavailable));
     }
 
+    void updateRequestMetrics(NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics,
+        RouterErrorCode routerErrorCode, ChunkPutRequestInfo chunkPutRequestInfo) {
+      dataNodeBasedMetrics.updateRequestLatency(time.milliseconds() - chunkPutRequestInfo.getStartTimeMs(),
+          NonBlockingRouter.RouterOperationType.PutBlob);
+      dataNodeBasedMetrics.countError(routerErrorCode, NonBlockingRouter.RouterOperationType.PutBlob);
+    }
+
     /**
      * A class that holds information about requests sent out by this PutChunk.
      */
@@ -863,6 +887,10 @@ class PutOperation {
         this.replicaId = replicaId;
         this.putRequest = putRequest;
         this.startTimeMs = startTimeMs;
+      }
+
+      long getStartTimeMs() {
+        return startTimeMs;
       }
     }
 

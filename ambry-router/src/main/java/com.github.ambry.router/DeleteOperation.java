@@ -13,13 +13,13 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
@@ -45,6 +45,7 @@ import org.slf4j.LoggerFactory;
  * data blobs. The {@code DeleteOperation} is issued only to delete the metadata blob.
  */
 class DeleteOperation {
+
   //Operation arguments
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
@@ -52,13 +53,15 @@ class DeleteOperation {
   private final FutureResult<Void> futureResult;
   private final Callback<Void> callback;
   private final Time time;
+  private final NonBlockingRouterMetrics routerMetrics;
+  private final long submittedTimeMs;
 
   // Parameters associated with the state.
 
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final HashMap<Integer, InflightRequestInfo> inflightRequestInfos;
+  private final HashMap<Integer, DeleteRequestInfo> deleteRequestInfos;
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
@@ -66,7 +69,7 @@ class DeleteOperation {
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // RouterErrorCode that is resolved from all the received ServerErrorCode for this operation.
   private RouterErrorCode resolvedRouterErrorCode;
-  // denotes whether the operation is complete.
+  // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DeleteOperation.class);
@@ -79,16 +82,19 @@ class DeleteOperation {
    * @param futureResult The {@link FutureResult} that is returned to the caller.
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
    */
   DeleteOperation(RouterConfig routerConfig, ResponseHandler responsehandler, BlobId blobId,
-      FutureResult<Void> futureResult, Callback<Void> callback, Time time) {
+      FutureResult<Void> futureResult, Callback<Void> callback, Time time, NonBlockingRouterMetrics routerMetrics) {
+    this.submittedTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.responseHandler = responsehandler;
     this.blobId = blobId;
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
-    this.inflightRequestInfos = new HashMap<Integer, InflightRequestInfo>();
+    this.routerMetrics = routerMetrics;
+    this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
     this.operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true,
         routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
   }
@@ -116,10 +122,12 @@ class DeleteOperation {
       String hostname = replica.getDataNodeId().getHostname();
       Port port = replica.getDataNodeId().getPortToConnectTo();
       DeleteRequest deleteRequest = createDeleteRequest();
-      inflightRequestInfos.put(deleteRequest.getCorrelationId(), new InflightRequestInfo(time.milliseconds(), replica));
+      deleteRequestInfos.put(deleteRequest.getCorrelationId(), new DeleteRequestInfo(time.milliseconds(), replica));
       RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
+      routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId())
+          .uopdateRequestRate(NonBlockingRouter.RouterOperationType.DeleteBlob);
     }
   }
 
@@ -139,19 +147,32 @@ class DeleteOperation {
    * that different {@link ServerErrorCode} are received from different replicas. These error codes
    * are eventually resolved to a single {@link RouterErrorCode}.
    * @param responseInfo The response to be handled.
+   * @param shouldOnlyRecordMetrics {@code true} indicates that only update metrics for the corresponding
+   *                                            metrics, and do not handle the response.
    */
-  void handleResponse(ResponseInfo responseInfo) {
+  void handleResponse(ResponseInfo responseInfo, boolean shouldOnlyRecordMetrics) {
     DeleteRequest deleteRequest = (DeleteRequest) responseInfo.getRequest();
-    InflightRequestInfo inflightRequestInfo = inflightRequestInfos.remove(deleteRequest.getCorrelationId());
-    // inflightRequestInfo can be null if this request was timed out before this response is received.
-    if (inflightRequestInfo == null) {
+    DeleteRequestInfo deleteRequestInfo = deleteRequestInfos.remove(deleteRequest.getCorrelationId());
+    // deleteRequestInfo can be null if this request was timed out before this response is received. No
+    // metric is updated here, as corresponding metrics have been updated when the request was timed out.
+    if (deleteRequestInfo == null) {
       return;
     }
-    ReplicaId replica = inflightRequestInfo.replica;
+    routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - deleteRequestInfo.getStartTimeMs());
+    ReplicaId replica = deleteRequestInfo.replica;
+    DataNodeId dataNodeId = replica.getDataNodeId();
+    NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
+        routerMetrics.getDataNodeBasedMetrics(dataNodeId);
+    if (shouldOnlyRecordMetrics) { // Indicate the corresponding operation has been already completed.
+      updateRequestMetrics(dataNodeBasedMetrics, RouterErrorCode.OperationTimedOut, deleteRequestInfo);
+      return;
+    }
+    RouterErrorCode routerErrorCode = null;
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
       responseHandler.onRequestResponseException(replica, new IOException(("NetworkClient error.")));
-      updateOperationState(replica, RouterErrorCode.OperationTimedOut);
+      routerErrorCode = RouterErrorCode.OperationTimedOut;
+      updateOperationState(replica, routerErrorCode);
     } else {
       try {
         DeleteResponse deleteResponse =
@@ -162,34 +183,43 @@ class DeleteOperation {
           logger.error("The correlation id in the DeleteResponse " + deleteResponse.getCorrelationId()
               + " is not the same as the correlation id in the associated DeleteRequest: " + deleteRequest
               .getCorrelationId());
+          // @todo Discuss why this would complete the operation.
+          routerMetrics.unknownReplicaResponseError.inc();
+          dataNodeBasedMetrics.unknownReplicaResponseError.inc();
           setOperationException(
               new RouterException("Received wrong response that is not for the corresponding request.",
                   RouterErrorCode.UnexpectedInternalError));
-          updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
-          return;
+          routerErrorCode = RouterErrorCode.UnexpectedInternalError;
+          updateOperationState(replica, routerErrorCode);
         } else {
           responseHandler.onRequestResponseError(replica, deleteResponse.getError());
-          processServerError(replica, deleteResponse.getError());
+          // The status of operation tracker will be updated within the processServerError method.
+          routerErrorCode = processServerError(replica, deleteResponse.getError());
         }
       } catch (IOException e) {
-        // @todo: Even this should really not happen. But we need a metric.
         logger.error("Unable to recover a deleteResponse from received stream.");
-        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
+        routerErrorCode = RouterErrorCode.UnexpectedInternalError;
+        updateOperationState(replica, routerErrorCode);
       }
     }
     checkAndMaybeComplete();
+    updateRequestMetrics(dataNodeBasedMetrics, routerErrorCode, deleteRequestInfo);
   }
 
   /**
    * A wrapper class that is used to check if a request has been expired.
    */
-  private class InflightRequestInfo {
-    final long submissionTime;
+  private class DeleteRequestInfo {
+    final long startTimeMs;
     final ReplicaId replica;
 
-    InflightRequestInfo(long submissionTime, ReplicaId replica) {
-      this.submissionTime = submissionTime;
+    DeleteRequestInfo(long submissionTime, ReplicaId replica) {
+      this.startTimeMs = submissionTime;
       this.replica = replica;
+    }
+
+    long getStartTimeMs() {
+      return startTimeMs;
     }
   }
 
@@ -198,12 +228,19 @@ class DeleteOperation {
    * have been timed out.
    */
   private void cleanupExpiredInflightRequests() {
-    Iterator<Map.Entry<Integer, InflightRequestInfo>> itr = inflightRequestInfos.entrySet().iterator();
+    Iterator<Map.Entry<Integer, DeleteRequestInfo>> itr = deleteRequestInfos.entrySet().iterator();
     while (itr.hasNext()) {
-      InflightRequestInfo inflightRequestInfo = itr.next().getValue();
-      if (time.milliseconds() - inflightRequestInfo.submissionTime > routerConfig.routerRequestTimeoutMs) {
+      DeleteRequestInfo deleteRequestInfo = itr.next().getValue();
+      if (time.milliseconds() - deleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
-        updateOperationState(inflightRequestInfo.replica, RouterErrorCode.OperationTimedOut);
+        ReplicaId replica = deleteRequestInfo.replica;
+        DataNodeId dataNodeId = replica.getDataNodeId();
+        NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
+            routerMetrics.getDataNodeBasedMetrics(dataNodeId);
+        dataNodeBasedMetrics.updateRequestTimeoutCount(NonBlockingRouter.RouterOperationType.DeleteBlob);
+        dataNodeBasedMetrics
+            .countError(RouterErrorCode.OperationTimedOut, NonBlockingRouter.RouterOperationType.DeleteBlob);
+        updateOperationState(deleteRequestInfo.replica, RouterErrorCode.OperationTimedOut);
       }
     }
   }
@@ -213,8 +250,10 @@ class DeleteOperation {
    * to a {@link RouterErrorCode}, and then makes corresponding state update.
    * @param replica The replica for which the ServerErrorCode was generated.
    * @param serverErrorCode The ServerErrorCode received from the replica.
+   * @return The resolved {@link RouterErrorCode}.
    */
-  private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode) {
+  private RouterErrorCode processServerError(ReplicaId replica, ServerErrorCode serverErrorCode) {
+    RouterErrorCode routerErrorCode = null;
     switch (serverErrorCode) {
       case No_Error:
         logger.trace("The delete request was successful.");
@@ -230,15 +269,19 @@ class DeleteOperation {
       case Blob_Not_Found:
       case Partition_Unknown:
         updateOperationState(replica, RouterErrorCode.BlobDoesNotExist);
+        routerErrorCode = RouterErrorCode.BlobDoesNotExist;
         break;
       case Disk_Unavailable:
         updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
+        routerErrorCode = RouterErrorCode.AmbryUnavailable;
         break;
       default:
         logger.trace("Server returned an error: ", serverErrorCode);
         updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
+        routerErrorCode = RouterErrorCode.UnexpectedInternalError;
         break;
     }
+    return routerErrorCode;
   }
 
   /**
@@ -356,5 +399,16 @@ class DeleteOperation {
   void setOperationException(Exception exception) {
     operationException.set(exception);
     operationCompleted = true;
+  }
+
+  long getSubmittedTimeMs() {
+    return submittedTimeMs;
+  }
+
+  void updateRequestMetrics(NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics,
+      RouterErrorCode routerErrorCode, DeleteRequestInfo deleteRequestInfo) {
+    dataNodeBasedMetrics.updateRequestLatency(time.milliseconds() - deleteRequestInfo.getStartTimeMs(),
+        NonBlockingRouter.RouterOperationType.DeleteBlob);
+    dataNodeBasedMetrics.countError(routerErrorCode, NonBlockingRouter.RouterOperationType.DeleteBlob);
   }
 }

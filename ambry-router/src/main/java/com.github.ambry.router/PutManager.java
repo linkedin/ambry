@@ -121,6 +121,7 @@ class PutManager {
       putOperations.add(putOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.countError(e, NonBlockingRouter.RouterOperationType.PutBlob);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -176,13 +177,16 @@ class PutManager {
    * @param op the {@link PutOperation} that has completed.
    */
   void onComplete(PutOperation op) {
-    if (op.getOperationException() != null) {
+    Exception e = op.getOperationException();
+    if (e != null) {
       // @todo add blobs in the metadata chunk to ids_to_delete
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
     }
     routerMetrics.operationDequeuingRate.mark();
-    routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
+    routerMetrics.countError(e, NonBlockingRouter.RouterOperationType.PutBlob);
+    routerMetrics.updateOperationLatency(time.milliseconds() - op.getSubmissionTimeMs(),
+        NonBlockingRouter.RouterOperationType.PutBlob);
     operationCompleteCallback
         .completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(), op.getOperationException());
   }
@@ -222,9 +226,12 @@ class PutManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (putOperations.remove(op)) {
+        RouterException routerException =
+            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
-        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null,
-            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+        routerMetrics.operationAbortCount.inc();
+        routerMetrics.countError(routerException, NonBlockingRouter.RouterOperationType.PutBlob);
+        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, routerException);
       }
     }
   }

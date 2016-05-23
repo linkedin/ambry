@@ -98,13 +98,13 @@ public class GetBlobInfoOperationTest {
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
-    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     replicasCount = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
-    router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(new MetricRegistry()),
+    router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, time);
     blobProperties = new BlobProperties(BLOB_SIZE, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     userMetadata = new byte[BLOB_USER_METADATA_SIZE];

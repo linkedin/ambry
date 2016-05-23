@@ -95,7 +95,7 @@ public class NonBlockingRouterTest {
     MockClusterMap mockClusterMap = new MockClusterMap();
     MockTime mockTime = new MockTime();
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties),
-        new NonBlockingRouterMetrics(new MetricRegistry()),
+        new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
         mockClusterMap, mockTime);
@@ -131,7 +131,7 @@ public class NonBlockingRouterTest {
     MockClusterMap mockClusterMap = new MockClusterMap();
     MockTime mockTime = new MockTime();
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties),
-        new NonBlockingRouterMetrics(new MetricRegistry()),
+        new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
         mockClusterMap, mockTime);

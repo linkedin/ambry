@@ -44,7 +44,7 @@ public class PutOperationTest {
   private final RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap = new MockClusterMap();
   private final NonBlockingRouterMetrics routerMetrics =
-      new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
+      new NonBlockingRouterMetrics(mockClusterMap);
   private final ResponseHandler responseHandler;
   private final Time time;
   private final Map<Integer, PutOperation> correlationIdToPutOperation = new TreeMap<>();
