@@ -13,9 +13,6 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.metrics.MetricsHistogram;
-
-
 /**
  * RequestResponse Channel used by the network layer to queue new requests and
  * send responses over the network from the channel. This is used by the server
@@ -31,7 +28,7 @@ public interface RequestResponseChannel {
    * @param metrics The set of metrics tracked at the network layer
    * @throws InterruptedException
    */
-  public void sendResponse(Send payloadToSend, Request originalRequest, NetworkRequestMetrics metrics)
+  public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkRequestMetrics metrics)
       throws InterruptedException;
 
   /**

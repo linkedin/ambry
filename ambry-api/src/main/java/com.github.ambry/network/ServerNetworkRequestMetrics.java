@@ -17,9 +17,9 @@ import com.github.ambry.metrics.MetricsHistogram;
 
 
 /**
- * An interface to track a set of metrics for a network request
+ * Tracks a set of metrics for a network request by a server
  */
-public class NetworkRequestMetrics {
+public class ServerNetworkRequestMetrics implements NetworkRequestSend {
   private MetricsHistogram responseQueueTime;
   private MetricsHistogram responseSendTime;
   private MetricsHistogram requestTotalTime;
@@ -27,7 +27,7 @@ public class NetworkRequestMetrics {
   private MetricsHistogram responseSendTimeBySize;
   private MetricsHistogram requestTotalTimeBySize;
 
-  public NetworkRequestMetrics(MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime,
+  public ServerNetworkRequestMetrics(MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime,
       MetricsHistogram requestTotalTime, MetricsHistogram responseSendTimeBySize,
       MetricsHistogram requestTotalTimeBySize, long timeSpentTillNow) {
     this.responseQueueTime = responseQueueTime;
@@ -38,12 +38,16 @@ public class NetworkRequestMetrics {
     this.requestTotalTimeBySize = requestTotalTimeBySize;
   }
 
+  /**
+   * Updates the time spent by the response in the queue before being sent
+   * @param value the time spent by the response in the queue
+   */
   public void updateResponseQueueTime(long value) {
     responseQueueTime.update(value);
     timeSpentTillNow += value;
   }
 
-  public void updateResponseSendTime(long value) {
+  public void updateSendTime(long value) {
     responseSendTime.update(value);
     if (responseSendTimeBySize != null) {
       responseSendTimeBySize.update(value);

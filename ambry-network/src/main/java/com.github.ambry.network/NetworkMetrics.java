@@ -16,9 +16,12 @@ package com.github.ambry.network;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -28,22 +31,30 @@ import java.util.concurrent.atomic.AtomicLong;
 public class NetworkMetrics {
   private final MetricRegistry registry;
 
-  // Selector metrics
+  // Rates and Counters
+  // Selector
   public final Counter sendInFlight;
   public final Counter selectorConnectionClosed;
   public final Counter selectorConnectionCreated;
   public final Counter selectorSelectRate;
-  public final Histogram selectorSelectTime;
   public final Counter selectorIORate;
-  public final Histogram selectorIOTime;
-  public final Counter selectorNioCloseErrorCount;
-  public final Counter selectorDisconnectedErrorCount;
-  public final Counter selectorIOErrorCount;
-  public final Counter selectorKeyOperationErrorCount;
-  public final Counter selectorCloseKeyErrorCount;
-  public final Counter selectorCloseSocketErrorCount;
-  public Gauge<Long> numActiveConnections;
+  // SSL metrics
+  public final Counter sslFactoryInitializationCount;
+  public final Counter sslTransmissionInitializationCount;
+  public final Counter sslHandshakeCount;
+  // the count of renegotiation after initial handshake done
+  public final Counter sslRenegotiationCount;
+  // NetworkClient metrics
+  // number of times connection checkout have been tried before succeeding
+  public final Meter connectionCheckOutAttemptsCount;
+  // number of times connection checkout have been tried before timing out
+  public final Meter connectionCheckOutFailureAttemptsCount;
+  public final Meter connectionsDisconnectedCount;
 
+  // Histogram
+  // Selector
+  public final Histogram selectorSelectTime;
+  public final Histogram selectorIOTime;
   // Plaintext metrics
   // the bytes rate to receive the entire request
   public final Histogram plaintextReceiveBytesRate;
@@ -53,15 +64,8 @@ public class NetworkMetrics {
   public final Histogram plaintextReceiveTimePerKB;
   // the time to send data in one write call
   public final Histogram plaintextSendTimePerKB;
-
   // SSL metrics
-  public final Counter sslFactoryInitializationCount;
-  public final Counter sslTransmissionInitializationCount;
-  public final Counter sslFactoryInitializationErrorCount;
-  public final Counter sslTransmissionInitializationErrorCount;
   public final Histogram sslHandshakeTime;
-  public final Counter sslHandshakeCount;
-  public final Counter sslHandshakeErrorCount;
   // the bytes rate to receive the entire request
   public final Histogram sslReceiveBytesRate;
   // the bytes rate to send the entire response
@@ -72,18 +76,87 @@ public class NetworkMetrics {
   public final Histogram sslSendTimePerKB;
   public final Histogram sslEncryptionTimePerKB;
   public final Histogram sslDecryptionTimePerKB;
-  // the count of renegotiation after initial handshake done
-  public final Counter sslRenegotiationCount;
+  // NetworkClient metrics
+  public final Histogram prepareSendTime;
+  public final Histogram handleSelectorEventsTime;
+  public final Histogram requestQueueTime;
+  public final Histogram requestSendTime;
+  public final Histogram requestResponseRoundTripTime;
+  public final Histogram requestResponseTotalTime;
+
+  // Errors
+  public final Counter selectorNioCloseErrorCount;
+  public final Counter selectorDisconnectedErrorCount;
+  public final Counter selectorIOErrorCount;
+  public final Counter selectorKeyOperationErrorCount;
+  public final Counter selectorCloseKeyErrorCount;
+  public final Counter selectorCloseSocketErrorCount;
+  // SSL metrics
+  public final Counter sslFactoryInitializationErrorCount;
+  public final Counter sslTransmissionInitializationErrorCount;
+  public final Counter sslHandshakeErrorCount;
+  // NetworkClient metrics
+  public final Counter connectionTimeOutError;
+  public final Counter networkClientIOError;
+
+  // Gauges
+  public Gauge<Long> selectorActiveConnections;
+  // NetworkClient metrics
+  public Gauge<Long> networkClientPendingConnections;
+
+  public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
   public NetworkMetrics(MetricRegistry registry) {
     this.registry = registry;
+    // Rates and Counters
+    // Selector
     sendInFlight = registry.counter(MetricRegistry.name(Selector.class, "SendInFlight"));
     selectorConnectionClosed = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionClosed"));
     selectorConnectionCreated = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionCreated"));
     selectorSelectRate = registry.counter(MetricRegistry.name(Selector.class, "SelectorSelectRate"));
     selectorIORate = registry.counter(MetricRegistry.name(Selector.class, "SelectorIORate"));
-    selectorSelectTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorSelectTime"));
+    // SSL metrics
+    sslFactoryInitializationCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SslFactoryInitializationCount"));
+    sslTransmissionInitializationCount =
+        registry.counter(MetricRegistry.name(Selector.class, "SslTransmissionInitializationCount"));
+    sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
+    sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
+    // NetworkClient metrics
+    connectionCheckOutAttemptsCount =
+        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutAttemptsCount"));
+    connectionCheckOutFailureAttemptsCount =
+        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutFailureAttemptsCount"));
+    connectionsDisconnectedCount =
+        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionsDisconnectedCount"));
+
+    // Histogram
+    // Selector
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
+    selectorSelectTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorSelectTime"));
+    // Plaintext metrics
+    plaintextReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveBytesRate"));
+    plaintextSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendBytesRate"));
+    plaintextReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveTimePerKB"));
+    plaintextSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTimePerKB"));
+    // SSL metrics
+    sslHandshakeTime = registry.histogram(MetricRegistry.name(Selector.class, "SslHandshakeTime"));
+    sslReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveBytesRate"));
+    sslSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslSendBytesRate"));
+    sslEncryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionTimePerKB"));
+    sslDecryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionTimePerKB"));
+    sslReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveTimePerKB"));
+    sslSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTimePerKB"));
+    // NetworkClient Metrics
+    prepareSendTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "PrepareSendTime"));
+    handleSelectorEventsTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "HandleSelectorEventsTime"));
+    requestQueueTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestQueueTime"));
+    requestSendTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestSendTime"));
+    requestResponseRoundTripTime =
+        registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseRoundTripTime"));
+    requestResponseTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseTotalTime"));
+
+    // Errors
     selectorNioCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorNioCloseErrorCount"));
     selectorDisconnectedErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorDisconnectedErrorCount"));
@@ -93,28 +166,17 @@ public class NetworkMetrics {
     selectorCloseKeyErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseKeyErrorCount"));
     selectorCloseSocketErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseSocketErrorCount"));
-    plaintextReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveBytesRate"));
-    plaintextSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendBytesRate"));
-    plaintextReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveTimePerKB"));
-    plaintextSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTimePerKB"));
-    sslReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveBytesRate"));
-    sslSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslSendBytesRate"));
-    sslEncryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionTimePerKB"));
-    sslDecryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionTimePerKB"));
-    sslReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveTimePerKB"));
-    sslSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTimePerKB"));
-    sslFactoryInitializationCount =
-        registry.counter(MetricRegistry.name(Selector.class, "SslFactoryInitializationCount"));
+    // SSL metrics
     sslFactoryInitializationErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SslFactoryInitializationErrorCount"));
-    sslTransmissionInitializationCount =
-        registry.counter(MetricRegistry.name(Selector.class, "SslTransmissionInitializationCount"));
     sslTransmissionInitializationErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SslTransmissionInitializationErrorCount"));
-    sslHandshakeTime = registry.histogram(MetricRegistry.name(Selector.class, "SslHandshakeTime"));
-    sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
-    sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
+    connectionTimeOutError = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionTimeOutError"));
+    networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
+
+    // Gauges
+    selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
   }
 
   /**
@@ -122,12 +184,79 @@ public class NetworkMetrics {
    * @param activeConnections count of current active connections
    */
   void initializeSelectorMetrics(final AtomicLong activeConnections) {
-    numActiveConnections = new Gauge<Long>() {
+    selectorActiveConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {
         return activeConnections.get();
       }
     };
+  }
+
+  /**
+   * Updates the gauge that tracks the count of pending connections to be checked out by the Network client
+   * @param numPendingConnections the count of pending connections to be checked out
+   */
+  void initializeNetworkClientPendingConnections(final AtomicLong numPendingConnections) {
+    networkClientPendingConnections = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return numPendingConnections.get();
+      }
+    };
+  }
+
+  public void initializeSelectorNodeMetricIfRequired(String hostname, int port) {
+    if (!selectorNodeMetricMap.containsKey(hostname + port)) {
+      SelectorNodeMetric nodeMetric = new SelectorNodeMetric(registry, hostname, port);
+      selectorNodeMetricMap.put(hostname + port, nodeMetric);
+    }
+  }
+
+  public void updateNodeSendMetric(String hostName, int port, long bytesSentCount, long timeTakenToSendInMs) {
+    if (!selectorNodeMetricMap.containsKey(hostName + port)) {
+      throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
+    }
+    SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
+    nodeMetric.sendCount.inc();
+    nodeMetric.bytesSentCount.inc(bytesSentCount);
+    nodeMetric.bytesSentLatency.update(timeTakenToSendInMs);
+  }
+
+  public void updateNodeReceiveMetric(String hostName, int port, long bytesReceivedCount, long timeTakenToReceiveInMs) {
+    if (!selectorNodeMetricMap.containsKey(hostName + port)) {
+      throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
+    }
+    SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
+    nodeMetric.bytesReceivedCount.inc(bytesReceivedCount);
+    nodeMetric.bytesReceivedLatency.update(timeTakenToReceiveInMs);
+  }
+
+  /**
+   * Updates a few metrics when a request was timed-out without getting a connection to be sent out
+   * @param connectionCheckOutAttempts number of times, connection check out was attempted before timing out
+   */
+  void updateConnectionTimedOutMetrics(int connectionCheckOutAttempts) {
+    connectionTimeOutError.inc();
+    connectionCheckOutFailureAttemptsCount.mark(connectionCheckOutAttempts);
+  }
+
+  class SelectorNodeMetric {
+    public final Counter sendCount;
+    public final Histogram bytesSentLatency;
+    public final Histogram bytesReceivedLatency;
+    public final Counter bytesSentCount;
+    public final Counter bytesReceivedCount;
+
+    public SelectorNodeMetric(MetricRegistry registry, String hostname, int port) {
+      sendCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-SendCount"));
+      bytesSentLatency =
+          registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesSentLatencyInMs"));
+      bytesReceivedLatency =
+          registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesReceivedLatencyInMs"));
+      bytesSentCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-BytesSentCount"));
+      bytesReceivedCount =
+          registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-BytesReceivedCount"));
+    }
   }
 }
 
@@ -194,3 +323,4 @@ class ServerNetworkMetrics extends NetworkMetrics {
     return count;
   }
 }
+

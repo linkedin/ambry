@@ -36,9 +36,9 @@ public class NetworkSend {
    */
   private final long sendStartTimeInMs;
 
-  private final NetworkRequestMetrics metrics;
+  private final NetworkRequestSend metrics;
 
-  public NetworkSend(String connectionId, Send payload, NetworkRequestMetrics metrics, Time time) {
+  public NetworkSend(String connectionId, Send payload, NetworkRequestSend metrics, Time time) {
     this.connectionId = connectionId;
     this.payload = payload;
     this.sendStartTimeInMs = time.milliseconds();
@@ -59,7 +59,7 @@ public class NetworkSend {
 
   public void onSendComplete() {
     if (metrics != null) {
-      metrics.updateResponseSendTime(SystemTime.getInstance().milliseconds() - sendStartTimeInMs);
+      metrics.updateSendTime(SystemTime.getInstance().milliseconds() - sendStartTimeInMs);
     }
   }
 }

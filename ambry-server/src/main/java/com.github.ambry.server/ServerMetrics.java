@@ -17,7 +17,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.metrics.MetricsHistogram;
 
 
 /**
@@ -327,24 +326,5 @@ public class ServerMetrics {
     } else {
       getLargeBlobRequestRate.mark();
     }
-  }
-}
-
-class HistogramMeasurement implements MetricsHistogram {
-
-  private final Histogram histogram;
-
-  public HistogramMeasurement(Histogram histogram) {
-    this.histogram = histogram;
-  }
-
-  @Override
-  public void update(long value) {
-    histogram.update(value);
-  }
-
-  @Override
-  public void update(int value) {
-    histogram.update(value);
   }
 }
