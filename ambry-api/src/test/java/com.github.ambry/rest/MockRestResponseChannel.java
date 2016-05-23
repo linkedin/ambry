@@ -183,7 +183,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public synchronized ResponseStatus getStatus() {
+  public ResponseStatus getStatus() {
     ResponseStatus status = null;
     try {
       if (responseMetadata.has(RESPONSE_STATUS_KEY)) {
@@ -202,7 +202,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public synchronized String getHeader(String headerName) {
+  public String getHeader(String headerName) {
     String headerValue = null;
     try {
       if (responseMetadata.has(RESPONSE_HEADERS_KEY) && responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY)
