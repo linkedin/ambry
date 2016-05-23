@@ -189,9 +189,9 @@ public class TestUtils {
       throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < dataNodeCount; ++i) {
-      JSONObject jsonDataNode = (i % 2 == 0)?
-          getJsonDataNode(hostname, basePort + i, sslPort + i, i, hardwareState, disks) :
-          getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks);
+      JSONObject jsonDataNode =
+          (i % 2 == 0) ? getJsonDataNode(hostname, basePort + i, sslPort + i, i, hardwareState, disks)
+              : getJsonDataNode(hostname, basePort + i, sslPort + i, hardwareState, disks);
       jsonArray.put(jsonDataNode);
     }
     return jsonArray;
@@ -375,8 +375,8 @@ public class TestUtils {
     protected JSONArray getDataNodes(int basePort, int sslPort, JSONArray disks)
         throws JSONException {
       if (rackAware) {
-        return getJsonArrayDataNodesRackAware(dataNodeCount, getLocalHost(), basePort, sslPort,
-            HardwareState.AVAILABLE, disks);
+        return getJsonArrayDataNodesRackAware(dataNodeCount, getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE,
+            disks);
       }
       return getJsonArrayDataNodes(dataNodeCount, getLocalHost(), basePort, sslPort, HardwareState.AVAILABLE, disks);
     }
@@ -648,7 +648,8 @@ public class TestUtils {
     List<PartitionId> allocatedPartitions;
 
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(partitionCount, replicaCountPerDatacenter, replicaCapacityInBytes, false, false);
+        clusterMapManager.allocatePartitions(partitionCount, replicaCountPerDatacenter, replicaCapacityInBytes, true,
+            false);
     assertEquals(allocatedPartitions.size(), 5);
 
     return clusterMapManager;

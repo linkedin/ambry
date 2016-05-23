@@ -292,16 +292,16 @@ public class ClusterMapManager implements ClusterMap {
    * @param dataNodes the list of {@link DataNode}s to sample from
    * @param dataNodesUsed the set of {@link DataNode}s to exclude from the sample
    * @param replicaCapacityInBytes the minimum amount of free space that a disk in the sample should have
-   * @param rackAware if {@code true}, only return disks in nodes that do not share racks with the nodes
-   *                  in {@code dataNodesUsed}
+   * @param disableRackAwareness if {@code false}, only return disks in nodes that do not share racks with the nodes
+   *                             in {@code dataNodesUsed}
    * @param numDisks how many disks to return in the sample
    * @return a list of {@link Disk}s of length {@code numDisks}, or fewer if {@code numDisks} valid samples could not
    *         be found
    */
   private List<Disk> getRandomDiskCandidateSample(List<DataNode> dataNodes, Set<DataNode> dataNodesUsed,
-      long replicaCapacityInBytes, boolean rackAware, int numDisks) {
+      long replicaCapacityInBytes, boolean disableRackAwareness, int numDisks) {
     Set<Long> rackIdsUsed = new HashSet<>();
-    if (rackAware) {
+    if (!disableRackAwareness) {
       for (DataNode dataNode : dataNodesUsed) {
         rackIdsUsed.add(dataNode.getRackId());
       }
@@ -332,21 +332,27 @@ public class ClusterMapManager implements ClusterMap {
    * @param replicaCapacityInBytes the minimum amount of free space on a disk for a replica
    * @param datacenter the {@link Datacenter} to allocate replicas in
    * @param disableRackAwareness if {@code true}, do not attempt a rack-aware allocation
-   * @return
+   * @return A list of {@link Disk}s
    */
   private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityInBytes,
       Datacenter datacenter, boolean disableRackAwareness) {
     ArrayList<Disk> disksToAllocate = new ArrayList<Disk>();
-    boolean rackAware = datacenter.isRackAware() && !disableRackAwareness;
+    if (!datacenter.isRackAware() && !disableRackAwareness) {
+      throw new IllegalArgumentException("disableRackAwareness is false, but the datacenter: " + datacenter.getName()
+          + " does not have rack information");
+    }
     Set<DataNode> nodesToExclude = new HashSet<>();
     List<DataNode> dataNodes = new ArrayList<>(datacenter.getDataNodes());
     for (int i = 0; i < replicaCountPerDatacenter; i++) {
       List<Disk> diskCandidates =
-          getRandomDiskCandidateSample(dataNodes, nodesToExclude, replicaCapacityInBytes, rackAware, NUM_CHOICES);
+          getRandomDiskCandidateSample(dataNodes, nodesToExclude, replicaCapacityInBytes, disableRackAwareness,
+              NUM_CHOICES);
       if (diskCandidates.size() > 0) {
         Disk diskToAdd = Collections.max(diskCandidates, diskCapacityComparator);
         disksToAllocate.add(diskToAdd);
         nodesToExclude.add(diskToAdd.getDataNode());
+      } else {
+        break;
       }
     }
     return disksToAllocate;
@@ -367,27 +373,23 @@ public class ClusterMapManager implements ClusterMap {
    */
   private List<Disk> allocateDisksForPartitionWithRetry(int replicaCountPerDatacenter, long replicaCapacityInBytes,
       Datacenter datacenter, boolean disableRackAwareness, boolean bestEffort) {
-
-    List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes,
-        datacenter, disableRackAwareness);
-    if (datacenter.isRackAware() && !disableRackAwareness && (disks.size() < replicaCountPerDatacenter)) {
-      System.err.println("Rack-aware allocation failed for a partition on datacenter:" + datacenter.getName());
-      if (bestEffort) {
-        System.err.println("Attempting to perform a non rack-aware allocation.");
-        disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter, false);
-      }
+    List<Disk> disks =
+        allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter, disableRackAwareness);
+    if (!disableRackAwareness && bestEffort && (disks.size() < replicaCountPerDatacenter)) {
+      System.err.println("Rack-aware allocation failed for a partition on datacenter:" + datacenter.getName()
+          + "; attempting to perform a non rack-aware allocation.");
+      disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter, true);
     }
     if (disks.size() < replicaCountPerDatacenter) {
-      System.err.println("Could only allocate " + disks.size() + "/" + replicaCountPerDatacenter
-          + " replicas in datacenter: " + datacenter.getName());
+      System.err.println(
+          "Could only allocate " + disks.size() + "/" + replicaCountPerDatacenter + " replicas in datacenter: "
+              + datacenter.getName());
     }
     return disks;
   }
 
-
   /**
-   * Perform a best effort (or less) allocation of partitions.
-   * i.e., size of returned list may be less than numPartitions.
+   * Allocate partitions for {@code numPartitions} new partitions on all datacenters.
    *
    * @param numPartitions How many partitions to allocate.
    * @param replicaCountPerDatacenter The number of replicas per partition on each datacenter
@@ -404,8 +406,9 @@ public class ClusterMapManager implements ClusterMap {
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
       List<Disk> disksToAllocate = new ArrayList<>();
       for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-        List<Disk> disks = allocateDisksForPartitionWithRetry(replicaCountPerDatacenter, replicaCapacityInBytes,
-            datacenter, disableRackAwareness, bestEffort);
+        List<Disk> disks =
+            allocateDisksForPartitionWithRetry(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter,
+                disableRackAwareness, bestEffort);
         disksToAllocate.addAll(disks);
       }
       partitions.add(partitionLayout.addNewPartition(disksToAllocate, replicaCapacityInBytes));
@@ -459,8 +462,9 @@ public class ClusterMapManager implements ClusterMap {
       index++;
     }
     Datacenter datacenterToAdd = hardwareLayout.findDatacenter(dataCenterName);
-    List<Disk> disksForReplicas = allocateDisksForPartitionWithRetry(numberOfReplicasPerDatacenter,
-        capacityOfReplicasInBytes, datacenterToAdd, disableRackAwareness, bestEffort);
+    List<Disk> disksForReplicas =
+        allocateDisksForPartitionWithRetry(numberOfReplicasPerDatacenter, capacityOfReplicasInBytes, datacenterToAdd,
+            disableRackAwareness, bestEffort);
     partitionLayout.addNewReplicas((Partition) partitionId, disksForReplicas);
   }
 
