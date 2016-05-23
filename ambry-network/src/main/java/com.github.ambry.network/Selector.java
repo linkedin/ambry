@@ -26,6 +26,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.UnresolvedAddressException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -72,12 +73,11 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
-  private final List<String> connectionsPendingHandshake;
+  private final Set<String> unreadycConnections;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
   private AtomicLong numActiveConnections;
-  private AtomicLong numConnectionsPendingHandshake;
   private final SSLFactory sslFactory;
 
   /**
@@ -95,9 +95,8 @@ public class Selector implements Selectable {
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
-    numConnectionsPendingHandshake = new AtomicLong(0);
-    connectionsPendingHandshake = new ArrayList<>();
-    metrics.initializeSelectorMetrics(numActiveConnections, numConnectionsPendingHandshake);
+    unreadycConnections = new HashSet<>();
+    metrics.initializeSelectorMetrics(numActiveConnections);
     this.sslFactory = sslFactory;
   }
 
@@ -324,8 +323,7 @@ public class Selector implements Selectable {
               connected.add(transmission.getConnectionId());
               metrics.selectorConnectionCreated.inc();
             } else {
-              connectionsPendingHandshake.add(transmission.getConnectionId());
-              numConnectionsPendingHandshake.incrementAndGet();
+              unreadycConnections.add(transmission.getConnectionId());
             }
           }
 
@@ -369,14 +367,13 @@ public class Selector implements Selectable {
    * Check readiness for unready connections and add to completed list if ready
    */
   private void checkUnreadyConnectionsStatus() {
-    Iterator<String> iterator = connectionsPendingHandshake.iterator();
+    Iterator<String> iterator = unreadycConnections.iterator();
     while (iterator.hasNext()) {
       String connId = iterator.next();
       if (isChannelReady(connId)) {
         connected.add(connId);
         iterator.remove();
         metrics.selectorConnectionCreated.inc();
-        numConnectionsPendingHandshake.decrementAndGet();
       }
     }
   }
@@ -396,7 +393,7 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Returns true if channel is ready after completing handshake to accept reads/writes
+   * Returns {@code true} if channel is ready to send or receive data, {@code false} otherwise
    * @param connectionId upon which readiness is checked for
    * @return true if channel is ready to accept reads/writes, false otherwise
    */
@@ -481,7 +478,7 @@ public class Selector implements Selectable {
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
       numActiveConnections.set(keyMap.size());
-      connectionsPendingHandshake.remove(transmission.getConnectionId());
+      unreadycConnections.remove(transmission.getConnectionId());
       try {
         transmission.close();
       } catch (IOException e) {
