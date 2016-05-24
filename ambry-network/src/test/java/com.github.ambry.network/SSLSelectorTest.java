@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -47,18 +48,16 @@ public class SSLSelectorTest {
         TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     SSLFactory serverSSLFactory = new SSLFactory(sslConfig);
     SSLFactory clientSSLFactory = new SSLFactory(clientSSLConfig);
-    this.server = new EchoServer(serverSSLFactory, 18383);
-    this.server.start();
-    this.selector =
-        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(),
-            clientSSLFactory);
+    server = new EchoServer(serverSSLFactory, 18383);
+    server.start();
+    selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory);
   }
 
   @After
   public void teardown()
       throws Exception {
-    this.selector.close();
-    this.server.close();
+    selector.close();
+    server.close();
   }
 
   /**
@@ -72,7 +71,7 @@ public class SSLSelectorTest {
     assertEquals("hello", blockingRequest(connectionId, "hello"));
 
     // disconnect
-    this.server.closeConnections();
+    server.closeConnections();
     while (!selector.disconnected().contains(connectionId)) {
       selector.poll(1000L);
     }
@@ -203,6 +202,27 @@ public class SSLSelectorTest {
     assertEquals("", blockingRequest(connectionId, ""));
   }
 
+  @Test
+  public void testSSLConnect()
+      throws IOException {
+    String connectionId =
+        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+    while (!selector.connected().contains(connectionId)) {
+      selector.poll(10000L);
+    }
+    Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionId));
+  }
+
+  @Test
+  public void testCloseAfterConnectCall()
+      throws IOException {
+    String connectionId =
+        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+    selector.close(connectionId);
+    Assert.assertTrue("Channel should have been added to disconnected list",
+        selector.disconnected().contains(connectionId));
+  }
+
   private String blockingRequest(String connectionId, String s)
       throws Exception {
     selector.poll(1000L, asList(SelectorTest.createSend(connectionId, s)));
@@ -222,10 +242,6 @@ public class SSLSelectorTest {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
     while (!selector.connected().contains(connectionId)) {
-      selector.poll(10000L);
-    }
-    //finish the handshake as well
-    while (!selector.isChannelReady(connectionId)) {
       selector.poll(10000L);
     }
     return connectionId;

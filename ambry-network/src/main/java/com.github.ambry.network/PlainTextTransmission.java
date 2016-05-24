@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * Transmission used to speak plain text to the underlying channel.
  */
 public class PlainTextTransmission extends Transmission {
-  private static final Logger logger = LoggerFactory.getLogger(SSLTransmission.class);
+  private static final Logger logger = LoggerFactory.getLogger(PlainTextTransmission.class);
 
   public PlainTextTransmission(String connectionId, SocketChannel socketChannel, SelectionKey key, Time time,
       NetworkMetrics metrics) {

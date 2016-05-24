@@ -26,6 +26,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.UnresolvedAddressException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -72,10 +73,11 @@ public class Selector implements Selectable {
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
   private final List<String> connected;
+  private final Set<String> unreadyConnections;
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
-  private AtomicLong activeConnections;
+  private final AtomicLong numActiveConnections;
   private final SSLFactory sslFactory;
 
   /**
@@ -92,8 +94,9 @@ public class Selector implements Selectable {
     this.disconnected = new ArrayList<String>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
-    this.activeConnections = new AtomicLong(0);
-    this.metrics.initializeSelectorMetricsIfRequired(activeConnections);
+    numActiveConnections = new AtomicLong(0);
+    unreadyConnections = new HashSet<>();
+    metrics.initializeSelectorMetrics(numActiveConnections);
     this.sslFactory = sslFactory;
   }
 
@@ -163,7 +166,7 @@ public class Selector implements Selectable {
     }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
-    activeConnections.set(this.keyMap.size());
+    numActiveConnections.set(this.keyMap.size());
     return connectionId;
   }
 
@@ -190,7 +193,7 @@ public class Selector implements Selectable {
     }
     key.attach(transmission);
     this.keyMap.put(connectionId, key);
-    activeConnections.set(this.keyMap.size());
+    numActiveConnections.set(this.keyMap.size());
     return connectionId;
   }
 
@@ -315,7 +318,13 @@ public class Selector implements Selectable {
         Transmission transmission = getTransmission(key);
         try {
           if (key.isConnectable()) {
-            handleConnect(key, transmission);
+            transmission.finishConnect();
+            if (transmission.ready()) {
+              connected.add(transmission.getConnectionId());
+              metrics.selectorConnectionCreated.inc();
+            } else {
+              unreadyConnections.add(transmission.getConnectionId());
+            }
           }
 
           /* if channel is not ready, finish prepare */
@@ -347,10 +356,26 @@ public class Selector implements Selectable {
           close(key);
         }
       }
+      checkUnreadyConnectionsStatus();
       this.metrics.selectorIORate.inc();
     }
     long endIo = time.milliseconds();
     this.metrics.selectorIOTime.update(endIo - endSelect);
+  }
+
+  /**
+   * Check readiness for unready connections and add to completed list if ready
+   */
+  private void checkUnreadyConnectionsStatus() {
+    Iterator<String> iterator = unreadyConnections.iterator();
+    while (iterator.hasNext()) {
+      String connId = iterator.next();
+      if (isChannelReady(connId)) {
+        connected.add(connId);
+        iterator.remove();
+        metrics.selectorConnectionCreated.inc();
+      }
+    }
   }
 
   /**
@@ -368,7 +393,7 @@ public class Selector implements Selectable {
   }
 
   /**
-   * Returns true if channel is ready after completing handshake to accept reads/writes
+   * Returns {@code true} if channel is ready to send or receive data, {@code false} otherwise
    * @param connectionId upon which readiness is checked for
    * @return true if channel is ready to accept reads/writes, false otherwise
    */
@@ -397,8 +422,8 @@ public class Selector implements Selectable {
     return this.connected;
   }
 
-  public long getActiveConnections() {
-    return activeConnections.get();
+  public long getNumActiveConnections() {
+    return numActiveConnections.get();
   }
 
   /**
@@ -452,7 +477,8 @@ public class Selector implements Selectable {
       logger.debug("Closing connection from {}", transmission.getConnectionId());
       this.disconnected.add(transmission.getConnectionId());
       this.keyMap.remove(transmission.getConnectionId());
-      activeConnections.set(this.keyMap.size());
+      numActiveConnections.set(keyMap.size());
+      unreadyConnections.remove(transmission.getConnectionId());
       try {
         transmission.close();
       } catch (IOException e) {
@@ -481,16 +507,6 @@ public class Selector implements Selectable {
    */
   private SelectionKey keyForId(String id) {
     return this.keyMap.get(id);
-  }
-
-  /**
-   * Process connections that have finished their handshake
-   */
-  private void handleConnect(SelectionKey key, Transmission transmission)
-      throws IOException {
-    transmission.finishConnect();
-    this.connected.add(transmission.getConnectionId());
-    this.metrics.selectorConnectionCreated.inc();
   }
 
   /**
