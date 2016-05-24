@@ -125,7 +125,7 @@ public class NetworkMetrics {
    * Initializes a few network metrics for the selector
    * @param activeConnections count of current active connections
    */
-  public void initializeSelectorMetrics(final AtomicLong activeConnections) {
+  void initializeSelectorMetrics(final AtomicLong activeConnections) {
     numActiveConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {

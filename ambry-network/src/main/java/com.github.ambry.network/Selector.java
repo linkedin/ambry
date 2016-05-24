@@ -77,7 +77,7 @@ public class Selector implements Selectable {
   private final Time time;
   private final NetworkMetrics metrics;
   private final AtomicLong IdGenerator;
-  private AtomicLong numActiveConnections;
+  private final AtomicLong numActiveConnections;
   private final SSLFactory sslFactory;
 
   /**
