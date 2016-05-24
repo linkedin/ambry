@@ -260,6 +260,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     private Callback<Long> readIntoCallback;
     // the future to mark as done when all the chunks are successfully written out into the asyncWritableChannel.
     private FutureResult<Long> readIntoFuture;
+    // size of the data in this channel. This will be set eventually.
+    private volatile long streamSize = -1;
     // the number of bytes written out to the asyncWritableChannel. This would be the size of the blob eventually.
     private Long bytesWritten = 0L;
     // the number of chunks that have been written out to the asyncWritableChannel.
@@ -282,11 +284,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
 
     /**
      * The bytes that will be read from this channel is not known until the read is complete.
-     * @return -1.
+     * @return size written when called after the readInto is complete, -1 any time before that.
      */
     @Override
     public long getSize() {
-      return -1;
+      return streamSize;
     }
 
     @Override
@@ -352,6 +354,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      */
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
+        streamSize = bytesWritten;
         readIntoFuture.done(bytesWritten, operationException.get());
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten, operationException.get());
