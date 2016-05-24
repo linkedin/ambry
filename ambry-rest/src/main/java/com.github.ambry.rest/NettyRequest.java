@@ -71,8 +71,8 @@ class NettyRequest implements RestRequest {
   private final AtomicLong bytesReceived = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  private MessageDigest digest = null;
-  private byte[] digestBytes = null;
+  private MessageDigest digest;
+  private byte[] digestBytes;
   private long digestCalculationTimeInMs = -1;
 
   private volatile AsyncWritableChannel writeChannel = null;
