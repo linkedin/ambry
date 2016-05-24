@@ -113,6 +113,7 @@ public class ChunkFillTest {
     VerifiableProperties vProps = getNonBlockingRouterProperties();
     MockClusterMap mockClusterMap = new MockClusterMap();
     RouterConfig routerConfig = new RouterConfig(vProps);
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
     ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
     BlobProperties putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -123,9 +124,8 @@ public class ChunkFillTest {
     random.nextBytes(putContent);
     final ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     FutureResult<String> futureResult = new FutureResult<String>();
-    PutOperation op =
-        new PutOperation(routerConfig, mockClusterMap, responseHandler, putBlobProperties, putUserMetadata, putChannel,
-            futureResult, null, new MockTime());
+    PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
+        putUserMetadata, putChannel, futureResult, null, new MockTime());
     numChunks = op.getNumDataChunks();
     compositeBuffers = new ByteBuffer[numChunks];
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);

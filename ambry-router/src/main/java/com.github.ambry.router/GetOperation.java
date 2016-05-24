@@ -25,7 +25,6 @@ import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.Time;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.slf4j.Logger;
@@ -38,6 +37,7 @@ import org.slf4j.LoggerFactory;
  */
 abstract class GetOperation<T> {
   protected final RouterConfig routerConfig;
+  protected final NonBlockingRouterMetrics routerMetrics;
   protected final ClusterMap clusterMap;
   protected final ResponseHandler responseHandler;
   protected final FutureResult<T> operationFuture;
@@ -53,6 +53,7 @@ abstract class GetOperation<T> {
   /**
    * Construct a GetOperation
    * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blobId of the associated blob in string form.
@@ -61,10 +62,11 @@ abstract class GetOperation<T> {
    * @param time the {@link Time} instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
-  GetOperation(RouterConfig routerConfig, ClusterMap clusterMap, ResponseHandler responseHandler, String blobIdStr,
-      FutureResult<T> futureResult, Callback<T> callback, Time time)
+  GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      ResponseHandler responseHandler, String blobIdStr, FutureResult<T> futureResult, Callback<T> callback, Time time)
       throws RouterException {
     this.routerConfig = routerConfig;
+    this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.operationFuture = futureResult;
@@ -187,8 +189,8 @@ abstract class GetOperation<T> {
    */
   protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag) {
     List<BlobId> blobIds = Collections.singletonList(blobId);
-    List<PartitionRequestInfo> partitionRequestInfoList = Collections.singletonList(new PartitionRequestInfo(blobId
-        .getPartition(), blobIds));
+    List<PartitionRequestInfo> partitionRequestInfoList =
+        Collections.singletonList(new PartitionRequestInfo(blobId.getPartition(), blobIds));
     return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, flag,
         partitionRequestInfoList, GetOptions.None);
   }

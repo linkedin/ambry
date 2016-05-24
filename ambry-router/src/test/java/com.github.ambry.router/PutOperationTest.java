@@ -43,6 +43,8 @@ import org.junit.Test;
 public class PutOperationTest {
   private final RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap = new MockClusterMap();
+  private final NonBlockingRouterMetrics routerMetrics =
+      new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
   private final ResponseHandler responseHandler;
   private final Time time;
   private final Map<Integer, PutOperation> correlationIdToPutOperation = new TreeMap<>();
@@ -96,8 +98,8 @@ public class PutOperationTest {
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
     FutureResult<String> future = new FutureResult<>();
     PutOperation op =
-        new PutOperation(routerConfig, mockClusterMap, responseHandler, blobProperties, userMetadata, channel, future,
-            null, time);
+        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobProperties, userMetadata,
+            channel, future, null, time);
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;
     // Since this channel is in memory, one call to fill chunks would end up filling the maximum number of PutChunks.

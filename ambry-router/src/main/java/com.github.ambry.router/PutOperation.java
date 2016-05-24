@@ -72,6 +72,7 @@ import org.slf4j.LoggerFactory;
 class PutOperation {
   // Operation arguments.
   private final RouterConfig routerConfig;
+  private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
   private final BlobProperties blobProperties;
@@ -113,6 +114,8 @@ class PutOperation {
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // To find the PutChunk to hand over the response quickly.
   private final Map<Integer, PutChunk> correlationIdToPutChunk = new HashMap<Integer, PutChunk>();
+  // The time at which the operation was submitted.
+  private final long submissionTimeMs;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -123,6 +126,7 @@ class PutOperation {
    * size than the max chunk put size, and a single metadata blob containing the information about each of these
    * chunks.
    * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobProperties the BlobProperties associated with the put operation.
@@ -133,10 +137,11 @@ class PutOperation {
    * @param time the Time instance to use.
    * @throws {@link RouterException} if there is an error in constructing the PutOperation with the given parameters.
    */
-  PutOperation(RouterConfig routerConfig, ClusterMap clusterMap, ResponseHandler responseHandler,
-      BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      FutureResult<String> futureResult, Callback<String> callback, Time time)
+  PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
+      ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
+      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback, Time time)
       throws RouterException {
+    submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
     if (channel.getSize() != blobSize) {
       throw new RouterException(
@@ -152,6 +157,7 @@ class PutOperation {
     }
     numDataChunks = (int) numDataChunksL;
     this.routerConfig = routerConfig;
+    this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.blobProperties = blobProperties;
@@ -248,12 +254,14 @@ class PutOperation {
     if (chunk.getChunkBlobId() == null) {
       // the overall operation has failed if any of the chunk fails.
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
+      routerMetrics.putBlobErrorCount.inc();
       operationCompleted = true;
     } else if (numDataChunks == 1 || chunk == metadataPutChunk) {
       blobId = chunk.getChunkBlobId();
       // the overall operation has succeeded.
       if (chunk.failedAttempts > 0) {
         logger.trace("Slipped put succeeded for chunk: " + chunk.getChunkBlobId());
+        routerMetrics.slippedPutSuccessCount.inc();
       } else {
         logger.trace("Successfully put chunk: " + chunk.getChunkBlobId());
       }
@@ -398,6 +406,14 @@ class PutOperation {
    */
   Exception getOperationException() {
     return operationException.get();
+  }
+
+  /**
+   * The time at which this operation was submitted.
+   * @return return the time at which the operation was submitted.
+   */
+  long getSubmissionTimeMs() {
+    return submissionTimeMs;
   }
 
   /**
@@ -757,6 +773,8 @@ class PutOperation {
         // before attempting the slipped put.
         // - the response is for an earlier chunk held by this PutChunk.
         return;
+      } else {
+        routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - chunkPutRequestInfo.startTimeMs);
       }
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
@@ -810,6 +828,7 @@ class PutOperation {
      * @param exception the exception that may be set as the chunkException.
      */
     private void setChunkException(RouterException exception) {
+      // @todo: update error metric.
       chunkException = exception;
     }
 

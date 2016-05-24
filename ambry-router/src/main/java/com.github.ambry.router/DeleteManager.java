@@ -103,6 +103,7 @@ class DeleteManager {
           new DeleteOperation(routerConfig, responseHandler, blobId, futureResult, callback, time);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
+      routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -149,6 +150,7 @@ class DeleteManager {
     if (op.getOperationException() == null) {
       notificationSystem.onBlobDeleted(op.getBlobId().getID());
     }
+    routerMetrics.operationDequeuingRate.mark();
     operationCompleteCallback
         .completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
@@ -163,6 +165,7 @@ class DeleteManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (deleteOperations.remove(op)) {
+        routerMetrics.operationDequeuingRate.mark();
         operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null,
             new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed));
       }

@@ -18,14 +18,14 @@ package com.github.ambry.utils;
  */
 public class TestUtils {
   /**
-   * Return the number of threads currently running with the given name.
-   * @param name the name to compare
-   * @return the number of threads currently running with the given name.
+   * Return the number of threads currently running with a name containing the given pattern.
+   * @param pattern the pattern to compare
+   * @return the number of threads currently running with a name containing the given pattern.
    */
-  public static int numThreadsByThisName(String name) {
+  public static int numThreadsByThisName(String pattern) {
     int count = 0;
     for (Thread t : Thread.getAllStackTraces().keySet()) {
-      if (t.getName().equals(name)) {
+      if (t.getName().contains(pattern)) {
         count++;
       }
     }
@@ -33,14 +33,15 @@ public class TestUtils {
   }
 
   /**
-   * Return the thread with the given name. If there are multiple such threads, return the first thread by this name.
-   * @param name the name to compare
-   * @return the first thread with the given name.
+   * Return the thread with a name that contains the given name. If there are multiple such threads,
+   * return the first such thread.
+   * @param pattern the pattern to compare
+   * @return the first thread with a name that contains the given pattern.
    */
-  public static Thread getThreadByThisName(String name) {
+  public static Thread getThreadByThisName(String pattern) {
     Thread thread = null;
     for (Thread t : Thread.getAllStackTraces().keySet()) {
-      if (t.getName().equals(name)) {
+      if (t.getName().contains(pattern)) {
         thread = t;
         break;
       }
