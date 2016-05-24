@@ -428,10 +428,7 @@ public class NettyMultipartRequestTest {
     request.readInto(asyncWritableChannel, null).get();
     readOutput = asyncWritableChannel.getData();
     assertArrayEquals(RestUtils.MultipartPost.BLOB_PART + " content does not match", blobData.array(), readOutput);
-    byte[] partByPartDigest = request.getDigest();
-    if (partByPartDigest != null) {
-      assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, partByPartDigest);
-    }
+    assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, request.getDigest());
     closeRequestAndValidate(request);
   }
 

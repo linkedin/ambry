@@ -216,11 +216,12 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
 
   @Override
   public void setDigestAlgorithm(String digestAlgorithm) {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override
   public byte[] getDigest() {
-    return null;
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

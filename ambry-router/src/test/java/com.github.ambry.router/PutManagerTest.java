@@ -34,7 +34,6 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -880,8 +879,7 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
   }
 
   @Override
-  public void setDigestAlgorithm(String digestAlgorithm)
-      throws NoSuchAlgorithmException {
+  public void setDigestAlgorithm(String digestAlgorithm) {
     throw new IllegalStateException("Not implemented");
   }
 

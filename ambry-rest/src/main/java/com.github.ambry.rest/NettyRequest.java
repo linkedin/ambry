@@ -288,15 +288,31 @@ class NettyRequest implements RestRequest {
     return tempWrapper.futureResult;
   }
 
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * This function can only be called before {@link #readInto(AsyncWritableChannel, Callback)}.
+   * @param digestAlgorithm the digest algorithm to use.
+   * @throws NoSuchAlgorithmException if the {@code digestAlgorithm} does not exist or is not supported.
+   * @throws IllegalStateException if {@link #readInto(AsyncWritableChannel, Callback)} has already been called.
+   */
   @Override
   public void setDigestAlgorithm(String digestAlgorithm)
       throws NoSuchAlgorithmException {
     if (callbackWrapper != null) {
-      throw new IllegalStateException("Cannot create a digest because some content has already been discarded");
+      throw new IllegalStateException("Cannot create a digest because some content may have been consumed");
     }
     digest = MessageDigest.getInstance(digestAlgorithm);
   }
 
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * This function can only be called once the channel has been emptied.
+   * @return the digest as computed by the digest algorithm set through {@link #setDigestAlgorithm(String)}. If none
+   * was set, {@code null}.
+   * @throws IllegalStateException if called before the channel has been emptied.
+   */
   @Override
   public byte[] getDigest() {
     if (digest == null) {

@@ -36,8 +36,8 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final int size;
   private final int startPos;
 
-  private MessageDigest digest = null;
-  private byte[] digestBytes = null;
+  private MessageDigest digest;
+  private byte[] digestBytes;
 
   /**
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code buffer}.
@@ -73,6 +73,15 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     return future;
   }
 
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * This implementation supports setting the digest algorithm at any point in the lifecycle of the object. Digest
+   * algorithms can be changed at will and a subsequent call to {@link #getDigest()} will get the digest as computed
+   * by the algorithm that was set most recently.
+   * @param digestAlgorithm the digest algorithm to use.
+   * @throws NoSuchAlgorithmException if the {@code digestAlgorithm} does not exist or is not supported.
+   */
   @Override
   public void setDigestAlgorithm(String digestAlgorithm)
       throws NoSuchAlgorithmException {
@@ -83,6 +92,15 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     digestBytes = null;
   }
 
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * This implementation supports getting the digest at any point in the lifecycle of the object. The digest is always
+   * that of all the data in the channel regardless of how much data has been consumed by
+   * {@link #readInto(AsyncWritableChannel, Callback)}.
+   * @return the digest as computed by the digest algorithm set through {@link #setDigestAlgorithm(String)}. If none
+   * was set, {@code null}.
+   */
   @Override
   public byte[] getDigest() {
     if (digest == null) {
