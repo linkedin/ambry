@@ -28,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
@@ -155,15 +156,21 @@ public class GetManagerTest {
   private void getBlobAndCompareContent(String blobId)
       throws Exception {
     ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
-    router.getBlob(blobId).get().readInto(getChannel, null);
+    Future<Long> readIntoFuture = router.getBlob(blobId).get().readInto(getChannel, null);
     int readBytes = 0;
     do {
       ByteBuffer buf = getChannel.getNextChunk();
+      int bufLength = buf.remaining();
+      Assert.assertTrue("total content read should not be greater than length of put content",
+          readBytes + bufLength <= putContent.length);
       while (buf.hasRemaining()) {
         Assert.assertEquals("Get and Put blob content should match", putContent[readBytes++], buf.get());
       }
       getChannel.resolveOldestChunk(null);
     } while (readBytes < putContent.length);
+    Assert.assertEquals("the returned length in the future should be the length of data written", (long) readBytes,
+        (long) readIntoFuture.get());
+    Assert.assertNull("There should be no more data in the channel", getChannel.getNextChunk(0));
   }
 
   /**

@@ -67,8 +67,6 @@ import org.slf4j.LoggerFactory;
  * as done) so that the caller can start reading in data. The rest of the chunks are asynchronously fetched and
  * buffered up to the maximum that can be buffered. When fetched chunks are consumed by the caller, subsequent chunks
  * become eligible to be fetched.
- *
- * This class implements {@link ReadableStreamChannel} and passes itself as the result of this operation.
  */
 class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   // the callback to use to complete the operation.
@@ -115,11 +113,12 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, FutureResult<ReadableStreamChannel> futureResult,
-      Callback<ReadableStreamChannel> callback, OperationCompleteCallback operationCompleteCallback, Time time)
+      Callback<ReadableStreamChannel> callback, OperationCompleteCallback operationCompleteCallback,
+      BlobIdFactory blobIdFactory, Time time)
       throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
-    this.blobIdFactory = new BlobIdFactory(clusterMap);
+    this.blobIdFactory = blobIdFactory;
     firstChunk = new FirstGetChunk(blobId);
   }
 
@@ -260,35 +259,33 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     private Callback<Long> readIntoCallback;
     // the future to mark as done when all the chunks are successfully written out into the asyncWritableChannel.
     private FutureResult<Long> readIntoFuture;
-    // size of the data in this channel. This will be set eventually.
-    private volatile long streamSize = -1;
     // the number of bytes written out to the asyncWritableChannel. This would be the size of the blob eventually.
     private Long bytesWritten = 0L;
     // the number of chunks that have been written out to the asyncWritableChannel.
-    private final AtomicInteger numChunksWrittenOut = new AtomicInteger(0);
+    private volatile int numChunksWrittenOut = 0;
     // the index of the next chunk that is to be written out to the asyncWritableChannel.
     private int indexOfNextChunkToWriteOut = 0;
     // whether this object has called the readIntoCallback yet.
-    private AtomicBoolean readIntoCallbackCalled = new AtomicBoolean(false);
+    private final AtomicBoolean readIntoCallbackCalled = new AtomicBoolean(false);
     // the callback that is passed into the asyncWritableChannel write() operation.
-    Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
+    private final Callback<Long> chunkAsyncWriteCallback = new Callback<Long>() {
       @Override
       public void onCompletion(Long result, Exception exception) {
         bytesWritten += result;
         if (exception != null) {
           operationException.set(exception);
         }
-        numChunksWrittenOut.incrementAndGet();
+        numChunksWrittenOut++;
       }
     };
 
     /**
      * The bytes that will be read from this channel is not known until the read is complete.
-     * @return size written when called after the readInto is complete, -1 any time before that.
+     * @return -1
      */
     @Override
     public long getSize() {
-      return streamSize;
+      return -1;
     }
 
     @Override
@@ -328,7 +325,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      * @return the number of chunks that have been written out to the {@link AsyncWritableChannel}
      */
     int getNumChunksWrittenOut() {
-      return numChunksWrittenOut.get();
+      return numChunksWrittenOut;
     }
 
     /**
@@ -343,7 +340,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
           asyncWritableChannel.write(chunkBuf, chunkAsyncWriteCallback);
           indexOfNextChunkToWriteOut++;
         }
-        if (operationException.get() != null || numChunksWrittenOut.get() == numChunksTotal) {
+        if (operationException.get() != null || numChunksWrittenOut == numChunksTotal) {
           completeRead();
         }
       }
@@ -354,7 +351,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      */
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
-        streamSize = bytesWritten;
         readIntoFuture.done(bytesWritten, operationException.get());
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten, operationException.get());
@@ -636,6 +632,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
 
     /**
      * Process the given {@link ServerErrorCode} and set operation status accordingly.
+     * Receiving a {@link ServerErrorCode#Blob_Deleted}, {@link ServerErrorCode#Blob_Expired} or
+     * {@link ServerErrorCode#Blob_Not_Found} is unexpected for all chunks except for the first.
      * @param errorCode the {@link ServerErrorCode} to process.
      */
     void processServerError(ServerErrorCode errorCode) {
@@ -787,11 +785,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
    */
   enum ChunkState {
     /**
-     * The GetChunk is free and can be assigned to hold a chunk of an object.
+     * The GetChunk is free and can be assigned to hold a chunk of the overall blob.
      */
     Free,
     /**
-     * The GetChunk has been assigned to get and hold a chunk of an object.
+     * The GetChunk has been assigned to get and hold a chunk of the overall blob.
      */
     Ready,
     /**
