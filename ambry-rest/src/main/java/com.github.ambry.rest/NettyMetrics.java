@@ -116,7 +116,7 @@ public class NettyMetrics {
   public final Counter connectionsConnectedCount;
   public final Counter connectionsDisconnectedCount;
 
-  // PublicAccessLogRequestHandler
+  // PublicAccessLogHandler
   public final Counter publicAccessLogRequestDisconnectWhileInProgressCount;
   public final Counter publicAccessLogRequestCloseWhileRequestInProgressCount;
   // HealthCheckRequestHandler
@@ -260,7 +260,7 @@ public class NettyMetrics {
    * Registers the {@link ConnectionStatsHandler} to track open connections
    * @param openConnectionsCount open connections count to be tracked
    */
-  public void registerConnectionsStatsHandler(AtomicLong openConnectionsCount) {
+  void registerConnectionsStatsHandler(AtomicLong openConnectionsCount) {
     Gauge<Long> openConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {

@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * Handler that tracks connection establishment statistics.
  */
 @ChannelHandler.Sharable
-class ConnectionStatsHandler extends ChannelDuplexHandler {
+public class ConnectionStatsHandler extends ChannelDuplexHandler {
   private final NettyMetrics metrics;
   private final AtomicLong openConnections;
   private static ConnectionStatsHandler instance = null;
