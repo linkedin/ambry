@@ -322,7 +322,7 @@ public final class ReplicationManager {
         }
       }
       replicationMetrics
-          .populatePerColoMetrics(dataNode.getDatacenterName(), numberOfReplicaThreads.keySet(), replicaThreadPools);
+          .populatePerColoMetrics(numberOfReplicaThreads.keySet());
     } catch (Exception e) {
       logger.error("Error on starting replication manager", e);
       throw new ReplicationException("Error on starting replication manager");
@@ -346,6 +346,7 @@ public final class ReplicationManager {
       // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
       // number of nodes. Otherwise, assign one thread to one node.
       assignReplicasToThreadPool();
+      replicationMetrics.trackLiveThreadsCount(replicaThreadPools, dataNodeId.getDatacenterName());
 
       // start all replica threads
       for (List<ReplicaThread> replicaThreads : replicaThreadPools.values()) {
@@ -356,7 +357,6 @@ public final class ReplicationManager {
         }
       }
 
-      replicationMetrics.trackLiveThreadsCount(replicaThreadPools, dataNodeId.getDatacenterName());
 
       // start background persistent thread
       // start scheduler thread to persist index in the background

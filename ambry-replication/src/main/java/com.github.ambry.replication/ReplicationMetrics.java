@@ -206,13 +206,9 @@ public class ReplicationMetrics {
 
   /**
    * Updates per colo metrics for each thread pool
-   * @param localDatacenter from which replication happens
    * @param datacenters List of datacenters to replicate from
-   * @param replicaThreadPools Mapping of datacenter to List of {@link ReplicaThread} that is responsible for
-   *                           replicating from that datacenter
    */
-  public void populatePerColoMetrics(String localDatacenter, Set<String> datacenters,
-      final Map<String, ArrayList<ReplicaThread>> replicaThreadPools) {
+  public void populatePerColoMetrics(Set<String> datacenters) {
     for (String datacenter : datacenters) {
       Meter interColoReplicationBytesRatePerDC =
           registry.meter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBytesRate"));
@@ -314,6 +310,13 @@ public class ReplicationMetrics {
     }
   }
 
+  /**
+   * Register metrics for measuring the number of active intra and inter colo replica threads.
+   *
+   * @param replicaThreadPools A map of datacenter names to {@link ReplicaThread}s handling replication from that
+   *                           datacenter
+   * @param localDatacenter The datacenter on which the {@link ReplicationManager} is running
+   */
   void trackLiveThreadsCount(final Map<String, ArrayList<ReplicaThread>> replicaThreadPools,
       String localDatacenter) {
     for (final String datacenter : replicaThreadPools.keySet()) {

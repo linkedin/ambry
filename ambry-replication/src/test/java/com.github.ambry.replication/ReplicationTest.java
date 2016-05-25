@@ -616,7 +616,7 @@ public class ReplicationTest {
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
       replicationMetrics
-          .populatePerColoMetrics("localhost", new HashSet<String>(Arrays.asList("localhost")), replicaThreadMap);
+          .populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -872,7 +872,7 @@ public class ReplicationTest {
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
       replicationMetrics
-          .populatePerColoMetrics("localhost", new HashSet<String>(Arrays.asList("localhost")), replicaThreadMap);
+          .populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -1103,7 +1103,7 @@ public class ReplicationTest {
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
       replicationMetrics
-          .populatePerColoMetrics("localhost", new HashSet<String>(Arrays.asList("localhost")), replicaThreadMap);
+          .populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
