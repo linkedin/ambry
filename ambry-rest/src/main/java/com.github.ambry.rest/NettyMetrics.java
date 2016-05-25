@@ -260,7 +260,7 @@ public class NettyMetrics {
    * Registers the {@link ConnectionStatsHandler} to track open connections
    * @param openConnectionsCount open connections count to be tracked
    */
-  void registerConnectionsStatsHandler(AtomicLong openConnectionsCount) {
+  void registerConnectionsStatsHandler(final AtomicLong openConnectionsCount) {
     Gauge<Long> openConnections = new Gauge<Long>() {
       @Override
       public Long getValue() {

@@ -13,9 +13,9 @@
  */
 package com.github.ambry.rest;
 
-import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * Handler that tracks connection establishment statistics.
  */
 @ChannelHandler.Sharable
-public class ConnectionStatsHandler extends ChannelDuplexHandler {
+public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
   private final NettyMetrics metrics;
   private final AtomicLong openConnections;
   private static ConnectionStatsHandler instance = null;
