@@ -44,7 +44,7 @@ public class ConnectionStatsHandler extends ChannelDuplexHandler {
     return instance;
   }
 
-  public ConnectionStatsHandler(NettyMetrics metrics) {
+  private ConnectionStatsHandler(NettyMetrics metrics) {
     this.metrics = metrics;
     openConnections = new AtomicLong(0);
     metrics.registerConnectionsStatsHandler(openConnections);

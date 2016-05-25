@@ -126,9 +126,9 @@ public class NettyServerTest {
       protected void initChannel(SocketChannel ch) {
         ch.pipeline()
             // connection stats handler to track connection related metrics
-            .addLast("ConnectionStatsHandler", new ConnectionStatsHandler(nettyMetrics))
-            // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-            // to go here.
+            .addLast("ConnectionStatsHandler", ConnectionStatsHandler.getInstance(nettyMetrics))
+                // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+                // to go here.
             .addLast("codec", new HttpServerCodec())
                 // for health check request handling
             .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
