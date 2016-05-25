@@ -213,7 +213,6 @@ public class ReplicationMetrics {
    */
   public void populatePerColoMetrics(String localDatacenter, Set<String> datacenters,
       final Map<String, ArrayList<ReplicaThread>> replicaThreadPools) {
-    trackLiveThreadsCount(replicaThreadPools, localDatacenter);
     for (String datacenter : datacenters) {
       Meter interColoReplicationBytesRatePerDC =
           registry.meter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBytesRate"));
@@ -315,7 +314,7 @@ public class ReplicationMetrics {
     }
   }
 
-  private void trackLiveThreadsCount(final Map<String, ArrayList<ReplicaThread>> replicaThreadPools,
+  void trackLiveThreadsCount(final Map<String, ArrayList<ReplicaThread>> replicaThreadPools,
       String localDatacenter) {
     for (final String datacenter : replicaThreadPools.keySet()) {
       Gauge<Integer> liveThreadsPerDatacenter = new Gauge<Integer>() {

@@ -356,6 +356,8 @@ public final class ReplicationManager {
         }
       }
 
+      replicationMetrics.trackLiveThreadsCount(replicaThreadPools, dataNodeId.getDatacenterName());
+
       // start background persistent thread
       // start scheduler thread to persist index in the background
       this.scheduler.schedule("replica token persistor", persistor, replicationConfig.replicationTokenFlushDelaySeconds,
