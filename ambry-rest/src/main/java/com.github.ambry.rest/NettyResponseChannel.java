@@ -92,6 +92,13 @@ class NettyResponseChannel implements RestResponseChannel {
   private volatile boolean responseComplete = false;
   // marked as true if force close is required because close() was called.
   private volatile boolean forceClose = false;
+  // the ResponseStatus that will be sent (or has been sent) as a part of the response.
+  private volatile ResponseStatus responseStatus = ResponseStatus.Ok;
+  // the response metadata that was actually sent.
+  private volatile HttpResponse finalResponseMetadata = null;
+  // temp variable to hold the error response status which will be overwritten on responseStatus if the error response
+  // was successfully sent
+  private ResponseStatus errorResponseStatus = null;
 
   /**
    * Create an instance of NettyResponseChannel that will use {@code ctx} to return responses.
@@ -204,13 +211,28 @@ class NettyResponseChannel implements RestResponseChannel {
   public void setStatus(ResponseStatus status)
       throws RestServiceException {
     responseMetadata.setStatus(getHttpResponseStatus(status));
+    responseStatus = status;
     logger.trace("Set status to {} for response on channel {}", responseMetadata.getStatus(), ctx.channel());
+  }
+
+  @Override
+  public ResponseStatus getStatus() {
+    return responseStatus;
   }
 
   @Override
   public void setHeader(String headerName, Object headerValue)
       throws RestServiceException {
     setResponseHeader(headerName, headerValue);
+  }
+
+  @Override
+  public Object getHeader(String headerName) {
+    HttpResponse response = finalResponseMetadata;
+    if (response == null) {
+      response = responseMetadata;
+    }
+    return HttpHeaders.getHeader(response, headerName);
   }
 
   /**
@@ -246,7 +268,6 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private void closeRequest() {
     if (request != null && request.isOpen()) {
-      request.getMetricsTracker().nioMetricsTracker.markRequestCompleted();
       request.close();
     }
   }
@@ -274,6 +295,7 @@ class NettyResponseChannel implements RestResponseChannel {
       ChannelPromise writePromise = ctx.newPromise().addListener(listener);
       ctx.writeAndFlush(responseMetadata, writePromise);
       writtenThisTime = true;
+      finalResponseMetadata = responseMetadata;
       long writeProcessingTime = System.currentTimeMillis() - writeProcessingStartTime;
       nettyMetrics.responseMetadataProcessingTimeInMs.update(writeProcessingTime);
     }
@@ -321,6 +343,7 @@ class NettyResponseChannel implements RestResponseChannel {
     if (maybeWriteResponseMetadata(errorResponse,
         new ErrorResponseWriteListener(HttpHeaders.isKeepAlive(errorResponse)))) {
       logger.trace("Successfully sent error response on channel {}", ctx.channel());
+      responseStatus = errorResponseStatus;
       responseSent = true;
       long processingTime = System.currentTimeMillis() - processingStartTime;
       nettyMetrics.errorResponseProcessingTimeInMs.update(processingTime);
@@ -341,13 +364,15 @@ class NettyResponseChannel implements RestResponseChannel {
     StringBuilder errReason = new StringBuilder();
     if (cause instanceof RestServiceException) {
       RestServiceErrorCode restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
-      status = getHttpResponseStatus(ResponseStatus.getResponseStatus(restServiceErrorCode));
+      errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
+      status = getHttpResponseStatus(errorResponseStatus);
       if (status == HttpResponseStatus.BAD_REQUEST) {
         errReason.append(" [").append(Utils.getRootCause(cause).getMessage()).append("]");
       }
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      errorResponseStatus = ResponseStatus.InternalServerError;
     }
     String fullMsg = "Failure: " + status + errReason;
     logger.trace("Constructed error response for the client - [{}]", fullMsg);
@@ -362,9 +387,9 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setContentLength(response, fullMsg.length());
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    boolean keepAlive =
+    boolean keepAlive = HttpHeaders.isKeepAlive(responseMetadata) &&
         request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES
-            .contains(status);
+        .contains(status);
     HttpHeaders.setKeepAlive(response, keepAlive);
     return response;
   }

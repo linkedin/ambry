@@ -190,7 +190,7 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response should have been set ", ResponseStatus.Ok, restResponseChannel.getResponseStatus());
+    Assert.assertEquals("Response should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
     Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
     verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
 
@@ -517,9 +517,19 @@ public class AmbrySecurityServiceTest {
     }
 
     @Override
+    public ResponseStatus getStatus() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void setHeader(String headerName, Object headerValue)
         throws RestServiceException {
       throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
+    }
+
+    @Override
+    public Object getHeader(String headerName) {
+      throw new IllegalStateException("Not implemented");
     }
   }
 }

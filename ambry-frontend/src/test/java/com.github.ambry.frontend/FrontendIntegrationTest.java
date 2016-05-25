@@ -264,6 +264,7 @@ public class FrontendIntegrationTest {
       endMarkerFound = object instanceof LastHttpContent;
       ReferenceCountUtil.release(content);
     }
+    assertTrue("There should have been an end marker", endMarkerFound);
   }
 
   /**

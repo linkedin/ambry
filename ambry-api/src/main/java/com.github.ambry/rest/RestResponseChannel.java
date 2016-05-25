@@ -97,6 +97,12 @@ public interface RestResponseChannel extends AsyncWritableChannel {
       throws RestServiceException;
 
   /**
+   * Gets the current {@link ResponseStatus}.
+   * @return the response status.
+   */
+  public ResponseStatus getStatus();
+
+  /**
    * Sets header {@code headerName} to {@code headerValue}.
    * @param headerName the name of the header to set to {@code headerValue}.
    * @param headerValue the value of the header with name {@code headerName}.
@@ -104,4 +110,11 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    */
   public void setHeader(String headerName, Object headerValue)
       throws RestServiceException;
+
+  /**
+   * Gets the current value of the header with {@code headerName}.
+   * @param headerName the name of the header whose value is required.
+   * @return the value of the header with name {@code headerName} if it exists. {@code null} otherwise.
+   */
+  public Object getHeader(String headerName);
 }
