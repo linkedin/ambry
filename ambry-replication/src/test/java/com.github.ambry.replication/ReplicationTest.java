@@ -430,8 +430,7 @@ public class ReplicationTest {
       if (metadataRequest != null) {
         List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
             new ArrayList<ReplicaMetadataResponseInfo>();
-        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest
-            .getReplicaMetadataRequestInfoList()) {
+        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest.getReplicaMetadataRequestInfoList()) {
           List<MessageInfo> messageInfoToReturn = new ArrayList<MessageInfo>();
           int startIndex = ((MockFindToken) (replicaMetadataRequestInfo.getToken())).getIndex();
           int endIndex = Math.min(messageInfoForPartition.get(replicaMetadataRequestInfo.getPartitionId()).size(),
@@ -615,8 +614,7 @@ public class ReplicationTest {
       Map<String, ArrayList<ReplicaThread>> replicaThreadMap = new HashMap<String, ArrayList<ReplicaThread>>();
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
-      replicationMetrics
-          .populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
+      replicationMetrics.populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -871,8 +869,7 @@ public class ReplicationTest {
       Map<String, ArrayList<ReplicaThread>> replicaThreadMap = new HashMap<String, ArrayList<ReplicaThread>>();
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
-      replicationMetrics
-          .populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
+      replicationMetrics.populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -1102,8 +1099,7 @@ public class ReplicationTest {
       Map<String, ArrayList<ReplicaThread>> replicaThreadMap = new HashMap<String, ArrayList<ReplicaThread>>();
       replicaThreadMap.put("localhost", new ArrayList<ReplicaThread>());
       ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), replicaIds);
-      replicationMetrics
-          .populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
+      replicationMetrics.populatePerColoMetrics(new HashSet<String>(Arrays.asList("localhost")));
       StoreKeyFactory storeKeyFactory = null;
       try {
         storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
