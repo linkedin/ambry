@@ -162,21 +162,20 @@ public class ClusterMapManagerTest {
 
     // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true, false);
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 5);
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 5);
 
     // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
     // "free" but unusable capacity may be left after trying to allocate these partitions.
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes, true,
-            false);
+        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds().size());
     System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
 
     // Capacity is already exhausted...
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true, false);
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 0);
   }
 
@@ -194,7 +193,7 @@ public class ClusterMapManagerTest {
 
     // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false, false);
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size(), 5);
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 5);
     checkRackUsage(allocatedPartitions);
@@ -203,15 +202,14 @@ public class ClusterMapManagerTest {
     // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
     // "free" but unusable capacity may be left after trying to allocate these partitions.
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes, false,
-            false);
+        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds().size());
     System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
     checkRackUsage(allocatedPartitions);
 
     // Capacity is already exhausted...
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false, false);
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size(), 0);
   }
 
@@ -227,15 +225,15 @@ public class ClusterMapManagerTest {
     List<PartitionId> allocatedPartitions;
     // Require more replicas than there are racks
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false, false);
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
     assertEquals(allocatedPartitions.size(), 5);
     checkNumReplicasPerDatacenter(allocatedPartitions, 3);
     checkRackUsage(allocatedPartitions);
 
-    // Test with bestEffort enabled.  We should be able to allocate 4 replicas per datacenter b/c we do no longer
-    // require unique racks
+    // Test with retryIfNotRackAware enabled.  We should be able to allocate 4 replicas per datacenter b/c we no
+    // longer require unique racks
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false, true);
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 5);
     checkNumReplicasPerDatacenter(allocatedPartitions, 4);
   }

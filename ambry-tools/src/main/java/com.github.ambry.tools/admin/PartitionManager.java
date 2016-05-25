@@ -79,11 +79,9 @@ public class PartitionManager {
           parser.accepts("datacenterToAddReplicasTo", "The data center to which replicas need to be added to")
               .withOptionalArg().ofType(String.class);
 
-      String disableRackAwarenessFlag = "disableRackAwareness";
-      parser.accepts(disableRackAwarenessFlag, "Disable rack-aware partition allocation");
-
-      String bestEffortFlag = "bestEffort";
-      parser.accepts(bestEffortFlag, "If rack-aware partition allocation fails, attempt a non rack-aware allocation");
+      String retryIfNotRackAwareFlag = "retryIfNotRackAware";
+      parser.accepts(retryIfNotRackAwareFlag,
+          "If a rack-aware partition allocation cannot be found, attempt a non rack-aware one");
 
       OptionSet options = parser.parse(args);
 
@@ -103,8 +101,7 @@ public class PartitionManager {
       String outputPartitionLayoutPath = options.has(outputPartitionLayoutPathOpt) ?
           options.valueOf(outputPartitionLayoutPathOpt) : partitionLayoutPath;
       String operationType = options.valueOf(operationTypeOpt);
-      boolean disableRackAwareness = options.has(disableRackAwarenessFlag);
-      boolean bestEffort = options.has(bestEffortFlag);
+      boolean retryIfNotRackAware = options.has(retryIfNotRackAwareFlag);
 
       String fileString = null;
       try {
@@ -134,8 +131,7 @@ public class PartitionManager {
         int numberOfPartitions = options.valueOf(numberOfPartitionsOpt);
         int numberOfReplicas = options.valueOf(numberOfReplicasPerDatacenterOpt);
         long replicaCapacityInBytes = options.valueOf(replicaCapacityInBytesOpt);
-        manager.allocatePartitions(numberOfPartitions, numberOfReplicas, replicaCapacityInBytes,
-            disableRackAwareness, bestEffort);
+        manager.allocatePartitions(numberOfPartitions, numberOfReplicas, replicaCapacityInBytes, retryIfNotRackAware);
       } else if (operationType.compareToIgnoreCase("AddReplicas") == 0) {
         listOpt.add(partitionIdsToAddReplicasToOpt);
         listOpt.add(datacenterToAddReplicasToOpt);
@@ -151,14 +147,14 @@ public class PartitionManager {
         String datacenterToAddReplicasTo = options.valueOf(datacenterToAddReplicasToOpt);
         if (partitionIdsToAddReplicas.compareToIgnoreCase(".") == 0) {
           for (PartitionId partitionId : manager.getAllPartitions()) {
-            manager.addReplicas(partitionId, datacenterToAddReplicasTo, disableRackAwareness, bestEffort);
+            manager.addReplicas(partitionId, datacenterToAddReplicasTo, retryIfNotRackAware);
           }
         } else {
           String[] partitionIds = partitionIdsToAddReplicas.split(",");
           for (String partitionId : partitionIds) {
             for (PartitionId partitionInCluster : manager.getAllPartitions()) {
               if (partitionInCluster.isEqual(partitionId)) {
-                manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo, disableRackAwareness, bestEffort);
+                manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo, retryIfNotRackAware);
               }
             }
           }

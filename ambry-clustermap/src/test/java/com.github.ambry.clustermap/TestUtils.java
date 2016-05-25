@@ -15,11 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -648,8 +644,7 @@ public class TestUtils {
     List<PartitionId> allocatedPartitions;
 
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(partitionCount, replicaCountPerDatacenter, replicaCapacityInBytes, true,
-            false);
+        clusterMapManager.allocatePartitions(partitionCount, replicaCountPerDatacenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 5);
 
     return clusterMapManager;
