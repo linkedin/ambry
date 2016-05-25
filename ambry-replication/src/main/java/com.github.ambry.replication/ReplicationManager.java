@@ -321,8 +321,7 @@ public final class ReplicationManager {
           partitionGroupedByMountPath.put(replicaId.getMountPath(), partitionInfos);
         }
       }
-      replicationMetrics
-          .populatePerColoMetrics(dataNode.getDatacenterName(), numberOfReplicaThreads.keySet(), replicaThreadPools);
+      replicationMetrics.populatePerColoMetrics(numberOfReplicaThreads.keySet());
     } catch (Exception e) {
       logger.error("Error on starting replication manager", e);
       throw new ReplicationException("Error on starting replication manager");
@@ -346,6 +345,7 @@ public final class ReplicationManager {
       // divide the nodes between the replica threads if the number of replica threads is less than or equal to the
       // number of nodes. Otherwise, assign one thread to one node.
       assignReplicasToThreadPool();
+      replicationMetrics.trackLiveThreadsCount(replicaThreadPools, dataNodeId.getDatacenterName());
 
       // start all replica threads
       for (List<ReplicaThread> replicaThreads : replicaThreadPools.values()) {
@@ -424,7 +424,9 @@ public final class ReplicationManager {
     PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
     for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
       if (remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo.getReplicaId()
-          .getDataNodeId().getHostname().equals(hostName)) {
+          .getDataNodeId()
+          .getHostname()
+          .equals(hostName)) {
         foundRemoteReplicaInfo = remoteReplicaInfo;
       }
     }
@@ -605,9 +607,8 @@ public final class ReplicationManager {
                 if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
                     remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port &&
                     remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
-                  logger
-                      .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
-                          token);
+                  logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname,
+                      port, token);
                   if (partitionInfo.getStore().getSizeInBytes() > 0) {
                     remoteReplicaInfo.initializeTokens(token);
                     remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
@@ -643,8 +644,8 @@ public final class ReplicationManager {
         throw new ReplicationException("IO error while reading from replica token file " + e);
       } finally {
         stream.close();
-        replicationMetrics.remoteReplicaTokensRestoreTime
-            .update(SystemTime.getInstance().milliseconds() - readStartTimeMs);
+        replicationMetrics.remoteReplicaTokensRestoreTime.update(
+            SystemTime.getInstance().milliseconds() - readStartTimeMs);
       }
     }
 
@@ -704,8 +705,8 @@ public final class ReplicationManager {
         throw new ReplicationException("IO error while persisting replica tokens to disk ");
       } finally {
         writer.close();
-        replicationMetrics.remoteReplicaTokensPersistTime
-            .update(SystemTime.getInstance().milliseconds() - writeStartTimeMs);
+        replicationMetrics.remoteReplicaTokensPersistTime.update(
+            SystemTime.getInstance().milliseconds() - writeStartTimeMs);
       }
       logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
     }
