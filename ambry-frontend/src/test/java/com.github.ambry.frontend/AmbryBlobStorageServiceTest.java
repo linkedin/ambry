@@ -439,6 +439,19 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
+   * Tests for cases where the {@link Router} misbehaves and throws {@link RuntimeException}.
+   * @throws Exception
+   */
+  @Test
+  public void misbehavingRouterTest()
+      throws Exception {
+    FrontendTestRouter testRouter = new FrontendTestRouter();
+    String exceptionMsg = UtilsTest.getRandomString(10);
+    testRouter.exceptionToThrow = new IllegalStateException(exceptionMsg);
+    doRouterExceptionPipelineTest(testRouter, exceptionMsg);
+  }
+
+  /**
    * Tests for cases where the {@link Router} returns valid {@link RouterException}.
    * @throws InstantiationException
    * @throws JSONException
@@ -449,37 +462,7 @@ public class AmbryBlobStorageServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     String exceptionMsg = UtilsTest.getRandomString(10);
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError);
-    ambryBlobStorageService =
-        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, idConverterFactory,
-            securityServiceFactory);
-    ambryBlobStorageService.start();
-    for (RestMethod restMethod : RestMethod.values()) {
-      switch (restMethod) {
-        case HEAD:
-          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlobInfo;
-          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
-          break;
-        case GET:
-          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlobInfo;
-          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
-          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlob;
-          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
-          break;
-        case POST:
-          testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
-          JSONObject headers = new JSONObject();
-          setAmbryHeaders(headers, 1, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
-              "routerExceptionPipelineTest");
-          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
-          break;
-        case DELETE:
-          testRouter.exceptionOpType = FrontendTestRouter.OpType.DeleteBlob;
-          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
-          break;
-        default:
-          break;
-      }
-    }
+    doRouterExceptionPipelineTest(testRouter, exceptionMsg);
   }
 
   // helpers
@@ -939,9 +922,10 @@ public class AmbryBlobStorageServiceTest {
       if (mode.equals(FrontendTestSecurityServiceFactory.Mode.Request)) {
         restMethods = RestMethod.values();
       } else {
-        restMethods = new RestMethod[2];
+        restMethods = new RestMethod[3];
         restMethods[0] = RestMethod.GET;
         restMethods[1] = RestMethod.HEAD;
+        restMethods[2] = RestMethod.POST;
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
@@ -984,6 +968,47 @@ public class AmbryBlobStorageServiceTest {
   // routerExceptionPipelineTest() helpers.
 
   /**
+   * Does the exception pipelining test for {@link Router}.
+   * @param testRouter the {@link Router} to use to while creating {@link AmbryBlobStorageService}.
+   * @param exceptionMsg the expected exception message.
+   * @throws Exception
+   */
+  private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg)
+      throws Exception {
+    ambryBlobStorageService =
+        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, idConverterFactory,
+            securityServiceFactory);
+    ambryBlobStorageService.start();
+    for (RestMethod restMethod : RestMethod.values()) {
+      switch (restMethod) {
+        case HEAD:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlobInfo;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          break;
+        case GET:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlobInfo;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.GetBlob;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          break;
+        case POST:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
+          JSONObject headers = new JSONObject();
+          setAmbryHeaders(headers, 1, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
+              "routerExceptionPipelineTest");
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
+          break;
+        case DELETE:
+          testRouter.exceptionOpType = FrontendTestRouter.OpType.DeleteBlob;
+          checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  /**
    * Checks that the exception received by submitting {@code restRequest} to {@link AmbryBlobStorageService} matches
    * what was expected.
    * @param expectedExceptionMsg the expected exception message.
@@ -996,8 +1021,9 @@ public class AmbryBlobStorageServiceTest {
       doOperation(restRequest, new MockRestResponseChannel());
       fail("Operation " + restRequest.getRestMethod()
           + " should have failed because an external service would have thrown an exception");
-    } catch (RestServiceException e) {
+    } catch (RestServiceException | RuntimeException e) {
       // catching RestServiceException because RouterException should have been converted.
+      // RuntimeException might get bubbled up as is.
       assertEquals("Unexpected exception message", expectedExceptionMsg, Utils.getRootCause(e).getMessage());
       // Nothing should be closed.
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
@@ -1306,6 +1332,7 @@ class FrontendTestRouter implements Router {
 
   public OpType exceptionOpType = null;
   public Exception exceptionToReturn = null;
+  public RuntimeException exceptionToThrow = null;
 
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId) {
@@ -1367,9 +1394,13 @@ class FrontendTestRouter implements Router {
       throw new IllegalStateException("Router not open");
     }
     Exception exception = null;
-    if (opType == exceptionOpType && exceptionToReturn != null) {
-      exception = exceptionToReturn;
-      result = null;
+    if (opType == exceptionOpType) {
+      if (exceptionToThrow != null) {
+        throw new RuntimeException(exceptionToThrow);
+      } else if (exceptionToReturn != null) {
+        exception = exceptionToReturn;
+        result = null;
+      }
     }
     FutureResult<T> futureResult = new FutureResult<T>();
     futureResult.done(result, exception);

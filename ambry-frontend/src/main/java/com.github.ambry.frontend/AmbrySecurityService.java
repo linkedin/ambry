@@ -84,34 +84,47 @@ class AmbrySecurityService implements SecurityService {
         throw new IllegalArgumentException("One of the required params is null");
       }
       try {
-        responseChannel.setStatus(ResponseStatus.Ok);
         responseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        if (restRequest.getRestMethod() == RestMethod.HEAD) {
-          responseChannel
-              .setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-          setHeadResponseHeaders(blobInfo, responseChannel);
-        } else if (restRequest.getRestMethod() == RestMethod.GET) {
-          RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
-          if (subResource == null) {
-            Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
-            if (ifModifiedSinceMs != null
-                && RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs())
-                <= ifModifiedSinceMs) {
-              responseChannel.setStatus(ResponseStatus.NotModified);
-              responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        RestMethod restMethod = restRequest.getRestMethod();
+        switch (restMethod) {
+          case HEAD:
+            responseChannel.setStatus(ResponseStatus.Ok);
+            responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+                new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+            setHeadResponseHeaders(blobInfo, responseChannel);
+            break;
+          case GET:
+            responseChannel.setStatus(ResponseStatus.Ok);
+            RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
+            if (subResource == null) {
+              Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
+              if (ifModifiedSinceMs != null
+                  && RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs())
+                  <= ifModifiedSinceMs) {
+                responseChannel.setStatus(ResponseStatus.NotModified);
+                responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+              } else {
+                responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+                    new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+                setGetBlobResponseHeaders(responseChannel, blobInfo);
+              }
             } else {
               responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-              setGetBlobResponseHeaders(responseChannel, blobInfo);
+              if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
+                setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+              }
             }
-          } else if (subResource == RestUtils.SubResource.BlobInfo) {
-            responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+            break;
+          case POST:
+            responseChannel.setStatus(ResponseStatus.Created);
+            responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+            responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-            setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
-          } else if (subResource == RestUtils.SubResource.UserMetadata) {
-            responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
-                new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-          }
+            break;
+          default:
+            exception = new RestServiceException("Cannot process response for request with method " + restMethod,
+                RestServiceErrorCode.InternalServerError);
         }
       } catch (RestServiceException e) {
         exception = e;
