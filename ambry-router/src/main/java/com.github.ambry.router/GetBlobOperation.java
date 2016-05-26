@@ -107,6 +107,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param operationCompleteCallback the {@link OperationCompleteCallback} to use to complete operations.
+   * @param blobIdFactory the factory to use to deserialize keys in a metadata chunk.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */

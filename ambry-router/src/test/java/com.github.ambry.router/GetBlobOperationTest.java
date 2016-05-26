@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -66,8 +67,8 @@ public class GetBlobOperationTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
-  private final int REPLICAS_COUNT;
-  private final int MAX_CHUNK_SIZE;
+  private final int replicasCount;
+  private final int maxChunkSize;
   private final MockTime time = new MockTime();
   private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<>();
   private final Random random = new Random();
@@ -118,9 +119,9 @@ public class GetBlobOperationTest {
   public GetBlobOperationTest()
       throws Exception {
     // Defaults. Tests may override these and do new puts as appropriate.
-    MAX_CHUNK_SIZE = random.nextInt(1024 * 1024) + 1;
-    // a blob size that is greater than the MAX_CHUNK_SIZE and is not a multiple of it. Will result in a composite blob.
-    blobSize = MAX_CHUNK_SIZE * random.nextInt(10) + random.nextInt(MAX_CHUNK_SIZE - 1) + 1;
+    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
+    blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
     mockSelectorState.set(MockSelectorState.Good);
     VerifiableProperties vprops = new VerifiableProperties(getDefaultNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
@@ -128,7 +129,7 @@ public class GetBlobOperationTest {
     blobIdFactory = new BlobIdFactory(mockClusterMap);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
     mockServerLayout = new MockServerLayout(mockClusterMap);
-    REPLICAS_COUNT = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
+    replicasCount = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
@@ -175,7 +176,7 @@ public class GetBlobOperationTest {
           e.getErrorCode());
     }
 
-    doPut();
+    blobIdStr = new BlobId(mockClusterMap.getWritablePartitionIds().get(0)).getID();
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op =
@@ -194,8 +195,8 @@ public class GetBlobOperationTest {
   public void testSimpleBlobGetSuccess()
       throws Exception {
     for (int i = 0; i < 10; i++) {
-      // blobSize in the range [1, MAX_CHUNK_SIZE]
-      blobSize = random.nextInt(MAX_CHUNK_SIZE) + 1;
+      // blobSize in the range [1, maxChunkSize]
+      blobSize = random.nextInt(maxChunkSize) + 1;
       doPut();
       getAndAssertSuccess();
     }
@@ -219,7 +220,7 @@ public class GetBlobOperationTest {
   public void testCompositeBlobChunkSizeMultipleGetSuccess()
       throws Exception {
     for (int i = 2; i < 10; i++) {
-      blobSize = MAX_CHUNK_SIZE * i;
+      blobSize = maxChunkSize * i;
       doPut();
       getAndAssertSuccess();
     }
@@ -233,7 +234,7 @@ public class GetBlobOperationTest {
   public void testCompositeBlobNotChunkSizeMultipleGetSuccess()
       throws Exception {
     for (int i = 0; i < 10; i++) {
-      blobSize = MAX_CHUNK_SIZE * i + random.nextInt(MAX_CHUNK_SIZE - 1) + 1;
+      blobSize = maxChunkSize * i + random.nextInt(maxChunkSize - 1) + 1;
       doPut();
       getAndAssertSuccess();
     }
@@ -259,7 +260,7 @@ public class GetBlobOperationTest {
     }
     // At this time requests would have been created for all replicas, as none of them were delivered,
     // and cross-colo proxying is enabled by default.
-    Assert.assertEquals("Must have attempted sending requests to all replicas", REPLICAS_COUNT,
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
     RouterException routerException = (RouterException) op.getOperationException();
     Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
@@ -295,7 +296,7 @@ public class GetBlobOperationTest {
 
     // At this time requests would have been created for all replicas, as none of them were delivered,
     // and cross-colo proxying is enabled by default.
-    Assert.assertEquals("Must have attempted sending requests to all replicas", REPLICAS_COUNT,
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     RouterException routerException = (RouterException) op.getOperationException();
@@ -333,7 +334,7 @@ public class GetBlobOperationTest {
       }
     }
 
-    Assert.assertEquals("Must have attempted sending requests to all replicas", REPLICAS_COUNT,
+    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     RouterException routerException = (RouterException) op.getOperationException();
@@ -352,7 +353,7 @@ public class GetBlobOperationTest {
     ServerErrorCode[] serverErrorCodesToTest = {ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired};
     RouterErrorCode[] routerErrorCodesToExpect = {RouterErrorCode.BlobDeleted, RouterErrorCode.BlobExpired};
     for (int i = 0; i < serverErrorCodesToTest.length; i++) {
-      int indexToSetCustomError = random.nextInt(REPLICAS_COUNT);
+      int indexToSetCustomError = random.nextInt(replicasCount);
       ServerErrorCode[] serverErrorCodesInOrder = new ServerErrorCode[9];
       for (int j = 0; j < serverErrorCodesInOrder.length; j++) {
         if (j == indexToSetCustomError) {
@@ -584,7 +585,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.put.request.parallelism", Integer.toString(3));
     properties.setProperty("router.put.success.target", Integer.toString(2));
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(MAX_CHUNK_SIZE));
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxChunkSize));
     properties.setProperty("router.get.request.parallelism", Integer.toString(2));
     properties.setProperty("router.get.success.target", Integer.toString(1));
     return properties;

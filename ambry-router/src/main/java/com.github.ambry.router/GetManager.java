@@ -135,7 +135,7 @@ class GetManager {
    * @param op the {@link GetOperation} to remove.
    * @return true if the operation was removed in this call.
    */
-  boolean remove(GetOperation op) {
+  private boolean remove(GetOperation op) {
     if (getOperations.remove(op)) {
       routerMetrics.operationDequeuingRate.mark();
       return true;
