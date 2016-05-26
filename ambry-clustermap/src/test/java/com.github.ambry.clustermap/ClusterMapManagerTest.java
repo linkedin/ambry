@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import junit.framework.Assert;
 import org.json.JSONException;
 import org.junit.Rule;
 import org.junit.Test;
@@ -160,6 +161,16 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
     List<PartitionId> allocatedPartitions;
 
+    try {
+      // Test with retryIfNotRackAware set to false, this should throw an exception
+      clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
+      Assert.fail("allocatePartitions should not succeed when datacenters are missing rack info "
+          + "and retryIfNotRackAware is false");
+    } catch (IllegalArgumentException e) {
+      // This should be thrown
+    } catch (Throwable e) {
+      Assert.fail("Unexpected exception thrown: " + e);
+    }
     // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
         clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true);
@@ -214,7 +225,8 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void rackAwareOverAllocationTest() throws JSONException, IOException {
+  public void rackAwareOverAllocationTest()
+      throws JSONException, IOException {
     int replicaCountPerDataCenter = 4;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 

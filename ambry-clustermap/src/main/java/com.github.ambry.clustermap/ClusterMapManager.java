@@ -337,10 +337,6 @@ public class ClusterMapManager implements ClusterMap {
   private List<Disk> allocateDisksForPartition(int replicaCountPerDatacenter, long replicaCapacityInBytes,
       Datacenter datacenter, boolean rackAware) {
     ArrayList<Disk> disksToAllocate = new ArrayList<Disk>();
-    if (!datacenter.isRackAware() && rackAware) {
-      throw new IllegalArgumentException(
-          "Rack awareness enabled, but the datacenter: " + datacenter.getName() + " does not have rack information");
-    }
     Set<DataNode> nodesToExclude = new HashSet<>();
     List<DataNode> dataNodes = new ArrayList<>(datacenter.getDataNodes());
     for (int i = 0; i < replicaCountPerDatacenter; i++) {
@@ -374,7 +370,7 @@ public class ClusterMapManager implements ClusterMap {
     List<Disk> disks;
     if (datacenter.isRackAware()) {
       disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter, true);
-      if (retryIfNotRackAware && (disks.size() < replicaCountPerDatacenter)) {
+      if ((disks.size() < replicaCountPerDatacenter) && retryIfNotRackAware) {
         System.err.println("Rack-aware allocation failed for a partition on datacenter:" + datacenter.getName()
             + "; attempting to perform a non rack-aware allocation.");
         disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter, false);

@@ -79,7 +79,7 @@ public class DatacenterTest {
 
   JSONArray getDataNodesRackAware()
       throws JSONException {
-    return TestUtils.getJsonArrayDataNodesRackAware(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666,
+    return TestUtils.getJsonArrayDataNodesRackAware(dataNodeCount, TestUtils.getLocalHost(), 6666, 7666, 3,
         HardwareState.AVAILABLE, getDisks());
   }
 
