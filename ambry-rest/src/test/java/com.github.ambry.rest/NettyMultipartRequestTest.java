@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -98,26 +99,29 @@ public class NettyMultipartRequestTest {
   @Test
   public void multipartRequestDecodeTest()
       throws Exception {
-    // request without content
-    doMultipartDecodeTest(0, null);
+    String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
+    for (String digestAlgorithm : digestAlgorithms) {
+      // request without content
+      doMultipartDecodeTest(0, null, digestAlgorithm);
 
-    final int BLOB_PART_SIZE = 1024;
-    // number of parts including the Blob
-    final int NUM_TOTAL_PARTS = 5;
-    Random random = new Random();
-    InMemoryFile[] files = new InMemoryFile[NUM_TOTAL_PARTS];
-    for (int i = 0; i < NUM_TOTAL_PARTS; i++) {
-      files[i] =
-          new InMemoryFile("part-" + i, ByteBuffer.wrap(RestTestUtils.getRandomBytes(random.nextInt(128) + 128)));
+      final int BLOB_PART_SIZE = 1024;
+      // number of parts including the Blob
+      final int NUM_TOTAL_PARTS = 5;
+      Random random = new Random();
+      InMemoryFile[] files = new InMemoryFile[NUM_TOTAL_PARTS];
+      for (int i = 0; i < NUM_TOTAL_PARTS; i++) {
+        files[i] =
+            new InMemoryFile("part-" + i, ByteBuffer.wrap(RestTestUtils.getRandomBytes(random.nextInt(128) + 128)));
+      }
+
+      // request without blob (but has other parts)
+      doMultipartDecodeTest(0, files, digestAlgorithm);
+
+      // request with blob and other parts
+      files[NUM_TOTAL_PARTS - 1] = new InMemoryFile(RestUtils.MultipartPost.BLOB_PART,
+          ByteBuffer.wrap(RestTestUtils.getRandomBytes(BLOB_PART_SIZE)));
+      doMultipartDecodeTest(BLOB_PART_SIZE, files, digestAlgorithm);
     }
-
-    // request without blob (but has other parts)
-    doMultipartDecodeTest(0, files);
-
-    // request with blob and other parts
-    files[NUM_TOTAL_PARTS - 1] = new InMemoryFile(RestUtils.MultipartPost.BLOB_PART,
-        ByteBuffer.wrap(RestTestUtils.getRandomBytes(BLOB_PART_SIZE)));
-    doMultipartDecodeTest(BLOB_PART_SIZE, files);
   }
 
   /**
@@ -382,9 +386,11 @@ public class NettyMultipartRequestTest {
    * {@link NettyMultipartRequest#getArgs()} and verifies them against the source data ({@code files}).
    * @param expectedRequestSize the value expected on a call to {@link NettyMultipartRequest#getSize()}.
    * @param files the {@link InMemoryFile}s that form the parts of the multipart request.
+   * @param digestAlgorithm the digest algorithm to use. Can be empty or {@code null} if digest checking is not
+   *                        required.
    * @throws Exception
    */
-  private void doMultipartDecodeTest(int expectedRequestSize, InMemoryFile[] files)
+  private void doMultipartDecodeTest(int expectedRequestSize, InMemoryFile[] files, String digestAlgorithm)
       throws Exception {
     HttpHeaders httpHeaders = new DefaultHttpHeaders();
     httpHeaders.set(RestUtils.Headers.BLOB_SIZE, expectedRequestSize);
@@ -396,10 +402,18 @@ public class NettyMultipartRequestTest {
     byte[] readOutput;
     Map<String, Object> args = request.getArgs();
     ByteBuffer blobData = ByteBuffer.allocate(0);
+    byte[] wholeDigest = null;
     if (files != null) {
       for (InMemoryFile file : files) {
         if (file.name.equals(RestUtils.MultipartPost.BLOB_PART)) {
           blobData = file.content;
+          if (digestAlgorithm != null && !digestAlgorithm.isEmpty()) {
+            MessageDigest digest = MessageDigest.getInstance(digestAlgorithm);
+            digest.update(blobData);
+            wholeDigest = digest.digest();
+            blobData.rewind();
+            request.setDigestAlgorithm(digestAlgorithm);
+          }
         } else {
           Object value = args.get(file.name);
           assertNotNull("Request does not contain " + file, value);
@@ -414,6 +428,7 @@ public class NettyMultipartRequestTest {
     request.readInto(asyncWritableChannel, null).get();
     readOutput = asyncWritableChannel.getData();
     assertArrayEquals(RestUtils.MultipartPost.BLOB_PART + " content does not match", blobData.array(), readOutput);
+    assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, request.getDigest());
     closeRequestAndValidate(request);
   }
 

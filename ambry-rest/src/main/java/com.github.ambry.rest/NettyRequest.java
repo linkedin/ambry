@@ -27,6 +27,8 @@ import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -69,8 +71,13 @@ class NettyRequest implements RestRequest {
   private final AtomicLong bytesReceived = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  private MessageDigest digest;
+  private byte[] digestBytes;
+  private long digestCalculationTimeInMs = -1;
+
   private volatile AsyncWritableChannel writeChannel = null;
   private volatile Exception channelException = CLOSED_CHANNEL_EXCEPTION;
+  private volatile boolean allContentReceived = false;
 
   protected static String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
 
@@ -216,6 +223,9 @@ class NettyRequest implements RestRequest {
         contentLock.unlock();
         restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
         restRequestMetricsTracker.recordMetrics();
+        if (digestCalculationTimeInMs >= 0) {
+          nettyMetrics.digestCalculationTimeInMs.update(digestCalculationTimeInMs);
+        }
         if (callbackWrapper != null) {
           callbackWrapper.invokeCallback(channelException);
         }
@@ -277,6 +287,46 @@ class NettyRequest implements RestRequest {
       contentLock.unlock();
     }
     return tempWrapper.futureResult;
+  }
+
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * This function can only be called before {@link #readInto(AsyncWritableChannel, Callback)}.
+   * @param digestAlgorithm the digest algorithm to use.
+   * @throws NoSuchAlgorithmException if the {@code digestAlgorithm} does not exist or is not supported.
+   * @throws IllegalStateException if {@link #readInto(AsyncWritableChannel, Callback)} has already been called.
+   */
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm)
+      throws NoSuchAlgorithmException {
+    if (callbackWrapper != null) {
+      throw new IllegalStateException("Cannot create a digest because some content may have been consumed");
+    }
+    digest = MessageDigest.getInstance(digestAlgorithm);
+  }
+
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * This function can only be called once the channel has been emptied.
+   * @return the digest as computed by the digest algorithm set through {@link #setDigestAlgorithm(String)}. If none
+   * was set, {@code null}.
+   * @throws IllegalStateException if called before the channel has been emptied.
+   */
+  @Override
+  public byte[] getDigest() {
+    if (digest == null) {
+      return null;
+    } else if (!allContentReceived) {
+      throw new IllegalStateException("Cannot calculate digest yet because all the content has not been processed");
+    }
+    if (digestBytes == null) {
+      long startTime = System.currentTimeMillis();
+      digestBytes = digest.digest();
+      digestCalculationTimeInMs += (System.currentTimeMillis() - startTime);
+    }
+    return digestBytes;
   }
 
   /**
@@ -365,6 +415,13 @@ class NettyRequest implements RestRequest {
     boolean asyncWritesCalled = false;
     try {
       for (int i = 0; i < contentBuffers.length; i++) {
+        if (digest != null) {
+          long startTime = System.currentTimeMillis();
+          int savedPosition = contentBuffers[i].position();
+          digest.update(contentBuffers[i]);
+          contentBuffers[i].position(savedPosition);
+          digestCalculationTimeInMs += (System.currentTimeMillis() - startTime);
+        }
         writeChannel.write(contentBuffers[i], writeCallbacks[i]);
       }
       asyncWritesCalled = true;
@@ -373,6 +430,7 @@ class NettyRequest implements RestRequest {
         ReferenceCountUtil.release(httpContent);
       }
     }
+    allContentReceived = isLast;
   }
 
   /**

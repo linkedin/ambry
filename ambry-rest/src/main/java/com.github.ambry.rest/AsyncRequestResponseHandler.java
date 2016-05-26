@@ -703,7 +703,7 @@ class AsyncResponseHandler implements Closeable {
           restServerMetrics.responseCallbackWaitTimeInMs.update(callbackWaitTime);
           restRequest.getMetricsTracker().scalingMetricsTracker.addToResponseProcessingWaitTime(callbackWaitTime);
           inFlightResponsesCount.decrementAndGet();
-          if (exception == null && (result == null || result != response.getSize())) {
+          if (exception == null && (result == null || (response.getSize() != -1 && result != response.getSize()))) {
             exception = new IllegalStateException("Response write incomplete");
           }
           onResponseComplete(restRequest, restResponseChannel, response, exception);

@@ -52,6 +52,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -1216,7 +1217,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
 /**
  * A bad implementation of {@link RestRequest}. Just throws exceptions.
  */
-class BadRestRequest implements RestRequest {
+class BadRestRequest extends BadRSC implements RestRequest {
 
   @Override
   public RestMethod getRestMethod() {
@@ -1244,29 +1245,8 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
-  public boolean isOpen() {
-    throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
-  public void close()
-      throws IOException {
-    throw new IOException("Not implemented");
-  }
-
-  @Override
   public RestRequestMetricsTracker getMetricsTracker() {
     return new RestRequestMetricsTracker();
-  }
-
-  @Override
-  public long getSize() {
-    return -1;
-  }
-
-  @Override
-  public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
-    throw new IllegalStateException("Not implemented");
   }
 }
 
@@ -1282,6 +1262,17 @@ class BadRSC implements ReadableStreamChannel {
 
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm)
+      throws NoSuchAlgorithmException {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public byte[] getDigest() {
     throw new IllegalStateException("Not implemented");
   }
 

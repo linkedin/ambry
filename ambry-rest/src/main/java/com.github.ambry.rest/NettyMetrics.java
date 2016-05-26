@@ -95,6 +95,7 @@ public class NettyMetrics {
   // Other
   // NettyRequest
   public final Counter contentCopyCount;
+  public final Histogram digestCalculationTimeInMs;
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
   public final Counter idleConnectionCloseCount;
@@ -167,10 +168,12 @@ public class NettyMetrics {
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ResponseMetadataProcessingTimeInMs"));
     writeProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "WriteProcessingTimeInMs"));
+    // PublicAccessLogHandler
     publicAccessLogRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(PublicAccessLogHandler.class, "RequestProcessingTimeInMs"));
     publicAccessLogResponseProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(PublicAccessLogHandler.class, "ResponseProcessingTimeInMs"));
+    // HealthCheckHandler
     healthCheckRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HealthCheckHandler.class, "RequestProcessingTimeInMs"));
     healthCheckRequestRoundTripTimeInMs =
@@ -216,14 +219,20 @@ public class NettyMetrics {
     // NettyServer
     nettyServerShutdownError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "ShutdownError"));
     nettyServerStartError = metricRegistry.counter(MetricRegistry.name(NettyServer.class, "StartError"));
+    // PublicAccessLogHandler
     publicAccessLogRequestDisconnectWhileInProgressCount = metricRegistry
-        .counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelDisconnectWhileRequestInProgressCount"));
+        .counter(MetricRegistry.name(PublicAccessLogHandler.class, "ChannelDisconnectWhileRequestInProgressCount"));
     publicAccessLogRequestCloseWhileRequestInProgressCount = metricRegistry
-        .counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseWhileRequestInProgressCount"));
+        .counter(MetricRegistry.name(PublicAccessLogHandler.class, "ChannelCloseWhileRequestInProgressCount"));
+    // HealthCheckHandler
     healthCheckHandlerChannelCloseOnWriteCount =
         metricRegistry.counter(MetricRegistry.name(HealthCheckHandler.class, "ChannelCloseOnWriteCount"));
 
     // Other
+    // NettyRequest
+    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
+    digestCalculationTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyRequest.class, "DigestCalculationTimeInMs"));
     // NettyMessageProcessor
     channelReadIntervalInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));
@@ -231,8 +240,6 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionCloseCount"));
     processorExceptionCaughtCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtCount"));
-    // NettyRequest
-    contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
     // NettyResponseChannel
     badRequestCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount"));
     unauthorizedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnauthorizedCount"));

@@ -16,6 +16,8 @@ package com.github.ambry.router;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
@@ -32,6 +34,8 @@ public class ByteBufferRSC implements ReadableStreamChannel {
   public enum Event {
     GetSize,
     ReadInto,
+    SetDigestAlgorithm,
+    GetDigest,
     IsOpen,
     Close
   }
@@ -55,8 +59,14 @@ public class ByteBufferRSC implements ReadableStreamChannel {
 
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean channelEmptied = new AtomicBoolean(false);
-  private final ByteBuffer buffer;
   private final List<EventListener> listeners = new ArrayList<EventListener>();
+
+  protected final ByteBuffer buffer;
+  protected final int size;
+  private final int startPos;
+
+  private MessageDigest digest = null;
+  private byte[] digestBytes = null;
 
   /**
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code buffer}.
@@ -64,12 +74,14 @@ public class ByteBufferRSC implements ReadableStreamChannel {
    */
   public ByteBufferRSC(ByteBuffer buffer) {
     this.buffer = buffer;
+    size = buffer.remaining();
+    startPos = buffer.position();
   }
 
   @Override
   public long getSize() {
     onEventComplete(Event.GetSize);
-    return buffer.capacity();
+    return size;
   }
 
   @Override
@@ -90,6 +102,34 @@ public class ByteBufferRSC implements ReadableStreamChannel {
     }
     onEventComplete(Event.ReadInto);
     return future;
+  }
+
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm)
+      throws NoSuchAlgorithmException {
+    if (digest != null && digest.getAlgorithm().equals(digestAlgorithm)) {
+      onEventComplete(Event.SetDigestAlgorithm);
+      return;
+    }
+    digest = MessageDigest.getInstance(digestAlgorithm);
+    digestBytes = null;
+    onEventComplete(Event.SetDigestAlgorithm);
+  }
+
+  @Override
+  public byte[] getDigest() {
+    if (digest == null) {
+      onEventComplete(Event.GetDigest);
+      return null;
+    } else if (digestBytes == null) {
+      int savedPosition = buffer.position();
+      buffer.position(startPos);
+      digest.update(buffer);
+      buffer.position(savedPosition);
+      digestBytes = digest.digest();
+    }
+    onEventComplete(Event.GetDigest);
+    return digestBytes;
   }
 
   @Override
