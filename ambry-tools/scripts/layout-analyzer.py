@@ -65,6 +65,7 @@ class Partition(object):
 
 
 class Layout(object):
+    BALANCE_THRESHOLD = 4.0
 
     def __init__(self, hardware_layout_filename, partition_layout_filename):
         with open(hardware_layout_filename) as f:
@@ -83,6 +84,8 @@ class Layout(object):
                 self.node_map[k] = Node(node_struct, datacenter_struct)
         for partition_struct in self.partition_layout["partitions"]:
             partition = Partition(partition_struct)
+            if len(partition_struct["replicas"]) == 0:
+                raise Exception("No replicas assigned to partition {}".format(partition.id))
             for replica_struct in partition_struct["replicas"]:
                 k = (replica_struct["hostname"], replica_struct["port"])
                 node = self.node_map[k]
@@ -95,7 +98,7 @@ class Layout(object):
         k = (node_host, node_port)
         if k in self.node_map:
             return self.node_map[k].rack_id
-        raise Exception("Node not found")
+        raise Exception("Node {}:{} not found".format(node_host, node_port))
 
     def racks_used(self, partition_id, datacenter_name):
         return self.partition_map[partition_id].racks_used(datacenter_name)
@@ -110,22 +113,24 @@ class Layout(object):
             print("In datacenter: {}".format(dc))
             max_combo = max(node_combo_map,
                             key=lambda k: len(node_combo_map[k]))
+            avg_per_combo = sum(len(partitions) for partitions in node_combo_map.values()) / float(len(node_combo_map))
+            max_per_combo = len(node_combo_map[max_combo])
             print("Num node combos used: {}".format(len(node_combo_map)))
-            print("Average partitions sharing a node combo: {}".format(
-                sum(len(partitions) for partitions in node_combo_map.values()) / float(len(node_combo_map))))
-            print("Max partitions sharing a node combo: {} on the following nodes:".format(
-                len(node_combo_map[max_combo])))
+            print("Average partitions sharing a node combo: {}".format(avg_per_combo))
+            print("Max partitions sharing a node combo: {} on the following nodes:".format(max_per_combo))
             for node in max_combo:
                 print(node)
+            if (float(max_per_combo)/avg_per_combo) > self.BALANCE_THRESHOLD:
+                print("The ratio of max to average number of partitions sharing a node combo "
+                      + "exceeds the threshold: {} on this datacenter".format(self.BALANCE_THRESHOLD))
 
             sum_racks, n_partitions, min_racks = 0, 0, sys.maxsize
             for partition in self.partition_map.values():
                 num_racks = len(partition.racks_used(dc))
-                if num_racks > 0:
-                    n_partitions += 1
-                    sum_racks += num_racks
-                    if num_racks < min_racks:
-                        min_racks = num_racks
+                n_partitions += 1
+                sum_racks += num_racks
+                if num_racks < min_racks:
+                    min_racks = num_racks
             print("Min racks used: {}".format(min_racks))
             print("Average racks used: {}".format(
                 float(sum_racks) / n_partitions))
