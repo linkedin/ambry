@@ -116,12 +116,14 @@ public class LogTest {
       Assert.assertEquals(logTest.getLogEndOffset(), 4000);
 
       // write more and verify we fail to write
+      String parentPath = tempFile.getParent();
+      String str = parentPath.substring(parentPath.lastIndexOf('/') + 1);
       try {
         logTest.appendFrom(ByteBuffer.wrap(testbuf));
         Assert.assertTrue(false);
       } catch (IllegalArgumentException e) {
         Assert.assertEquals(registry.getCounters().
-            get("com.github.ambry.store.Log." + tempFile.getParent() + "-overflowWriteError").getCount(), 1);
+            get("com.github.ambry.store.Log." + str + ".OverflowWriteError").getCount(), 1);
       }
 
       // append to log from buffer and check overflow
@@ -131,7 +133,7 @@ public class LogTest {
         Assert.assertTrue(false);
       } catch (IllegalArgumentException e) {
         Assert.assertEquals(registry.getCounters().
-            get("com.github.ambry.store.Log." + tempFile.getParent() + "-overflowWriteError").getCount(), 2);
+            get("com.github.ambry.store.Log." + str + ".OverflowWriteError").getCount(), 2);
       }
 
       logTest.close();
