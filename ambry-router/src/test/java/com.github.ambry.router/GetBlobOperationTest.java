@@ -140,6 +140,12 @@ public class GetBlobOperationTest {
     networkClient = networkClientFactory.getNetworkClient();
   }
 
+  /**
+   * Generates random content, and does a single put of the content, and saves the blob id string returned. The tests
+   * use this blob id string to perform the gets. Tests asserting success compare the contents of the returned blob
+   * with the content that is generated within this method.
+   * @throws Exception
+   */
   private void doPut()
       throws Exception {
     BlobProperties blobProperties =
@@ -350,19 +356,20 @@ public class GetBlobOperationTest {
   public void testErrorPrecedenceWithBlobDeletedAndExpiredCase()
       throws Exception {
     doPut();
-    ServerErrorCode[] serverErrorCodesToTest = {ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired};
-    RouterErrorCode[] routerErrorCodesToExpect = {RouterErrorCode.BlobDeleted, RouterErrorCode.BlobExpired};
-    for (int i = 0; i < serverErrorCodesToTest.length; i++) {
+    Map<ServerErrorCode, RouterErrorCode> serverErrorToRouterError = new HashMap<>();
+    serverErrorToRouterError.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
+    serverErrorToRouterError.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
+    for (Map.Entry<ServerErrorCode, RouterErrorCode> entry : serverErrorToRouterError.entrySet()) {
       int indexToSetCustomError = random.nextInt(replicasCount);
       ServerErrorCode[] serverErrorCodesInOrder = new ServerErrorCode[9];
       for (int j = 0; j < serverErrorCodesInOrder.length; j++) {
         if (j == indexToSetCustomError) {
-          serverErrorCodesInOrder[j] = serverErrorCodesToTest[i];
+          serverErrorCodesInOrder[j] = entry.getKey();
         } else {
           serverErrorCodesInOrder[j] = ServerErrorCode.Blob_Not_Found;
         }
       }
-      testErrorPrecedence(serverErrorCodesInOrder, routerErrorCodesToExpect[i]);
+      testErrorPrecedence(serverErrorCodesInOrder, entry.getValue());
     }
   }
 
@@ -445,6 +452,7 @@ public class GetBlobOperationTest {
     // to the local dc, whereas gets go cross colo).
     serverErrors.remove(ServerErrorCode.Blob_Deleted);
     serverErrors.remove(ServerErrorCode.Blob_Expired);
+    serverErrors.remove(ServerErrorCode.No_Error);
     boolean goodServerMarked = false;
     for (MockServer mockServer : mockServers) {
       if (!goodServerMarked && mockServer.getDataCenter().equals(dcWherePutHappened)) {
