@@ -934,26 +934,27 @@ class PutOperation {
           buf.remaining(), BlobType.MetadataBlob);
     }
   }
+
+  /**
+   * Different states of a PutChunk.
+   */
+  enum ChunkState {
+    /**
+     * The Chunk is free and can be filled with data.
+     */
+    Free,
+    /**
+     * The Chunk is being built. It may have some data but is not yet ready to be sent.
+     */
+    Building,
+    /**
+     * The Chunk is ready to be sent out.
+     */
+    Ready,
+    /**
+     * The Chunk is complete.
+     */
+    Complete,
+  }
 }
 
-/**
- * Different states of a PutChunk.
- */
-enum ChunkState {
-  /**
-   * The Chunk is free and can be filled with data.
-   */
-  Free,
-  /**
-   * The Chunk is being built. It may have some data but is not yet ready to be sent.
-   */
-  Building,
-  /**
-   * The Chunk is ready to be sent out.
-   */
-  Ready,
-  /**
-   * The Chunk is complete.
-   */
-  Complete,
-}

@@ -34,11 +34,13 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
@@ -88,6 +90,9 @@ public class GetBlobInfoOperationTest {
     }
   }
 
+  private final AtomicInteger operationsCount = new AtomicInteger(0);
+  private final OperationCompleteCallback operationCompleteCallback = new OperationCompleteCallback(operationsCount);
+
   public GetBlobInfoOperationTest()
       throws Exception {
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
@@ -117,7 +122,7 @@ public class GetBlobInfoOperationTest {
     if (networkClient != null) {
       networkClient.close();
     }
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    Assert.assertEquals("All operations should have completed", 0, operationsCount.get());
   }
 
   /**
@@ -138,7 +143,7 @@ public class GetBlobInfoOperationTest {
     // test a bad case
     try {
       new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id",
-          operationFuture, operationCallback, time);
+          operationFuture, operationCallback, operationCompleteCallback, time);
       Assert.fail("Instantiation of GetBlobInfo operation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert
@@ -149,7 +154,7 @@ public class GetBlobInfoOperationTest {
     // test a good case
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, operationCallback, time);
+            operationFuture, operationCallback, operationCompleteCallback, time);
 
     Assert.assertEquals("Callback must match", operationCallback, op.getCallback());
     Assert.assertEquals("Futures must match", operationFuture, op.getFuture());
@@ -163,9 +168,10 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testPollAndResponseHandling()
       throws Exception {
+    operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, time);
+            operationFuture, null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     op.poll(requestRegistrationCallback);
@@ -190,9 +196,10 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testRouterRequestTimeoutAllFailure()
       throws Exception {
+    operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, time);
+            operationFuture, null, operationCompleteCallback, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
@@ -215,9 +222,10 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testNetworkClientTimeoutAllFailure()
       throws Exception {
+    operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, time);
+            operationFuture, null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -251,9 +259,10 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testBlobNotFoundCase()
       throws Exception {
+    operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, time);
+            operationFuture, null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -311,9 +320,10 @@ public class GetBlobInfoOperationTest {
    */
   private void testErrorPrecedence(ServerErrorCode[] serverErrorCodesInOrder, RouterErrorCode expectedErrorCode)
       throws Exception {
+    operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, time);
+            operationFuture, null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -367,9 +377,10 @@ public class GetBlobInfoOperationTest {
 
   private void testVariousErrors(String dcWherePutHappened)
       throws Exception {
+    operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-            operationFuture, null, time);
+            operationFuture, null, operationCompleteCallback, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -420,6 +431,7 @@ public class GetBlobInfoOperationTest {
       throws IOException {
     List<ResponseInfo> responseList = new ArrayList<>();
     int sendCount = requestList.size();
+    Collections.shuffle(requestList);
     responseList.addAll(networkClient.sendAndPoll(requestList));
     requestList.clear();
     while (responseList.size() < sendCount) {
