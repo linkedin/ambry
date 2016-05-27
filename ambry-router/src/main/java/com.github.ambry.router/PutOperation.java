@@ -347,7 +347,7 @@ class PutOperation {
    * @return the size of the chunk.
    */
   private int getSizeOfChunkAt(int pos) {
-    return pos == numDataChunks - 1 ? (int) (blobSize - 1) % routerConfig.routerMaxPutChunkSizeBytes + 1
+    return pos == numDataChunks - 1 ? (int) ((blobSize - 1) % routerConfig.routerMaxPutChunkSizeBytes + 1)
         : routerConfig.routerMaxPutChunkSizeBytes;
   }
 
