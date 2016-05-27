@@ -46,9 +46,9 @@ public class NetworkMetrics {
   public final Counter sslRenegotiationCount;
   // NetworkClient metrics
   // number of times connection checkout have been tried before succeeding
-  public final Meter connectionCheckOutAttemptsCount;
+  public final Meter connectionCheckOutAttemptsBeforeSucceeding;
   // number of times connection checkout have been tried before timing out
-  public final Meter connectionCheckOutFailureAttemptsCount;
+  public final Meter connectionCheckOutAttemptsBeforeFailing;
   public final Meter connectionsDisconnectedCount;
 
   // Histogram
@@ -123,10 +123,10 @@ public class NetworkMetrics {
     sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
     sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
     // NetworkClient metrics
-    connectionCheckOutAttemptsCount =
-        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutAttemptsCount"));
-    connectionCheckOutFailureAttemptsCount =
-        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutFailureAttemptsCount"));
+    connectionCheckOutAttemptsBeforeSucceeding =
+        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutAttemptsBeforeSucceeding"));
+    connectionCheckOutAttemptsBeforeFailing =
+        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutAttemptsBeforeFailing"));
     connectionsDisconnectedCount =
         registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionsDisconnectedCount"));
 
@@ -237,7 +237,7 @@ public class NetworkMetrics {
    */
   void updateConnectionTimedOutMetrics(int connectionCheckOutAttempts) {
     connectionTimeOutError.inc();
-    connectionCheckOutFailureAttemptsCount.mark(connectionCheckOutAttempts);
+    connectionCheckOutAttemptsBeforeFailing.mark(connectionCheckOutAttempts);
   }
 
   class SelectorNodeMetric {

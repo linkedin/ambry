@@ -13,23 +13,23 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.metrics.MetricsHistogram;
+import com.codahale.metrics.Histogram;
 
 
 /**
  * Tracks a set of metrics for a network request by a server
  */
 public class ServerNetworkRequestMetrics implements NetworkRequestSend {
-  private MetricsHistogram responseQueueTime;
-  private MetricsHistogram responseSendTime;
-  private MetricsHistogram requestTotalTime;
+  private Histogram responseQueueTime;
+  private Histogram responseSendTime;
+  private Histogram requestTotalTime;
   private long timeSpentTillNow;
-  private MetricsHistogram responseSendTimeBySize;
-  private MetricsHistogram requestTotalTimeBySize;
+  private Histogram responseSendTimeBySize;
+  private Histogram requestTotalTimeBySize;
 
-  public ServerNetworkRequestMetrics(MetricsHistogram responseQueueTime, MetricsHistogram responseSendTime,
-      MetricsHistogram requestTotalTime, MetricsHistogram responseSendTimeBySize,
-      MetricsHistogram requestTotalTimeBySize, long timeSpentTillNow) {
+  public ServerNetworkRequestMetrics(Histogram responseQueueTime, Histogram responseSendTime,
+      Histogram requestTotalTime, Histogram responseSendTimeBySize, Histogram requestTotalTimeBySize,
+      long timeSpentTillNow) {
     this.responseQueueTime = responseQueueTime;
     this.responseSendTime = responseSendTime;
     this.requestTotalTime = requestTotalTime;

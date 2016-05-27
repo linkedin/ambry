@@ -152,7 +152,7 @@ public class NetworkClient implements Closeable {
           }
         } else {
           sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(),
-              new ClientNetworkRequestMetrics(new HistogramMeasurement(networkMetrics.requestSendTime)), time));
+              new ClientNetworkRequestMetrics(networkMetrics.requestSendTime), time));
           connectionIdToRequestInFlight.put(connId, requestMetadata);
           iter.remove();
           requestMetadata.onRequestSend();
@@ -232,7 +232,7 @@ public class NetworkClient implements Closeable {
     void onRequestSend() {
       requestSentTimeMs = System.currentTimeMillis();
       networkMetrics.requestQueueTime.update(requestSentTimeMs - requestQueuedTimeMs);
-      networkMetrics.connectionCheckOutAttemptsCount.mark(connectionCheckOutAttempts);
+      networkMetrics.connectionCheckOutAttemptsBeforeSucceeding.mark(connectionCheckOutAttempts);
     }
 
     void onResponseReceive() {

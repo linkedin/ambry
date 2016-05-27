@@ -13,16 +13,16 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.metrics.MetricsHistogram;
+import com.codahale.metrics.Histogram;
 
 
 /**
  * Tracks a set of metrics for a network request by a client
  */
 public class ClientNetworkRequestMetrics implements NetworkRequestSend {
-  private MetricsHistogram requestSendTime;
+  private Histogram requestSendTime;
 
-  public ClientNetworkRequestMetrics(MetricsHistogram requestSendTime) {
+  public ClientNetworkRequestMetrics(Histogram requestSendTime) {
     this.requestSendTime = requestSendTime;
   }
 
