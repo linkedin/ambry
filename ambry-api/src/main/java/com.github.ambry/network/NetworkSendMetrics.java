@@ -1,0 +1,54 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+package com.github.ambry.network;
+
+import com.codahale.metrics.Histogram;
+
+
+/**
+ * Tracks a set of metrics for a {@link NetworkSend}
+ */
+public class NetworkSendMetrics {
+  protected long timeSpentTillNow;
+  private Histogram requestOrResponseQueueTime;
+  private Histogram requestOrResponseSendTime;
+  private Histogram requestOrResponseTotalTime;
+
+  public NetworkSendMetrics(Histogram requestOrResponseQueueTime, Histogram requestOrResponseSendTime,
+      Histogram requestOrResponseTotalTime, long timeSpentTillNow) {
+    this.requestOrResponseQueueTime = requestOrResponseQueueTime;
+    this.requestOrResponseSendTime = requestOrResponseSendTime;
+    this.requestOrResponseTotalTime = requestOrResponseTotalTime;
+    this.timeSpentTillNow = timeSpentTillNow;
+  }
+
+  /**
+   * Updates the time spent by the request or response in the queue before being sent out
+   * @param value the time spent by the request or response in the queue
+   */
+  public void updateQueueTime(long value) {
+    requestOrResponseQueueTime.update(value);
+    timeSpentTillNow += value;
+  }
+
+  /**
+   * Updates the time spent by request or response to be completely sent
+   * @param value the time spent by the request or response to be completely sent
+   */
+  public void updateSendTime(long value) {
+    requestOrResponseSendTime.update(value);
+    timeSpentTillNow += value;
+    requestOrResponseTotalTime.update(timeSpentTillNow);
+  }
+}

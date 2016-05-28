@@ -32,10 +32,11 @@ import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.CompositeSend;
+import com.github.ambry.network.NetworkSendMetrics;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.network.Send;
-import com.github.ambry.network.ServerNetworkRequestMetrics;
+import com.github.ambry.network.ServerNetworkSendMetrics;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
@@ -399,8 +400,8 @@ public class AmbryRequests implements RequestAPI {
       metrics.deleteBlobProcessingTimeInMs.update(processingTime);
     }
     requestResponseChannel.sendResponse(response, request,
-        new ServerNetworkRequestMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
-            metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+        new NetworkSendMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
+            metrics.deleteBlobTotalTimeInMs, totalTimeSpent));
   }
 
   public void handleReplicaMetadataRequest(Request request)
@@ -491,8 +492,8 @@ public class AmbryRequests implements RequestAPI {
     }
 
     requestResponseChannel.sendResponse(response, request,
-        new ServerNetworkRequestMetrics(metrics.replicaMetadataResponseQueueTimeInMs,
-            metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
+        new NetworkSendMetrics(metrics.replicaMetadataResponseQueueTimeInMs, metrics.replicaMetadataSendTimeInMs,
+            metrics.replicaMetadataTotalTimeInMs, totalTimeSpent));
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
@@ -503,21 +504,20 @@ public class AmbryRequests implements RequestAPI {
       metrics.markPutBlobRequestRateBySize(blobSize);
       if (blobSize <= ServerMetrics.smallBlob) {
         requestResponseChannel.sendResponse(response, request,
-            new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+            new ServerNetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                 metrics.putSmallBlobProcessingTimeInMs, metrics.putSmallBlobTotalTimeInMs, totalTimeSpent));
       } else if (blobSize <= ServerMetrics.mediumBlob) {
         requestResponseChannel.sendResponse(response, request,
-            new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+            new ServerNetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                 metrics.putMediumBlobProcessingTimeInMs, metrics.putMediumBlobTotalTimeInMs, totalTimeSpent));
       } else {
         requestResponseChannel.sendResponse(response, request,
-            new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+            new ServerNetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                 metrics.putLargeBlobProcessingTimeInMs, metrics.putLargeBlobTotalTimeInMs, totalTimeSpent));
       }
     } else {
       requestResponseChannel.sendResponse(response, request,
-          new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-              totalTimeSpent));
+          new NetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime, totalTimeSpent));
     }
   }
 
@@ -531,51 +531,45 @@ public class AmbryRequests implements RequestAPI {
         if (response.getError() == ServerErrorCode.No_Error) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
-              new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+              new ServerNetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                   metrics.getSmallBlobProcessingTimeInMs, metrics.getSmallBlobTotalTimeInMs, totalTimeSpent));
         } else {
           requestResponseChannel.sendResponse(response, request,
-              new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                  totalTimeSpent));
+              new NetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime, totalTimeSpent));
         }
       } else {
         requestResponseChannel.sendResponse(response, request,
-            new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                totalTimeSpent));
+            new NetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime, totalTimeSpent));
       }
     } else if (blobSize <= ServerMetrics.mediumBlob) {
       if (flags == MessageFormatFlags.Blob) {
         if (response.getError() == ServerErrorCode.No_Error) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
-              new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+              new ServerNetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                   metrics.getMediumBlobProcessingTimeInMs, metrics.getMediumBlobTotalTimeInMs, totalTimeSpent));
         } else {
           requestResponseChannel.sendResponse(response, request,
-              new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                  totalTimeSpent));
+              new NetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime, totalTimeSpent));
         }
       } else {
         requestResponseChannel.sendResponse(response, request,
-            new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                totalTimeSpent));
+            new NetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime, totalTimeSpent));
       }
     } else {
       if (flags == MessageFormatFlags.Blob) {
         if (response.getError() == ServerErrorCode.No_Error) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
-              new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime,
+              new ServerNetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime,
                   metrics.getLargeBlobProcessingTimeInMs, metrics.getLargeBlobTotalTimeInMs, totalTimeSpent));
         } else {
           requestResponseChannel.sendResponse(response, request,
-              new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                  totalTimeSpent));
+              new NetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime, totalTimeSpent));
         }
       } else {
         requestResponseChannel.sendResponse(response, request,
-            new ServerNetworkRequestMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                totalTimeSpent));
+            new NetworkSendMetrics(responseQueueTime, responseSendTime, requestTotalTime, totalTimeSpent));
       }
     }
   }

@@ -81,6 +81,7 @@ public class NetworkMetrics {
   public final Histogram handleSelectorEventsTime;
   public final Histogram requestQueueTime;
   public final Histogram requestSendTime;
+  public final Histogram requestSendTotalTime;
   public final Histogram requestResponseRoundTripTime;
   public final Histogram requestResponseTotalTime;
 
@@ -152,6 +153,7 @@ public class NetworkMetrics {
     handleSelectorEventsTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "HandleSelectorEventsTime"));
     requestQueueTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestQueueTime"));
     requestSendTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestSendTime"));
+    requestSendTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestSendTotalTime"));
     requestResponseRoundTripTime =
         registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseRoundTripTime"));
     requestResponseTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseTotalTime"));

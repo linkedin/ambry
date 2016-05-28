@@ -28,7 +28,7 @@ public interface RequestResponseChannel {
    * @param metrics The set of metrics tracked at the network layer
    * @throws InterruptedException
    */
-  public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkRequestMetrics metrics)
+  public void sendResponse(Send payloadToSend, Request originalRequest, NetworkSendMetrics metrics)
       throws InterruptedException;
 
   /**

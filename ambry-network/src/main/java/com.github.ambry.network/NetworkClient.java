@@ -98,7 +98,11 @@ public class NetworkClient implements Closeable {
     List<ResponseInfo> responseInfoList = new ArrayList<ResponseInfo>();
     numPendingConnections.set(pendingRequests.size());
     for (RequestInfo requestInfo : requestInfos) {
-      pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo));
+      NetworkSendMetrics networkSendMetrics =
+          new NetworkSendMetrics(networkMetrics.requestQueueTime, networkMetrics.requestSendTime,
+              networkMetrics.requestSendTotalTime, 0);
+      pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, networkSendMetrics));
+      numPendingConnections.set(pendingRequests.size());
     }
     List<NetworkSend> sends = prepareSends(responseInfoList);
     selector.poll(POLL_TIMEOUT_MS, sends);
@@ -115,7 +119,7 @@ public class NetworkClient implements Closeable {
    * @return the list of {@link NetworkSend} objects to hand over to the Selector.
    */
   private List<NetworkSend> prepareSends(List<ResponseInfo> responseInfoList) {
-    long prepareStartTimeInMs = System.currentTimeMillis();
+    long prepareSendStartTimeInMs = System.currentTimeMillis();
     List<NetworkSend> sends = new ArrayList<NetworkSend>();
     ListIterator<RequestMetadata> iter = pendingRequests.listIterator();
 
@@ -128,6 +132,7 @@ public class NetworkClient implements Closeable {
                 null));
         iter.remove();
         networkMetrics.updateConnectionTimedOutMetrics(requestMetadata.connectionCheckOutAttempts);
+        numPendingConnections.set(pendingRequests.size());
       } else {
         // Since requests are ordered by time, once the first request that cannot be dropped is found,
         // we let that and the rest be iterated over in the next while loop. Just move the cursor backwards as this
@@ -151,18 +156,20 @@ public class NetworkClient implements Closeable {
             requestMetadata.connectionCheckOutAttempts++;
           }
         } else {
-          sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(),
-              new ClientNetworkRequestMetrics(networkMetrics.requestSendTime), time));
+          sends.add(
+              new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), requestMetadata.networkSendMetrics,
+                  time));
           connectionIdToRequestInFlight.put(connId, requestMetadata);
           iter.remove();
-          requestMetadata.onRequestSend();
+          numPendingConnections.set(pendingRequests.size());
+          requestMetadata.onRequestDequeue();
         }
       } catch (IOException e) {
         networkMetrics.networkClientIOError.inc();
         logger.error("Received exception while checking out a connection", e);
       }
     }
-    networkMetrics.prepareSendTime.update(System.currentTimeMillis() - prepareStartTimeInMs);
+    networkMetrics.prepareSendTime.update(System.currentTimeMillis() - prepareSendStartTimeInMs);
     return sends;
   }
 
@@ -210,34 +217,40 @@ public class NetworkClient implements Closeable {
   }
 
   /**
-   * A class that consists of a {@link RequestInfo} with the time at which it is added to the queue.
+   * A class that consists of a {@link RequestInfo} and some metadata related to the request
    */
   private class RequestMetadata {
-    // the time at which this request was queued.
-    long requestQueuedTimeMs;
-    // the time at which this request was sent(or moved from queue to in flight state)
-    long requestSentTimeMs;
-    // the time at which response is received for this request
-    long responseReceivedTimeMs;
+    // networkSendMetrics to track NetworkSend related metrics
+    NetworkSendMetrics networkSendMetrics;
     // the RequestInfo associated with the request.
     RequestInfo requestInfo;
     // number of times connection checkout attempt has been made for this request
     int connectionCheckOutAttempts = 0;
+    // the time at which this request was queued.
+    private long requestQueuedTimeMs;
+    // the time at which this request was sent(or moved from queue to in flight state)
+    private long requestSentTimeMs;
 
-    RequestMetadata(long requestQueuedTimeMs, RequestInfo requestInfo) {
+    RequestMetadata(long requestQueuedTimeMs, RequestInfo requestInfo, NetworkSendMetrics networkSendMetrics) {
       this.requestInfo = requestInfo;
       this.requestQueuedTimeMs = requestQueuedTimeMs;
+      this.networkSendMetrics = networkSendMetrics;
     }
 
-    void onRequestSend() {
+    /**
+     * Actions to be done on dequeue of this request and ready to be sent
+     */
+    void onRequestDequeue() {
       requestSentTimeMs = System.currentTimeMillis();
-      networkMetrics.requestQueueTime.update(requestSentTimeMs - requestQueuedTimeMs);
+      networkSendMetrics.updateQueueTime(requestSentTimeMs - requestQueuedTimeMs);
       networkMetrics.connectionCheckOutAttemptsBeforeSucceeding.mark(connectionCheckOutAttempts);
     }
 
+    /**
+     * Actions to be done on receiving response for the request sent
+     */
     void onResponseReceive() {
-      responseReceivedTimeMs = System.currentTimeMillis();
-      networkMetrics.requestResponseRoundTripTime.update(responseReceivedTimeMs - requestSentTimeMs);
+      networkMetrics.requestResponseRoundTripTime.update(System.currentTimeMillis() - requestSentTimeMs);
       networkMetrics.requestResponseTotalTime.update(System.currentTimeMillis() - requestQueuedTimeMs);
     }
   }
