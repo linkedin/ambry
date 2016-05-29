@@ -91,6 +91,76 @@ public class ChunkFillTest {
   }
 
   /**
+   * Test the calculation of number of chunks and the size of each chunk, using a very large blob size. No content
+   * comparison is done. This test does not consume memory more than chunkSize.
+   */
+  @Test
+  public void testChunkNumAndSizeCalculations()
+      throws Exception {
+    chunkSize = 4 * 1024 * 1024;
+    // a large blob greater than Integer.MAX_VALUE and not at chunk size boundary.
+    final long blobSize = ((long) Integer.MAX_VALUE / chunkSize + 1) * chunkSize + random.nextInt(chunkSize - 1) + 1;
+    VerifiableProperties vProps = getNonBlockingRouterProperties();
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
+    ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
+    BlobProperties putBlobProperties =
+        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    Random random = new Random();
+    byte[] putUserMetadata = new byte[10];
+    random.nextBytes(putUserMetadata);
+    final MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+    FutureResult<String> futureResult = new FutureResult<String>();
+    PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
+        putUserMetadata, putChannel, futureResult, null, new MockTime());
+    numChunks = op.getNumDataChunks();
+    // largeBlobSize is not a multiple of chunkSize
+    int expectedNumChunks = (int) (blobSize / chunkSize + 1);
+    Assert.assertEquals("numChunks should be as expected", expectedNumChunks, numChunks);
+    int lastChunkSize = (int) (blobSize % chunkSize);
+    final AtomicReference<Exception> channelException = new AtomicReference<Exception>(null);
+    int chunkIndex = 0;
+
+    // The write to the MockReadableStreamChannel blocks until the data is read as part fo the chunk filling,
+    // so create a thread that fills the MockReadableStreamChannel.
+    Utils.newThread(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          byte[] writeBuf = new byte[chunkSize];
+          long written = 0;
+          while (written < blobSize) {
+            int toWrite = (int) Math.min(chunkSize, blobSize - written);
+            putChannel.write(ByteBuffer.wrap(writeBuf, 0, toWrite));
+            written += toWrite;
+          }
+        } catch (Exception e) {
+          channelException.set(e);
+        }
+      }
+    }, false).start();
+
+    // Do the chunk filling.
+    do {
+      op.fillChunks();
+      // All existing chunks must have been filled if no work was done in the last call,
+      // since the channel is ByteBuffer based.
+      for (PutOperation.PutChunk putChunk : op.putChunks) {
+        Assert.assertNull("Mock channel write should not have caused an exception", channelException.get());
+        if (putChunk.isFree()) {
+          continue;
+        }
+        Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
+        Assert.assertEquals("Chunk size should be maxChunkSize unless this is the last chunk",
+            chunkIndex < numChunks - 1 ? chunkSize : lastChunkSize, putChunk.buf.remaining());
+        chunkIndex++;
+        putChunk.clear();
+      }
+    } while (!op.isChunkFillComplete());
+  }
+
+  /**
    * Get default {@link Properties}.
    * @return {@link Properties} with default values.
    */
