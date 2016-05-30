@@ -100,11 +100,13 @@ class DeleteManager {
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
-          new DeleteOperation(routerConfig, responseHandler, blobId, futureResult, callback, time, routerMetrics);
+          new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, futureResult, callback, time);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.countError(e, NonBlockingRouter.RouterOperationType.DeleteBlob);
+      routerMetrics.operationAbortCount.inc();
+      routerMetrics.deleteBlobErrorCount.inc();
+      routerMetrics.countError(e);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -135,12 +137,12 @@ class DeleteManager {
     DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (deleteOperations.contains(deleteOperation)) {
-      deleteOperation.handleResponse(responseInfo, false);
+      deleteOperation.handleResponse(responseInfo);
       if (deleteOperation.isOperationComplete() && deleteOperations.remove(deleteOperation)) {
         onComplete(deleteOperation);
       }
     } else {
-      deleteOperation.handleResponse(responseInfo, true);
+      routerMetrics.ignoredResponseCount.inc();
     }
   }
 
@@ -153,11 +155,12 @@ class DeleteManager {
     Exception e = op.getOperationException();
     if (e == null) {
       notificationSystem.onBlobDeleted(op.getBlobId().getID());
+    } else {
+      routerMetrics.deleteBlobErrorCount.inc();
+      routerMetrics.countError(e);
     }
     routerMetrics.operationDequeuingRate.mark();
-    routerMetrics.countError(e, NonBlockingRouter.RouterOperationType.DeleteBlob);
-    routerMetrics.updateOperationLatency(time.milliseconds() - op.getSubmittedTimeMs(),
-        NonBlockingRouter.RouterOperationType.DeleteBlob);
+    routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmittedTimeMs());
     operationCompleteCallback
         .completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
@@ -176,7 +179,8 @@ class DeleteManager {
             new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
-        routerMetrics.countError(routerException, NonBlockingRouter.RouterOperationType.DeleteBlob);
+        routerMetrics.deleteBlobErrorCount.inc();
+        routerMetrics.countError(routerException);
         operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, routerException);
       }
     }

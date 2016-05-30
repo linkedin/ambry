@@ -703,9 +703,9 @@ class PutOperation {
           DataNodeId dataNodeId = replica.getDataNodeId();
           NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
               routerMetrics.getDataNodeBasedMetrics(dataNodeId);
-          dataNodeBasedMetrics.updateRequestTimeoutCount(NonBlockingRouter.RouterOperationType.PutBlob);
-          dataNodeBasedMetrics
-              .countError(RouterErrorCode.OperationTimedOut, NonBlockingRouter.RouterOperationType.PutBlob);
+          dataNodeBasedMetrics.putRequestTimeoutCount.inc();
+          dataNodeBasedMetrics.putRequestErrorCount.inc();
+          dataNodeBasedMetrics.countError(RouterErrorCode.OperationTimedOut);
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -731,8 +731,7 @@ class PutOperation {
         correlationIdToPutChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
-        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId())
-            .uopdateRequestRate(NonBlockingRouter.RouterOperationType.DeleteBlob);
+        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestRate.mark();
       }
     }
 
@@ -833,8 +832,10 @@ class PutOperation {
       }
       operationTracker.onResponse(chunkPutRequestInfo.replicaId, isSuccessful);
       checkAndMaybeComplete();
-      if(chunkException != null) {
-        updateRequestMetrics(dataNodeBasedMetrics, chunkException.getErrorCode(), chunkPutRequestInfo);
+      if (chunkException != null) {
+        dataNodeBasedMetrics.putRequestErrorCount.inc();
+        dataNodeBasedMetrics.countError(chunkException.getErrorCode());
+        dataNodeBasedMetrics.putRequestLatencyMs.update(time.milliseconds() - chunkPutRequestInfo.getStartTimeMs());
       }
     }
 
@@ -861,13 +862,6 @@ class PutOperation {
       // However, for metrics, we will need to distinguish them here.
       setChunkException(new RouterException("Could not complete operation, server returned: " + error,
           RouterErrorCode.AmbryUnavailable));
-    }
-
-    void updateRequestMetrics(NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics,
-        RouterErrorCode routerErrorCode, ChunkPutRequestInfo chunkPutRequestInfo) {
-      dataNodeBasedMetrics.updateRequestLatency(time.milliseconds() - chunkPutRequestInfo.getStartTimeMs(),
-          NonBlockingRouter.RouterOperationType.PutBlob);
-      dataNodeBasedMetrics.countError(routerErrorCode, NonBlockingRouter.RouterOperationType.PutBlob);
     }
 
     /**
