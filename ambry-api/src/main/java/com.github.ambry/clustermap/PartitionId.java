@@ -49,8 +49,9 @@ public abstract class PartitionId implements Resource, Comparable<PartitionId> {
   public abstract boolean isEqual(String partitionId);
 
   /**
-   * Returns a {@link String} that uniquely represents the {@link PartitionId}.
-   * @return String I.D. of the PartitionId.
+   * Returns a {@link String} that uniquely represents the {@code PartitionId}.
+   * @return String representation of the {@code PartitionId}.
    */
+  @Override
   public abstract String toString();
 }
