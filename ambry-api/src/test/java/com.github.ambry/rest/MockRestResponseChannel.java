@@ -59,17 +59,8 @@ public class MockRestResponseChannel implements RestResponseChannel {
    */
   public enum Event {
     Write,
-    Flush,
     OnRequestComplete,
     SetStatus,
-    SetContentType,
-    SetContentLength,
-    SetLocation,
-    SetLastModified,
-    SetExpires,
-    SetCacheControl,
-    SetPragma,
-    SetDate,
     SetHeader,
     IsOpen,
     Close

@@ -192,6 +192,11 @@ public class AmbrySecurityServiceTest {
         new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID,
             "image/gif", false, 10000), null);
     testGetBlob(blobInfo);
+    // == chunk threshold size
+    blobInfo = new BlobInfo(
+        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID,
+            "image/gif", false, 10000), null);
+    testGetBlob(blobInfo);
     // more than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID,
@@ -493,15 +498,10 @@ public class AmbrySecurityServiceTest {
   private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel)
       throws RestServiceException {
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
-    Assert.assertNull("Blob Size should have been null", restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
-    Assert.assertNull("Content Type should have been null",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    Assert.assertNull("Expires should have been null", restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
-    Assert.assertNull("Cache control should have been null",
-        restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
-    Assert.assertNull("Pragma should have been null", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     Assert.assertEquals("Content length should have been 0", "0",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.CONTENT_TYPE,
+        RestUtils.Headers.EXPIRES, RestUtils.Headers.CACHE_CONTROL, RestUtils.Headers.PRAGMA);
   }
 
   /**
