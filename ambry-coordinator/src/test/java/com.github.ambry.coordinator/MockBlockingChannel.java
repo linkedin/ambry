@@ -15,7 +15,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannel;
@@ -31,6 +31,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -106,9 +107,12 @@ class MockBlockingChannel extends BlockingChannel {
         BlobId blobId = putRequest.getBlobId();
         BlobProperties blobProperties = putRequest.getBlobProperties();
         ByteBuffer userMetadata = putRequest.getUsermetadata();
-        BlobOutput blobOutput = new BlobOutput(putRequest.getBlobSize(), putRequest.getBlobStream());
+        // Since this is a test class, we assume that the Inputstream sent in via PutRequest is ByteBufferInputStream
+        // else, have to make a another copy of the data
+        BlobData blobData = new BlobData(putRequest.getBlobType(), putRequest.getBlobSize(),
+            (ByteBufferInputStream) putRequest.getBlobStream());
 
-        ServerErrorCode error = mockDataNode.put(blobId, new Blob(blobProperties, userMetadata, blobOutput));
+        ServerErrorCode error = mockDataNode.put(blobId, new Blob(blobProperties, userMetadata, blobData));
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
         break;
       }
@@ -152,13 +156,14 @@ class MockBlockingChannel extends BlockingChannel {
             break;
 
           case Blob:
-            MockDataNode.BlobOutputAndError bdae = mockDataNode.getData(blobId);
+            MockDataNode.BlobDataAndError bdae = mockDataNode.getData(blobId);
             getResponseErrorCode = bdae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
-              BlobOutput blobData = bdae.getBlobOutput();
-              byteBufferSize = (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobData.getSize());
+              BlobData blobData = bdae.getBlobData();
+              byteBufferSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobData.getSize());
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer, blobData.getSize());
+              MessageFormatRecord.Blob_Format_V2
+                  .serializePartialBlobRecord(byteBuffer, blobData.getSize(), blobData.getBlobType());
 
               byte[] blobDataBytes = new byte[(int) blobData.getSize()];
               blobData.getStream().read(blobDataBytes, 0, (int) blobData.getSize());

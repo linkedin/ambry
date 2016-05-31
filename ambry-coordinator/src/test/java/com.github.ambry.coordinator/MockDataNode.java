@@ -16,11 +16,8 @@ package com.github.ambry.coordinator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.BlobOutput;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
-
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -35,36 +32,16 @@ import java.util.Set;
 public class MockDataNode {
   private DataNodeId dataNodeId;
 
-  private Map<BlobId, MaterializedBlob> blobs;
+  private Map<BlobId, Blob> blobs;
   private Set<BlobId> deletedBlobs;
   private ServerErrorCode deleteErrorCode;
   private ServerErrorCode getErrorCode;
   private ServerErrorCode putErrorCode;
 
-  public class MaterializedBlob extends Blob {
-    final ByteBuffer materializedBlobOutput;
-
-    public MaterializedBlob(Blob blob)
-        throws IOException {
-      super(blob.getBlobProperties(), blob.getUserMetadata(), blob.getBlobOutput());
-
-      BlobOutput blobOutput = blob.getBlobOutput();
-      byte[] blobOutputBytes = new byte[(int) blobOutput.getSize()];
-      new DataInputStream(blobOutput.getStream()).readFully(blobOutputBytes);
-      this.materializedBlobOutput = ByteBuffer.allocate((int) blobOutput.getSize());
-      materializedBlobOutput.put(blobOutputBytes);
-    }
-
-    @Override
-    public BlobOutput getBlobOutput() {
-      return new BlobOutput(super.getBlobOutput().getSize(), new ByteArrayInputStream(materializedBlobOutput.array()));
-    }
-  }
-
   public MockDataNode(DataNodeId dataNodeId) {
     this.dataNodeId = dataNodeId;
 
-    blobs = new HashMap<BlobId, MaterializedBlob>();
+    blobs = new HashMap<BlobId, Blob>();
     deletedBlobs = new HashSet<BlobId>();
   }
 
@@ -76,7 +53,7 @@ public class MockDataNode {
     if (blobs.containsKey(blobId)) {
       return ServerErrorCode.Unknown_Error;
     }
-    blobs.put(blobId, new MaterializedBlob(blob));
+    blobs.put(blobId, blob);
     return ServerErrorCode.No_Error;
   }
 
@@ -140,17 +117,17 @@ public class MockDataNode {
     return new UserMetadataAndError(blobs.get(blobId).getUserMetadata(), ServerErrorCode.No_Error);
   }
 
-  public class BlobOutputAndError {
-    private BlobOutput blobOutput;
+  public class BlobDataAndError {
+    private BlobData blobData;
     private ServerErrorCode error;
 
-    BlobOutputAndError(BlobOutput blobOutput, ServerErrorCode error) {
-      this.blobOutput = blobOutput;
+    BlobDataAndError(BlobData blobData, ServerErrorCode error) {
+      this.blobData = blobData;
       this.error = error;
     }
 
-    public BlobOutput getBlobOutput() {
-      return blobOutput;
+    public BlobData getBlobData() {
+      return blobData;
     }
 
     public ServerErrorCode getError() {
@@ -158,19 +135,19 @@ public class MockDataNode {
     }
   }
 
-  public synchronized BlobOutputAndError getData(BlobId blobId) {
+  public synchronized BlobDataAndError getData(BlobId blobId) {
     if (getErrorCode != null) {
-      return new BlobOutputAndError(null, getErrorCode);
+      return new BlobDataAndError(null, getErrorCode);
     }
     if (deletedBlobs.contains(blobId)) {
-      return new BlobOutputAndError(null, ServerErrorCode.Blob_Deleted);
+      return new BlobDataAndError(null, ServerErrorCode.Blob_Deleted);
     }
 
     if (!blobs.containsKey(blobId)) {
-      return new BlobOutputAndError(null, ServerErrorCode.Blob_Not_Found);
+      return new BlobDataAndError(null, ServerErrorCode.Blob_Not_Found);
     }
 
-    return new BlobOutputAndError(blobs.get(blobId).getBlobOutput(), ServerErrorCode.No_Error);
+    return new BlobDataAndError(blobs.get(blobId).getBlobData(), ServerErrorCode.No_Error);
   }
 
   public synchronized ServerErrorCode delete(BlobId blobId) {
@@ -193,12 +170,12 @@ public class MockDataNode {
     StringBuilder sb = new StringBuilder();
     sb.append(dataNodeId).append(System.getProperty("line.separator"));
     sb.append("put blobs").append(System.getProperty("line.separator"));
-    for (Map.Entry<BlobId, MaterializedBlob> entry : blobs.entrySet()) {
+    for (Map.Entry<BlobId, Blob> entry : blobs.entrySet()) {
       sb.append("\t").append(entry.getKey()).append(" : ");
       Blob blob = entry.getValue();
       sb.append(blob.getBlobProperties().getBlobSize()).append(" / ");
       sb.append(blob.getUserMetadata().capacity()).append(" / ");
-      sb.append(blob.getBlobOutput().getSize()).append(System.getProperty("line.separator"));
+      sb.append(blob.getBlobData().getSize()).append(System.getProperty("line.separator"));
     }
     sb.append("deleted blobs").append(System.getProperty("line.separator"));
     for (BlobId blobId : deletedBlobs) {

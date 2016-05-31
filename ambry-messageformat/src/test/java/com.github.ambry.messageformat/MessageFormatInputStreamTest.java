@@ -59,9 +59,9 @@ public class MessageFormatInputStreamTest {
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
 
     MessageFormatInputStream messageFormatStream =
-        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key, prop,
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key, prop,
             ByteBuffer.wrap(usermetadata), stream, blobContentSize, blobType)
-            : new PutMessageFormatBlobV2InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
+            : new PutMessageFormatBlobV1InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
                 blobType);
 
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
