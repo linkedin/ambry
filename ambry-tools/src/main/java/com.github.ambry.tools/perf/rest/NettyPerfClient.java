@@ -39,6 +39,7 @@ import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpVersion;
@@ -46,6 +47,8 @@ import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -62,6 +65,9 @@ import org.slf4j.LoggerFactory;
  * A Netty based client to evaluate performance of the front end.
  */
 public class NettyPerfClient {
+  private static final String GET = "GET";
+  private static final String POST = "POST";
+  private static final List<String> SUPPORTED_REQUEST_TYPES = Arrays.asList(GET, POST);
   private static final Logger logger = LoggerFactory.getLogger(NettyPerfClient.class);
 
   private final String host;
@@ -80,18 +86,19 @@ public class NettyPerfClient {
 
   private EventLoopGroup group;
   private long perfClientStartTime;
-  private volatile boolean isRunning = true;
+  private volatile boolean isRunning = false;
 
   /**
    * Abstraction class for all the parameters that are expected.
    */
   private static class ClientArgs {
-    public final String host;
-    public final int port;
-    public final String path;
-    private final int concurrency;
-    private final long postBlobTotalSize;
-    private final int postBlobChunkSize;
+    final String host;
+    final Integer port;
+    final String path;
+    final String requestType;
+    final Integer concurrency;
+    final Long postBlobTotalSize;
+    final Integer postBlobChunkSize;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     /**
@@ -101,37 +108,57 @@ public class NettyPerfClient {
     protected ClientArgs(String args[]) {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> host =
-          parser.accepts("host", "Front end host to contact").withRequiredArg().describedAs("host").ofType(String.class)
+          parser.accepts("host", "Front end host to contact").withOptionalArg().describedAs("host").ofType(String.class)
               .defaultsTo("localhost");
       ArgumentAcceptingOptionSpec<Integer> port =
-          parser.accepts("port", "Front end port").withRequiredArg().describedAs("port").ofType(Integer.class)
+          parser.accepts("port", "Front end port").withOptionalArg().describedAs("port").ofType(Integer.class)
               .defaultsTo(1174);
       ArgumentAcceptingOptionSpec<String> path =
-          parser.accepts("path", "Resource path (prefix with a '/')").withRequiredArg().describedAs("path")
-              .ofType(String.class).defaultsTo("/random-id");
+          parser.accepts("path", "Resource path (prefix with a '/')").withOptionalArg().describedAs("path")
+              .ofType(String.class).defaultsTo("/");
+      ArgumentAcceptingOptionSpec<String> requestType =
+          parser.accepts("requestType", "The type of request to make (POST, GET)").withOptionalArg()
+              .describedAs("requestType").ofType(String.class).defaultsTo(GET);
       ArgumentAcceptingOptionSpec<Integer> concurrency =
-          parser.accepts("concurrency", "Number of parallel requests").withRequiredArg().describedAs("concurrency")
+          parser.accepts("concurrency", "Number of parallel requests").withOptionalArg().describedAs("concurrency")
               .ofType(Integer.class).defaultsTo(1);
       ArgumentAcceptingOptionSpec<Long> postBlobTotalSize =
-          parser.accepts("postBlobTotalSize", "Total size in bytes of blob to be posted (-1 if GET is desired)")
-              .withRequiredArg().describedAs("postBlobTotalSize").ofType(Long.class).defaultsTo(-1L);
+          parser.accepts("postBlobTotalSize", "Total size in bytes of blob to be POSTed").withOptionalArg()
+              .describedAs("postBlobTotalSize").ofType(Long.class);
       ArgumentAcceptingOptionSpec<Integer> postBlobChunkSize =
-          parser.accepts("postBlobChunkSize", "Size in bytes of each chunk that will be POSTed  (-1 if GET is desired)")
-              .withRequiredArg().describedAs("postBlobChunkSize").ofType(Integer.class).defaultsTo(-1);
+          parser.accepts("postBlobChunkSize", "Size in bytes of each chunk that will be POSTed").withOptionalArg()
+              .describedAs("postBlobChunkSize").ofType(Integer.class);
 
       OptionSet options = parser.parse(args);
       this.host = options.valueOf(host);
-      logger.info("Host: {}", this.host);
       this.port = options.valueOf(port);
-      logger.info("Port: {}", this.port);
       this.path = options.valueOf(path);
-      logger.info("Path: {}", this.path);
+      this.requestType = options.valueOf(requestType);
       this.concurrency = options.valueOf(concurrency);
-      logger.info("Concurrency: {}", this.concurrency);
       this.postBlobTotalSize = options.valueOf(postBlobTotalSize);
-      logger.info("Post blob total size: {}", this.postBlobTotalSize);
       this.postBlobChunkSize = options.valueOf(postBlobChunkSize);
+      validateArgs();
+
+      logger.info("Host: {}", this.host);
+      logger.info("Port: {}", this.port);
+      logger.info("Path: {}", this.path);
+      logger.info("Request type: {}", this.requestType);
+      logger.info("Concurrency: {}", this.concurrency);
+      logger.info("Post blob total size: {}", this.postBlobTotalSize);
       logger.info("Post blob chunk size: {}", this.postBlobChunkSize);
+    }
+
+    /**
+     * Validates the arguments given and verifies relationships b/w them if any exist.
+     */
+    private void validateArgs() {
+      if (!SUPPORTED_REQUEST_TYPES.contains(requestType)) {
+        throw new IllegalArgumentException("Unsupported request type: " + requestType);
+      } else if (requestType.equals(POST) && (postBlobTotalSize == null || postBlobTotalSize <= 0
+          || postBlobChunkSize == null || postBlobChunkSize <= 0)) {
+        throw new IllegalArgumentException(
+            "Total size to be posted and size of each chunk need to be specified with POST and have to be > 0");
+      }
     }
   }
 
@@ -165,19 +192,20 @@ public class NettyPerfClient {
    * @param port port to contact.
    * @param path resource path.
    * @param concurrency number of parallel requests.
-   * @param totalSize the total size in bytes of a blob to be POSTed (-1 if GET is intended).
-   * @param chunkSize size in bytes of each chunk to be POSTed (-1 if GET is intended).
+   * @param totalSize the total size in bytes of a blob to be POSTed ({@code null} if non-POST).
+   * @param chunkSize size in bytes of each chunk to be POSTed ({@code null} if non-POST).
    */
-  protected NettyPerfClient(String host, int port, String path, int concurrency, long totalSize, int chunkSize) {
+  private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize) {
     this.host = host;
     this.port = port;
     this.uri = "http://" + host + ":" + port + path;
     this.concurrency = concurrency;
-    this.totalSize = totalSize;
-    if (chunkSize >= 0) {
+    if (chunkSize != null) {
+      this.totalSize = totalSize;
       chunk = new byte[chunkSize];
       new Random().nextBytes(chunk);
     } else {
+      this.totalSize = 0;
       chunk = null;
     }
     logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, uri {} with concurrency {}",
@@ -197,7 +225,7 @@ public class NettyPerfClient {
       @Override
       public void initChannel(SocketChannel ch)
           throws Exception {
-        ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(new RequestSender());
+        ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(new ResponseHandler());
       }
     });
     logger.info("Connecting to {}:{}", host, port);
@@ -206,6 +234,7 @@ public class NettyPerfClient {
     for (int i = 0; i < concurrency; i++) {
       b.connect().addListener(channelConnectListener);
     }
+    isRunning = true;
     logger.info("Created {} channel(s)", concurrency);
     logger.info("NettyPerfClient started");
   }
@@ -251,9 +280,9 @@ public class NettyPerfClient {
   }
 
   /**
-   * Custom handler that sends out the request and receives responses.
+   * Custom handler that sends out the request and receives and processes the response.
    */
-  private class RequestSender extends SimpleChannelInboundHandler<Object> {
+  private class ResponseHandler extends SimpleChannelInboundHandler<HttpObject> {
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     private HttpRequest request;
@@ -274,7 +303,7 @@ public class NettyPerfClient {
     }
 
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, Object in) {
+    public void channelRead0(ChannelHandlerContext ctx, HttpObject in) {
       long currentChunkReceiveTime = System.currentTimeMillis();
       boolean recognized = false;
       if (in instanceof HttpResponse) {
@@ -473,29 +502,29 @@ public class NettyPerfClient {
      * @param metricRegistry the {@link MetricRegistry} instance to use.
      */
     protected PerfClientMetrics(MetricRegistry metricRegistry) {
-      bytesReceiveRate = metricRegistry.meter(MetricRegistry.name(RequestSender.class, "BytesReceiveRate"));
-      channelCreationRate = metricRegistry.meter(MetricRegistry.name(RequestSender.class, "ChannelCreationRate"));
-      requestRate = metricRegistry.meter(MetricRegistry.name(RequestSender.class, "RequestRate"));
+      bytesReceiveRate = metricRegistry.meter(MetricRegistry.name(ResponseHandler.class, "BytesReceiveRate"));
+      channelCreationRate = metricRegistry.meter(MetricRegistry.name(ResponseHandler.class, "ChannelCreationRate"));
+      requestRate = metricRegistry.meter(MetricRegistry.name(ResponseHandler.class, "RequestRate"));
 
       delayBetweenChunkReceiveInMs =
-          metricRegistry.histogram(MetricRegistry.name(RequestSender.class, "DelayBetweenChunkReceiveInMs"));
+          metricRegistry.histogram(MetricRegistry.name(ResponseHandler.class, "DelayBetweenChunkReceiveInMs"));
       delayBetweenChunkSendInMs = metricRegistry
-          .histogram(MetricRegistry.name(RequestSender.RepeatedBytesInput.class, "DelayBetweenChunkSendInMs"));
+          .histogram(MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "DelayBetweenChunkSendInMs"));
       getContentSizeInBytes = metricRegistry
-          .histogram(MetricRegistry.name(RequestSender.RepeatedBytesInput.class, "GetContentSizeInBytes"));
+          .histogram(MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "GetContentSizeInBytes"));
       getChunkCount =
-          metricRegistry.histogram(MetricRegistry.name(RequestSender.RepeatedBytesInput.class, "GetChunkCount"));
+          metricRegistry.histogram(MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "GetChunkCount"));
       postChunksTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RequestSender.RepeatedBytesInput.class, "PostChunksTimeInMs"));
+          metricRegistry.histogram(MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "PostChunksTimeInMs"));
       requestRoundTripTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(RequestSender.class, "RequestRoundTripTimeInMs"));
+          metricRegistry.histogram(MetricRegistry.name(ResponseHandler.class, "RequestRoundTripTimeInMs"));
       timeToFirstResponseChunkInMs =
-          metricRegistry.histogram(MetricRegistry.name(RequestSender.class, "TimeToFirstResponseChunkInMs"));
+          metricRegistry.histogram(MetricRegistry.name(ResponseHandler.class, "TimeToFirstResponseChunkInMs"));
 
-      connectError = metricRegistry.counter(MetricRegistry.name(RequestSender.class, "ConnectError"));
-      requestResponseError = metricRegistry.counter(MetricRegistry.name(RequestSender.class, "RequestResponseError"));
+      connectError = metricRegistry.counter(MetricRegistry.name(ResponseHandler.class, "ConnectError"));
+      requestResponseError = metricRegistry.counter(MetricRegistry.name(ResponseHandler.class, "RequestResponseError"));
       unexpectedDisconnectionError =
-          metricRegistry.counter(MetricRegistry.name(RequestSender.class, "UnexpectedDisconnectionError"));
+          metricRegistry.counter(MetricRegistry.name(ResponseHandler.class, "UnexpectedDisconnectionError"));
     }
   }
 }

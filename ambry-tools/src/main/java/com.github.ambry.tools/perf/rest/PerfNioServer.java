@@ -116,11 +116,11 @@ class PerfNioServer implements NioServer {
       this.perfNioServerMetrics = perfNioServerMetrics;
       this.restRequestHandler = restRequestHandler;
       chunk = new byte[perfConfig.perfNioServerChunkSize];
-      byte[] um = new byte[perfConfig.perfUserMetadataSize];
+      byte[] umBytes = new byte[perfConfig.perfUserMetadataSize];
       Random random = new Random();
       random.nextBytes(chunk);
-      random.nextBytes(um);
-      usermetadata = new String(um);
+      random.nextBytes(umBytes);
+      usermetadata = new String(umBytes);
       slots = new LinkedBlockingQueue<Boolean>(perfConfig.perfNioServerConcurrency);
       logger.trace("Instantiated LoadCreator");
     }
