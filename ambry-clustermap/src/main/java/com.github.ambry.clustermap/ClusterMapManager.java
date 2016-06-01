@@ -49,18 +49,6 @@ public class ClusterMapManager implements ClusterMap {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
-   * Comparator for comparing unallocated capacity in two disks
-   */
-  private final Comparator<Disk> diskCapacityComparator = new Comparator<Disk>() {
-    @Override
-    public int compare(Disk o1, Disk o2) {
-      long o1Capacity = getUnallocatedRawCapacityInBytes(o1);
-      long o2Capacity = getUnallocatedRawCapacityInBytes(o2);
-      return (o1Capacity < o2Capacity) ? -1 : (o1Capacity == o2Capacity) ? 0 : 1;
-    }
-  };
-
-  /**
    * How many data nodes to put in a random sample for partition allocation. 2 node samples provided the best balance
    * of speed and allocation quality in testing. Larger samples (ie 3 nodes) took longer to generate but did not
    * improve the quality of the allocated partitions.
