@@ -345,11 +345,10 @@ public class ClusterMapManager implements ClusterMap {
     Set<DataNode> nodesToExclude = new HashSet<>();
     List<DataNode> dataNodes = new ArrayList<>(datacenter.getDataNodes());
     for (int i = 0; i < replicaCountPerDatacenter; i++) {
-      Disk diskCandidate =
-          getBestDiskCandidate(dataNodes, nodesToExclude, replicaCapacityInBytes, rackAware, NUM_CHOICES);
-      if (diskCandidate != null) {
-        disksToAllocate.add(diskCandidate);
-        nodesToExclude.add(diskCandidate.getDataNode());
+      Disk bestDisk = getBestDiskCandidate(dataNodes, nodesToExclude, replicaCapacityInBytes, rackAware, NUM_CHOICES);
+      if (bestDisk != null) {
+        disksToAllocate.add(bestDisk);
+        nodesToExclude.add(bestDisk.getDataNode());
       } else {
         break;
       }
