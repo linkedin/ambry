@@ -35,6 +35,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketException;
@@ -107,11 +108,15 @@ class MockBlockingChannel extends BlockingChannel {
         BlobId blobId = putRequest.getBlobId();
         BlobProperties blobProperties = putRequest.getBlobProperties();
         ByteBuffer userMetadata = putRequest.getUsermetadata();
-        // Since this is a test class, we assume that the Inputstream sent in via PutRequest is ByteBufferInputStream
-        // else, have to make a another copy of the data
-        BlobData blobData = new BlobData(putRequest.getBlobType(), putRequest.getBlobSize(),
-            (ByteBufferInputStream) putRequest.getBlobStream());
 
+        byte[] blobOutputBytes = new byte[(int) blobProperties.getBlobSize()];
+        new DataInputStream(putRequest.getBlobStream()).readFully(blobOutputBytes);
+        ByteBuffer blobStream = ByteBuffer.allocate((int) blobProperties.getBlobSize());
+        blobStream.put(blobOutputBytes);
+        blobStream.rewind();
+
+        BlobData blobData =
+            new BlobData(putRequest.getBlobType(), putRequest.getBlobSize(), new ByteBufferInputStream(blobStream));
         ServerErrorCode error = mockDataNode.put(blobId, new Blob(blobProperties, userMetadata, blobData));
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
         break;
