@@ -186,6 +186,12 @@ public class Partition extends PartitionId {
     return jsonObject;
   }
 
+  /**
+   * Generates a {@link String} representation that uniquely identifies this partition. The string
+   * is in the format of {@code Partition[i]}, where {@code i} is a {@code long} id number uniquely
+   * associated with this partition.
+   * @return The {@link String} representation of this partition.
+   */
   @Override
   public String toString() {
     return "Partition[" + toPathString() + "]";

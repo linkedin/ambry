@@ -1568,6 +1568,11 @@ public class OperationPolicyTest {
     public int compareTo(PartitionId partitionId) {
       throw new IllegalStateException("Should not be invoked.");
     }
+
+    @Override
+    public String toString() {
+      throw new IllegalStateException("Should not be invoked.");
+    }
   }
 
   class OperationPolicyReplicaId implements ReplicaId {

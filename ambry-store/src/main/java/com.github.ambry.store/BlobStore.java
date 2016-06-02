@@ -54,10 +54,10 @@ public class BlobStore implements Store {
   private StoreMetrics metrics;
   private Time time;
 
-  public BlobStore(StoreConfig config, Scheduler scheduler, MetricRegistry registry, String dataDir,
+  public BlobStore(String storeId, StoreConfig config, Scheduler scheduler, MetricRegistry registry, String dataDir,
       long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       Time time) {
-    this.metrics = new StoreMetrics(dataDir, registry);
+    this.metrics = new StoreMetrics(storeId, registry);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
     this.config = config;

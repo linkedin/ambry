@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.Partition;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
@@ -80,9 +81,11 @@ public class StoreManager {
       if (!file.exists()) {
         throw new IllegalStateException("Mount path does not exist " + replica.getMountPath());
       }
+      // Partition id is used as the id of a store.
+      String storeId = replica.getPartitionId().toString();
       Store store =
-          new BlobStore(config, scheduler, registry, replica.getReplicaPath(), replica.getCapacityInBytes(), factory,
-              recovery, hardDelete, time);
+          new BlobStore(storeId, config, scheduler, registry, replica.getReplicaPath(), replica.getCapacityInBytes(),
+              factory, recovery, hardDelete, time);
       store.start();
       stores.put(replica.getPartitionId(), store);
     }
