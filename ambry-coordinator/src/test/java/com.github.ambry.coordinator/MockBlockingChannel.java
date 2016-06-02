@@ -15,7 +15,7 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannel;
@@ -31,11 +31,9 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketException;
@@ -108,16 +106,9 @@ class MockBlockingChannel extends BlockingChannel {
         BlobId blobId = putRequest.getBlobId();
         BlobProperties blobProperties = putRequest.getBlobProperties();
         ByteBuffer userMetadata = putRequest.getUsermetadata();
+        BlobOutput blobOutput = new BlobOutput(putRequest.getBlobSize(), putRequest.getBlobStream());
 
-        byte[] blobOutputBytes = new byte[(int) blobProperties.getBlobSize()];
-        new DataInputStream(putRequest.getBlobStream()).readFully(blobOutputBytes);
-        ByteBuffer blobStream = ByteBuffer.allocate((int) blobProperties.getBlobSize());
-        blobStream.put(blobOutputBytes);
-        blobStream.rewind();
-
-        BlobData blobData =
-            new BlobData(putRequest.getBlobType(), putRequest.getBlobSize(), new ByteBufferInputStream(blobStream));
-        ServerErrorCode error = mockDataNode.put(blobId, new Blob(blobProperties, userMetadata, blobData));
+        ServerErrorCode error = mockDataNode.put(blobId, new Blob(blobProperties, userMetadata, blobOutput));
         response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
         break;
       }
@@ -161,14 +152,13 @@ class MockBlockingChannel extends BlockingChannel {
             break;
 
           case Blob:
-            MockDataNode.BlobDataAndError bdae = mockDataNode.getData(blobId);
+            MockDataNode.BlobOutputAndError bdae = mockDataNode.getData(blobId);
             getResponseErrorCode = bdae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
-              BlobData blobData = bdae.getBlobData();
-              byteBufferSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobData.getSize());
+              BlobOutput blobData = bdae.getBlobOutput();
+              byteBufferSize = (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobData.getSize());
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormatRecord.Blob_Format_V2
-                  .serializePartialBlobRecord(byteBuffer, blobData.getSize(), blobData.getBlobType());
+              MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer, blobData.getSize());
 
               byte[] blobDataBytes = new byte[(int) blobData.getSize()];
               blobData.getStream().read(blobDataBytes, 0, (int) blobData.getSize());

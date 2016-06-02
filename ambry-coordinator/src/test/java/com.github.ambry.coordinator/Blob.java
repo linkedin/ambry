@@ -13,7 +13,7 @@
  */
 package com.github.ambry.coordinator;
 
-import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
 import java.nio.ByteBuffer;
 
@@ -24,12 +24,12 @@ import java.nio.ByteBuffer;
 class Blob {
   private final BlobProperties blobProperties;
   private final ByteBuffer userMetadata;
-  private final BlobData blobData;
+  private final BlobOutput blobOutput;
 
-  public Blob(BlobProperties blobProperties, ByteBuffer userMetadata, BlobData blobData) {
+  public Blob(BlobProperties blobProperties, ByteBuffer userMetadata, BlobOutput blobOutput) {
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
-    this.blobData = blobData;
+    this.blobOutput = blobOutput;
   }
 
   public BlobProperties getBlobProperties() {
@@ -40,7 +40,7 @@ class Blob {
     return userMetadata;
   }
 
-  public BlobData getBlobData() {
-    return blobData;
+  public BlobOutput getBlobOutput() {
+    return blobOutput;
   }
 }
