@@ -44,8 +44,10 @@ public class PerfNioServerFactory implements NioServerFactory {
    * @param verifiableProperties the in-memory {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
    * @param requestHandler the {@link RestRequestHandler} that can be used to submit requests that need to be handled.
-   * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging (unused).
-   * @param restServerState the {@link RestServerState} that can be used to check the health of the system (unused).
+   * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging (can be
+   *                           {@code null}).
+   * @param restServerState the {@link RestServerState} that can be used to check the health of the system (can be
+   *                        {@code null}).
    * @throws IllegalArgumentException if any of the required arguments are null.
    */
   public PerfNioServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,

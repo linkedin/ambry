@@ -16,7 +16,6 @@ package com.github.ambry.tools.perf.rest;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
@@ -32,16 +31,15 @@ import org.slf4j.LoggerFactory;
  * {@link #getRouter()}.
  */
 public class PerfRouterFactory implements RouterFactory {
-  private final RouterConfig routerConfig;
   private final PerfConfig perfConfig;
   private final PerfRouterMetrics perfRouterMetrics;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Creates an instance of PerfRouterFactory.
-   * @param verifiableProperties the in-memory properties to use to construct configurations.
+   * @param verifiableProperties the in-memory properties for constructing configurations.
    * @param clusterMap the {@link ClusterMap} whose {@link MetricRegistry} needs to be used.
-   * @param notificationSystem the {@link NotificationSystem} to use (unused).
+   * @param notificationSystem the {@link NotificationSystem} to use (can be {@code null}).
    *@throws IllegalArgumentException if any of the required arguments are null.
    */
   public PerfRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
@@ -49,7 +47,6 @@ public class PerfRouterFactory implements RouterFactory {
     if (verifiableProperties == null || clusterMap == null) {
       throw new IllegalArgumentException("One of the arguments is null");
     } else {
-      routerConfig = new RouterConfig(verifiableProperties);
       perfConfig = new PerfConfig(verifiableProperties);
       perfRouterMetrics = new PerfRouterMetrics(clusterMap.getMetricRegistry());
       logger.trace("Instantiated PerfRouterFactory");
@@ -58,7 +55,7 @@ public class PerfRouterFactory implements RouterFactory {
 
   @Override
   public Router getRouter() {
-    return new PerfRouter(routerConfig, perfConfig, perfRouterMetrics);
+    return new PerfRouter(perfConfig, perfRouterMetrics);
   }
 }
 
@@ -66,7 +63,6 @@ public class PerfRouterFactory implements RouterFactory {
  * Metrics related to the {@link PerfRouter}.
  */
 class PerfRouterMetrics {
-  public final Histogram putOperationQueuingTimeInMs;
   public final Histogram putSizeInBytes;
   public final Histogram putContentConsumeTimeInMs;
 
@@ -75,8 +71,6 @@ class PerfRouterMetrics {
    * @param metricRegistry the {@link MetricRegistry} instance to use.
    */
   PerfRouterMetrics(MetricRegistry metricRegistry) {
-    putOperationQueuingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(PerfRouter.class, "PostOperationQueuingTimeInMs"));
     putSizeInBytes = metricRegistry.histogram(MetricRegistry.name(PerfRouter.class, "PostSizeInBytes"));
     putContentConsumeTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(PerfRouter.class, "PostContentConsumeTimeInMs"));

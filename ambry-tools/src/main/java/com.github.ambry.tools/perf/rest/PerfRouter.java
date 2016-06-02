@@ -13,7 +13,6 @@
  */
 package com.github.ambry.tools.perf.rest;
 
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
@@ -23,11 +22,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,23 +48,20 @@ class PerfRouter implements Router {
   private final BlobProperties blobProperties;
   private final byte[] usermetadata;
   private final byte[] chunk;
-  private final AtomicBoolean routerOpen = new AtomicBoolean(true);
-  private final ExecutorService operationPool;
+  private volatile boolean routerOpen = true;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * Creates an instance of PerfRouter with configuration as specified in {@code perfRouterConfig}.
-   * @param routerConfig the {@link RouterConfig} that passes generic configs.
    * @param perfConfig the {@link PerfConfig} to use that determines behavior.
    * @param perfRouterMetrics the {@link PerfRouterMetrics} instance to use to record metrics.
    */
-  public PerfRouter(RouterConfig routerConfig, PerfConfig perfConfig, PerfRouterMetrics perfRouterMetrics) {
+  public PerfRouter(PerfConfig perfConfig, PerfRouterMetrics perfRouterMetrics) {
     this.perfRouterMetrics = perfRouterMetrics;
     blobProperties = new BlobProperties(perfConfig.perfBlobSize, "PerfRouter");
     usermetadata = getRandomString(perfConfig.perfUserMetadataSize).getBytes();
     chunk = new byte[perfConfig.perfRouterChunkSize];
     random.nextBytes(chunk);
-    operationPool = Executors.newFixedThreadPool(routerConfig.routerScalingUnitCount);
     logger.trace("Instantiated PerfRouter");
   }
 
@@ -93,7 +85,7 @@ class PerfRouter implements Router {
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
     logger.trace("Received getBlobInfo call");
     FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
-    if (!routerOpen.get()) {
+    if (!routerOpen) {
       completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
     } else {
       BlobInfo blobInfo = new BlobInfo(blobProperties, usermetadata);
@@ -124,7 +116,7 @@ class PerfRouter implements Router {
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
     logger.trace("Received getBlob call");
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
-    if (!routerOpen.get()) {
+    if (!routerOpen) {
       completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
     } else {
       ReadableStreamChannel blob = new PerfRSC(chunk, blobProperties.getBlobSize());
@@ -160,10 +152,25 @@ class PerfRouter implements Router {
       final Callback<String> callback) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
-    if (!routerOpen.get()) {
+    if (!routerOpen) {
       completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
     } else {
-      operationPool.submit(new PutContentConsumer(channel, futureResult, callback));
+      final long putConsumeStartTime = System.currentTimeMillis();
+      channel.readInto(new NoOpAWC(), new Callback<Long>() {
+        @Override
+        public void onCompletion(Long result, Exception exception) {
+          String operationResult = null;
+          if (exception == null && (result == null || (channel.getSize() != -1 && result != channel.getSize()))) {
+            exception = new IllegalStateException("The content was not completely read");
+          } else if (exception == null) {
+            logger.debug("Total bytes read - {}", result);
+            perfRouterMetrics.putSizeInBytes.update(result);
+            operationResult = PerfRouter.BLOB_ID;
+          }
+          perfRouterMetrics.putContentConsumeTimeInMs.update(System.currentTimeMillis() - putConsumeStartTime);
+          completeOperation(futureResult, callback, operationResult, exception);
+        }
+      });
     }
     return futureResult;
   }
@@ -188,7 +195,7 @@ class PerfRouter implements Router {
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
     logger.trace("Received deleteBlob call");
     FutureResult<Void> futureResult = new FutureResult<Void>();
-    if (!routerOpen.get()) {
+    if (!routerOpen) {
       completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
     } else {
       completeOperation(futureResult, callback, null, null);
@@ -198,17 +205,7 @@ class PerfRouter implements Router {
 
   @Override
   public void close() {
-    try {
-      if (routerOpen.compareAndSet(true, false)) {
-        operationPool.shutdown();
-        operationPool.awaitTermination(1, TimeUnit.MINUTES);
-      } else {
-        operationPool.awaitTermination(1, TimeUnit.MINUTES);
-      }
-      logger.info("PerfRouter closed");
-    } catch (InterruptedException e) {
-      throw new IllegalStateException(e);
-    }
+    routerOpen = false;
   }
 
   /**
@@ -243,49 +240,5 @@ class PerfRouter implements Router {
       sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
     }
     return sb.toString();
-  }
-
-  /**
-   * Thread that consumes put content async.
-   */
-  private class PutContentConsumer implements Runnable {
-    private final ReadableStreamChannel putContentChannel;
-    private final FutureResult<String> futureResult;
-    private final Callback<String> callback;
-    private final long queueStartTime = System.currentTimeMillis();
-
-    /**
-     * Create a new instance.
-     * @param putContentChannel the {@link ReadableStreamChannel} on which put content is available.
-     * @param futureResult the {@link FutureResult} that must be set on completion.
-     * @param callback the {@link Callback} to be invoked on completion.
-     */
-    public PutContentConsumer(ReadableStreamChannel putContentChannel, FutureResult<String> futureResult,
-        Callback<String> callback) {
-      this.putContentChannel = putContentChannel;
-      this.futureResult = futureResult;
-      this.callback = callback;
-    }
-
-    @Override
-    public void run() {
-      perfRouterMetrics.putOperationQueuingTimeInMs.update(System.currentTimeMillis() - queueStartTime);
-      final long putConsumeStartTime = System.currentTimeMillis();
-      putContentChannel.readInto(new NoOpAWC(), new Callback<Long>() {
-        @Override
-        public void onCompletion(Long result, Exception exception) {
-          String operationResult = null;
-          if (exception == null && (result == null || result != putContentChannel.getSize())) {
-            exception = new IllegalStateException("The content was not completely read");
-          } else if (exception == null) {
-            logger.debug("Total bytes read - {}", result);
-            perfRouterMetrics.putSizeInBytes.update(result);
-            operationResult = PerfRouter.BLOB_ID;
-          }
-          perfRouterMetrics.putContentConsumeTimeInMs.update(System.currentTimeMillis() - putConsumeStartTime);
-          completeOperation(futureResult, callback, operationResult, exception);
-        }
-      });
-    }
   }
 }
