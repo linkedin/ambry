@@ -168,8 +168,6 @@ public class ClusterMapManagerTest {
           + "and retryIfNotRackAware is false");
     } catch (IllegalArgumentException e) {
       // This should be thrown
-    } catch (Throwable e) {
-      Assert.fail("Unexpected exception thrown: " + e);
     }
     // Allocate five partitions that fit within cluster's capacity
     allocatedPartitions =
