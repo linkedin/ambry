@@ -187,10 +187,10 @@ public class Partition extends PartitionId {
   }
 
   /**
-   * Generates a {@link String} representation of this {@code Partition} that uniquely identifies the
-   * {@code Partition}. The string representation is in the format of {@code Partition[i]},
-   * where {@code i} is a {@code long} I.D. number uniquely associated with this {@code Partition}.
-   * @return The {@link String} form of the {@code Partition}'s unique I.D.
+   * Generates a {@link String} representation that uniquely identifies this partition. The string
+   * is in the format of {@code Partition[i]}, where {@code i} is a {@code long} id number uniquely
+   * associated with this partition.
+   * @return The {@link String} representation of this partition.
    */
   @Override
   public String toString() {
