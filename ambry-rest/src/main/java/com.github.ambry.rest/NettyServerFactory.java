@@ -39,7 +39,7 @@ public class NettyServerFactory implements NioServerFactory {
    * Creates a new instance of NettyServerFactory.
    * @param verifiableProperties the in-memory {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
-   * @param requestHandler the {@link RestRequestHandler} that handles general requests.
+   * @param requestHandler the {@link RestRequestHandler} to hand off the requests to.
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to health check requests
@@ -52,14 +52,14 @@ public class NettyServerFactory implements NioServerFactory {
         || restServerState == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyServerFactory");
     } else {
-      this.nettyConfig = new NettyConfig(verifiableProperties);
-      this.nettyMetrics = new NettyMetrics(metricRegistry);
+      nettyConfig = new NettyConfig(verifiableProperties);
+      nettyMetrics = new NettyMetrics(metricRegistry);
       channelInitializer = new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) {
           ch.pipeline()
               // connection stats handler to track connection related metrics
-              .addLast("ConnectionStatsHandler", ConnectionStatsHandler.getInstance(nettyMetrics))
+              .addLast("connectionStatsHandler", ConnectionStatsHandler.getInstance(nettyMetrics))
                   // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
                   // to go here.
               .addLast("codec", new HttpServerCodec())
