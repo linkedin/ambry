@@ -981,7 +981,7 @@ public final class ServerTestUtil {
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       // read the replica file and check correctness
-      // The token offset value of 13062 was derived as followed:
+      // The token offset value of 13074 was derived as followed:
       // - Up to this point we have done 6 puts and 1 delete
       // - Each put takes up 2179 bytes in the log (1000 data, 1000 user metadata, 179 ambry metadata)
       // - Each delete takes up 97 bytes in the log
