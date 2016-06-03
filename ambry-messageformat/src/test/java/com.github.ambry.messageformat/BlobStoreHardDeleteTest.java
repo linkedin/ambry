@@ -138,15 +138,12 @@ public class BlobStoreHardDeleteTest {
     private MessageFormatInputStream getPutMessage(StoreKey key, BlobProperties blobProperties, byte[] usermetadata,
         byte[] blob, int blobSize, short blobVersion, BlobType blobType)
         throws MessageFormatException {
-      switch (blobVersion) {
-        case MessageFormatRecord.Blob_Version_V1:
-          return new PutMessageFormatBlobV1InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
-        case MessageFormatRecord.Blob_Version_V2:
-          return new PutMessageFormatInputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
-        default:
-          throw new IllegalStateException("Unsupported Blob version " + blobVersion);
+      if (blobVersion == MessageFormatRecord.Blob_Version_V2) {
+        return new PutMessageFormatInputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
+      } else {
+        return new PutMessageFormatBlobV1InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
+            new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
       }
     }
 
