@@ -51,6 +51,7 @@ public class NettyMetrics {
   // NettyResponseChannel
   public final Histogram channelWriteFailureProcessingTimeInMs;
   public final Histogram chunkDispenseTimeInMs;
+  public final Histogram chunkQueueTimeInMs;
   public final Histogram channelWriteTimeInMs;
   public final Histogram chunkResolutionProcessingTimeInMs;
   public final Histogram errorResponseProcessingTimeInMs;
@@ -153,10 +154,12 @@ public class NettyMetrics {
     // NettyResponseChannel
     channelWriteFailureProcessingTimeInMs = metricRegistry
         .histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteFailureProcessingTimeInMs"));
-    channelWriteTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteTimeInMs"));
     chunkDispenseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChunkDispenseTimeInMs"));
+    chunkQueueTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChunkQueueTimeInMs"));
+    channelWriteTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChannelWriteTimeInMs"));
     chunkResolutionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ChunkResolutionProcessingTimeInMs"));
     errorResponseProcessingTimeInMs =
