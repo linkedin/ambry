@@ -98,10 +98,10 @@ public class NetworkClient implements Closeable {
     List<ResponseInfo> responseInfoList = new ArrayList<ResponseInfo>();
     numPendingConnections.set(pendingRequests.size());
     for (RequestInfo requestInfo : requestInfos) {
-      NetworkSendMetrics networkSendMetrics =
-          new NetworkSendMetrics(networkMetrics.requestQueueTime, networkMetrics.requestSendTime,
+      ClientNetworkRequestMetrics clientNetworkRequestMetrics =
+          new ClientNetworkRequestMetrics(networkMetrics.requestQueueTime, networkMetrics.requestSendTime,
               networkMetrics.requestSendTotalTime, 0);
-      pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, networkSendMetrics));
+      pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, clientNetworkRequestMetrics));
       numPendingConnections.set(pendingRequests.size());
     }
     List<NetworkSend> sends = prepareSends(responseInfoList);
@@ -156,9 +156,8 @@ public class NetworkClient implements Closeable {
             requestMetadata.connectionCheckOutAttempts++;
           }
         } else {
-          sends.add(
-              new NetworkSend(connId, requestMetadata.requestInfo.getRequest(), requestMetadata.networkSendMetrics,
-                  time));
+          sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(),
+              requestMetadata.clientNetworkRequestMetrics, time));
           connectionIdToRequestInFlight.put(connId, requestMetadata);
           iter.remove();
           numPendingConnections.set(pendingRequests.size());
@@ -220,8 +219,8 @@ public class NetworkClient implements Closeable {
    * A class that consists of a {@link RequestInfo} and some metadata related to the request
    */
   private class RequestMetadata {
-    // networkSendMetrics to track NetworkSend related metrics
-    NetworkSendMetrics networkSendMetrics;
+    // to track network request related metrics
+    ClientNetworkRequestMetrics clientNetworkRequestMetrics;
     // the RequestInfo associated with the request.
     RequestInfo requestInfo;
     // number of times connection checkout attempt has been made for this request
@@ -231,10 +230,11 @@ public class NetworkClient implements Closeable {
     // the time at which this request was sent(or moved from queue to in flight state)
     private long requestSentTimeMs;
 
-    RequestMetadata(long requestQueuedTimeMs, RequestInfo requestInfo, NetworkSendMetrics networkSendMetrics) {
+    RequestMetadata(long requestQueuedTimeMs, RequestInfo requestInfo,
+        ClientNetworkRequestMetrics clientNetworkRequestMetrics) {
       this.requestInfo = requestInfo;
       this.requestQueuedTimeMs = requestQueuedTimeMs;
-      this.networkSendMetrics = networkSendMetrics;
+      this.clientNetworkRequestMetrics = clientNetworkRequestMetrics;
     }
 
     /**
@@ -242,7 +242,7 @@ public class NetworkClient implements Closeable {
      */
     void onRequestDequeue() {
       requestSentTimeMs = System.currentTimeMillis();
-      networkSendMetrics.updateQueueTime(requestSentTimeMs - requestQueuedTimeMs);
+      clientNetworkRequestMetrics.updateQueueTime(requestSentTimeMs - requestQueuedTimeMs);
       networkMetrics.connectionCheckOutAttemptsBeforeSucceeding.mark(connectionCheckOutAttempts);
     }
 

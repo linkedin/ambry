@@ -66,10 +66,10 @@ class SocketServerResponse implements Response {
   private final int processor;
   private final Request request;
   private final Send output;
-  private final NetworkSendMetrics metrics;
+  private final ServerNetworkResponseMetrics metrics;
   private long startQueueTimeInMs;
 
-  public SocketServerResponse(Request request, Send output, NetworkSendMetrics metrics) {
+  public SocketServerResponse(Request request, Send output, ServerNetworkResponseMetrics metrics) {
     this.request = request;
     this.output = output;
     this.processor = ((SocketServerRequest) request).getProcessor();
@@ -138,7 +138,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   /** Send a response back to the socket server to be sent over the network */
   @Override
-  public void sendResponse(Send payloadToSend, Request originalRequest, NetworkSendMetrics metrics)
+  public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics)
       throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest, payloadToSend, metrics);
     response.onEnqueueIntoResponseQueue();

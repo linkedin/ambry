@@ -17,29 +17,13 @@ import com.codahale.metrics.Histogram;
 
 
 /**
- * Tracks a set of metrics for a {@link NetworkSend}
+ * Tracks send time metrics for a {@link NetworkSend}
  */
 public class NetworkSendMetrics {
-  protected long timeSpentTillNow;
-  private Histogram requestOrResponseQueueTime;
-  private Histogram requestOrResponseSendTime;
-  private Histogram requestOrResponseTotalTime;
+  private final Histogram requestOrResponseSendTime;
 
-  public NetworkSendMetrics(Histogram requestOrResponseQueueTime, Histogram requestOrResponseSendTime,
-      Histogram requestOrResponseTotalTime, long timeSpentTillNow) {
-    this.requestOrResponseQueueTime = requestOrResponseQueueTime;
+  public NetworkSendMetrics(Histogram requestOrResponseSendTime) {
     this.requestOrResponseSendTime = requestOrResponseSendTime;
-    this.requestOrResponseTotalTime = requestOrResponseTotalTime;
-    this.timeSpentTillNow = timeSpentTillNow;
-  }
-
-  /**
-   * Updates the time spent by the request or response in the queue before being sent out
-   * @param value the time spent by the request or response in the queue
-   */
-  public void updateQueueTime(long value) {
-    requestOrResponseQueueTime.update(value);
-    timeSpentTillNow += value;
   }
 
   /**
@@ -48,7 +32,5 @@ public class NetworkSendMetrics {
    */
   public void updateSendTime(long value) {
     requestOrResponseSendTime.update(value);
-    timeSpentTillNow += value;
-    requestOrResponseTotalTime.update(timeSpentTillNow);
   }
 }
