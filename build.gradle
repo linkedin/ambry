@@ -127,6 +127,7 @@ project(':ambry-server') {
     dependencies {
         compile project(':ambry-clustermap'),
                 project(':ambry-coordinator'),
+                project(':ambry-router'),
                 project(':ambry-messageformat'),
                 project(':ambry-metrics'),
                 project(':ambry-network'),

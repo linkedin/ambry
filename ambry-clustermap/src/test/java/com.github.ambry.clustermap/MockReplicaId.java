@@ -78,7 +78,7 @@ public class MockReplicaId implements ReplicaId {
 
   @Override
   public long getCapacityInBytes() {
-    return 10000000;
+    return 100000000;
   }
 
   @Override
