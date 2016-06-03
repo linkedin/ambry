@@ -16,7 +16,12 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import junit.framework.Assert;
 import org.json.JSONException;
 import org.junit.Rule;
 import org.junit.Test;
@@ -44,18 +49,26 @@ public class ClusterMapManagerTest {
   public String freeCapacityDump(ClusterMapManager clusterMapManager, HardwareLayout hardwareLayout) {
     StringBuilder sb = new StringBuilder();
     sb.append("Free space dump for cluster.").append(System.getProperty("line.separator"));
-    sb.append(hardwareLayout.getClusterName()).append(" : ")
-        .append(clusterMapManager.getUnallocatedRawCapacityInBytes()).append(System.getProperty("line.separator"));
+    sb.append(hardwareLayout.getClusterName())
+        .append(" : ")
+        .append(clusterMapManager.getUnallocatedRawCapacityInBytes())
+        .append(System.getProperty("line.separator"));
     for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
-      sb.append("\t").append(datacenter).append(" : ")
+      sb.append("\t")
+          .append(datacenter)
+          .append(" : ")
           .append(clusterMapManager.getUnallocatedRawCapacityInBytes(datacenter))
           .append(System.getProperty("line.separator"));
       for (DataNode dataNode : datacenter.getDataNodes()) {
-        sb.append("\t\t").append(dataNode).append(" : ")
+        sb.append("\t\t")
+            .append(dataNode)
+            .append(" : ")
             .append(clusterMapManager.getUnallocatedRawCapacityInBytes(dataNode))
             .append(System.getProperty("line.separator"));
         for (Disk disk : dataNode.getDisks()) {
-          sb.append("\t\t\t").append(disk).append(" : ")
+          sb.append("\t\t\t")
+              .append(disk)
+              .append(" : ")
               .append(clusterMapManager.getUnallocatedRawCapacityInBytes(disk))
               .append(System.getProperty("line.separator"));
         }
@@ -137,7 +150,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void bestEffortAllocation()
+  public void nonRackAwareAllocationTest()
       throws JSONException, IOException {
     int replicaCountPerDataCenter = 2;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
@@ -148,21 +161,91 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
     List<PartitionId> allocatedPartitions;
 
-    // Allocate a five partitions that fit within cluster's capacity
-    allocatedPartitions = clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes);
+    try {
+      // Test with retryIfNotRackAware set to false, this should throw an exception
+      clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
+      Assert.fail("allocatePartitions should not succeed when datacenters are missing rack info "
+          + "and retryIfNotRackAware is false");
+    } catch (IllegalArgumentException e) {
+      // This should be thrown
+    }
+    // Allocate five partitions that fit within cluster's capacity
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 5);
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 5);
 
     // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
     // "free" but unusable capacity may be left after trying to allocate these partitions.
     allocatedPartitions =
-        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes);
+        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds().size());
     System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
 
     // Capacity is already exhausted...
-    allocatedPartitions = clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes);
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true);
     assertEquals(allocatedPartitions.size(), 0);
+  }
+
+  @Test
+  public void rackAwareAllocationTest()
+      throws JSONException, IOException {
+    int replicaCountPerDataCenter = 3;
+    long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
+
+    TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha", true);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
+
+    ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
+    List<PartitionId> allocatedPartitions;
+
+    // Allocate five partitions that fit within cluster's capacity
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
+    assertEquals(allocatedPartitions.size(), 5);
+    assertEquals(clusterMapManager.getWritablePartitionIds().size(), 5);
+    checkRackUsage(allocatedPartitions);
+    checkNumReplicasPerDatacenter(allocatedPartitions, replicaCountPerDataCenter);
+
+    // Allocate "too many" partitions (1M) to exhaust capacity. Capacity is not exhausted evenly across nodes so some
+    // "free" but unusable capacity may be left after trying to allocate these partitions.
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(1000 * 1000, replicaCountPerDataCenter, replicaCapacityInBytes, false);
+    assertEquals(allocatedPartitions.size() + 5, clusterMapManager.getWritablePartitionIds().size());
+    System.out.println(freeCapacityDump(clusterMapManager, testHardwareLayout.getHardwareLayout()));
+    checkRackUsage(allocatedPartitions);
+
+    // Capacity is already exhausted...
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
+    assertEquals(allocatedPartitions.size(), 0);
+  }
+
+  @Test
+  public void rackAwareOverAllocationTest()
+      throws JSONException, IOException {
+    int replicaCountPerDataCenter = 4;
+    long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
+
+    TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha", true);
+    PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
+
+    ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
+    List<PartitionId> allocatedPartitions;
+    // Require more replicas than there are racks
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, false);
+    assertEquals(allocatedPartitions.size(), 5);
+    checkNumReplicasPerDatacenter(allocatedPartitions, 3);
+    checkRackUsage(allocatedPartitions);
+
+    // Test with retryIfNotRackAware enabled.  We should be able to allocate 4 replicas per datacenter b/c we no
+    // longer require unique racks
+    allocatedPartitions =
+        clusterMapManager.allocatePartitions(5, replicaCountPerDataCenter, replicaCapacityInBytes, true);
+    assertEquals(allocatedPartitions.size(), 5);
+    checkNumReplicasPerDatacenter(allocatedPartitions, 4);
   }
 
   @Test
@@ -257,6 +340,51 @@ public class ClusterMapManagerTest {
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 1);
     assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));
+  }
+
+  /**
+   * Verify that the partitions in the list are on unique racks for each datacenter.
+   *
+   * @param allocatedPartitions the list of partitions to check
+   */
+  private static void checkRackUsage(List<PartitionId> allocatedPartitions) {
+    for (PartitionId partition : allocatedPartitions) {
+      Map<String, Set<Long>> rackSetByDatacenter = new HashMap<>();
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        String datacenter = replica.getDataNodeId().getDatacenterName();
+        Set<Long> rackSet = rackSetByDatacenter.get(datacenter);
+        if (rackSet == null) {
+          rackSet = new HashSet<>();
+          rackSetByDatacenter.put(datacenter, rackSet);
+        }
+
+        long rackId = replica.getDataNodeId().getRackId();
+        if (rackId >= 0) {
+          assertFalse("Allocation was not on unique racks", rackSet.contains(rackId));
+          rackSet.add(rackId);
+        }
+      }
+    }
+  }
+
+  /**
+   * Verify that the partitions in the list have {@code numReplicas} per datacenter
+   *
+   * @param allocatedPartitions the list of partitions to check
+   * @param numReplicas how many replicas a partition should have in each datacenter
+   */
+  private static void checkNumReplicasPerDatacenter(List<PartitionId> allocatedPartitions, int numReplicas) {
+    for (PartitionId partition : allocatedPartitions) {
+      Map<String, Integer> numReplicasMap = new HashMap<>();
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        String datacenter = replica.getDataNodeId().getDatacenterName();
+        Integer replicasInDatacenter = numReplicasMap.containsKey(datacenter) ? numReplicasMap.get(datacenter) : 0;
+        numReplicasMap.put(datacenter, replicasInDatacenter + 1);
+      }
+      for (int replicasInDatacenter : numReplicasMap.values()) {
+        assertEquals("Datacenter does not have expected number of replicas", numReplicas, replicasInDatacenter);
+      }
+    }
   }
 }
 
