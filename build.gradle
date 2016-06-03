@@ -127,7 +127,6 @@ project(':ambry-server') {
     dependencies {
         compile project(':ambry-clustermap'),
                 project(':ambry-coordinator'),
-                project(':ambry-router'),
                 project(':ambry-messageformat'),
                 project(':ambry-metrics'),
                 project(':ambry-network'),
@@ -137,6 +136,7 @@ project(':ambry-server') {
                 project(':ambry-utils'),
                 project(':ambry-replication')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        testCompile project(':ambry-router').sourceSets.main.output
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-network').sourceSets.test.output
