@@ -120,7 +120,6 @@ class NettyResponseChannel implements RestResponseChannel {
       maybeWriteResponseMetadata(responseMetadata, responseMetadataWriteListener);
     }
     Chunk chunk = new Chunk(src, callback);
-    chunksToWriteCount.incrementAndGet();
     chunksToWrite.add(chunk);
     if (!isOpen()) {
       // the isOpen() check is not before addition to the queue because chunks need to be acknowledged in the order
@@ -497,7 +496,7 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       chunk = chunksToWrite.poll();
       while (chunk != null) {
-        chunksToWriteCount.decrementAndGet();
+        chunk.onDequeue();
         chunk.resolveChunk(exception);
         chunk = chunksToWrite.poll();
       }
@@ -554,8 +553,8 @@ class NettyResponseChannel implements RestResponseChannel {
      */
     public long writeCompleteThreshold;
     private final Callback<Long> callback;
-    // working under the assumption that a chunk is scheduled to be written as soon as it is created.
-    private final long chunkWriteStartTime = System.currentTimeMillis();
+    private final long chunkQueueStartTime = System.currentTimeMillis();
+    private long chunkWriteStartTime;
 
     /**
      * Creates a chunk.
@@ -566,6 +565,20 @@ class NettyResponseChannel implements RestResponseChannel {
       this.buffer = buffer;
       bytesToBeWritten = buffer.remaining();
       this.callback = callback;
+      chunksToWriteCount.incrementAndGet();
+    }
+
+    /**
+     * Does tasks (like tracking) that need to be done when a chunk is dequeued for processing.
+     */
+    public void onDequeue() {
+      chunksToWriteCount.decrementAndGet();
+      chunkWriteStartTime = System.currentTimeMillis();
+      long chunkQueueTime = chunkWriteStartTime - chunkQueueStartTime;
+      nettyMetrics.chunkQueueTimeInMs.update(chunkQueueTime);
+      if (request != null) {
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(chunkQueueTime);
+      }
     }
 
     /**
@@ -591,6 +604,7 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.chunkResolutionProcessingTimeInMs.update(chunkResolutionProcessingTime);
       if (request != null) {
         request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(chunkWriteTime);
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(chunkResolutionProcessingTime);
       }
     }
   }
@@ -630,7 +644,7 @@ class NettyResponseChannel implements RestResponseChannel {
       HttpContent content = null;
       Chunk chunk = chunksToWrite.poll();
       if (chunk != null) {
-        chunksToWriteCount.decrementAndGet();
+        chunk.onDequeue();
         ByteBuf buf = Unpooled.wrappedBuffer(chunk.buffer);
         chunk.writeCompleteThreshold = totalBytesWritten.addAndGet(chunk.bytesToBeWritten);
         chunksAwaitingCallback.add(chunk);

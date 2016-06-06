@@ -18,8 +18,12 @@ import com.github.ambry.router.FutureResult;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONException;
@@ -55,17 +59,8 @@ public class MockRestResponseChannel implements RestResponseChannel {
    */
   public enum Event {
     Write,
-    Flush,
     OnRequestComplete,
     SetStatus,
-    SetContentType,
-    SetContentLength,
-    SetLocation,
-    SetLastModified,
-    SetExpires,
-    SetCacheControl,
-    SetPragma,
-    SetDate,
     SetHeader,
     IsOpen,
     Close
@@ -244,6 +239,11 @@ public class MockRestResponseChannel implements RestResponseChannel {
         try {
           if (!responseMetadata.has(RESPONSE_HEADERS_KEY)) {
             responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
+          }
+          if (headerValue instanceof Date) {
+            SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.US);
+            dateFormatter.setTimeZone(TimeZone.getTimeZone("GMT"));
+            headerValue = dateFormatter.format((Date) headerValue);
           }
           responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).put(headerName, headerValue);
           onEventComplete(eventToFire);

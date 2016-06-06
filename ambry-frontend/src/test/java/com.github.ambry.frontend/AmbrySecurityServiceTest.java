@@ -39,8 +39,10 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.TimeZone;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import junit.framework.Assert;
 import org.json.JSONException;
@@ -53,44 +55,44 @@ import org.junit.Test;
  */
 public class AmbrySecurityServiceTest {
 
-  private SecurityService securityService;
-  private final static FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
+  private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
+  private static final String SERVICE_ID = "AmbrySecurityService";
+  private static final String OWNER_ID = SERVICE_ID;
+  private static final BlobInfo DEFAULT_INFO =
+      new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time), null);
 
-  public AmbrySecurityServiceTest()
-      throws InstantiationException {
-    securityService = new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry())
-        .getSecurityService();
-  }
+  private final SecurityService securityService =
+      new AmbrySecurityService(new FrontendConfig(new VerifiableProperties(new Properties())),
+          new FrontendMetrics(new MetricRegistry()));
 
   /**
    * Tests {@link AmbrySecurityService#processRequest(RestRequest, Callback)} for common as well as uncommon cases
    * @throws Exception
    */
   @Test
-  public void testProcessRequest()
+  public void processRequestTest()
       throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
-    RestRequest restRequest = null;
     //rest request being null
     try {
-      securityService.processRequest(restRequest, callback).get();
+      securityService.processRequest(null, callback).get();
       Assert.fail("Should have thrown IllegalArgumentException ");
     } catch (IllegalArgumentException e) {
     }
 
-    // no callbacks
+    // without callbacks
     RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
-      restRequest = createRestRequest(restMethod, "/", null);
+      RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.processRequest(restRequest, null).get();
     }
 
-    // w/ callbacks
+    // with callbacks
     callback = new SecurityServiceCallback();
     for (RestMethod restMethod : methods) {
-      restRequest = createRestRequest(restMethod, "/", null);
+      RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.processRequest(restRequest, callback).get();
-      Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
+      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
       Assert.assertNull("Exception should not have been thrown", callback.exception);
       callback.reset();
     }
@@ -99,7 +101,7 @@ public class AmbrySecurityServiceTest {
     callback = new SecurityServiceCallback();
     securityService.close();
     for (RestMethod restMethod : methods) {
-      restRequest = createRestRequest(restMethod, "/", null);
+      RestRequest restRequest = createRestRequest(restMethod, "/", null);
       try {
         securityService.processRequest(restRequest, callback).get();
         Assert.fail("Process Request should have failed because Security Service is closed");
@@ -123,119 +125,115 @@ public class AmbrySecurityServiceTest {
    * @throws Exception
    */
   @Test
-  public void testProcessResponse()
+  public void processResponseTest()
       throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
-    RestRequest restRequest = null;
-    BlobInfo blobInfo = new BlobInfo(getBlobProperties(100, true, Utils.Infinite_Time, "image/gif"), null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
     //rest request being null
     try {
-      securityService.processResponse(restRequest, restResponseChannel, blobInfo, null).get();
+      securityService.processResponse(null, new MockRestResponseChannel(), DEFAULT_INFO, null).get();
       Assert.fail("Should have thrown IllegalArgumentException ");
     } catch (IllegalArgumentException e) {
     }
 
-    restRequest = createRestRequest(RestMethod.GET, "/", null);
     //restResponseChannel being null
     try {
-      securityService.processResponse(restRequest, null, blobInfo, null).get();
+      securityService.processResponse(restRequest, null, DEFAULT_INFO, null).get();
       Assert.fail("Should have thrown IllegalArgumentException ");
     } catch (IllegalArgumentException e) {
     }
 
     //blob info being null
-    restResponseChannel = new MockRestResponseChannel();
     try {
-      securityService.processResponse(restRequest, restResponseChannel, null, null).get();
+      securityService.processResponse(restRequest, new MockRestResponseChannel(), null, null).get();
       Assert.fail("Should have thrown IllegalArgumentException ");
     } catch (IllegalArgumentException e) {
     }
 
-    // no callbacks
-    restResponseChannel = new MockRestResponseChannel();
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, null).get();
-
-    // w/ callbacks
-    // for no-ops
-    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.DELETE};
+    // without callbacks
+    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
-      callback.reset();
       restRequest = createRestRequest(restMethod, "/", null);
-      restResponseChannel = new MockRestResponseChannel();
-      securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
-      Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
-      Assert.assertNull("Exception should not have been thrown", callback.exception);
-      Assert.assertNull("No exception is expected in the response", restResponseChannel.getException());
-      Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
+      securityService.processResponse(restRequest, new MockRestResponseChannel(), DEFAULT_INFO, null).get();
     }
 
-    // Head for a public blob with a diff TTL
+    // with callbacks
+    // for unsupported methods
+    methods = new RestMethod[]{RestMethod.DELETE};
+    for (RestMethod restMethod : methods) {
+      testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), DEFAULT_INFO,
+          RestServiceErrorCode.InternalServerError);
+    }
+
+    // HEAD
+    // normal
+    testHeadBlob(DEFAULT_INFO);
+    // with no owner id
+    BlobInfo blobInfo =
+        new BlobInfo(new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time), null);
+    testHeadBlob(blobInfo);
+    // with no content type
+    blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time), null);
+    testHeadBlob(blobInfo);
+    // with a TTL
+    blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000), null);
+    testHeadBlob(blobInfo);
+
+    // GET BlobInfo
+    testGetSubResource(RestUtils.SubResource.BlobInfo);
+    // GET UserMetadata
+    testGetSubResource(RestUtils.SubResource.UserMetadata);
+
+    // POST
+    testPostBlob();
+
+    // GET Blob
+    // less than chunk threshold size
     blobInfo = new BlobInfo(
-        getBlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, false, 10000, "image/gif"),
-        null);
-    callback.reset();
-    restResponseChannel = new MockRestResponseChannel();
-    restRequest = createRestRequest(RestMethod.HEAD, "/", null);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
-    Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
-    verifyHeadersForHead(blobInfo.getBlobProperties(), restResponseChannel);
-
-    // Get Blobinfo
-    callback.reset();
-    restResponseChannel = new MockRestResponseChannel();
-    restRequest = createRestRequest(RestMethod.GET, "/abc/" + RestUtils.SubResource.BlobInfo, null);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
-    Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
-    Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
-    verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
-
-    // Get Blob
-    testGetBlob(callback, blobInfo);
-    testGetNotModifiedBlob(callback, blobInfo);
+        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID,
+            "image/gif", false, 10000), null);
+    testGetBlob(blobInfo);
+    // == chunk threshold size
+    blobInfo = new BlobInfo(
+        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID,
+            "image/gif", false, 10000), null);
+    testGetBlob(blobInfo);
+    // more than chunk threshold size
+    blobInfo = new BlobInfo(
+        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID,
+            "image/gif", false, 10000), null);
+    testGetBlob(blobInfo);
+    // Get blob with content type null
+    blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, true, 10000), null);
+    testGetBlob(blobInfo);
     // Get blob for a private blob
-    blobInfo = new BlobInfo(getBlobProperties(100, false, Utils.Infinite_Time, "image/gif"), null);
-    testGetBlob(callback, blobInfo);
-
+    blobInfo =
+        new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time), null);
+    testGetBlob(blobInfo);
     // Get blob for a public blob with content type as "text/html"
-    blobInfo = new BlobInfo(getBlobProperties(100, true, 10000, "text/html"), null);
-    testGetBlob(callback, blobInfo);
+    blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "text/html", true, 10000), null);
+    testGetBlob(blobInfo);
+    // not modified response
+    // > creation time (in secs).
+    testGetNotModifiedBlob(DEFAULT_INFO, DEFAULT_INFO.getBlobProperties().getCreationTimeInMs() + 1000);
+    // == creation time
+    testGetNotModifiedBlob(DEFAULT_INFO, DEFAULT_INFO.getBlobProperties().getCreationTimeInMs());
+    // < creation time (in secs)
+    testGetNotModifiedBlob(DEFAULT_INFO, DEFAULT_INFO.getBlobProperties().getCreationTimeInMs() - 1000);
 
     // bad rest response channel
-    // Head and Get
-    testExceptionCasesProcessResponse(RestMethod.HEAD, callback, blobInfo);
-    testExceptionCasesProcessResponse(RestMethod.GET, callback, blobInfo);
-
-    // test Get of a large blob
-    blobInfo = new BlobInfo(
-        getBlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 2, false, 10000, "image/gif"),
-        null);
-    testGetBlob(callback, blobInfo);
+    testExceptionCasesProcessResponse(RestMethod.HEAD, new BadRestResponseChannel(), blobInfo,
+        RestServiceErrorCode.InternalServerError);
+    testExceptionCasesProcessResponse(RestMethod.GET, new BadRestResponseChannel(), blobInfo,
+        RestServiceErrorCode.InternalServerError);
+    testExceptionCasesProcessResponse(RestMethod.POST, new BadRestResponseChannel(), blobInfo,
+        RestServiceErrorCode.InternalServerError);
 
     // security service closed
-    callback = new SecurityServiceCallback();
     securityService.close();
     methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
-      restRequest = createRestRequest(restMethod, "/", null);
-      try {
-        securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
-        Assert.fail("Process Request should have failed because Security Service is closed");
-      } catch (Exception e) {
-        Assert.assertTrue("Exception should have been an instance of RestServiceException",
-            e.getCause() instanceof RestServiceException);
-        RestServiceException re = (RestServiceException) e.getCause();
-        Assert.assertEquals("Unexpected RestServerErrorCode (Future)", RestServiceErrorCode.ServiceUnavailable,
-            re.getErrorCode());
-        re = (RestServiceException) callback.exception;
-        Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", RestServiceErrorCode.ServiceUnavailable,
-            re.getErrorCode());
-      }
-      callback.reset();
+      testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), blobInfo,
+          RestServiceErrorCode.ServiceUnavailable);
     }
   }
 
@@ -261,87 +259,162 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
+   * Verifies that there are no values for all headers in {@code headers}.
+   * @param restResponseChannel the {@link MockRestResponseChannel} over which response has been received.
+   * @param headers the headers that must have no values.
+   */
+  private void verifyAbsenceOfHeaders(MockRestResponseChannel restResponseChannel, String... headers) {
+    for (String header : headers) {
+      Assert.assertNull("[" + header + "] should not have been present in the response",
+          restResponseChannel.getHeader(header));
+    }
+  }
+
+  /**
    * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Get blob
    * with the passed in {@link BlobInfo}
-   * @param callback {@link Callback} to be used with the security service
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}
    * @throws Exception
    */
-  private void testGetBlob(SecurityServiceCallback callback, BlobInfo blobInfo)
+  private void testGetBlob(BlobInfo blobInfo)
       throws Exception {
-    callback.reset();
+    SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/abc", null);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
-    Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
+    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
+    Assert.assertEquals("Response should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
     verifyHeadersForGetBlob(blobInfo.getBlobProperties(), restResponseChannel);
   }
 
   /**
    * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Get blob
    * with the passed in {@link BlobInfo} for a not modified response
-   * @param callback {@link Callback} to be used with the security service
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}
+   * @param ifModifiedSinceMs the value (as a date string) of the {@link RestUtils.Headers#IF_MODIFIED_SINCE} header.
    * @throws Exception
    */
-  private void testGetNotModifiedBlob(SecurityServiceCallback callback, BlobInfo blobInfo)
+  private void testGetNotModifiedBlob(BlobInfo blobInfo, long ifModifiedSinceMs)
       throws Exception {
-    callback.reset();
+    SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers = new JSONObject();
     SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
     dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
-    Date date = new Date(System.currentTimeMillis());
+    Date date = new Date(ifModifiedSinceMs);
     String dateStr = dateFormat.format(date);
     headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/abc", headers);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
-    Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
+    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("No body is expected in the response", 0, restResponseChannel.getResponseBody().length);
-    verifyHeadersForGetBlobNotModified(restResponseChannel);
+    if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
+      Assert
+          .assertEquals("Not modified response expected", ResponseStatus.NotModified, restResponseChannel.getStatus());
+      verifyHeadersForGetBlobNotModified(restResponseChannel);
+    } else {
+      Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
+          restResponseChannel.getStatus());
+      verifyHeadersForGetBlob(blobInfo.getBlobProperties(), restResponseChannel);
+    }
+  }
+
+  /**
+   * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
+   * {@link RestMethod#HEAD}.
+   * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
+   * @throws Exception
+   */
+  private void testHeadBlob(BlobInfo blobInfo)
+      throws Exception {
+    SecurityServiceCallback callback = new SecurityServiceCallback();
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", null);
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
+    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    Assert.assertEquals("Response status should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
+    verifyHeadersForHead(blobInfo.getBlobProperties(), restResponseChannel);
+  }
+
+  /**
+   * Tests GET of sub-resources.
+   * @param subResource the {@link RestUtils.SubResource}  to test.
+   * @throws Exception
+   */
+  private void testGetSubResource(RestUtils.SubResource subResource)
+      throws Exception {
+    SecurityServiceCallback callback = new SecurityServiceCallback();
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
+    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
+    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    Assert.assertEquals("Response status should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
+    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    Assert.assertEquals("Last Modified does not match creation time",
+        RestUtils.toSecondsPrecisionInMs(DEFAULT_INFO.getBlobProperties().getCreationTimeInMs()),
+        RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED)).longValue());
+    if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
+      verifyBlobPropertiesHeaders(DEFAULT_INFO.getBlobProperties(), restResponseChannel);
+    } else {
+      verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.PRIVATE, RestUtils.Headers.TTL,
+          RestUtils.Headers.SERVICE_ID, RestUtils.Headers.OWNER_ID, RestUtils.Headers.AMBRY_CONTENT_TYPE,
+          RestUtils.Headers.CREATION_TIME, RestUtils.Headers.BLOB_SIZE);
+    }
+  }
+
+  /**
+   * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
+   * {@link RestMethod#POST}.
+   * @throws Exception
+   */
+  private void testPostBlob()
+      throws Exception {
+    SecurityServiceCallback callback = new SecurityServiceCallback();
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
+    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
+    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    Assert
+        .assertEquals("Response status should have been set", ResponseStatus.Created, restResponseChannel.getStatus());
+    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    Assert.assertEquals("Creation time should have been set correctly",
+        RestUtils.toSecondsPrecisionInMs(DEFAULT_INFO.getBlobProperties().getCreationTimeInMs()),
+        RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME)).longValue());
+    Assert.assertEquals("Content-Length should have been 0", "0",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
   }
 
   /**
    * Tests exception cases for {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}
    * with a {@link BadRestResponseChannel}
    * @param restMethod the {@link RestMethod} of the request to be made
-   * @param callback {@link Callback} to be used with the security service
+   * @param restResponseChannel the {@link RestResponseChannel} to write responses over.
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}
+   * @param expectedErrorCode the {@link RestServiceErrorCode} expected in the exception returned.
    * @throws Exception
    */
-  private void testExceptionCasesProcessResponse(RestMethod restMethod, SecurityServiceCallback callback,
-      BlobInfo blobInfo)
+  private void testExceptionCasesProcessResponse(RestMethod restMethod, RestResponseChannel restResponseChannel,
+      BlobInfo blobInfo, RestServiceErrorCode expectedErrorCode)
       throws Exception {
     RestRequest restRequest = createRestRequest(restMethod, "/", null);
-    BadRestResponseChannel badRestResponseChannel = new BadRestResponseChannel();
-    callback.reset();
+    SecurityServiceCallback callback = new SecurityServiceCallback();
     try {
-      securityService.processResponse(restRequest, badRestResponseChannel, blobInfo, callback).get();
+      securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
       Assert.fail("Should have thrown Exception");
-    } catch (Exception e) {
+    } catch (ExecutionException e) {
+      Assert.assertTrue("Exception should have been an instance of RestServiceException",
+          e.getCause() instanceof RestServiceException);
+      RestServiceException re = (RestServiceException) e.getCause();
+      Assert.assertEquals("Unexpected RestServerErrorCode (Future)", expectedErrorCode, re.getErrorCode());
+      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+      Assert.assertNotNull("Exception should have been thrown", callback.exception);
+      re = (RestServiceException) callback.exception;
+      Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
     }
-    Assert.assertTrue("Call back should have been invoked", callback.callbackInvoked.get());
-    Assert.assertNotNull("Exception should have been thrown", callback.exception);
-    Assert.assertTrue("Exception class mismatch", callback.exception instanceof RestServiceException);
-    Assert.assertEquals("Exception msg mismatch", "Not Implemented", callback.exception.getMessage());
-    Assert.assertEquals("Error code mismatch", RestServiceErrorCode.InternalServerError,
-        ((RestServiceException) callback.exception).getErrorCode());
-  }
-
-  /**
-   * Create {@link BlobProperties} with the passed in params
-   * @param blobSize Size of the blob to be set in the blob properties
-   * @param isPrivate {@code true}, if private. {@code false} otherwise
-   * @param ttl time to live for the blob
-   * @param contentType content type of the blob
-   * @return {@link com.github.ambry.messageformat.BlobProperties} created with the passsed in params
-   */
-  private BlobProperties getBlobProperties(long blobSize, boolean isPrivate, long ttl, String contentType) {
-    BlobProperties blobProperties = new BlobProperties(blobSize, "serviceId", "ownerId", contentType, isPrivate, ttl);
-    return blobProperties;
   }
 
   /**
@@ -352,8 +425,10 @@ public class AmbrySecurityServiceTest {
    */
   private void verifyHeadersForHead(BlobProperties blobProperties, MockRestResponseChannel restResponseChannel)
       throws RestServiceException {
-    Assert.assertEquals("Last Modified not set", new Date(blobProperties.getCreationTimeInMs()).toString(),
-        restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED));
+    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    Assert.assertEquals("Last Modified does not match creation time",
+        RestUtils.toSecondsPrecisionInMs(blobProperties.getCreationTimeInMs()),
+        RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED)).longValue());
     Assert.assertEquals("Content length mismatch", blobProperties.getBlobSize(),
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     if (blobProperties.getContentType() != null) {
@@ -373,6 +448,9 @@ public class AmbrySecurityServiceTest {
       throws RestServiceException {
     Assert.assertEquals("Blob size mismatch ", blobProperties.getBlobSize(),
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE)));
+    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.PRIVATE, RestUtils.Headers.TTL,
+        RestUtils.Headers.SERVICE_ID, RestUtils.Headers.OWNER_ID, RestUtils.Headers.AMBRY_CONTENT_TYPE,
+        RestUtils.Headers.CREATION_TIME);
     if (blobProperties.getContentType() != null) {
       Assert.assertEquals("Content Type mismatch", blobProperties.getContentType(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
@@ -385,11 +463,6 @@ public class AmbrySecurityServiceTest {
       }
     }
 
-    Assert.assertNotNull("Expires value not set", restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
-    Assert.assertNull("Private value should not be set", restResponseChannel.getHeader(RestUtils.Headers.PRIVATE));
-    Assert.assertNull("TTL value should not be set", restResponseChannel.getHeader(RestUtils.Headers.TTL));
-    Assert.assertNull("ServiceID value should not be set", restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
-    Assert.assertNull("OwnerId value should not be set", restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
     if (blobProperties.getBlobSize() < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
       Assert.assertEquals("Content length value mismatch", blobProperties.getBlobSize(),
           Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
@@ -397,18 +470,18 @@ public class AmbrySecurityServiceTest {
       Assert.assertNull("Content length value should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     }
-    Assert.assertNull("Ambry Content Type should not be set",
-        restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
-    Assert.assertNull("CreationTime should not be set", restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME));
 
     if (blobProperties.isPrivate()) {
+      Assert.assertEquals("Expires value is incorrect for private blob", 0,
+          RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES)).longValue());
       Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertEquals("Pragma value not as expected", "no-cache",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     } else {
-      Assert.assertNotSame("Expires value not as expected", new Date(0),
-          restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
+      Assert.assertTrue("Expires value should be in the future",
+          RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES)).longValue() > System
+              .currentTimeMillis());
       Assert.assertEquals("Cache-Control value not as expected",
           "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
@@ -424,15 +497,12 @@ public class AmbrySecurityServiceTest {
    */
   private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel)
       throws RestServiceException {
-    Assert.assertNull("Blob Size should have been null", restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
-    Assert.assertNull("Content Type should have been null",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    Assert.assertNull("Expires should have been null", restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
-    Assert.assertNull("Cache control should have been null",
-        restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
-    Assert.assertNull("Pragma should have been null", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
-    Assert.assertEquals("Content lenght should have been 0", "0",
+    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    Assert.assertEquals("Content length should have been 0", "0",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.LAST_MODIFIED, RestUtils.Headers.BLOB_SIZE,
+        RestUtils.Headers.CONTENT_TYPE, RestUtils.Headers.EXPIRES, RestUtils.Headers.CACHE_CONTROL,
+        RestUtils.Headers.PRAGMA);
   }
 
   /**
@@ -451,7 +521,9 @@ public class AmbrySecurityServiceTest {
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE)));
     Assert.assertEquals("Service Id mismatch", blobProperties.getServiceId(),
         restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
-    Assert.assertNotNull("Creation time not set", restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME));
+    Assert.assertEquals("Creation time should have been set correctly",
+        RestUtils.toSecondsPrecisionInMs(blobProperties.getCreationTimeInMs()),
+        RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME)).longValue());
     Assert.assertEquals("Private value mismatch", blobProperties.isPrivate(),
         Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
@@ -469,20 +541,27 @@ public class AmbrySecurityServiceTest {
    */
   class SecurityServiceCallback implements Callback<Void> {
     public volatile Exception exception;
+    public CountDownLatch callbackLatch = new CountDownLatch(1);
+
     private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
     @Override
     public void onCompletion(Void result, Exception exception) {
       if (callbackInvoked.compareAndSet(false, true)) {
         this.exception = exception;
+        callbackLatch.countDown();
       } else {
         this.exception = new IllegalStateException("Callback invoked more than once");
       }
     }
 
+    /**
+     * Resets the state for using this instance again.
+     */
     public void reset() {
       exception = null;
       callbackInvoked.set(false);
+      callbackLatch = new CountDownLatch(1);
     }
   }
 
