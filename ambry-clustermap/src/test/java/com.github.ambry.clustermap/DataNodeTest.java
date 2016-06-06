@@ -142,8 +142,8 @@ public class DataNodeTest {
     failValidation(jsonObject, clusterMapConfig);
 
     // Bad hostname (http://tools.ietf.org/html/rfc6761 defines 'invalid' top level domain)
-   // jsonObject = TestUtils.getJsonDataNode("hostname.invalid", 6666, 7666, HardwareState.AVAILABLE, getDisks());
-   // failValidation(jsonObject, clusterMapConfig);
+    jsonObject = TestUtils.getJsonDataNode("hostname.invalid", 6666, 7666, HardwareState.AVAILABLE, getDisks());
+    failValidation(jsonObject, clusterMapConfig);
 
     // Bad port (too small)
     jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), -1, 7666, HardwareState.AVAILABLE, getDisks());
