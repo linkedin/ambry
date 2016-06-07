@@ -13,10 +13,8 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.TestSSLUtils;
-import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.RouterServerTestFramework.OperationInfo;
 import com.github.ambry.server.RouterServerTestFramework.OperationType;
 import com.github.ambry.utils.SystemTime;
@@ -31,7 +29,6 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static com.github.ambry.server.RouterServerTestFramework.checkFutures;
 import static com.github.ambry.server.RouterServerTestFramework.getRouterProperties;
 
 
@@ -50,7 +47,7 @@ public class RouterServerSSLTest {
     TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     Properties routerProps = getRouterProperties("DC1");
     TestSSLUtils.addSSLProperties(routerProps, "DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
-    NotificationSystem notificationSystem = new LoggingNotificationSystem();
+    MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
     sslCluster =
         new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
@@ -76,16 +73,17 @@ public class RouterServerSSLTest {
     for (int i = 0; i < 10; i++) {
       Queue<OperationType> opChain = new LinkedList<>();
       opChain.add(OperationType.PUT_NB);
+      opChain.add(OperationType.AWAIT_CREATION);
       opChain.add(OperationType.GET_INFO_NB);
       opChain.add(OperationType.GET_NB);
       opChain.add(OperationType.DELETE_NB);
-      opChain.add(OperationType.WAIT);
+      opChain.add(OperationType.AWAIT_DELETION);
       opChain.add(OperationType.GET_INFO_DELETED_NB);
       opChain.add(OperationType.GET_DELETED_NB);
       opChain.add(OperationType.DELETE_NB);
       opInfos.add(testFramework.startOperationChain(32 * 1024, i, opChain));
     }
-    checkFutures(opInfos);
+    testFramework.checkOperationChains(opInfos);
   }
 
   @Test
@@ -95,18 +93,19 @@ public class RouterServerSSLTest {
     for (int i = 0; i < 10; i++) {
       Queue<OperationType> opChain = new LinkedList<>();
       opChain.add(i % 2 == 0 ? OperationType.PUT_NB : OperationType.PUT_COORD);
+      opChain.add(OperationType.AWAIT_CREATION);
       opChain.add(OperationType.GET_INFO_COORD);
       opChain.add(OperationType.GET_INFO_NB);
       opChain.add(OperationType.GET_COORD);
       opChain.add(OperationType.GET_NB);
       opChain.add(i % 2 == 0 ? OperationType.DELETE_COORD : OperationType.DELETE_NB);
-      opChain.add(OperationType.WAIT);
+      opChain.add(OperationType.AWAIT_DELETION);
       opChain.add(OperationType.GET_INFO_DELETED_NB);
       opChain.add(OperationType.GET_INFO_DELETED_COORD);
       opChain.add(OperationType.GET_DELETED_NB);
       opChain.add(OperationType.GET_DELETED_COORD);
       opInfos.add(testFramework.startOperationChain(32 * 1024, i, opChain));
     }
-    checkFutures(opInfos);
+    testFramework.checkOperationChains(opInfos);
   }
 }

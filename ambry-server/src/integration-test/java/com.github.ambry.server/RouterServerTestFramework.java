@@ -14,6 +14,8 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.RouterConfig;
@@ -31,7 +33,9 @@ import com.github.ambry.router.Router;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Random;
@@ -46,13 +50,16 @@ import org.junit.Assert;
 
 class RouterServerTestFramework {
   static final int CHUNK_SIZE = 1024 * 1024;
-  private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor();
+  private final MockClusterMap clusterMap;
+  private final MockNotificationSystem notificationSystem;
   private final Router nonBlockingRouter;
   private final Router coordinatorBackedRouter;
 
-  RouterServerTestFramework(Properties routerProps, MockCluster cluster, NotificationSystem notificationSystem)
+  RouterServerTestFramework(Properties routerProps, MockCluster cluster, MockNotificationSystem notificationSystem)
       throws Exception {
-    MockClusterMap clusterMap = cluster.getClusterMap();
+    this.clusterMap = cluster.getClusterMap();
+    this.notificationSystem = notificationSystem;
+
     VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProps);
     this.nonBlockingRouter =
         new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, notificationSystem).getRouter();
@@ -67,7 +74,6 @@ class RouterServerTestFramework {
 
   void cleanup()
       throws IOException {
-    worker.shutdown();
     if (nonBlockingRouter != null) {
       nonBlockingRouter.close();
     }
@@ -76,8 +82,10 @@ class RouterServerTestFramework {
     }
   }
 
-  static void checkFutures(List<OperationInfo> opInfos)
+  void checkOperationChains(List<OperationInfo> opInfos)
       throws Exception {
+    Map<PartitionId, Integer> partitionCount = new HashMap<>();
+    double blobsPut = 0;
     for (OperationInfo opInfo : opInfos) {
       opInfo.latch.await();
       synchronized (opInfo.futures) {
@@ -85,6 +93,18 @@ class RouterServerTestFramework {
           future.check();
         }
       }
+      if (opInfo.blobId != null) {
+        blobsPut++;
+        PartitionId partitionId = new BlobId(opInfo.blobId, clusterMap).getPartition();
+        int count = partitionCount.containsKey(partitionId) ? partitionCount.get(partitionId) : 0;
+        partitionCount.put(partitionId, count + 1);
+      }
+    }
+    double blobBalanceThreshold = 3.0 * Math.ceil(blobsPut / (double) clusterMap.getWritablePartitionIds().size());
+    for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
+      Assert.assertTrue("Number of blobs is " + entry.getValue() + " on partition: " + entry.getKey()
+              + ", which is greater than the threshold of " + blobBalanceThreshold,
+          entry.getValue() <= blobBalanceThreshold);
     }
   }
 
@@ -234,22 +254,14 @@ class RouterServerTestFramework {
     opInfo.futures.add(testFuture);
   }
 
-  private void startWait(final OperationInfo opInfo) {
-    final Callback<Void> callback = new TestCallback<>(opInfo, false);
-    Future<Void> future = worker.schedule(new Callable<Void>() {
-      @Override
-      public Void call() {
-        callback.onCompletion(null, null);
-        return null;
-      }
-    }, 1, TimeUnit.SECONDS);
-    TestFuture<Void> testFuture = new TestFuture<Void>(future, "wait", opInfo) {
-      @Override
-      void check() {
-        get();
-      }
-    };
-    opInfo.futures.add(testFuture);
+  private void startAwaitCreation(final OperationInfo opInfo) {
+    notificationSystem.awaitBlobCreations(opInfo.blobId);
+    continueChain(opInfo);
+  }
+
+  private void startAwaitDeletion(final OperationInfo opInfo) {
+    notificationSystem.awaitBlobDeletions(opInfo.blobId);
+    continueChain(opInfo);
   }
 
   private void continueChain(final OperationInfo opInfo) {
@@ -280,27 +292,82 @@ class RouterServerTestFramework {
         case DELETE_COORD:
           startDeleteBlob(nextOp.nonBlocking, opInfo);
           break;
-        case WAIT:
-          startWait(opInfo);
+        case AWAIT_CREATION:
+          startAwaitCreation(opInfo);
+          break;
+        case AWAIT_DELETION:
+          startAwaitDeletion(opInfo);
           break;
       }
     }
   }
 
+  /**
+   * Used to specify operations to perform on a blob in an operation chain
+   */
   enum OperationType {
+    /**
+     * PutBlob with the nonblocking router
+     */
     PUT_NB(true, false),
+    /**
+     * GetBlobInfo with the nonblocking router and check the blob info against what was put in.
+     */
     GET_INFO_NB(true, false),
+    /**
+     * GetBlob with the nonblocking router and check the blob contents against what was put in.
+     */
     GET_NB(true, false),
+    /**
+     * DeleteBlob with the nonblocking router
+     */
     DELETE_NB(true, false),
+    /**
+     * GetBlobInfo with the nonblocking router. Expect an exception to occur because the blob should have already been
+     * deleted
+     */
     GET_INFO_DELETED_NB(true, true),
+    /**
+     * GetBlob with the nonblocking router. Expect an exception to occur because the blob should have already been
+     * deleted
+     */
     GET_DELETED_NB(true, true),
+    /**
+     * PutBlob with the coordinator-backed router
+     */
     PUT_COORD(false, false),
+    /**
+     * GetBlobInfo with the coordinator-backed router and check the blob info against what was put in.
+     */
     GET_INFO_COORD(false, false),
+    /**
+     * GetBlob with the coordinator-backed router and check the blob contents against what was put in.
+     */
     GET_COORD(false, false),
+    /**
+     * DeleteBlob with the coordinator-backed router.
+     */
     DELETE_COORD(false, false),
+    /**
+     * GetBlobInfo with the coordinator-backed router. Expect an exception to occur because the blob should have
+     * already been deleted.
+     */
     GET_INFO_DELETED_COORD(false, true),
+    /**
+     * GetBlob with the coordinator-backed router. Expect an exception to occur because the blob should have already
+     * been deleted.
+     */
     GET_DELETED_COORD(false, true),
-    WAIT(false, false);
+    /**
+     * Wait for the operation chain's blob ID to be reported as created on all replicas. Continue with the remaining
+     * actions in the operation chain afterwards.
+     */
+    AWAIT_CREATION(false, false),
+    /**
+     * Wait for the operation chain's blob ID to be reported as deleted on all replicas. Continue with the remaining
+     * actions in the operation chain afterwards.
+     */
+    AWAIT_DELETION(false, false);
 
     final boolean nonBlocking;
     final boolean afterDelete;
@@ -311,6 +378,9 @@ class RouterServerTestFramework {
     }
   }
 
+  /**
+   * Describes an operation chain and provides useful metadata and operation results for testing.
+   */
   static class OperationInfo {
     final int operationId;
     final BlobProperties properties;
