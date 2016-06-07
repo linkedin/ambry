@@ -213,30 +213,6 @@ public class SSLSelectorTest {
     Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionId));
   }
 
-  /**
-   * Test that preparation of a ssl connection doesn't starve other connections in queue
-   * @throws IOException
-   */
-  @Test
-  public void testSSLPrepare()
-      throws IOException {
-    // plain text connection should not starve or wait until ssl connection completes handshake
-    String connectionIdPlainText =
-        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
-
-    String connectionIdSsl =
-        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
-
-    selector.poll(10000L);
-    Assert.assertTrue("Plain text channel should have been added to connected list ",
-        selector.connected().contains(connectionIdPlainText));
-
-    while (!selector.connected().contains(connectionIdSsl)) {
-      selector.poll(10000L);
-    }
-    Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionIdSsl));
-  }
-
   @Test
   public void testCloseAfterConnectCall()
       throws IOException {
