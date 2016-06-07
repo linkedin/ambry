@@ -210,7 +210,8 @@ public final class ServerTestUtil {
       channel.send(getRequestExpired);
       InputStream streamExpired = channel.receive().getInputStream();
       GetResponse respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
-      Assert.assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
+      Assert
+          .assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // 2. With Include_Expired flag
       idsExpired = new ArrayList<BlobId>();
@@ -980,13 +981,13 @@ public final class ServerTestUtil {
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       // read the replica file and check correctness
-      // The token offset value of 13062 was derived as followed:
+      // The token offset value of 13074 was derived as followed:
       // - Up to this point we have done 6 puts and 1 delete
-      // - Each put takes up 2177 bytes in the log (1000 data, 1000 user metadata, 177 ambry metadata)
+      // - Each put takes up 2179 bytes in the log (1000 data, 1000 user metadata, 179 ambry metadata)
       // - Each delete takes up 97 bytes in the log
       // - The offset stored in the token will be the position of the last entry in the log (the delete, in this case)
-      // - Thus, it will be at the end of the 6 puts: 6 * 2177 = 13062
-      checkReplicaTokens(clusterMap, dataNodeId, 13062, "0");
+      // - Thus, it will be at the end of the 6 puts: 6 * 2179 = 13074
+      checkReplicaTokens(clusterMap, dataNodeId, 13074, "0");
 
       // Shut down server 1
       cluster.getServers().get(0).shutdown();

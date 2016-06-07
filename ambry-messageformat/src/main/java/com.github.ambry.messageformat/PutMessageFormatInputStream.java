@@ -45,9 +45,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int blobPropertiesRecordSize =
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
-    long blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(streamSize);
-    // TODO: Uncomment below lines when switching to blob format version 2
-    // long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
+    long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
 
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize +
         (int) (blobSize - streamSize - MessageFormatRecord.Crc_Size));
@@ -61,9 +59,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(buffer, blobProperties);
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
-    MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(buffer, streamSize);
-    // TODO: Uncomment below lines when switching to blob format version 2
-    // MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
+    MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
     Crc32 crc = new Crc32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);

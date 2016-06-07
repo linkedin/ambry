@@ -345,7 +345,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198431);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198443);
 
     MockPartitionId partition = (MockPartitionId) mockClusterMap.getWritablePartitionIds().get(0);
 
@@ -475,7 +475,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.currentMilliseconds = time.currentMilliseconds + Time.SecsPerDay * Time.MsPerSec;
-    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 297905);
+    ensureCleanupTokenCatchesUp(partitionIds.get(0).getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 297923);
 
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partition, blobIdList);

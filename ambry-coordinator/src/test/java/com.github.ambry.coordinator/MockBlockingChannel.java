@@ -17,6 +17,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.network.ByteBufferSend;
@@ -152,16 +153,17 @@ class MockBlockingChannel extends BlockingChannel {
             break;
 
           case Blob:
-            MockDataNode.BlobOutputAndError bdae = mockDataNode.getData(blobId);
-            getResponseErrorCode = bdae.getError();
+            MockDataNode.BlobOutputAndError boae = mockDataNode.getData(blobId);
+            getResponseErrorCode = boae.getError();
             if (getResponseErrorCode == ServerErrorCode.No_Error) {
-              BlobOutput blobData = bdae.getBlobOutput();
-              byteBufferSize = (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobData.getSize());
+              BlobOutput blobOutput = boae.getBlobOutput();
+              byteBufferSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobOutput.getSize());
               byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer, blobData.getSize());
+              MessageFormatRecord.Blob_Format_V2
+                  .serializePartialBlobRecord(byteBuffer, blobOutput.getSize(), BlobType.DataBlob);
 
-              byte[] blobDataBytes = new byte[(int) blobData.getSize()];
-              blobData.getStream().read(blobDataBytes, 0, (int) blobData.getSize());
+              byte[] blobDataBytes = new byte[(int) blobOutput.getSize()];
+              blobOutput.getStream().read(blobDataBytes, 0, (int) blobOutput.getSize());
               byteBuffer.put(blobDataBytes);
 
               Crc32 crc = new Crc32();

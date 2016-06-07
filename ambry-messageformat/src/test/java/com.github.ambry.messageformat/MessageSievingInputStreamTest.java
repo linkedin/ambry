@@ -69,9 +69,9 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key1, prop1,
-            ByteBuffer.wrap(usermetadata1), stream1, blobContentSize)
-            : new PutMessageFormatBlobV2InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1, prop1,
+            ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
     MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
@@ -92,9 +92,9 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key2, prop2,
-            ByteBuffer.wrap(usermetadata2), stream2, blobContentSize)
-            : new PutMessageFormatBlobV2InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key2, prop2,
+            ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
     MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), false, -1);
@@ -115,9 +115,9 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key3, prop3,
-            ByteBuffer.wrap(usermetadata3), stream3, blobContentSize)
-            : new PutMessageFormatBlobV2InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3, prop3,
+            ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
     MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
@@ -211,9 +211,9 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key1, prop1,
-            ByteBuffer.wrap(usermetadata1), stream1, blobContentSize)
-            : new PutMessageFormatBlobV2InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1, prop1,
+            ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
     MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
@@ -234,9 +234,9 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key2, prop2,
-            ByteBuffer.wrap(usermetadata2), stream2, blobContentSize)
-            : new PutMessageFormatBlobV2InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key2, prop2,
+            ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
     MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), false, -1);
@@ -263,9 +263,9 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key3, prop3,
-            ByteBuffer.wrap(usermetadata3), stream3, blobContentSize)
-            : new PutMessageFormatBlobV2InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3, prop3,
+            ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
+            : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
     MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);
@@ -348,9 +348,9 @@ public class MessageSievingInputStreamTest {
       ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
       MessageFormatInputStream messageFormatStream1 =
-          (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key1, prop1,
-              ByteBuffer.wrap(usermetadata1), stream1, blobContentSize)
-              : new PutMessageFormatBlobV2InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
+          (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1, prop1,
+              ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
+              : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                   blobContentSize, blobType);
 
       MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize(), false, -1);
@@ -377,9 +377,9 @@ public class MessageSievingInputStreamTest {
       ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
       MessageFormatInputStream messageFormatStream3 =
-          (blobVersion == MessageFormatRecord.Blob_Version_V1) ? new PutMessageFormatInputStream(key3, prop3,
-              ByteBuffer.wrap(usermetadata3), stream3, blobContentSize)
-              : new PutMessageFormatBlobV2InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
+          (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3, prop3,
+              ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
+              : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                   blobContentSize, blobType);
 
       MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize(), false, -1);

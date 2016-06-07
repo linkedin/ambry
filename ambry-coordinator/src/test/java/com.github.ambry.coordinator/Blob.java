@@ -15,7 +15,6 @@ package com.github.ambry.coordinator;
 
 import com.github.ambry.messageformat.BlobOutput;
 import com.github.ambry.messageformat.BlobProperties;
-
 import java.nio.ByteBuffer;
 
 
