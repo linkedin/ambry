@@ -104,7 +104,6 @@ class DeleteManager {
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.operationAbortCount.inc();
       routerMetrics.deleteBlobErrorCount.inc();
       routerMetrics.countError(e);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
@@ -160,7 +159,7 @@ class DeleteManager {
       routerMetrics.countError(e);
     }
     routerMetrics.operationDequeuingRate.mark();
-    routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmittedTimeMs());
+    routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
     operationCompleteCallback
         .completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }

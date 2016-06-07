@@ -121,7 +121,6 @@ class PutManager {
       putOperations.add(putOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.operationAbortCount.inc();
       routerMetrics.putBlobErrorCount.inc();
       routerMetrics.countError(e);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);

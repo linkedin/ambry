@@ -127,7 +127,7 @@ public class GetBlobOperationTest {
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     blobIdFactory = new BlobIdFactory(mockClusterMap);
-    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     replicasCount = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
@@ -135,7 +135,7 @@ public class GetBlobOperationTest {
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     router =
-        new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(new MetricRegistry()), networkClientFactory,
+        new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
             new LoggingNotificationSystem(), mockClusterMap, time);
     networkClient = networkClientFactory.getNetworkClient();
   }

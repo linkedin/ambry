@@ -699,13 +699,9 @@ class PutOperation {
         if (time.milliseconds() - entry.getValue().getStartTimeMs() > routerConfig.routerRequestTimeoutMs) {
           operationTracker.onResponse(entry.getValue().replicaId, false);
           chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
-          ReplicaId replica = entry.getValue().replicaId;
-          DataNodeId dataNodeId = replica.getDataNodeId();
           NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-              routerMetrics.getDataNodeBasedMetrics(dataNodeId);
-          dataNodeBasedMetrics.putRequestTimeoutCount.inc();
+              routerMetrics.getDataNodeBasedMetrics(entry.getValue().replicaId.getDataNodeId());
           dataNodeBasedMetrics.putRequestErrorCount.inc();
-          dataNodeBasedMetrics.countError(RouterErrorCode.OperationTimedOut);
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -781,13 +777,12 @@ class PutOperation {
         // before attempting the slipped put.
         // - the response is for an earlier chunk held by this PutChunk.
         return;
-      } else {
-        routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - chunkPutRequestInfo.getStartTimeMs());
       }
-      ReplicaId replica = chunkPutRequestInfo.replicaId;
-      DataNodeId dataNodeId = replica.getDataNodeId();
+      long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.getStartTimeMs();
       NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-          routerMetrics.getDataNodeBasedMetrics(dataNodeId);
+          routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId());
+      routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
+      dataNodeBasedMetrics.putRequestLatencyMs.update(requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
@@ -832,10 +827,8 @@ class PutOperation {
       }
       operationTracker.onResponse(chunkPutRequestInfo.replicaId, isSuccessful);
       checkAndMaybeComplete();
-      if (chunkException != null) {
+      if (!isSuccessful) {
         dataNodeBasedMetrics.putRequestErrorCount.inc();
-        dataNodeBasedMetrics.countError(chunkException.getErrorCode());
-        dataNodeBasedMetrics.putRequestLatencyMs.update(time.milliseconds() - chunkPutRequestInfo.getStartTimeMs());
       }
     }
 

@@ -94,7 +94,7 @@ public class NonBlockingRouterMetrics {
   public NonBlockingRouterMetrics(ClusterMap clusterMap) {
     metricRegistry = clusterMap.getMetricRegistry();
 
-    // Operation Rate
+    // Operation Rate.
     putBlobOperationRate = metricRegistry.meter(MetricRegistry.name(PutManager.class, "PutBlobRequestArrivalRate"));
     getBlobInfoOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetManager.class, "GetBlobInfoRequestArrivalRate"));
@@ -105,7 +105,7 @@ public class NonBlockingRouterMetrics {
     operationDequeuingRate =
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationDequeuingRate"));
 
-    // Latency
+    // Latency.
     putBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobOperationLatencyMs"));
     putChunkOperationLatencyMs =
@@ -126,7 +126,7 @@ public class NonBlockingRouterMetrics {
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteManager.class, "DeleteBlobErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
 
-    // Count for various errors.
+    // Counters for various errors.
     ambryUnavailableErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "AmbryUnavailableErrorCount"));
     invalidBlobIdErrorCount =
@@ -170,8 +170,6 @@ public class NonBlockingRouterMetrics {
           .toString(dataNodeId.getPort());
       dataNodeToMetrics.put(dataNodeId, new NodeLevelMetrics(metricRegistry, dataNodeName));
     }
-    // A null key corresponds to the NodeLevelMetrics for all unknown DataNodeId.
-    dataNodeToMetrics.put(null, new NodeLevelMetrics(metricRegistry, "UnknownDataNode.UnknownHostName.UnknownPort"));
   }
 
   public void initializeOperationControllerMetrics(final Thread requestResponseHandlerThread) {
@@ -208,7 +206,7 @@ public class NonBlockingRouterMetrics {
   }
 
   /**
-   * Count error based on error type.
+   * Count errors based on error type.
    * <p/>
    * This method should be called when an {@code Operation} is completed or aborted.
    * @param exception The exception to be counted.
@@ -263,13 +261,15 @@ public class NonBlockingRouterMetrics {
   }
 
   /**
-   * Get {@link NodeLevelMetrics} for a given {@link DataNodeId}. If the {@link DataNodeId} as the key does not exist,
-   * a {@link NodeLevelMetrics} corresponding to an unknown {@link DataNodeId} will be returned.
+   * Get {@link NodeLevelMetrics} for a given {@link DataNodeId}. The construction of {@code dataNodeToMetrics}
+   * and any {@link DataNodeId} as a key passed to this method are all based on the {@link ClusterMap}, and the
+   * key should always exist. If the {@link DataNodeId} as the key does not exist, this will be a programming
+   * error.
    * @param dataNodeId The {@link DataNodeId} to be indexed.
    * @return The {@link NodeLevelMetrics}.
    */
   NodeLevelMetrics getDataNodeBasedMetrics(DataNodeId dataNodeId) {
-    return dataNodeToMetrics.containsKey(dataNodeId) ? dataNodeToMetrics.get(dataNodeId) : dataNodeToMetrics.get(null);
+    return dataNodeToMetrics.get(dataNodeId);
   }
 
   /**
@@ -280,48 +280,26 @@ public class NonBlockingRouterMetrics {
    */
   public class NodeLevelMetrics {
 
-    // Request rate.
+    // Request rate. For each operation type, this metrics tracks the request rate from the NonBlockingRouter to the
+    // remote data node.
     public final Meter putRequestRate;
     public final Meter getBlobInfoRequestRate;
     public final Meter getRequestRate;
     public final Meter deleteRequestRate;
 
-    // Request latency.
+    // Request latency. For each operation type, this metrics tracks the round-trip time between the NonBlockingRouter
+    // and the remote data node.
     public final Histogram putRequestLatencyMs;
     public final Histogram getBlobInfoRequestLatencyMs;
     public final Histogram getRequestLatencyMs;
     public final Histogram deleteRequestLatencyMs;
 
-    // Request error count.
+    // Request error count. For each operation type, this metrics tracks the total error count seen by the NonBlockingRouter
+    // for the remote data node.
     public final Counter putRequestErrorCount;
     public final Counter getBlobInfoRequestErrorCount;
     public final Counter getRequestErrorCount;
     public final Counter deleteRequestErrorCount;
-
-    // Timed-out request count for each operation type.
-    public final Counter putRequestTimeoutCount;
-    public final Counter getBlobInfoRequestTimeoutCount;
-    public final Counter getRequestTimeoutCount;
-    public final Counter deleteRequestTimeoutCount;
-
-    // Count for various errors at request level.
-    public final Counter ambryUnavailableErrorCountForRequest;
-    public final Counter invalidBlobIdErrorCountForRequest;
-    public final Counter invalidPutArgumentErrorCountForRequest;
-    public final Counter requestTimedOutErrorCountForRequest;
-    public final Counter routerClosedErrorCountForRequest;
-    public final Counter unexpectedInternalErrorCountForRequest;
-    public final Counter blobTooLargeErrorCountForRequest;
-    public final Counter badInputChannelErrorCountForRequest;
-    public final Counter insufficientCapacityErrorCountForRequest;
-    public final Counter blobDeletedErrorCountForRequest;
-    public final Counter blobDoesNotExistErrorCountForRequest;
-    public final Counter blobExpiredErrorCountForRequest;
-    public final Counter unknownErrorCountForRequest;
-
-    // Misc metrics at the DataNode level.
-    public final Meter requestErrorRate;
-    public final Counter unknownReplicaResponseError;
 
     NodeLevelMetrics(MetricRegistry registry, String dataNodeName) {
       // Request rate.
@@ -351,102 +329,6 @@ public class NonBlockingRouterMetrics {
           registry.counter(MetricRegistry.name(GetManager.class, dataNodeName, "GetRequestErrorCount"));
       deleteRequestErrorCount =
           registry.counter(MetricRegistry.name(DeleteManager.class, dataNodeName, "DeleteRequestErrorCount"));
-
-      // Timed-out request count.
-      putRequestTimeoutCount =
-          registry.counter(MetricRegistry.name(PutManager.class, dataNodeName, "PutRequestTimeoutCount"));
-      getBlobInfoRequestTimeoutCount =
-          registry.counter(MetricRegistry.name(GetManager.class, dataNodeName, "GetBlobInfoRequestTimeoutCount"));
-      getRequestTimeoutCount =
-          registry.counter(MetricRegistry.name(GetManager.class, dataNodeName, "GetRequestTimeoutCount"));
-      deleteRequestTimeoutCount =
-          registry.counter(MetricRegistry.name(DeleteManager.class, dataNodeName, "DeleteRequestTimeoutCount"));
-
-      // Count for various errors at request level.
-      ambryUnavailableErrorCountForRequest = registry
-          .counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "AmbryUnavailableErrorForRequest"));
-      invalidBlobIdErrorCountForRequest =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "InvalidBlobIdErrorForRequest"));
-      invalidPutArgumentErrorCountForRequest = registry
-          .counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "InvalidPutArgumentErrorForRequest"));
-      requestTimedOutErrorCountForRequest = registry
-          .counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "RequestTimedOutErrorForRequest"));
-      routerClosedErrorCountForRequest =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "RouterClosedErrorForRequest"));
-      unexpectedInternalErrorCountForRequest = registry
-          .counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "UnexpectedInternalErrorForRequest"));
-      blobTooLargeErrorCountForRequest =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "BlobTooLargeErrorForRequest"));
-      badInputChannelErrorCountForRequest =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "BadInputChannel"));
-      insufficientCapacityErrorCountForRequest = registry
-          .counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "InsufficientCapacityErrorForRequest"));
-      blobDeletedErrorCountForRequest =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "BlobDeletedErrorForRequest"));
-      blobDoesNotExistErrorCountForRequest = registry
-          .counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "BlobDoesNotExistErrorForRequest"));
-      blobExpiredErrorCountForRequest =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "BlobExpiredErrorForRequest"));
-      unknownErrorCountForRequest =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "UnknownRouterErrorForRequest"));
-
-      // Misc metrics at the DataNode level.
-      requestErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "RequestErrorArrivalRate"));
-      unknownReplicaResponseError =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, dataNodeName, "UnknownReplicaResponseError"));
-    }
-
-    /**
-     * Count the {@link RouterException} caused by a request (or its response). This {@link RouterException}
-     * may not be the final {@link RouterException} accompanied with the {@code Operation}, but such metrics
-     * can assist a root-cause analysis at the {@link DataNodeId} level.
-     * <p/>
-     * This method should be called when a request is either completed or timed out.
-     * @param error The {@link RouterErrorCode} of the exception to be counted.
-     */
-    void countError(RouterErrorCode error) {
-      requestErrorRate.mark();
-      switch (error) {
-        case AmbryUnavailable:
-          ambryUnavailableErrorCountForRequest.inc();
-          break;
-        case InvalidBlobId:
-          invalidBlobIdErrorCountForRequest.inc();
-          break;
-        case InvalidPutArgument:
-          invalidPutArgumentErrorCountForRequest.inc();
-          break;
-        case OperationTimedOut:
-          requestTimedOutErrorCountForRequest.inc();
-          break;
-        case RouterClosed:
-          routerClosedErrorCountForRequest.inc();
-          break;
-        case UnexpectedInternalError:
-          unexpectedInternalErrorCountForRequest.inc();
-          break;
-        case BlobTooLarge:
-          blobTooLargeErrorCountForRequest.inc();
-          break;
-        case BadInputChannel:
-          badInputChannelErrorCountForRequest.inc();
-          break;
-        case InsufficientCapacity:
-          insufficientCapacityErrorCountForRequest.inc();
-          break;
-        case BlobDeleted:
-          blobDeletedErrorCountForRequest.inc();
-          break;
-        case BlobDoesNotExist:
-          blobDoesNotExistErrorCountForRequest.inc();
-          break;
-        case BlobExpired:
-          blobExpiredErrorCountForRequest.inc();
-          break;
-        default:
-          unknownErrorCountForRequest.inc();
-          break;
-      }
     }
   }
 }

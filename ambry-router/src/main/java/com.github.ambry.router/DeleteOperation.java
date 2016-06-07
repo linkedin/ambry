@@ -45,7 +45,6 @@ import org.slf4j.LoggerFactory;
  * data blobs. The {@code DeleteOperation} is issued only to delete the metadata blob.
  */
 class DeleteOperation {
-
   //Operation arguments
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
@@ -54,7 +53,7 @@ class DeleteOperation {
   private final Callback<Void> callback;
   private final Time time;
   private final NonBlockingRouterMetrics routerMetrics;
-  private final long submittedTimeMs;
+  private final long submissionTimeMs;
 
   // Parameters associated with the state.
 
@@ -77,16 +76,16 @@ class DeleteOperation {
   /**
    * Instantiates a {@link DeleteOperation}.
    * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
    * @param responsehandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param blobId The {@link BlobId} that is to be deleted by this {@code DeleteOperation}.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
-   * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
    */
   DeleteOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ResponseHandler responsehandler,
       BlobId blobId, FutureResult<Void> futureResult, Callback<Void> callback, Time time) {
-    this.submittedTimeMs = time.milliseconds();
+    this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.responseHandler = responsehandler;
@@ -155,11 +154,13 @@ class DeleteOperation {
     if (deleteRequestInfo == null) {
       return;
     }
-    routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - deleteRequestInfo.getStartTimeMs());
     ReplicaId replica = deleteRequestInfo.replica;
-    DataNodeId dataNodeId = replica.getDataNodeId();
-    NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics = routerMetrics.getDataNodeBasedMetrics(dataNodeId);
-    RouterErrorCode routerErrorCode = null;
+    RouterErrorCode routerErrorCode;
+    long requestLatencyMs = time.milliseconds() - deleteRequestInfo.getStartTimeMs();
+    NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
+        routerMetrics.getDataNodeBasedMetrics(deleteRequestInfo.replica.getDataNodeId());
+    routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
+    dataNodeBasedMetrics.putRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
       responseHandler.onRequestResponseException(replica, new IOException(("NetworkClient error.")));
@@ -177,7 +178,6 @@ class DeleteOperation {
               .getCorrelationId());
           // @todo Discuss why this would complete the operation.
           routerMetrics.unknownReplicaResponseError.inc();
-          dataNodeBasedMetrics.unknownReplicaResponseError.inc();
           setOperationException(
               new RouterException("Received wrong response that is not for the corresponding request.",
                   RouterErrorCode.UnexpectedInternalError));
@@ -197,8 +197,6 @@ class DeleteOperation {
     checkAndMaybeComplete();
     if (routerErrorCode != null) {
       dataNodeBasedMetrics.deleteRequestErrorCount.inc();
-      dataNodeBasedMetrics.countError(routerErrorCode);
-      dataNodeBasedMetrics.deleteRequestLatencyMs.update(time.milliseconds() - deleteRequestInfo.getStartTimeMs());
     }
   }
 
@@ -229,13 +227,9 @@ class DeleteOperation {
       DeleteRequestInfo deleteRequestInfo = itr.next().getValue();
       if (time.milliseconds() - deleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
-        ReplicaId replica = deleteRequestInfo.replica;
-        DataNodeId dataNodeId = replica.getDataNodeId();
         NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-            routerMetrics.getDataNodeBasedMetrics(dataNodeId);
-        dataNodeBasedMetrics.deleteRequestTimeoutCount.inc();
+            routerMetrics.getDataNodeBasedMetrics(deleteRequestInfo.replica.getDataNodeId());
         dataNodeBasedMetrics.deleteRequestErrorCount.inc();
-        dataNodeBasedMetrics.countError(RouterErrorCode.OperationTimedOut);
         updateOperationState(deleteRequestInfo.replica, RouterErrorCode.OperationTimedOut);
       }
     }
@@ -397,7 +391,7 @@ class DeleteOperation {
     operationCompleted = true;
   }
 
-  long getSubmittedTimeMs() {
-    return submittedTimeMs;
+  long getSubmissionTimeMs() {
+    return submissionTimeMs;
   }
 }

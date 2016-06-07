@@ -103,7 +103,7 @@ public class ChunkFillTest {
     VerifiableProperties vProps = getNonBlockingRouterProperties();
     MockClusterMap mockClusterMap = new MockClusterMap();
     RouterConfig routerConfig = new RouterConfig(vProps);
-    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap.getMetricRegistry());
+    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
     BlobProperties putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
