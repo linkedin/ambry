@@ -214,6 +214,26 @@ public class SSLSelectorTest {
   }
 
   @Test
+  public void testSSLPrepare()
+      throws IOException {
+    // plain text connection should not starve or wait until ssl connection completes handshake
+    String connectionIdPlainText =
+        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
+
+    String connectionId =
+        selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
+
+    selector.poll(10000L);
+    Assert.assertTrue("Plain text channel should have been ready by now ",
+        selector.isChannelReady(connectionIdPlainText));
+
+    while (!selector.connected().contains(connectionId)) {
+      selector.poll(10000L);
+    }
+    Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionId));
+  }
+
+  @Test
   public void testCloseAfterConnectCall()
       throws IOException {
     String connectionId =
