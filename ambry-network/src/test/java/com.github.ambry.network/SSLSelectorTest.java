@@ -228,7 +228,7 @@ public class SSLSelectorTest {
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
 
     selector.poll(10000L);
-    Assert.assertTrue("Plain text channel should been added to connected list ",
+    Assert.assertTrue("Plain text channel should have been added to connected list ",
         selector.connected().contains(connectionIdPlainText));
 
     while (!selector.connected().contains(connectionIdSsl)) {
