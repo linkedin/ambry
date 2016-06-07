@@ -84,10 +84,9 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
     long startTimeInMs = System.currentTimeMillis();
+    boolean shouldReset = msg instanceof LastHttpContent;
     if (request != null) {
-      boolean recognized = false;
       if (msg instanceof HttpResponse) {
-        recognized = true;
         HttpResponse response = (HttpResponse) msg;
         logHeaders("Response", response, publicAccessLogger.getResponseHeaders());
         logMessage.append(", ");
@@ -95,24 +94,20 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         logMessage.append(", ");
         if (HttpHeaders.isTransferEncodingChunked(response)) {
           responseFirstChunkStartTimeInMs = System.currentTimeMillis();
+        } else {
+          shouldReset = true;
         }
+      } else if (!(msg instanceof HttpContent)) {
+        logger.error(
+            "Sending response that is not of type HttpResponse or HttpContent. Sending response to " + ctx.channel()
+                .remoteAddress() + ". Request is of type " + msg.getClass()
+                + ". No action being taken other than logging this unexpected state.");
       }
-      if (msg instanceof LastHttpContent) {
-        recognized = true;
+      if (shouldReset) {
         logDurations();
         publicAccessLogger.logInfo(logMessage.toString());
         reset();
       }
-      if (!recognized && !(msg instanceof HttpContent)) {
-        logger.error("Sending response (writeRequested) that is not of type HttpResponse or HttpContent. " +
-            "Sending response to " + ctx.channel().remoteAddress() + ". " +
-            "Request is of type " + msg.getClass() + ". " +
-            "No action being taken other than logging this unexpected state.");
-      }
-    } else {
-      logger.error("Sending response (writeRequested) without any request in progress. " +
-          "Sending response to " + ctx.channel().remoteAddress() + ". " +
-          "No action being taken other than logging this unexpected state.");
     }
     nettyMetrics.publicAccessLogResponseProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
     super.write(ctx, msg, promise);

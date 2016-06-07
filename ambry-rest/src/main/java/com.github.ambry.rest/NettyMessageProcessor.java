@@ -179,7 +179,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       logger.info("Channel {} has been idle for {} seconds. Closing it", ctx.channel(),
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
-      if (request != null) {
+      if (request != null && request.isOpen()) {
         onRequestAborted(new ClosedChannelException());
       }
     }
@@ -214,7 +214,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     if (!recognized) {
       logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
       nettyMetrics.unknownHttpObjectError.inc();
-      if (responseChannel == null || responseChannel.isResponseComplete()) {
+      if (responseChannel == null || requestContentFullyReceived) {
         resetState();
       }
       throw new RestServiceException("HttpObject received is null or not of a known type",
@@ -240,7 +240,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    */
   private void handleRequest(HttpRequest httpRequest)
       throws RestServiceException {
-    if (responseChannel == null || responseChannel.isResponseComplete()) {
+    if (responseChannel == null || requestContentFullyReceived) {
+      // Once all content associated with a request has been received, this channel is clear to receive new requests.
+      // If the client sends a request without waiting for the response, it is possible to screw things up a little
+      // but doing so would constitute an error and no proper client would do that.
       long processingStartTime = System.currentTimeMillis();
       try {
         resetState();
@@ -298,10 +301,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     if (request != null && !requestContentFullyReceived) {
       long processingStartTime = System.currentTimeMillis();
       nettyMetrics.bytesReadRate.mark(httpContent.content().readableBytes());
+      requestContentFullyReceived = httpContent instanceof LastHttpContent;
       try {
         logger.trace("Received content for request - {}", request.getUri());
         try {
-          requestContentFullyReceived = httpContent instanceof LastHttpContent;
           request.addContent(httpContent);
         } catch (IllegalStateException e) {
           nettyMetrics.contentAdditionError.inc();
@@ -329,9 +332,6 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    */
   private void onRequestAborted(Exception exception) {
     if (responseChannel != null) {
-      if (request != null && !responseChannel.isResponseComplete()) {
-        logger.trace("Request {} is aborted", request.getUri());
-      }
       responseChannel.onResponseComplete(exception);
     } else {
       // we specifically do not send an error response to the client directly (through ctx) at this point because of
