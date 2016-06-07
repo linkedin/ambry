@@ -213,6 +213,10 @@ public class SSLSelectorTest {
     Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionId));
   }
 
+  /**
+   * Test that preparation of a ssl connection doesn't starve other connections in queue
+   * @throws IOException
+   */
   @Test
   public void testSSLPrepare()
       throws IOException {
@@ -220,17 +224,17 @@ public class SSLSelectorTest {
     String connectionIdPlainText =
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
 
-    String connectionId =
+    String connectionIdSsl =
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
 
     selector.poll(10000L);
-    Assert.assertTrue("Plain text channel should have been ready by now ",
-        selector.isChannelReady(connectionIdPlainText));
+    Assert.assertTrue("Plain text channel should been added to connected list ",
+        selector.connected().contains(connectionIdPlainText));
 
-    while (!selector.connected().contains(connectionId)) {
+    while (!selector.connected().contains(connectionIdSsl)) {
       selector.poll(10000L);
     }
-    Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionId));
+    Assert.assertTrue("Channel should have been ready by now ", selector.isChannelReady(connectionIdSsl));
   }
 
   @Test
