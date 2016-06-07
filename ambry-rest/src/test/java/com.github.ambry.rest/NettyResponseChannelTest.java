@@ -722,19 +722,16 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       case Close:
         restResponseChannel.close();
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         break;
       case CopyHeaders:
         copyHeaders(httpRequest);
         restResponseChannel.onResponseComplete(null);
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         break;
       case ImmediateResponseComplete:
         restResponseChannel.onResponseComplete(null);
         assertEquals("ResponseStatus differs from default", ResponseStatus.Ok, restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         break;
       case FillWriteBuffer:
         ctx.channel().config().setWriteBufferLowWaterMark(1);
@@ -747,14 +744,12 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       case MultipleClose:
         restResponseChannel.onResponseComplete(null);
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         restResponseChannel.close();
         restResponseChannel.close();
         break;
       case MultipleOnResponseComplete:
         restResponseChannel.onResponseComplete(null);
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         restResponseChannel.onResponseComplete(null);
         break;
       case OnResponseCompleteWithRestException:
@@ -764,7 +759,6 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         break;
       case OnResponseCompleteWithNonRestException:
         restResponseChannel
@@ -772,7 +766,6 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         break;
       case ResponseFailureMidway:
         ChannelWriteCallback callback = new ChannelWriteCallback();
@@ -792,12 +785,10 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         restResponseChannel.setStatus(ResponseStatus.valueOf(HttpHeaders.getHeader(httpRequest, STATUS_HEADER_NAME)));
         restResponseChannel.onResponseComplete(null);
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         break;
       case WriteAfterClose:
         restResponseChannel.close();
         assertFalse("Request channel is not closed", request.isOpen());
-        assertTrue("Response should be marked complete", restResponseChannel.isResponseComplete());
         callback = new ChannelWriteCallback();
         callback.compareWithFuture(
             restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));

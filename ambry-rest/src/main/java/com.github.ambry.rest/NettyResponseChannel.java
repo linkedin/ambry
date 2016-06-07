@@ -77,9 +77,9 @@ class NettyResponseChannel implements RestResponseChannel {
   // tracks whether onResponseComplete() has been called. Helps make it idempotent and also treats response channel as
   // closed if this is true.
   private final AtomicBoolean responseCompleteCalled = new AtomicBoolean(false);
-  // tracks whether any response metadata has been written to the channel. Rejects any more attempts at writing
-  // metadata after this has been set to true.
-  private final AtomicBoolean responseMetadataWritten = new AtomicBoolean(false);
+  // tracks whether response metadata write has been initated. Rejects any more attempts at writing metadata after this
+  // has been set to true.
+  private final AtomicBoolean responseMetadataWriteInitiated = new AtomicBoolean(false);
   private final ResponseMetadataWriteListener responseMetadataWriteListener = new ResponseMetadataWriteListener();
   private final CleanupCallback cleanupCallback = new CleanupCallback();
   private final AtomicLong totalBytesWritten = new AtomicLong(0);
@@ -88,8 +88,6 @@ class NettyResponseChannel implements RestResponseChannel {
   private final AtomicLong chunksToWriteCount = new AtomicLong(0);
 
   private NettyRequest request = null;
-  // marked as true once response sending is *completely* finished. Signifies that this instance is no longer useful.
-  private volatile boolean responseComplete = false;
   // marked as true if force close is required because close() was called.
   private volatile boolean forceClose = false;
   // the ResponseStatus that will be sent (or has been sent) as a part of the response.
@@ -116,7 +114,7 @@ class NettyResponseChannel implements RestResponseChannel {
   @Override
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
     long writeProcessingStartTime = System.currentTimeMillis();
-    if (!responseMetadataWritten.get()) {
+    if (!responseMetadataWriteInitiated.get()) {
       maybeWriteResponseMetadata(responseMetadata, responseMetadataWriteListener);
     }
     Chunk chunk = new Chunk(src, callback);
@@ -254,15 +252,6 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Provides information on whether the response that needs to be sent through this RestResponseChannel has been
-   * completed.
-   * @return {@code true} if response sending is complete. {@code false} otherwise.
-   */
-  protected boolean isResponseComplete() {
-    return responseComplete;
-  }
-
-  /**
    * Closes the request associated with this NettyResponseChannel.
    */
   private void closeRequest() {
@@ -281,7 +270,7 @@ class NettyResponseChannel implements RestResponseChannel {
       GenericFutureListener<ChannelFuture> listener) {
     long writeProcessingStartTime = System.currentTimeMillis();
     boolean writtenThisTime = false;
-    if (responseMetadataWritten.compareAndSet(false, true)) {
+    if (responseMetadataWriteInitiated.compareAndSet(false, true)) {
       // we do some manipulation here for chunking. According to the HTTP spec, we can have either a Content-Length
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked. Note that sending HttpContent chunks data anyway - we are just explicitly specifying
@@ -316,7 +305,7 @@ class NettyResponseChannel implements RestResponseChannel {
       } else {
         HttpHeaders.setHeader(responseMetadata, headerName, headerValue);
       }
-      if (responseMetadataWritten.get()) {
+      if (responseMetadataWriteInitiated.get()) {
         nettyMetrics.deadResponseAccessError.inc();
         throw new IllegalStateException("Response metadata changed after it has already been written to the channel");
       } else {
@@ -461,7 +450,6 @@ class NettyResponseChannel implements RestResponseChannel {
       logger.trace("Requested closing of channel {}", ctx.channel());
     }
     closeRequest();
-    responseComplete = true;
   }
 
   /**
