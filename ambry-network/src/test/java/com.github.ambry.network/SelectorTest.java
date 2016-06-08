@@ -103,8 +103,6 @@ public class SelectorTest {
     assertEquals("There should be a disconnect", 1, selector.disconnected().size());
     assertTrue("Expected connectionId " + connectionId + " missing from selector's disconnected list ",
         selector.disconnected().contains(connectionId));
-    connectionId = blockingConnect();
-    assertEquals("hello2", blockingRequest(connectionId, "hello2"));
   }
 
   /**
