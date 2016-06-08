@@ -298,7 +298,8 @@ class NettyResponseChannel implements RestResponseChannel {
       if (!HttpHeaders.isContentLengthSet(responseMetadata)) {
         // This makes sure that we don't stomp on any existing transfer-encoding.
         HttpHeaders.setTransferEncodingChunked(responseMetadata);
-      } else if (HttpHeaders.getContentLength(responseMetadata) == 0) {
+      } else if (HttpHeaders.getContentLength(responseMetadata) == 0
+          && !(responseMetadata instanceof FullHttpResponse)) {
         // if the Content-Length is 0, we can send a FullHttpResponse since there is no content expected.
         FullHttpResponse fullHttpResponse =
             new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, responseMetadata.getStatus());
