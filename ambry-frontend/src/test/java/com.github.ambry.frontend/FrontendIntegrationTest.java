@@ -125,9 +125,10 @@ public class FrontendIntegrationTest {
   @Test
   public void postGetHeadDeleteTest()
       throws Exception {
-    doPostGetHeadDeleteTest(1024);
-    doPostGetHeadDeleteTest(8192);
-    doPostGetHeadDeleteTest(10000);
+    doPostGetHeadDeleteTest(0, false);
+    doPostGetHeadDeleteTest(1024, false);
+    doPostGetHeadDeleteTest(8192, false);
+    doPostGetHeadDeleteTest(10000, false);
   }
 
   /**
@@ -137,23 +138,8 @@ public class FrontendIntegrationTest {
   @Test
   public void multipartPostGetHeadTest()
       throws Exception {
-    ByteBuffer blobContent = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
-    ByteBuffer usermetadata = ByteBuffer.wrap(UtilsTest.getRandomString(32).getBytes());
-    String serviceId = "postGetHeadDeleteServiceID";
-    String contentType = "application/octet-stream";
-    String ownerId = "postGetHeadDeleteOwnerID";
-    HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeaders(headers, blobContent.capacity(), 7200, false, serviceId, contentType, ownerId);
-
-    String blobId = multipartPostBlobAndVerify(headers, blobContent, usermetadata);
-    getBlobAndVerify(blobId, headers, blobContent);
-    getUserMetadataAndVerify(blobId, headers, usermetadata.array());
-    getBlobInfoAndVerify(blobId, headers, usermetadata.array());
-    getHeadAndVerify(blobId, headers);
-    deleteBlobAndVerify(blobId);
-
-    // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId);
+    doPostGetHeadDeleteTest(0, true);
+    doPostGetHeadDeleteTest(1024, true);
   }
 
   /*
@@ -176,35 +162,6 @@ public class FrontendIntegrationTest {
 
   // helpers
   // general
-
-  /**
-   * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
-   * @param contentSize the size of the blob to be tested
-   * @throws Exception
-   */
-  private void doPostGetHeadDeleteTest(int contentSize)
-      throws Exception {
-    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(contentSize));
-    String serviceId = "postGetHeadDeleteServiceID";
-    String contentType = "application/octet-stream";
-    String ownerId = "postGetHeadDeleteOwnerID";
-    HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
-    headers.set(HttpHeaders.Names.CONTENT_LENGTH, content.capacity());
-    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
-    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
-
-    String blobId = postBlobAndVerify(headers, content);
-    getBlobAndVerify(blobId, headers, content);
-    getNotModifiedBlobAndVerify(blobId);
-    getUserMetadataAndVerify(blobId, headers, null);
-    getBlobInfoAndVerify(blobId, headers, null);
-    getHeadAndVerify(blobId, headers);
-    deleteBlobAndVerify(blobId);
-
-    // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId);
-  }
 
   /**
    * Method to easily create a request.
@@ -299,6 +256,42 @@ public class FrontendIntegrationTest {
   }
 
   // postGetHeadDeleteTest() and multipartPostGetHeadTest() helpers
+
+  /**
+   * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
+   * @param contentSize the size of the blob to be tested
+   * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
+   * @throws Exception
+   */
+  private void doPostGetHeadDeleteTest(int contentSize, boolean multipartPost)
+      throws Exception {
+    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(contentSize));
+    String serviceId = "postGetHeadDeleteServiceID";
+    String contentType = "application/octet-stream";
+    String ownerId = "postGetHeadDeleteOwnerID";
+    HttpHeaders headers = new DefaultHttpHeaders();
+    setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
+    headers.set(HttpHeaders.Names.CONTENT_LENGTH, content.capacity());
+    String blobId;
+    byte[] usermetadata = null;
+    if (multipartPost) {
+      usermetadata = UtilsTest.getRandomString(32).getBytes();
+      blobId = multipartPostBlobAndVerify(headers, content, ByteBuffer.wrap(usermetadata));
+    } else {
+      headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+      headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+      blobId = postBlobAndVerify(headers, content);
+    }
+    getBlobAndVerify(blobId, headers, content);
+    getNotModifiedBlobAndVerify(blobId);
+    getUserMetadataAndVerify(blobId, headers, usermetadata);
+    getBlobInfoAndVerify(blobId, headers, usermetadata);
+    getHeadAndVerify(blobId, headers);
+    deleteBlobAndVerify(blobId);
+
+    // check GET, HEAD and DELETE after delete.
+    verifyOperationsAfterDelete(blobId);
+  }
 
   /**
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.

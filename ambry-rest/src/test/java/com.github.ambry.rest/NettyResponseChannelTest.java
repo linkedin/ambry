@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.router.Callback;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -40,8 +41,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -59,7 +62,7 @@ import static org.junit.Assert.*;
  * <p/>
  * To understand what each {@link TestingUri} is doing, refer to
  * {@link MockNettyMessageProcessor#handleRequest(HttpRequest)} and
- * {@link MockNettyMessageProcessor#handleContent(HttpContent)}
+ * {@link MockNettyMessageProcessor#handleContent(HttpContent)}.
  */
 public class NettyResponseChannelTest {
   private static final Map<RestServiceErrorCode, HttpResponseStatus> REST_ERROR_CODE_TO_HTTP_STATUS = new HashMap<>();
@@ -78,39 +81,93 @@ public class NettyResponseChannelTest {
 
   /**
    * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
-   * {@link NettyResponseChannel#write(ByteBuffer, Callback)} and then completes the response.
+   * {@link NettyResponseChannel#write(ByteBuffer, Callback)} and then complete the response.
    * <p/>
-   * For a description of what different URIs do, check {@link TestingUri}. For the actual functionality, check
-   * {@link MockNettyMessageProcessor}).
-   * @throws IOException
+   * These responses have the header Transfer-Encoding set to chunked.
+   * @throws Exception
    */
   @Test
-  public void commonCaseTest()
-      throws IOException {
+  public void responsesWithTransferEncodingChunkedTest()
+      throws Exception {
     String content = "@@randomContent@@@";
     String lastContent = "@@randomLastContent@@@";
     EmbeddedChannel channel = createEmbeddedChannel();
-    AtomicLong requestIdGenerator = new AtomicLong(0);
+    MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+    AtomicLong contentIdGenerator = new AtomicLong(0);
 
-    final int ITERATIONS = 5;
-    for (int i = 0; i < 5; i++) {
+    final int ITERATIONS = 10;
+    for (int i = 0; i < ITERATIONS; i++) {
       boolean isKeepAlive = i != (ITERATIONS - 1);
-      String contentToSend = content + requestIdGenerator.getAndIncrement();
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
       HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
       channel.writeInbound(httpRequest);
-      channel.writeInbound(createContent(contentToSend, false));
+      ArrayList<String> contents = new ArrayList<>();
+      for (int j = 0; j <= i; j++) {
+        String contentToSend = content + contentIdGenerator.getAndIncrement();
+        channel.writeInbound(createContent(contentToSend, false));
+        contents.add(contentToSend);
+      }
       channel.writeInbound(createContent(lastContent, true));
+      verifyCallbacks(processor);
       // first outbound has to be response.
       HttpResponse response = (HttpResponse) channel.readOutbound();
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+      assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpHeaders.isTransferEncodingChunked(response));
       // content echoed back.
-      String returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
-      assertEquals("Content does not match with expected content", contentToSend, returnedContent);
+      for (String srcOfTruth : contents) {
+        String returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
+        assertEquals("Content does not match with expected content", srcOfTruth, returnedContent);
+      }
       // last content echoed back.
-      returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
+      String returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
       assertEquals("Content does not match with expected content", lastContent, returnedContent);
       assertTrue("Did not receive end marker", channel.readOutbound() instanceof LastHttpContent);
+      assertEquals("Unexpected channel state on the server", isKeepAlive, channel.isActive());
+    }
+  }
+
+  /**
+   * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
+   * {@link NettyResponseChannel#write(ByteBuffer, Callback)} and then complete the response.
+   * <p/>
+   * These responses have the header Content-Length set.
+   * @throws Exception
+   */
+  @Test
+  public void responsesWithContentLengthTest()
+      throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+    final int ITERATIONS = 10;
+    for (int i = 0; i < ITERATIONS; i++) {
+      boolean isKeepAlive = i != (ITERATIONS - 1);
+      HttpHeaders httpHeaders = new DefaultHttpHeaders();
+      httpHeaders.set(MockNettyMessageProcessor.CHUNK_COUNT_HEADER_NAME, i);
+      HttpRequest httpRequest =
+          RestTestUtils.createRequest(HttpMethod.POST, TestingUri.ResponseWithContentLength.toString(), httpHeaders);
+      HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
+      channel.writeInbound(httpRequest);
+      verifyCallbacks(processor);
+
+      // first outbound has to be response.
+      HttpResponse response = (HttpResponse) channel.readOutbound();
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+      long contentLength = HttpHeaders.getContentLength(response, -1);
+      assertEquals("Unexpected Content-Length", MockNettyMessageProcessor.CHUNK.length * i, contentLength);
+      if (contentLength == 0) {
+        // special case. Since Content-Length is set, the response should be an instance of FullHttpResponse.
+        assertTrue("Response not instance of FullHttpResponse", response instanceof FullHttpResponse);
+      } else {
+        HttpContent httpContent = null;
+        for (int j = 0; j < i; j++) {
+          httpContent = (HttpContent) channel.readOutbound();
+          byte[] returnedContent = httpContent.content().array();
+          assertArrayEquals("Content does not match with expected content", MockNettyMessageProcessor.CHUNK,
+              returnedContent);
+        }
+        // the last HttpContent should also be an instance of LastHttpContent
+        assertTrue("The last part of the content is not LastHttpContent", httpContent instanceof LastHttpContent);
+      }
       assertEquals("Unexpected channel state on the server", isKeepAlive, channel.isActive());
     }
   }
@@ -123,15 +180,32 @@ public class NettyResponseChannelTest {
   @Test
   public void noResponseBodyTest() {
     EmbeddedChannel channel = createEmbeddedChannel();
+
+    // with Transfer-Encoding:Chunked
     HttpRequest httpRequest =
         RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString(), null);
-    HttpHeaders.setKeepAlive(httpRequest, false);
     channel.writeInbound(httpRequest);
     // There should be a response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-    // Channel should be closed.
-    assertFalse("Channel not closed on the server", channel.isActive());
+    assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpHeaders.isTransferEncodingChunked(response));
+    // since this is Transfer-Encoding:chunked, there should be a LastHttpContent
+    assertTrue("Did not receive end marker", channel.readOutbound() instanceof LastHttpContent);
+    assertTrue("Channel should be alive", channel.isActive());
+
+    // with Content-Length set
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(MockNettyMessageProcessor.CHUNK_COUNT_HEADER_NAME, 0);
+    httpRequest = RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString(), headers);
+    HttpHeaders.setKeepAlive(httpRequest, false);
+    channel.writeInbound(httpRequest);
+    // There should be a response.
+    response = (HttpResponse) channel.readOutbound();
+    assertEquals("Response must have Content-Length set to 0", 0, HttpHeaders.getContentLength(response, -1));
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    // since Content-Length is set, the response should be an instance of FullHttpResponse.
+    assertTrue("Response not instance of FullHttpResponse", response instanceof FullHttpResponse);
+    assertFalse("Channel should not be alive", channel.isActive());
   }
 
   /**
@@ -177,24 +251,40 @@ public class NettyResponseChannelTest {
       channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
       // channel gets closed because of write failure
       channel.writeInbound(createContent(content, true));
+      verifyCallbacks(processor);
       fail("Callback for write would have thrown an Exception");
     } catch (Exception e) {
       assertEquals("Exception not as expected", ExceptionOutboundHandler.EXCEPTION_MESSAGE, e.getMessage());
     }
 
     // writing to channel with a outbound handler that generates an Error
-    EmbeddedChannel channel = new EmbeddedChannel(new ErrorOutboundHandler(), new MockNettyMessageProcessor());
+    MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+    EmbeddedChannel channel = new EmbeddedChannel(new ErrorOutboundHandler(), processor);
     try {
       channel.writeInbound(
           RestTestUtils.createRequest(HttpMethod.GET, TestingUri.WriteFailureWithThrowable.toString(), null));
+      verifyCallbacks(processor);
     } catch (Error e) {
       assertEquals("Unexpected error", ErrorOutboundHandler.ERROR_MESSAGE, e.getMessage());
     }
 
     channel = createEmbeddedChannel();
+    processor = channel.pipeline().get(MockNettyMessageProcessor.class);
     channel
         .writeInbound(RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ResponseFailureMidway.toString(), null));
+    verifyCallbacks(processor);
     assertFalse("Channel is not closed at the remote end", channel.isActive());
+  }
+
+  /**
+   * Asks the server to write more data than the set Content-Length and checks behavior.
+   * @throws Exception
+   */
+  @Test
+  public void writeMoreThanContentLengthTest()
+      throws Exception {
+    doWriteMoreThanContentLengthTest(0);
+    doWriteMoreThanContentLengthTest(5);
   }
 
   /**
@@ -404,6 +494,24 @@ public class NettyResponseChannelTest {
     return new EmbeddedChannel(chunkedWriteHandler, processor);
   }
 
+  /**
+   * Verifies any callbacks queued in the {@code processor}.
+   * @param processor the {@link MockNettyMessageProcessor} that contains the callbacks that need to be verified.
+   * @throws Exception
+   */
+  private void verifyCallbacks(MockNettyMessageProcessor processor)
+      throws Exception {
+    if (processor == null) {
+      assertNotNull("There is no MockNettyMessageProcessor in the channel", processor);
+    }
+    for (ChannelWriteCallback callback : processor.writeCallbacksToVerify) {
+      callback.compareWithFuture();
+      if (callback.exception != null) {
+        throw callback.exception;
+      }
+    }
+  }
+
   // badStateTransitionsTest() helpers
 
   /**
@@ -417,8 +525,10 @@ public class NettyResponseChannelTest {
   private void doBadStateTransitionTest(TestingUri uri, Class exceptionClass)
       throws Exception {
     EmbeddedChannel channel = createEmbeddedChannel();
+    MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
     try {
       channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
+      verifyCallbacks(processor);
       fail("This test was expecting the handler in the channel to throw an exception");
     } catch (Exception e) {
       if (!exceptionClass.isInstance(e)) {
@@ -454,6 +564,39 @@ public class NettyResponseChannelTest {
     // no exception because onResponseComplete() swallows it.
     channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
     assertFalse("Channel is not closed at the remote end", channel.isActive());
+  }
+
+  // writeMoreThanContentLengthTest() helpers.
+
+  /**
+   * Asks the server to write more data than the set Content-Length and checks behavior.
+   * @param chunkCount the number of chunks of {@link MockNettyMessageProcessor#CHUNK} to use to set Content-Length.
+   * @throws Exception
+   */
+  private void doWriteMoreThanContentLengthTest(int chunkCount)
+      throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    MockNettyMessageProcessor processor = channel.pipeline().get(MockNettyMessageProcessor.class);
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
+    httpHeaders.set(MockNettyMessageProcessor.CHUNK_COUNT_HEADER_NAME, chunkCount);
+    HttpRequest httpRequest =
+        RestTestUtils.createRequest(HttpMethod.POST, TestingUri.WriteMoreThanContentLength.toString(), httpHeaders);
+    HttpHeaders.setKeepAlive(httpRequest, false);
+    channel.writeInbound(httpRequest);
+
+    try {
+      verifyCallbacks(processor);
+      fail("One of the callbacks should have failed because the data written was more than Content-Length");
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
+
+    // It doesn't matter what the response is - because it may either fail or succeed depending on certain race
+    // conditions. What matters is that the programming error is caught appropriately by NettyResponseChannel and it
+    // makes a callback with the right exception.
+    while (channel.readOutbound() != null) {
+    }
+    channel.close();
   }
 
   // headersPresenceTest() helpers
@@ -620,6 +763,16 @@ enum TestingUri {
    */
   ResponseFailureMidway,
   /**
+   * When this request is received, a response with {@link RestUtils.Headers#CONTENT_LENGTH} set is returned.
+   * The value of the header {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} is used to determine the number
+   * of chunks (each equal to {@link MockNettyMessageProcessor#CHUNK}) to return.
+   * <p/>
+   * The {@link RestUtils.Headers#CONTENT_LENGTH} is equal to the value in
+   * {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} times the length of
+   * {@link MockNettyMessageProcessor#CHUNK}
+   */
+  ResponseWithContentLength,
+  /**
    * When this request is received, {@link NettyResponseChannel#setHeader(String, Object)} is attempted with null
    * arguments. If these calls don't fail, we report an error.
    */
@@ -640,6 +793,18 @@ enum TestingUri {
    * Fail a write with a {@link Throwable} to test reactions.
    */
   WriteFailureWithThrowable,
+  /**
+   * When this request is received, a response with {@link RestUtils.Headers#CONTENT_LENGTH} set is returned.
+   * The value of the header {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} is used to determine the number
+   * of chunks (each equal to {@link MockNettyMessageProcessor#CHUNK}) to add to the response channel. The chunks added
+   * is one more than the value of {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME}. The last chunk write is
+   * checked for error.
+   * <p/>
+   * The {@link RestUtils.Headers#CONTENT_LENGTH} is equal to the value in
+   * {@link MockNettyMessageProcessor#CHUNK_COUNT_HEADER_NAME} times the length of
+   * {@link MockNettyMessageProcessor#CHUNK}
+   */
+  WriteMoreThanContentLength,
   /**
    * Catch all TestingUri.
    */
@@ -669,6 +834,17 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   static final String CUSTOM_HEADER_NAME = "customHeader";
   static final String STATUS_HEADER_NAME = "status";
   static final String REST_SERVICE_ERROR_CODE_HEADER_NAME = "restServiceErrorCode";
+
+  // CHUNK and CHUNK_COUNT HEADER_NAME together help in Content-Length tests.
+  // If a test sets CHUNK_COUNT_HEADER_NAME to 3,
+  // 1. The Content-Length is set to 3 * CHUNK.length
+  // 2. The content is sent in two chunks both of which contain the same data.
+  // 3. The last chunk will be sent as LastHttpContent.
+  static final byte[] CHUNK = RestTestUtils.getRandomBytes(1024);
+  static final String CHUNK_COUNT_HEADER_NAME = "chunkCount";
+
+  // the write callbacks to verify if any. This is reset at the beginning of every request.
+  final List<ChannelWriteCallback> writeCallbacksToVerify = new ArrayList<>();
 
   private ChannelHandlerContext ctx;
   private NettyRequest request;
@@ -713,10 +889,11 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    */
   private void handleRequest(HttpRequest httpRequest)
       throws Exception {
+    writeCallbacksToVerify.clear();
     request = new NettyRequest(httpRequest, nettyMetrics);
     restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics);
     restResponseChannel.setRequest(request);
-    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     TestingUri uri = TestingUri.getTestingURI(request.getUri());
     switch (uri) {
       case Close:
@@ -729,6 +906,14 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         assertFalse("Request channel is not closed", request.isOpen());
         break;
       case ImmediateResponseComplete:
+        int chunkCount = HttpHeaders.getIntHeader(httpRequest, CHUNK_COUNT_HEADER_NAME, -1);
+        if (chunkCount > 0) {
+          restResponseChannel.onResponseComplete(new RestServiceException(
+              "Invalid value for header : [" + CHUNK_COUNT_HEADER_NAME + "]. Can only be 0 for [/" + uri + "]",
+              RestServiceErrorCode.BadRequest));
+        } else if (chunkCount == 0) {
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        }
         restResponseChannel.onResponseComplete(null);
         assertEquals("ResponseStatus differs from default", ResponseStatus.Ok, restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
@@ -739,7 +924,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         break;
       case ModifyResponseMetadataAfterWrite:
         restResponseChannel.write(ByteBuffer.wrap(new byte[0]), null);
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
         break;
       case MultipleClose:
         restResponseChannel.onResponseComplete(null);
@@ -769,11 +954,35 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         break;
       case ResponseFailureMidway:
         ChannelWriteCallback callback = new ChannelWriteCallback();
-        callback.compareWithFuture(restResponseChannel
+        callback.setFuture(restResponseChannel
             .write(ByteBuffer.wrap(TestingUri.ResponseFailureMidway.toString().getBytes()), callback));
-        assertNull("There shouldn't have been any exceptions on the first write", callback.exception);
+        writeCallbacksToVerify.add(callback);
         restResponseChannel.onResponseComplete(new Exception());
         // this should close the channel and the test will check for that.
+        break;
+      case ResponseWithContentLength:
+        chunkCount = HttpHeaders.getIntHeader(httpRequest, CHUNK_COUNT_HEADER_NAME, -1);
+        if (chunkCount == -1) {
+          restResponseChannel.onResponseComplete(
+              new RestServiceException("Request should contain header : [" + CHUNK_COUNT_HEADER_NAME + "]",
+                  RestServiceErrorCode.BadRequest));
+        } else {
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, chunkCount * CHUNK.length);
+          if (chunkCount == 0) {
+            // special case check
+            callback = new ChannelWriteCallback();
+            callback.setFuture(restResponseChannel.write(ByteBuffer.allocate(0), callback));
+            writeCallbacksToVerify.add(callback);
+          } else {
+            for (int i = 0; i < chunkCount; i++) {
+              callback = new ChannelWriteCallback();
+              callback.setFuture(restResponseChannel.write(ByteBuffer.wrap(CHUNK), callback));
+              writeCallbacksToVerify.add(callback);
+            }
+          }
+          restResponseChannel.onResponseComplete(null);
+        }
+        assertFalse("Request channel is not closed", request.isOpen());
         break;
       case SetNullHeader:
         setNullHeaders();
@@ -790,16 +999,32 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         restResponseChannel.close();
         assertFalse("Request channel is not closed", request.isOpen());
         callback = new ChannelWriteCallback();
-        callback.compareWithFuture(
+        callback.setFuture(
             restResponseChannel.write(ByteBuffer.wrap(TestingUri.WriteAfterClose.toString().getBytes()), callback));
-        if (callback.exception != null) {
-          throw callback.exception;
-        }
+        writeCallbacksToVerify.add(callback);
         break;
       case WriteFailureWithThrowable:
         callback = new ChannelWriteCallback();
-        callback.compareWithFuture(restResponseChannel
+        callback.setFuture(restResponseChannel
             .write(ByteBuffer.wrap(TestingUri.WriteFailureWithThrowable.toString().getBytes()), callback));
+        writeCallbacksToVerify.add(callback);
+        break;
+      case WriteMoreThanContentLength:
+        chunkCount = HttpHeaders.getIntHeader(httpRequest, CHUNK_COUNT_HEADER_NAME, -1);
+        if (chunkCount == -1) {
+          restResponseChannel.onResponseComplete(
+              new RestServiceException("Request should contain header : [" + CHUNK_COUNT_HEADER_NAME + "]",
+                  RestServiceErrorCode.BadRequest));
+        } else {
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, chunkCount * CHUNK.length);
+          // write one more chunk than required.
+          for (int i = 0; i <= chunkCount; i++) {
+            callback = new ChannelWriteCallback();
+            callback.setFuture(restResponseChannel.write(ByteBuffer.wrap(CHUNK), callback));
+            writeCallbacksToVerify.add(callback);
+          }
+          restResponseChannel.onResponseComplete(null);
+        }
         break;
     }
   }
@@ -814,17 +1039,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     if (request != null) {
       boolean isLast = httpContent instanceof LastHttpContent;
       ByteBuffer content = ByteBuffer.wrap(httpContent.content().array());
-      int bytesWritten = 0;
-      while (content.hasRemaining()) {
-        ChannelWriteCallback callback = new ChannelWriteCallback();
-        callback.compareWithFuture(restResponseChannel.write(content, callback));
-        if (callback.exception == null) {
-          bytesWritten += callback.result;
-        } else {
-          throw callback.exception;
-        }
-      }
-      assertEquals("Bytes written not equal to content size", httpContent.content().array().length, bytesWritten);
+      ChannelWriteCallback callback = new ChannelWriteCallback();
+      callback.setFuture(restResponseChannel.write(content, callback));
+      writeCallbacksToVerify.add(callback);
       if (isLast) {
         restResponseChannel.onResponseComplete(null);
         assertFalse("Request channel is not closed", request.isOpen());
@@ -1014,6 +1231,7 @@ class ChannelWriteCallback implements Callback<Long> {
    */
   public Exception exception = null;
   private CountDownLatch callbackReceived = new CountDownLatch(1);
+  private Future<Long> future;
 
   @Override
   public void onCompletion(Long result, Exception exception) {
@@ -1023,22 +1241,37 @@ class ChannelWriteCallback implements Callback<Long> {
   }
 
   /**
-   * Compares the data obtained from the callback with the data obtained from {@code future}.
-   * @param future the {@link Future} that represents the result of the same operation that this callback is meant for.
+   * Set the {@link Future} associated with the write for which this object is a callback.
+   * @param future the {@link Future} associated with the write for which this object is a callback.
+   */
+  void setFuture(Future<Long> future) {
+    this.future = future;
+  }
+
+  /**
+   * Compares the data obtained from the callback with the data obtained from future.
    * @throws InterruptedException
    * @throws TimeoutException
    */
-  public void compareWithFuture(Future<Long> future)
+  void compareWithFuture()
       throws InterruptedException, TimeoutException {
-    Long futureOutput;
+    Long futureResult = null;
+    Exception futureException = null;
     try {
-      futureOutput = future.get(1, TimeUnit.MILLISECONDS);
-      assertEquals("Future and callback results don't match", futureOutput, result);
+      futureResult = future.get(1, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
-      if (!callbackReceived.await(1, TimeUnit.MILLISECONDS)) {
-        throw new IllegalStateException("Callback has not been invoked even though future.get() has returned");
+      futureException = e;
+    }
+
+    if (!callbackReceived.await(1, TimeUnit.MILLISECONDS)) {
+      throw new IllegalStateException("Callback has not been invoked even though future.get() has returned");
+    } else {
+      if (futureException == null) {
+        assertEquals("Future and callback results don't match", futureResult, result);
+        assertNull("There should have been no exception in the callback", exception);
       } else {
-        assertEquals("Future and callback exceptions don't match", e.getCause().getMessage(), exception.getMessage());
+        assertEquals("Future and callback exceptions don't match", Utils.getRootCause(exception).getMessage(),
+            Utils.getRootCause(futureException).getMessage());
       }
     }
   }
