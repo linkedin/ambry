@@ -45,7 +45,8 @@ public class NetworkMetrics {
   public final Counter selectorKeyOperationErrorCount;
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
-  public Gauge<Long> numActiveConnections;
+  private final List<AtomicLong> activeConnectionsList;
+  public final Gauge<Long> selectorActiveConnectionsCount;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
   // Plaintext metrics
@@ -80,14 +81,9 @@ public class NetworkMetrics {
   public final Counter sslRenegotiationCount;
 
   // NetworkClient metrics
-  // number of times connection checkout have been tried before succeeding
-  public final Meter connectionCheckOutAttemptsBeforeSucceeding;
-  // number of times connection checkout have been tried before timing out
-  public final Meter connectionCheckOutAttemptsBeforeFailing;
   public final Meter connectionsDisconnectedCount;
 
-  public final Histogram prepareSendTime;
-  public final Histogram handleSelectorEventsTime;
+  public final Histogram networkClientSendAndPollTime;
   public final Histogram requestQueueTime;
   public final Histogram requestSendTime;
   public final Histogram requestSendTotalTime;
@@ -97,7 +93,8 @@ public class NetworkMetrics {
   public final Counter connectionTimeOutError;
   public final Counter networkClientIOError;
 
-  public Gauge<Long> networkClientPendingConnections;
+  private final List<AtomicLong> pendingConnectionsList;
+  public final Gauge<Long> networkClientPendingConnectionsCount;
 
   public NetworkMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -140,14 +137,10 @@ public class NetworkMetrics {
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
     sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
 
-    connectionCheckOutAttemptsBeforeSucceeding =
-        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutAttemptsBeforeSucceeding"));
-    connectionCheckOutAttemptsBeforeFailing =
-        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionCheckOutAttemptsBeforeFailing"));
     connectionsDisconnectedCount =
         registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionsDisconnectedCount"));
-    prepareSendTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "PrepareSendTime"));
-    handleSelectorEventsTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "HandleSelectorEventsTime"));
+    networkClientSendAndPollTime =
+        registry.histogram(MetricRegistry.name(NetworkClient.class, "NetworkClientSendAndPollTime"));
     requestQueueTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestQueueTime"));
     requestSendTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestSendTime"));
     requestSendTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestSendTotalTime"));
@@ -157,33 +150,52 @@ public class NetworkMetrics {
     connectionTimeOutError = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionTimeOutError"));
     networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
 
+    activeConnectionsList = new ArrayList<>();
+    pendingConnectionsList = new ArrayList<>();
     selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
-  }
 
-  /**
-   * Initializes a few network metrics for the selector
-   * @param activeConnections count of current active connections
-   */
-  void initializeSelectorMetrics(final AtomicLong activeConnections) {
-    numActiveConnections = new Gauge<Long>() {
+    selectorActiveConnectionsCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return activeConnections.get();
+        long activeConnections = 0;
+        for (AtomicLong activeConnectionCount : activeConnectionsList) {
+          activeConnections += activeConnectionCount.get();
+        }
+        return activeConnections;
       }
     };
+
+    networkClientPendingConnectionsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        long pendingConnections = 0;
+        for (AtomicLong pendingConnectionCount : pendingConnectionsList) {
+          pendingConnections += pendingConnectionCount.get();
+        }
+        return pendingConnections;
+      }
+    };
+
+    registry.register(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
+        selectorActiveConnectionsCount);
+    registry.register(MetricRegistry.name(NetworkClient.class, "NetworkClientPendingConnectionsCount"),
+        networkClientPendingConnectionsCount);
   }
 
   /**
-   * Updates the gauge that tracks the count of pending connections to be checked out by the Network client
+   * Registers the number of active connections for a selector
+   * @param numActiveConnections count of current active connections
+   */
+  void registerSelectorActiveConnections(final AtomicLong numActiveConnections) {
+    activeConnectionsList.add(numActiveConnections);
+  }
+
+  /**
+   * Registers the count of pending connections to be checked out by the Network client
    * @param numPendingConnections the count of pending connections to be checked out
    */
-  void initializeNetworkClientPendingConnections(final AtomicLong numPendingConnections) {
-    networkClientPendingConnections = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return numPendingConnections.get();
-      }
-    };
+  void registerNetworkClientPendingConnections(final AtomicLong numPendingConnections) {
+    pendingConnectionsList.add(numPendingConnections);
   }
 
   public void initializeSelectorNodeMetricIfRequired(String hostname, int port) {
@@ -210,15 +222,6 @@ public class NetworkMetrics {
     SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
     nodeMetric.bytesReceivedCount.inc(bytesReceivedCount);
     nodeMetric.bytesReceivedLatency.update(timeTakenToReceiveInMs);
-  }
-
-  /**
-   * Updates a few metrics when a request is timed-out without successful checkout of a connection
-   * @param connectionCheckOutAttempts number of times, connection check out was attempted before timing out
-   */
-  void updateConnectionTimedOutMetrics(int connectionCheckOutAttempts) {
-    connectionTimeOutError.inc();
-    connectionCheckOutAttemptsBeforeFailing.mark(connectionCheckOutAttempts);
   }
 
   class SelectorNodeMetric {

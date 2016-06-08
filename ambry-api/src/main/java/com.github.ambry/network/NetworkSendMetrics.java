@@ -20,17 +20,17 @@ import com.codahale.metrics.Histogram;
  * Tracks send time metrics for a {@link NetworkSend}
  */
 public class NetworkSendMetrics {
-  private final Histogram requestOrResponseSendTime;
+  private final Histogram sendTime;
 
-  public NetworkSendMetrics(Histogram requestOrResponseSendTime) {
-    this.requestOrResponseSendTime = requestOrResponseSendTime;
+  public NetworkSendMetrics(Histogram sendTime) {
+    this.sendTime = sendTime;
   }
 
   /**
-   * Updates the time spent by request or response to be completely sent
-   * @param value the time spent by the request or response to be completely sent
+   * Updates sendTime when the networkSend has been sent out completely.
+   * @param value the time spent by the request or response to be sent out completely
    */
   public void updateSendTime(long value) {
-    requestOrResponseSendTime.update(value);
+    sendTime.update(value);
   }
 }

@@ -45,6 +45,7 @@ public class ClientNetworkRequestMetrics extends NetworkSendMetrics {
    * Updates few metrics once the send completes
    * @param value the time spent by the request to be completely sent out
    */
+  @Override
   public void updateSendTime(long value) {
     super.updateSendTime(value);
     timeSpentTillNow += value;

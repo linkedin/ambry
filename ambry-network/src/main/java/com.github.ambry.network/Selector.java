@@ -98,7 +98,7 @@ public class Selector implements Selectable {
     this.IdGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
     unreadyConnections = new HashSet<>();
-    metrics.initializeSelectorMetrics(numActiveConnections);
+    metrics.registerSelectorActiveConnections(numActiveConnections);
     this.sslFactory = sslFactory;
   }
 
