@@ -72,7 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkSend> completedSends;
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
-  private final List<String> interimDisconnectedList;
+  private final List<String> closedConnections;
   private final List<String> connected;
   private final Set<String> unreadyConnections;
   private final Time time;
@@ -93,7 +93,7 @@ public class Selector implements Selectable {
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
-    this.interimDisconnectedList = new ArrayList<>();
+    this.closedConnections = new ArrayList<>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
@@ -361,8 +361,8 @@ public class Selector implements Selectable {
       checkUnreadyConnectionsStatus();
       this.metrics.selectorIORate.inc();
     }
-    disconnected.addAll(interimDisconnectedList);
-    interimDisconnectedList.clear();
+    disconnected.addAll(closedConnections);
+    closedConnections.clear();
     long endIo = time.milliseconds();
     this.metrics.selectorIOTime.update(endIo - endSelect);
   }
@@ -479,7 +479,7 @@ public class Selector implements Selectable {
     Transmission transmission = getTransmission(key);
     if (transmission != null) {
       logger.debug("Closing connection from {}", transmission.getConnectionId());
-      interimDisconnectedList.add(transmission.getConnectionId());
+      closedConnections.add(transmission.getConnectionId());
       keyMap.remove(transmission.getConnectionId());
       numActiveConnections.set(keyMap.size());
       unreadyConnections.remove(transmission.getConnectionId());

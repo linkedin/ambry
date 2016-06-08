@@ -92,17 +92,17 @@ public class SelectorTest {
   }
 
   /**
-   * Validate that the client's connectionId is returned via disconnected list after closing
+   * Validate that a closed connectionId is returned via disconnected list after close
    */
   @Test
-  public void testClientClose()
+  public void testDisconnectedListOnClose()
       throws Exception {
     String connectionId = blockingConnect();
     selector.close(connectionId);
-    selector.poll(10);
-    assertEquals("Request should not have succeeded", 0, selector.completedSends().size());
+    selector.poll(0);
     assertEquals("There should be a disconnect", 1, selector.disconnected().size());
-    assertTrue("The disconnect should be from our node", selector.disconnected().contains(connectionId));
+    assertTrue("Expected connectionId " + connectionId + " missing from selector's disconnected list ",
+        selector.disconnected().contains(connectionId));
     connectionId = blockingConnect();
     assertEquals("hello2", blockingRequest(connectionId, "hello2"));
   }
