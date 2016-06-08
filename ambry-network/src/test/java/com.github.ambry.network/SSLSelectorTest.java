@@ -219,6 +219,7 @@ public class SSLSelectorTest {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.SSL);
     selector.close(connectionId);
+    selector.poll(0);
     Assert.assertTrue("Channel should have been added to disconnected list",
         selector.disconnected().contains(connectionId));
   }

@@ -44,9 +44,7 @@ public class SelectorTest {
       throws Exception {
     this.server = new EchoServer(18283);
     this.server.start();
-    this.selector =
-        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(),
-            null);
+    this.selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), null);
   }
 
   @After
@@ -86,6 +84,22 @@ public class SelectorTest {
     String connectionId = blockingConnect();
     selector.disconnect(connectionId);
     selector.poll(10, asList(createSend(connectionId, "hello1")));
+    assertEquals("Request should not have succeeded", 0, selector.completedSends().size());
+    assertEquals("There should be a disconnect", 1, selector.disconnected().size());
+    assertTrue("The disconnect should be from our node", selector.disconnected().contains(connectionId));
+    connectionId = blockingConnect();
+    assertEquals("hello2", blockingRequest(connectionId, "hello2"));
+  }
+
+  /**
+   * Validate that the client's connectionId is returned via disconnected list after closing
+   */
+  @Test
+  public void testClientClose()
+      throws Exception {
+    String connectionId = blockingConnect();
+    selector.close(connectionId);
+    selector.poll(10);
     assertEquals("Request should not have succeeded", 0, selector.completedSends().size());
     assertEquals("There should be a disconnect", 1, selector.disconnected().size());
     assertTrue("The disconnect should be from our node", selector.disconnected().contains(connectionId));
