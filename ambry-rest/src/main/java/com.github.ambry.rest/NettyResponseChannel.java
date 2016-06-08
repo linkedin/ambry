@@ -532,7 +532,7 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   /**
-   * Cleans up all the chunks remaining by invoking their callabacks.
+   * Cleans up all the chunks remaining by invoking their callbacks.
    * @param exception the {@link Exception} to provide in the callback. Can be {@code null}.
    */
   private void cleanupChunks(Exception exception) {
@@ -559,19 +559,26 @@ class NettyResponseChannel implements RestResponseChannel {
     /**
      * The future that will be set on chunk resolution.
      */
-    public final FutureResult<Long> future = new FutureResult<Long>();
+    final FutureResult<Long> future = new FutureResult<Long>();
     /**
      * The bytes associated with this chunk.
      */
-    public final ByteBuffer buffer;
+    final ByteBuffer buffer;
     /**
      * The number of bytes that will need to be written.
      */
-    public final long bytesToBeWritten;
+    final long bytesToBeWritten;
     /**
      * If progress in {@link #writeFuture} becomes greater than this number, the future/callback will be triggered.
      */
-    public final long writeCompleteThreshold;
+    final long writeCompleteThreshold;
+    /**
+     * Information on whether this is the last chunk.
+     * <p/>
+     * This value will be {@code true} for at most one chunk. If {@link HttpHeaders.Names#CONTENT_LENGTH} is not set,
+     * there will be no chunks with this value as {@code true}.
+     */
+    final boolean isLast;
     private final Callback<Long> callback;
     private final long chunkQueueStartTime = System.currentTimeMillis();
 
@@ -588,6 +595,10 @@ class NettyResponseChannel implements RestResponseChannel {
       this.callback = callback;
       writeCompleteThreshold = totalBytesReceived.addAndGet(bytesToBeWritten);
       chunksToWriteCount.incrementAndGet();
+
+      // if we are here, it means that finalResponseMetadata has been set and there is no danger of it being null
+      long contentLength = HttpHeaders.getContentLength(finalResponseMetadata, -1);
+      isLast = contentLength != -1 && writeCompleteThreshold >= contentLength;
     }
 
     /**
@@ -636,13 +647,7 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private class ChunkDispenser implements ChunkedInput<HttpContent> {
     // NOTE: Due to a bug in HttpChunkedInput, some code there has been reproduced here instead of using it directly.
-    private final long contentLength;
     private boolean sentLastChunk = false;
-
-    ChunkDispenser() {
-      // if we are here, it means that finalResponseMetadata has been set and there is no danger of it being null
-      contentLength = HttpHeaders.getContentLength(finalResponseMetadata, -1);
-    }
 
     /**
      * Determines if input has ended by examining response state and number of chunks pending for write.
@@ -675,8 +680,7 @@ class NettyResponseChannel implements RestResponseChannel {
         chunk.onDequeue();
         ByteBuf buf = Unpooled.wrappedBuffer(chunk.buffer);
         chunksAwaitingCallback.add(chunk);
-        if (contentLength != -1 && chunk.writeCompleteThreshold >= contentLength) {
-          // this is the last piece of content.
+        if (chunk.isLast) {
           content = new DefaultLastHttpContent(buf);
           sentLastChunk = true;
         } else {
