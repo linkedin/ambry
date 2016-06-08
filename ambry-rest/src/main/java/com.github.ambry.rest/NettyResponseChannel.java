@@ -129,7 +129,7 @@ class NettyResponseChannel implements RestResponseChannel {
       Exception exception = null;
       // this is only allowed to be a 0 sized buffer.
       if (src.remaining() > 0) {
-        exception = new IllegalArgumentException("Provided non zero size content after setting Content-Length to 0");
+        exception = new IllegalStateException("Provided non zero size content after setting Content-Length to 0");
         if (!writeFuture.isDone()) {
           writeFuture.setFailure(exception);
         }
@@ -137,7 +137,7 @@ class NettyResponseChannel implements RestResponseChannel {
       writeFuture.addListener(new CleanupCallback(exception));
     } else if (HttpHeaders.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpHeaders
         .getContentLength(finalResponseMetadata)) {
-      Exception exception = new IllegalArgumentException(
+      Exception exception = new IllegalStateException(
           "Size of provided content [" + totalBytesReceived.get() + "] is greater than Content-Length set ["
               + HttpHeaders.getContentLength(finalResponseMetadata) + "]");
       if (!writeFuture.isDone()) {
