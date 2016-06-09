@@ -44,9 +44,7 @@ public class SelectorTest {
       throws Exception {
     this.server = new EchoServer(18283);
     this.server.start();
-    this.selector =
-        new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(),
-            null);
+    this.selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), null);
   }
 
   @After
@@ -91,6 +89,24 @@ public class SelectorTest {
     assertTrue("The disconnect should be from our node", selector.disconnected().contains(connectionId));
     connectionId = blockingConnect();
     assertEquals("hello2", blockingRequest(connectionId, "hello2"));
+  }
+
+  /**
+   * Validate that a closed connectionId is returned via disconnected list after close
+   */
+  @Test
+  public void testDisconnectedListOnClose()
+      throws Exception {
+    String connectionId = blockingConnect();
+    assertEquals("Disconnect list should be empty", 0, selector.disconnected().size());
+    selector.close(connectionId);
+    selector.poll(0);
+    assertEquals("There should be a disconnect", 1, selector.disconnected().size());
+    assertTrue("Expected connectionId " + connectionId + " missing from selector's disconnected list ",
+        selector.disconnected().contains(connectionId));
+    // make sure that the connection id is not returned via disconnected list after another poll()
+    selector.poll(0);
+    assertEquals("Disconnect list should be empty", 0, selector.disconnected().size());
   }
 
   /**

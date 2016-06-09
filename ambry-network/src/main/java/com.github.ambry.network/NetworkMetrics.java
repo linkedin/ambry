@@ -18,9 +18,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -45,7 +43,6 @@ public class NetworkMetrics {
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
   public Gauge<Long> numActiveConnections;
-  public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
 
   // Plaintext metrics
   // the bytes rate to receive the entire request
@@ -118,7 +115,6 @@ public class NetworkMetrics {
     sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
     sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
-    selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
   }
 
   /**
@@ -132,51 +128,6 @@ public class NetworkMetrics {
         return activeConnections.get();
       }
     };
-  }
-
-  public void initializeSelectorNodeMetricIfRequired(String hostname, int port) {
-    if (!selectorNodeMetricMap.containsKey(hostname + port)) {
-      SelectorNodeMetric nodeMetric = new SelectorNodeMetric(registry, hostname, port);
-      selectorNodeMetricMap.put(hostname + port, nodeMetric);
-    }
-  }
-
-  public void updateNodeSendMetric(String hostName, int port, long bytesSentCount, long timeTakenToSendInMs) {
-    if (!selectorNodeMetricMap.containsKey(hostName + port)) {
-      throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
-    }
-    SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
-    nodeMetric.sendCount.inc();
-    nodeMetric.bytesSentCount.inc(bytesSentCount);
-    nodeMetric.bytesSentLatency.update(timeTakenToSendInMs);
-  }
-
-  public void updateNodeReceiveMetric(String hostName, int port, long bytesReceivedCount, long timeTakenToReceiveInMs) {
-    if (!selectorNodeMetricMap.containsKey(hostName + port)) {
-      throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
-    }
-    SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
-    nodeMetric.bytesReceivedCount.inc(bytesReceivedCount);
-    nodeMetric.bytesReceivedLatency.update(timeTakenToReceiveInMs);
-  }
-
-  class SelectorNodeMetric {
-    public final Counter sendCount;
-    public final Histogram bytesSentLatency;
-    public final Histogram bytesReceivedLatency;
-    public final Counter bytesSentCount;
-    public final Counter bytesReceivedCount;
-
-    public SelectorNodeMetric(MetricRegistry registry, String hostname, int port) {
-      sendCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-SendCount"));
-      bytesSentLatency =
-          registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesSentLatencyInMs"));
-      bytesReceivedLatency =
-          registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesReceivedLatencyInMs"));
-      bytesSentCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-BytesSentCount"));
-      bytesReceivedCount =
-          registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-BytesReceivedCount"));
-    }
   }
 }
 

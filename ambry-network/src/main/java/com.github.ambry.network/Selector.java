@@ -72,6 +72,7 @@ public class Selector implements Selectable {
   private final List<NetworkSend> completedSends;
   private final List<NetworkReceive> completedReceives;
   private final List<String> disconnected;
+  private final List<String> closedConnections;
   private final List<String> connected;
   private final Set<String> unreadyConnections;
   private final Time time;
@@ -92,6 +93,7 @@ public class Selector implements Selectable {
     this.completedReceives = new ArrayList<NetworkReceive>();
     this.connected = new ArrayList<String>();
     this.disconnected = new ArrayList<String>();
+    this.closedConnections = new ArrayList<>();
     this.metrics = metrics;
     this.IdGenerator = new AtomicLong(0);
     numActiveConnections = new AtomicLong(0);
@@ -359,6 +361,8 @@ public class Selector implements Selectable {
       checkUnreadyConnectionsStatus();
       this.metrics.selectorIORate.inc();
     }
+    disconnected.addAll(closedConnections);
+    closedConnections.clear();
     long endIo = time.milliseconds();
     this.metrics.selectorIOTime.update(endIo - endSelect);
   }
@@ -430,10 +434,10 @@ public class Selector implements Selectable {
    * Clear the results from the prior poll
    */
   private void clear() {
-    this.completedSends.clear();
-    this.completedReceives.clear();
-    this.connected.clear();
-    this.disconnected.clear();
+    completedSends.clear();
+    completedReceives.clear();
+    connected.clear();
+    disconnected.clear();
   }
 
   /**
@@ -475,8 +479,8 @@ public class Selector implements Selectable {
     Transmission transmission = getTransmission(key);
     if (transmission != null) {
       logger.debug("Closing connection from {}", transmission.getConnectionId());
-      this.disconnected.add(transmission.getConnectionId());
-      this.keyMap.remove(transmission.getConnectionId());
+      closedConnections.add(transmission.getConnectionId());
+      keyMap.remove(transmission.getConnectionId());
       numActiveConnections.set(keyMap.size());
       unreadyConnections.remove(transmission.getConnectionId());
       try {
