@@ -45,9 +45,8 @@ public class NetworkMetrics {
   public final Counter selectorKeyOperationErrorCount;
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
-  private final List<AtomicLong> activeConnectionsList;
-  public final Gauge<Long> selectorActiveConnectionsCount;
   public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
+  private static int selectorIndex = 0;
 
   // Plaintext metrics
   // the bytes rate to receive the entire request
@@ -92,9 +91,7 @@ public class NetworkMetrics {
 
   public final Counter connectionTimeOutError;
   public final Counter networkClientIOError;
-
-  private final List<AtomicLong> pendingConnectionsList;
-  public final Gauge<Long> networkClientPendingConnectionsCount;
+  private static int networkClientIndex = 0;
 
   public NetworkMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -150,36 +147,7 @@ public class NetworkMetrics {
     connectionTimeOutError = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionTimeOutError"));
     networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
 
-    activeConnectionsList = new ArrayList<>();
-    pendingConnectionsList = new ArrayList<>();
     selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
-
-    selectorActiveConnectionsCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        long activeConnections = 0;
-        for (AtomicLong activeConnectionCount : activeConnectionsList) {
-          activeConnections += activeConnectionCount.get();
-        }
-        return activeConnections;
-      }
-    };
-
-    networkClientPendingConnectionsCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        long pendingConnections = 0;
-        for (AtomicLong pendingConnectionCount : pendingConnectionsList) {
-          pendingConnections += pendingConnectionCount.get();
-        }
-        return pendingConnections;
-      }
-    };
-
-    registry.register(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
-        selectorActiveConnectionsCount);
-    registry.register(MetricRegistry.name(NetworkClient.class, "NetworkClientPendingConnectionsCount"),
-        networkClientPendingConnectionsCount);
   }
 
   /**
@@ -187,7 +155,14 @@ public class NetworkMetrics {
    * @param numActiveConnections count of current active connections
    */
   void registerSelectorActiveConnections(final AtomicLong numActiveConnections) {
-    activeConnectionsList.add(numActiveConnections);
+    Gauge<Long> selectorActiveConnectionsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return numActiveConnections.get();
+      }
+    };
+    registry.register(MetricRegistry.name(Selector.class, selectorIndex++ + "SelectorActiveConnectionsCount"),
+        selectorActiveConnectionsCount);
   }
 
   /**
@@ -195,7 +170,15 @@ public class NetworkMetrics {
    * @param numPendingConnections the count of pending connections to be checked out
    */
   void registerNetworkClientPendingConnections(final AtomicLong numPendingConnections) {
-    pendingConnectionsList.add(numPendingConnections);
+    Gauge<Long> networkClientPendingConnectionsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return numPendingConnections.get();
+      }
+    };
+    registry.register(
+        MetricRegistry.name(NetworkClient.class, networkClientIndex++ + "NetworkClientPendingConnectionsCount"),
+        networkClientPendingConnectionsCount);
   }
 
   public void initializeSelectorNodeMetricIfRequired(String hostname, int port) {
