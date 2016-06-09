@@ -98,6 +98,7 @@ public class SelectorTest {
   public void testDisconnectedListOnClose()
       throws Exception {
     String connectionId = blockingConnect();
+    assertEquals("Disconnect list should be empty", 0, selector.disconnected().size());
     selector.close(connectionId);
     selector.poll(0);
     assertEquals("There should be a disconnect", 1, selector.disconnected().size());
