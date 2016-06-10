@@ -27,8 +27,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
@@ -109,6 +111,46 @@ public class GetManagerTest {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize * 6 + 11);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    BlobInfo blobInfo = router.getBlobInfo(blobId).get();
+    Assert.assertTrue("Blob properties should match",
+        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
+    Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
+    getBlobAndCompareContent(blobId);
+    router.close();
+  }
+
+  /**
+   * Test that a bad user defined callback will not crash the router.
+   * @throws Exception
+   */
+  @Test
+  public void testBadCallback()
+      throws Exception {
+    router = getNonBlockingRouter();
+    setOperationParams(chunkSize * 6 + 11);
+    final CountDownLatch callbackCalled = new CountDownLatch(1);
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    router.getBlobInfo(blobId, new Callback<BlobInfo>() {
+      @Override
+      public void onCompletion(BlobInfo result, Exception exception) {
+        callbackCalled.countDown();
+        throw new RuntimeException("Throwing an exception in the user callback");
+      }
+    }).get();
+    router.getBlob(blobId, new Callback<ReadableStreamChannel>() {
+      @Override
+      public void onCompletion(ReadableStreamChannel result, Exception exception) {
+        callbackCalled.countDown();
+        throw new RuntimeException("Throwing an exception in the user callback");
+      }
+    }).get();
+    Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+    Assert.assertTrue("Router should not be closed", router.isOpen());
+
+    // Test that GetManager is still operational
+    setOperationParams(chunkSize);
+    blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
     Assert.assertTrue("Blob properties should match",
         RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));

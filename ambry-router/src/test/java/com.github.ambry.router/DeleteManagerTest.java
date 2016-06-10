@@ -111,6 +111,33 @@ public class DeleteManagerTest {
   }
 
   /**
+   * Test that a bad user defined callback will not crash the router.
+   * @throws Exception
+   */
+  @Test
+  public void testBadCallback()
+      throws Exception {
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
+    presetServerErrorCode(serverErrorCodes);
+    final CountDownLatch callbackCalled = new CountDownLatch(1);
+    router.deleteBlob(blobIdString, new Callback<Void>() {
+      @Override
+      public void onCompletion(Void result, Exception exception) {
+        callbackCalled.countDown();
+        throw new RuntimeException("Throwing an exception in the user callback");
+      }
+    }).get();
+    Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+    Assert.assertTrue("Router should not be closed", router.isOpen());
+
+    //Test that DeleteManager is still operational
+    future = router.deleteBlob(blobIdString, new ClientCallback());
+    future.get();
+  }
+
+  /**
    * Test the cases for invalid blobId strings.
    */
   @Test

@@ -118,7 +118,12 @@ class DeleteManager {
   public void poll(List<RequestInfo> requestListToFill) {
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (DeleteOperation op : deleteOperations) {
-      op.poll(requestRegistrationCallback);
+      try {
+        op.poll(requestRegistrationCallback);
+      } catch (Exception e) {
+        op.setOperationException(new RouterException("Delete poll encountered unexpected error", e,
+            RouterErrorCode.UnexpectedInternalError));
+      }
       if (op.isOperationComplete() && deleteOperations.remove(op)) {
         // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
         // operation actually gets removed from the set of operations. See comment within close().
@@ -136,7 +141,13 @@ class DeleteManager {
     DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (deleteOperations.contains(deleteOperation)) {
-      deleteOperation.handleResponse(responseInfo);
+      try {
+        deleteOperation.handleResponse(responseInfo);
+      } catch (Exception e) {
+        deleteOperation.setOperationException(
+            new RouterException("Delete handleResponse encountered unexpected error", e,
+                RouterErrorCode.UnexpectedInternalError));
+      }
       if (deleteOperation.isOperationComplete() && deleteOperations.remove(deleteOperation)) {
         onComplete(deleteOperation);
       }

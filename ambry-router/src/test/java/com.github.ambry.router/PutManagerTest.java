@@ -143,6 +143,35 @@ public class PutManagerTest {
   }
 
   /**
+   * Test that a bad user defined callback will not crash the router.
+   * @throws Exception
+   */
+  @Test
+  public void testBadCallback()
+      throws Exception {
+    RequestAndResult req = new RequestAndResult(chunkSize * 5 + random.nextInt(chunkSize - 1) + 1);
+    ReadableStreamChannel putChannel =
+        new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
+    router = getNonBlockingRouter();
+    final CountDownLatch callbackCalled = new CountDownLatch(1);
+    router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new Callback<String>() {
+      @Override
+      public void onCompletion(String result, Exception exception) {
+        callbackCalled.countDown();
+        throw new RuntimeException("Throwing an exception in the user callback");
+      }
+    }).get();
+    Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+    Assert.assertTrue("Router should not be closed", router.isOpen());
+    // Test that PutManager is still operational
+    requestAndResultsList.clear();
+    requestAndResultsList.add(new RequestAndResult(chunkSize + random.nextInt(5) * random.nextInt(chunkSize)));
+    instantiateNewRouterForPuts = false;
+    submitPutsAndAssertSuccess(true);
+  }
+
+  /**
    * Tests put of a blob with blob size 0.
    */
   @Test

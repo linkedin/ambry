@@ -135,7 +135,7 @@ class PutOperation {
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param time the Time instance to use.
-   * @throws {@link RouterException} if there is an error in constructing the PutOperation with the given parameters.
+   * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
@@ -144,9 +144,8 @@ class PutOperation {
     submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
     if (channel.getSize() != blobSize) {
-      throw new RouterException(
-          "Channel size: " + channel.getSize() + " different from size in BlobProperties: " + blobProperties
-              .getBlobSize(), RouterErrorCode.BadInputChannel);
+      throw new RouterException("Channel size: " + channel.getSize() + " different from size in BlobProperties: "
+          + blobProperties.getBlobSize(), RouterErrorCode.BadInputChannel);
     }
     // Set numDataChunks
     // the max blob size that can be supported is technically limited by the max chunk size configured.
@@ -288,34 +287,38 @@ class PutOperation {
    * chunkFillerChannel, if there is any.
    * @throws InterruptedException if the call to get a chunk from the chunkFillerChannel is interrupted.
    */
-  void fillChunks()
-      throws InterruptedException {
-    PutChunk chunkToFill;
-    if (!chunkFillingCompleted && !operationCompleted) {
-      do {
-        // Attempt to fill a chunk
-        if (channelReadBuffer == null) {
-          channelReadBuffer = chunkFillerChannel.getNextChunk(0);
-        }
-        if (channelReadBuffer != null) {
-          chunkToFill = getChunkToFill();
-          if (chunkToFill == null) {
-            // no chunks are free to be filled yet.
+  void fillChunks() {
+    try {
+      PutChunk chunkToFill;
+      if (!chunkFillingCompleted && !operationCompleted) {
+        do {
+          // Attempt to fill a chunk
+          if (channelReadBuffer == null) {
+            channelReadBuffer = chunkFillerChannel.getNextChunk(0);
+          }
+          if (channelReadBuffer != null) {
+            chunkToFill = getChunkToFill();
+            if (chunkToFill == null) {
+              // no chunks are free to be filled yet.
+              break;
+            }
+            bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+            if (!channelReadBuffer.hasRemaining()) {
+              chunkFillerChannel.resolveOldestChunk(null);
+              channelReadBuffer = null;
+            }
+          } else {
+            // channel does not have more data yet.
             break;
           }
-          bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
-          if (!channelReadBuffer.hasRemaining()) {
-            chunkFillerChannel.resolveOldestChunk(null);
-            channelReadBuffer = null;
-          }
-        } else {
-          // channel does not have more data yet.
-          break;
+        } while (bytesFilledSoFar < blobSize);
+        if (bytesFilledSoFar == blobSize) {
+          chunkFillingCompleted = true;
         }
-      } while (bytesFilledSoFar < blobSize);
-      if (bytesFilledSoFar == blobSize) {
-        chunkFillingCompleted = true;
       }
+    } catch (Exception e) {
+      setOperationException(new RouterException("PutOperation fillChunks encountered unexpected error", e,
+          RouterErrorCode.UnexpectedInternalError));
     }
   }
 
@@ -729,8 +732,8 @@ class PutOperation {
         PutRequest putRequest = createPutRequest();
         RequestInfo request = new RequestInfo(hostname, port, putRequest);
         int correlationId = putRequest.getCorrelationId();
-        correlationIdToChunkPutRequestInfo
-            .put(correlationId, new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
+        correlationIdToChunkPutRequestInfo.put(correlationId,
+            new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
         correlationIdToPutChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
@@ -792,8 +795,8 @@ class PutOperation {
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
-        responseHandler
-            .onRequestResponseException(chunkPutRequestInfo.replicaId, new IOException("NetworkClient error"));
+        responseHandler.onRequestResponseException(chunkPutRequestInfo.replicaId,
+            new IOException("NetworkClient error"));
         isSuccessful = false;
       } else {
         try {
