@@ -196,7 +196,10 @@ project(':ambry-tools') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-store'),
-                project(':ambry-coordinator')
+                project(':ambry-coordinator'),
+                project(':ambry-rest'),
+                project(':ambry-admin'),
+                project(':ambry-frontend')
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
     }
 }
