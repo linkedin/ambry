@@ -52,9 +52,9 @@ public class RestRequestMetricsTracker {
    */
   public final ScalingMetricsTracker scalingMetricsTracker = new ScalingMetricsTracker();
 
-  private final AtomicLong totalCpuTimeInMs = new AtomicLong(0);
   private final AtomicBoolean metricsRecorded = new AtomicBoolean(false);
   private RestRequestMetrics metrics = defaultMetrics;
+  private boolean failed = false;
 
   /**
    * Tracker for updating NIO related metrics.
@@ -77,7 +77,6 @@ public class RestRequestMetricsTracker {
      *          moment.
      */
     public long addToRequestProcessingTime(long delta) {
-      addToTotalCpuTime(delta);
       return requestProcessingTimeInMs.addAndGet(delta);
     }
 
@@ -89,7 +88,6 @@ public class RestRequestMetricsTracker {
      *          moment.
      */
     public long addToResponseProcessingTime(long delta) {
-      addToTotalCpuTime(delta);
       return responseProcessingTimeInMs.addAndGet(delta);
     }
 
@@ -132,7 +130,6 @@ public class RestRequestMetricsTracker {
      *          this moment.
      */
     public long addToRequestProcessingTime(long delta) {
-      addToTotalCpuTime(delta);
       return requestProcessingTimeInMs.addAndGet(delta);
     }
 
@@ -143,7 +140,6 @@ public class RestRequestMetricsTracker {
      * @return the total time in ms this request has spent waiting to be processed at the scaling layer at this moment.
      */
     public long addToRequestProcessingWaitTime(long delta) {
-      addToTotalCpuTime(delta);
       return requestProcessingWaitTimeInMs.addAndGet(delta);
     }
 
@@ -155,7 +151,6 @@ public class RestRequestMetricsTracker {
      *          this moment.
      */
     public long addToResponseProcessingTime(long delta) {
-      addToTotalCpuTime(delta);
       return responseProcessingTimeInMs.addAndGet(delta);
     }
 
@@ -166,7 +161,6 @@ public class RestRequestMetricsTracker {
      * @return the total time in ms this response has spent waiting to be processed at the scaling layer at this moment.
      */
     public long addToResponseProcessingWaitTime(long delta) {
-      addToTotalCpuTime(delta);
       return responseProcessingWaitTimeInMs.addAndGet(delta);
     }
 
@@ -189,17 +183,10 @@ public class RestRequestMetricsTracker {
   }
 
   /**
-   * Adds to the total cpu time taken in ms to service the request.
-   * @param delta the time taken in ms to do the current piece of processing for the request.
-   * @return the total cpu time taken in ms to service the request across all layers, including the current piece,
-   *          at this moment.
+   * Marks that the request is failed so that metrics can be tracked.
    */
-  public long addToTotalCpuTime(long delta) {
-    return totalCpuTimeInMs.addAndGet(delta);
-  }
-
   public void markFailure() {
-    metrics.operationError.inc();
+    failed = true;
   }
 
   /**
@@ -211,7 +198,6 @@ public class RestRequestMetricsTracker {
   public void injectMetrics(RestRequestMetrics restRequestMetrics) {
     if (restRequestMetrics != null) {
       metrics = restRequestMetrics;
-      metrics.operationRate.mark();
     } else {
       throw new IllegalArgumentException("RestRequestMetrics provided cannot be null");
     }
@@ -226,6 +212,7 @@ public class RestRequestMetricsTracker {
   public void recordMetrics() {
     if (metrics != null) {
       if (metricsRecorded.compareAndSet(false, true)) {
+        metrics.operationRate.mark();
         metrics.nioRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
@@ -235,11 +222,8 @@ public class RestRequestMetricsTracker {
         metrics.scResponseProcessingTimeInMs.update(scalingMetricsTracker.responseProcessingTimeInMs.get());
         metrics.scResponseProcessingWaitTimeInMs.update(scalingMetricsTracker.responseProcessingWaitTimeInMs.get());
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
-
-        metrics.totalCpuTimeInMs.update(totalCpuTimeInMs.get());
-        if (metrics == defaultMetrics) {
-          // track unknown requests rate.
-          metrics.operationRate.mark();
+        if (failed) {
+          metrics.operationError.inc();
         }
       }
     } else {

@@ -233,12 +233,6 @@ public class NettyMessageProcessorTest {
           RestServiceErrorCode.InternalServerError.toString());
       requestHandler.breakdown(new VerifiableProperties(properties));
       doRequestHandlerExceptionTest(HttpMethod.GET, HttpResponseStatus.INTERNAL_SERVER_ERROR);
-
-      // ClosedChannelException
-      properties.clear();
-      properties.setProperty(MockRestRequestResponseHandler.CLOSE_REQUEST_ON_HANDLE, "true");
-      requestHandler.breakdown(new VerifiableProperties(properties));
-      doRequestHandlerExceptionTest(HttpMethod.POST, HttpResponseStatus.INTERNAL_SERVER_ERROR);
     } finally {
       requestHandler.fix();
     }

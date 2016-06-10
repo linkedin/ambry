@@ -118,7 +118,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
       logger.error("Request {} was aborted because the channel became inactive", request.getUri());
-      onRequestAborted(new ClosedChannelException());
+      responseChannel.onResponseComplete(new ClosedChannelException());
     }
   }
 
@@ -138,20 +138,22 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       throws Exception {
     try {
       nettyMetrics.processorExceptionCaughtCount.inc();
-      if (cause instanceof RestServiceException) {
-        RestServiceErrorCode errorCode = ((RestServiceException) cause).getErrorCode();
-        if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.BadRequest) {
-          logger.debug("Error on channel {}", ctx.channel(), errorCode, cause);
+      if (request != null && request.isOpen() && cause instanceof Exception) {
+        responseChannel.onResponseComplete((Exception) cause);
+      } else {
+        if (cause instanceof RestServiceException) {
+          RestServiceErrorCode errorCode = ((RestServiceException) cause).getErrorCode();
+          if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.BadRequest) {
+            logger.debug("Swallowing error on channel {}", ctx.channel(), errorCode, cause);
+          } else {
+            logger.error("Swallowing error on channel {}", ctx.channel(), errorCode, cause);
+          }
         } else {
-          logger.error("Error on channel {}", ctx.channel(), errorCode, cause);
+          logger.error("Swallowing error on channel {}", ctx.channel(), cause);
+          if (!(cause instanceof Exception)) {
+            ctx.fireExceptionCaught(cause);
+          }
         }
-      } else {
-        logger.error("Error on channel {}", ctx.channel(), cause);
-      }
-      if (cause instanceof Exception) {
-        onRequestAborted((Exception) cause);
-      } else {
-        ctx.fireExceptionCaught(cause);
       }
     } catch (Exception e) {
       String uri = (request != null) ? request.getUri() : null;
@@ -180,7 +182,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
-        onRequestAborted(new ClosedChannelException());
+        responseChannel.onResponseComplete(new ClosedChannelException());
       }
     }
   }
@@ -217,8 +219,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       if (responseChannel == null || requestContentFullyReceived) {
         resetState();
       }
-      throw new RestServiceException("HttpObject received is null or not of a known type",
-          RestServiceErrorCode.UnknownHttpObject);
+      responseChannel.onResponseComplete(new RestServiceException("HttpObject received is null or not of a known type",
+          RestServiceErrorCode.UnknownHttpObject));
     }
 
     if (lastChannelReadTime != null) {
@@ -245,15 +247,15 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       // If the client sends a request without waiting for the response, it is possible to screw things up a little
       // but doing so would constitute an error and no proper client would do that.
       long processingStartTime = System.currentTimeMillis();
+      resetState();
+      nettyMetrics.requestArrivalRate.mark();
+      if (!httpRequest.getDecoderResult().isSuccess()) {
+        logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel());
+        nettyMetrics.malformedRequestError.inc();
+        throw new RestServiceException("Decoder failed because of malformed request",
+            RestServiceErrorCode.MalformedRequest);
+      }
       try {
-        resetState();
-        nettyMetrics.requestArrivalRate.mark();
-        if (!httpRequest.getDecoderResult().isSuccess()) {
-          logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel());
-          nettyMetrics.malformedRequestError.inc();
-          throw new RestServiceException("Decoder failed because of malformed request",
-              RestServiceErrorCode.MalformedRequest);
-        }
         // We need to maintain state about the request itself for the subsequent parts (if any) that come in. We will
         // attach content to the request as the content arrives.
         if (HttpPostRequestDecoder.isMultipart(httpRequest)) {
@@ -274,8 +276,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           requestHandler.handleRequest(request, responseChannel);
         }
       } finally {
-        request.getMetricsTracker().nioMetricsTracker
-            .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
+        if (request != null) {
+          request.getMetricsTracker().nioMetricsTracker
+              .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
+        }
       }
     } else {
       // We have received a request when we were not expecting one. This shouldn't happen and there is no good way to
@@ -302,14 +306,12 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       long processingStartTime = System.currentTimeMillis();
       nettyMetrics.bytesReadRate.mark(httpContent.content().readableBytes());
       requestContentFullyReceived = httpContent instanceof LastHttpContent;
+      logger.trace("Received content for request - {}", request.getUri());
       try {
-        logger.trace("Received content for request - {}", request.getUri());
-        try {
-          request.addContent(httpContent);
-        } catch (IllegalStateException e) {
-          nettyMetrics.contentAdditionError.inc();
-          throw new RestServiceException(e, RestServiceErrorCode.InvalidRequestState);
-        }
+        request.addContent(httpContent);
+      } catch (IllegalStateException e) {
+        nettyMetrics.contentAdditionError.inc();
+        throw new RestServiceException(e, RestServiceErrorCode.InvalidRequestState);
       } finally {
         long chunkProcessingTime = System.currentTimeMillis() - processingStartTime;
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
@@ -322,28 +324,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       resetState();
       logger.warn("Received content when it was not expected on channel {}", ctx.channel());
       nettyMetrics.noRequestError.inc();
-      throw new RestServiceException("Received content without a request", RestServiceErrorCode.InvalidRequestState);
-    }
-  }
-
-  /**
-   * Performs tasks that need to be performed when the request is aborted.
-   * @param exception the reason the request was aborted.
-   */
-  private void onRequestAborted(Exception exception) {
-    if (responseChannel != null) {
-      responseChannel.onResponseComplete(exception);
-    } else {
-      // we specifically do not send an error response to the client directly (through ctx) at this point because of
-      // the state transitions that we expect. If the client has sent *anything* at all to us after the completion of
-      // the last request (or just after channel became active if this is a newly created channel), we would have a
-      // response channel. If we do not have a response channel, it is because the client hasn't sent us anything and
-      // isn't *expecting* a response.
-      // However we close the channel so that the client realizes something is wrong.
-      logger.warn("No RestResponseChannel available for channel {}. Could not send error to client. Closing channel",
-          ctx.channel());
-      nettyMetrics.missingResponseChannelError.inc();
-      ctx.close();
+      responseChannel.onResponseComplete(
+          new RestServiceException("Received content without a request", RestServiceErrorCode.InvalidRequestState));
     }
   }
 

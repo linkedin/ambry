@@ -36,7 +36,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class MockRestRequestResponseHandler implements RestRequestHandler, RestResponseHandler {
   public static String RUNTIME_EXCEPTION_ON_HANDLE = "runtime.exception.on.handle";
   public static String REST_EXCEPTION_ON_HANDLE = "rest.exception.on.handle";
-  public static String CLOSE_REQUEST_ON_HANDLE = "close.request.on.handle";
 
   private boolean isRunning = false;
   private VerifiableProperties failureProperties = null;
@@ -178,13 +177,6 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
           // it's alright.
         }
         throw new RestServiceException(REST_EXCEPTION_ON_HANDLE, errorCode);
-      } else if (failureProperties.containsKey(CLOSE_REQUEST_ON_HANDLE) && failureProperties
-          .getBoolean(CLOSE_REQUEST_ON_HANDLE)) {
-        try {
-          restRequest.close();
-        } catch (IOException e) {
-          throw new IllegalStateException(e);
-        }
       }
     }
     return failureProperties == null;
