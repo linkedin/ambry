@@ -16,7 +16,6 @@ package com.github.ambry.network;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
-import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -80,8 +79,6 @@ public class NetworkMetrics {
   public final Counter sslRenegotiationCount;
 
   // NetworkClient metrics
-  public final Meter connectionsDisconnectedCount;
-
   public final Histogram networkClientSendAndPollTime;
   public final Histogram requestQueueTime;
   public final Histogram requestSendTime;
@@ -134,8 +131,6 @@ public class NetworkMetrics {
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
     sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
 
-    connectionsDisconnectedCount =
-        registry.meter(MetricRegistry.name(NetworkClient.class, "ConnectionsDisconnectedCount"));
     networkClientSendAndPollTime =
         registry.histogram(MetricRegistry.name(NetworkClient.class, "NetworkClientSendAndPollTime"));
     requestQueueTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestQueueTime"));

@@ -47,7 +47,7 @@ public class NetworkClient implements Closeable {
   private final Time time;
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
-  private final AtomicLong numPendingConnections;
+  private final AtomicLong numPendingRequests;
   private final int checkoutTimeoutMs;
   // @todo: this needs to be empirically determined.
   private final int POLL_TIMEOUT_MS = 1;
@@ -74,9 +74,9 @@ public class NetworkClient implements Closeable {
     this.checkoutTimeoutMs = checkoutTimeoutMs;
     this.time = time;
     pendingRequests = new LinkedList<RequestMetadata>();
-    numPendingConnections = new AtomicLong(0);
+    numPendingRequests = new AtomicLong(0);
     connectionIdToRequestInFlight = new HashMap<String, RequestMetadata>();
-    networkMetrics.registerNetworkClientPendingConnections(numPendingConnections);
+    networkMetrics.registerNetworkClientPendingConnections(numPendingRequests);
   }
 
   /**
@@ -98,19 +98,18 @@ public class NetworkClient implements Closeable {
         throw new IllegalStateException("The NetworkClient is closed.");
       }
       List<ResponseInfo> responseInfoList = new ArrayList<ResponseInfo>();
-      numPendingConnections.set(pendingRequests.size());
       for (RequestInfo requestInfo : requestInfos) {
         ClientNetworkRequestMetrics clientNetworkRequestMetrics =
             new ClientNetworkRequestMetrics(networkMetrics.requestQueueTime, networkMetrics.requestSendTime,
                 networkMetrics.requestSendTotalTime, 0);
         pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, clientNetworkRequestMetrics));
-        numPendingConnections.set(pendingRequests.size());
       }
       List<NetworkSend> sends = prepareSends(responseInfoList);
       selector.poll(POLL_TIMEOUT_MS, sends);
       handleSelectorEvents(responseInfoList);
       return responseInfoList;
     } finally {
+      numPendingRequests.set(pendingRequests.size());
       networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime);
     }
   }
@@ -130,7 +129,7 @@ public class NetworkClient implements Closeable {
     /* Drop requests that have waited too long */
     while (iter.hasNext()) {
       RequestMetadata requestMetadata = iter.next();
-      if (time.milliseconds() - requestMetadata.requestQueuedTimeMs > checkoutTimeoutMs) {
+      if (time.milliseconds() - requestMetadata.requestQueuedAtMs > checkoutTimeoutMs) {
         responseInfoList.add(
             new ResponseInfo(requestMetadata.requestInfo.getRequest(), NetworkClientErrorCode.ConnectionUnavailable,
                 null));
@@ -169,7 +168,6 @@ public class NetworkClient implements Closeable {
         logger.error("Received exception while checking out a connection", e);
       }
     }
-    numPendingConnections.set(pendingRequests.size());
     return sends;
   }
 
@@ -184,9 +182,7 @@ public class NetworkClient implements Closeable {
       connectionTracker.checkInConnection(connId);
     }
 
-    List<String> disconnectedList = selector.disconnected();
-    networkMetrics.connectionsDisconnectedCount.mark(disconnectedList.size());
-    for (String connId : disconnectedList) {
+    for (String connId : selector.disconnected()) {
       connectionTracker.removeConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       if (requestMetadata != null) {
@@ -223,14 +219,14 @@ public class NetworkClient implements Closeable {
     // the RequestInfo associated with the request.
     RequestInfo requestInfo;
     // the time at which this request was queued.
-    private long requestQueuedTimeMs;
+    private long requestQueuedAtMs;
     // the time at which this request was sent(or moved from queue to in flight state)
-    private long requestSentTimeMs;
+    private long requestDequeuedAtMs;
 
-    RequestMetadata(long requestQueuedTimeMs, RequestInfo requestInfo,
+    RequestMetadata(long requestQueuedAtMs, RequestInfo requestInfo,
         ClientNetworkRequestMetrics clientNetworkRequestMetrics) {
       this.requestInfo = requestInfo;
-      this.requestQueuedTimeMs = requestQueuedTimeMs;
+      this.requestQueuedAtMs = requestQueuedAtMs;
       this.clientNetworkRequestMetrics = clientNetworkRequestMetrics;
     }
 
@@ -238,16 +234,16 @@ public class NetworkClient implements Closeable {
      * Actions to be done on dequeue of this request and ready to be sent
      */
     void onRequestDequeue() {
-      requestSentTimeMs = System.currentTimeMillis();
-      clientNetworkRequestMetrics.updateQueueTime(requestSentTimeMs - requestQueuedTimeMs);
+      requestDequeuedAtMs = System.currentTimeMillis();
+      clientNetworkRequestMetrics.updateQueueTime(requestDequeuedAtMs - requestQueuedAtMs);
     }
 
     /**
      * Actions to be done on receiving response for the request sent
      */
     void onResponseReceive() {
-      networkMetrics.requestResponseRoundTripTime.update(System.currentTimeMillis() - requestSentTimeMs);
-      networkMetrics.requestResponseTotalTime.update(System.currentTimeMillis() - requestQueuedTimeMs);
+      networkMetrics.requestResponseRoundTripTime.update(System.currentTimeMillis() - requestDequeuedAtMs);
+      networkMetrics.requestResponseTotalTime.update(System.currentTimeMillis() - requestQueuedAtMs);
     }
   }
 }
