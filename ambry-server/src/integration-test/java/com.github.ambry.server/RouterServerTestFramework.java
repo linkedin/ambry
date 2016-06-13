@@ -23,7 +23,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.CoordinatorBackedRouter;
 import com.github.ambry.router.CoordinatorBackedRouterMetrics;
@@ -39,12 +38,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Random;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 
 
@@ -274,23 +269,23 @@ class RouterServerTestFramework {
       switch (nextOp) {
         case PUT_NB:
         case PUT_COORD:
-          startPutBlob(nextOp.nonBlocking, opInfo);
+          startPutBlob(nextOp.nonBlockingRouter, opInfo);
           break;
         case GET_INFO_NB:
         case GET_INFO_DELETED_NB:
         case GET_INFO_COORD:
         case GET_INFO_DELETED_COORD:
-          startGetBlobInfo(nextOp.nonBlocking, nextOp.afterDelete, opInfo);
+          startGetBlobInfo(nextOp.nonBlockingRouter, nextOp.afterDelete, opInfo);
           break;
         case GET_NB:
         case GET_DELETED_NB:
         case GET_COORD:
         case GET_DELETED_COORD:
-          startGetBlob(nextOp.nonBlocking, nextOp.afterDelete, opInfo);
+          startGetBlob(nextOp.nonBlockingRouter, nextOp.afterDelete, opInfo);
           break;
         case DELETE_NB:
         case DELETE_COORD:
-          startDeleteBlob(nextOp.nonBlocking, opInfo);
+          startDeleteBlob(nextOp.nonBlockingRouter, opInfo);
           break;
         case AWAIT_CREATION:
           startAwaitCreation(opInfo);
@@ -369,11 +364,11 @@ class RouterServerTestFramework {
      */
     AWAIT_DELETION(false, false);
 
-    final boolean nonBlocking;
+    final boolean nonBlockingRouter;
     final boolean afterDelete;
 
-    OperationType(boolean nonBlocking, boolean afterDelete) {
-      this.nonBlocking = nonBlocking;
+    OperationType(boolean nonBlockingRouter, boolean afterDelete) {
+      this.nonBlockingRouter = nonBlockingRouter;
       this.afterDelete = afterDelete;
     }
   }
