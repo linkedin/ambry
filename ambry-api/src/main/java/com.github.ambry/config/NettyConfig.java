@@ -57,7 +57,7 @@ public class NettyConfig {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
     nettyServerPort = verifiableProperties.getInt("netty.server.port", 1174);
-    nettyServerSoBacklog = verifiableProperties.getInt("netty.server.sobacklog", 100);
+    nettyServerSoBacklog = verifiableProperties.getInt("netty.server.so.backlog", 100);
     nettyServerWorkerThreadCount = verifiableProperties.getInt("netty.server.worker.thread.count", 1);
   }
 }
