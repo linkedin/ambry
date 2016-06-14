@@ -71,7 +71,8 @@ public class NetworkClientTest {
     selector = new MockSelector();
     time = new MockTime();
     networkClient =
-        new NetworkClient(selector, networkConfig, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL, CHECKOUT_TIMEOUT_MS, time);
+        new NetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), MAX_PORTS_PLAIN_TEXT,
+            MAX_PORTS_SSL, CHECKOUT_TIMEOUT_MS, time);
   }
 
   /**

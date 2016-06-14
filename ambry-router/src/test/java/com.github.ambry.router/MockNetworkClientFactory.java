@@ -67,7 +67,8 @@ class MockNetworkClientFactory extends NetworkClientFactory {
   public NetworkClient getNetworkClient()
       throws IOException {
     MockSelector selector = new MockSelector(serverLayout, state, time);
-    return new NetworkClient(selector, networkConfig, maxPortsPlainText, maxPortsSsl, checkoutTimeoutMs, time);
+    return new NetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), maxPortsPlainText,
+        maxPortsSsl, checkoutTimeoutMs, time);
   }
 }
 

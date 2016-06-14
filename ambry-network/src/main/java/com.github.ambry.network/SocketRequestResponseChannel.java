@@ -14,14 +14,14 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.SystemTime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.io.IOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 // The request at the network layer
@@ -66,10 +66,10 @@ class SocketServerResponse implements Response {
   private final int processor;
   private final Request request;
   private final Send output;
-  private final NetworkRequestMetrics metrics;
+  private final ServerNetworkResponseMetrics metrics;
   private long startQueueTimeInMs;
 
-  public SocketServerResponse(Request request, Send output, NetworkRequestMetrics metrics) {
+  public SocketServerResponse(Request request, Send output, ServerNetworkResponseMetrics metrics) {
     this.request = request;
     this.output = output;
     this.processor = ((SocketServerRequest) request).getProcessor();
@@ -94,11 +94,11 @@ class SocketServerResponse implements Response {
 
   public void onDequeueFromResponseQueue() {
     if (metrics != null) {
-      metrics.updateResponseQueueTime(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
+      metrics.updateQueueTime(SystemTime.getInstance().milliseconds() - startQueueTimeInMs);
     }
   }
 
-  public NetworkRequestMetrics getMetrics() {
+  public NetworkSendMetrics getMetrics() {
     return metrics;
   }
 }
@@ -138,7 +138,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   /** Send a response back to the socket server to be sent over the network */
   @Override
-  public void sendResponse(Send payloadToSend, Request originalRequest, NetworkRequestMetrics metrics)
+  public void sendResponse(Send payloadToSend, Request originalRequest, ServerNetworkResponseMetrics metrics)
       throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest, payloadToSend, metrics);
     response.onEnqueueIntoResponseQueue();

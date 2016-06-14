@@ -42,7 +42,7 @@ public class NetworkMetrics {
   public final Counter selectorKeyOperationErrorCount;
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
-  public Gauge<Long> numActiveConnections;
+  private final List<AtomicLong> selectorActiveConnectionsList;
 
   // Plaintext metrics
   // the bytes rate to receive the entire request
@@ -74,6 +74,18 @@ public class NetworkMetrics {
   public final Histogram sslDecryptionTimePerKB;
   // the count of renegotiation after initial handshake done
   public final Counter sslRenegotiationCount;
+
+  // NetworkClient metrics
+  public final Histogram networkClientSendAndPollTime;
+  public final Histogram requestQueueTime;
+  public final Histogram requestSendTime;
+  public final Histogram requestSendTotalTime;
+  public final Histogram requestResponseRoundTripTime;
+  public final Histogram requestResponseTotalTime;
+
+  public final Counter connectionTimeOutError;
+  public final Counter networkClientIOError;
+  private List<AtomicLong> networkClientPendingRequestList;
 
   public NetworkMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -115,19 +127,62 @@ public class NetworkMetrics {
     sslHandshakeCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeCount"));
     sslHandshakeErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SslHandshakeErrorCount"));
     sslRenegotiationCount = registry.counter(MetricRegistry.name(Selector.class, "SslRenegotiationCount"));
+
+    networkClientSendAndPollTime =
+        registry.histogram(MetricRegistry.name(NetworkClient.class, "NetworkClientSendAndPollTime"));
+    requestQueueTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestQueueTime"));
+    requestSendTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestSendTime"));
+    requestSendTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestSendTotalTime"));
+    requestResponseRoundTripTime =
+        registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseRoundTripTime"));
+    requestResponseTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseTotalTime"));
+    connectionTimeOutError = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionTimeOutError"));
+    networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
+
+    selectorActiveConnectionsList = new ArrayList<>();
+    networkClientPendingRequestList = new ArrayList<>();
+
+    final Gauge<Long> selectorActiveConnectionsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        long activeConnectionsCount = 0;
+        for (AtomicLong activeConnection : selectorActiveConnectionsList) {
+          activeConnectionsCount += activeConnection.get();
+        }
+        return activeConnectionsCount;
+      }
+    };
+    registry.register(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
+        selectorActiveConnectionsCount);
+
+    final Gauge<Long> networkClientPendingRequestsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        long pendingRequestsCount = 0;
+        for (AtomicLong pendingRequest : networkClientPendingRequestList) {
+          pendingRequestsCount += pendingRequest.get();
+        }
+        return pendingRequestsCount;
+      }
+    };
+    registry.register(MetricRegistry.name(NetworkClient.class, "NetworkClientPendingConnectionsCount"),
+        networkClientPendingRequestsCount);
   }
 
   /**
-   * Initializes a few network metrics for the selector
-   * @param activeConnections count of current active connections
+   * Registers the number of active connections for a selector
+   * @param numActiveConnections count of current active connections
    */
-  void initializeSelectorMetrics(final AtomicLong activeConnections) {
-    numActiveConnections = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return activeConnections.get();
-      }
-    };
+  void registerSelectorActiveConnections(final AtomicLong numActiveConnections) {
+    selectorActiveConnectionsList.add(numActiveConnections);
+  }
+
+  /**
+   * Registers the count of pending connections to be checked out by the Network client
+   * @param numPendingConnections the count of pending connections to be checked out
+   */
+  void registerNetworkClientPendingConnections(final AtomicLong numPendingConnections) {
+    networkClientPendingRequestList.add(numPendingConnections);
   }
 }
 

@@ -58,8 +58,8 @@ public class NetworkClientFactory {
   public NetworkClient getNetworkClient()
       throws IOException {
     Selector selector = new Selector(networkMetrics, time, sslFactory);
-    return new NetworkClient(selector, networkConfig, maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl,
-        connectionCheckoutTimeoutMs, time);
+    return new NetworkClient(selector, networkConfig, networkMetrics, maxConnectionsPerPortPlainText,
+        maxConnectionsPerPortSsl, connectionCheckoutTimeoutMs, time);
   }
 }
 
