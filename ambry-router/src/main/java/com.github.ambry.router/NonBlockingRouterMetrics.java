@@ -172,6 +172,13 @@ public class NonBlockingRouterMetrics {
     }
   }
 
+  /**
+   * Initializes a {@link Gauge} metric for the status of {@code RequestResponseHandlerThread} of an
+   * {@link com.github.ambry.router.NonBlockingRouter.OperationController}, to indicate if it is running
+   * or not.
+   * @param requestResponseHandlerThread The {@code RequestResponseHandlerThread} of which the status is
+   *                                     to be monitored.
+   */
   public void initializeOperationControllerMetrics(final Thread requestResponseHandlerThread) {
     requestResponseHandlerThreadRunning = new Gauge<Long>() {
       @Override
@@ -184,6 +191,11 @@ public class NonBlockingRouterMetrics {
             requestResponseHandlerThreadRunning);
   }
 
+  /**
+   * Initializes a {@link Gauge} metric for the status of {@code ChunkFillerThread} of a {@link PutManager}, to
+   * indicate if it is running or not.
+   * @param chunkFillerThread The {@code ChunkFillerThread} of which the status is to be monitored.
+   */
   public void initializePutManagerMetrics(final Thread chunkFillerThread) {
     chunkFillerThreadRunning = new Gauge<Long>() {
       @Override
@@ -195,6 +207,11 @@ public class NonBlockingRouterMetrics {
         chunkFillerThreadRunning);
   }
 
+  /**
+   * Initializes a {@link Gauge} metric to monitor the number of running
+   * {@link com.github.ambry.router.NonBlockingRouter.OperationController} of a {@link NonBlockingRouter}.
+   * @param currentOperationsCount The counter of {@link com.github.ambry.router.NonBlockingRouter.OperationController}.
+   */
   public void initializeNumActiveOperationsMetrics(final AtomicInteger currentOperationsCount) {
     activeOperations = new Gauge<Integer>() {
       @Override

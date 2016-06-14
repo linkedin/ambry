@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -158,9 +157,9 @@ class DeleteOperation {
     RouterErrorCode routerErrorCode;
     long requestLatencyMs = time.milliseconds() - deleteRequestInfo.getStartTimeMs();
     NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-        routerMetrics.getDataNodeBasedMetrics(deleteRequestInfo.replica.getDataNodeId());
+        routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId());
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-    dataNodeBasedMetrics.putRequestLatencyMs.update(requestLatencyMs);
+    dataNodeBasedMetrics.deleteRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
       responseHandler.onRequestResponseException(replica, new IOException(("NetworkClient error.")));
@@ -176,7 +175,6 @@ class DeleteOperation {
           logger.error("The correlation id in the DeleteResponse " + deleteResponse.getCorrelationId()
               + " is not the same as the correlation id in the associated DeleteRequest: " + deleteRequest
               .getCorrelationId());
-          // @todo Discuss why this would complete the operation.
           routerMetrics.unknownReplicaResponseError.inc();
           setOperationException(
               new RouterException("Received wrong response that is not for the corresponding request.",
@@ -388,7 +386,6 @@ class DeleteOperation {
    */
   void setOperationException(Exception exception) {
     operationException.set(exception);
-    operationCompleted = true;
   }
 
   long getSubmissionTimeMs() {
