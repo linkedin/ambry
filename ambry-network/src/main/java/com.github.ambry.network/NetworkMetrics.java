@@ -18,9 +18,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -44,8 +42,7 @@ public class NetworkMetrics {
   public final Counter selectorKeyOperationErrorCount;
   public final Counter selectorCloseKeyErrorCount;
   public final Counter selectorCloseSocketErrorCount;
-  public final Map<String, SelectorNodeMetric> selectorNodeMetricMap;
-  private static int selectorIndex = 0;
+  private final List<AtomicLong> selectorActiveConnectionsList;
 
   // Plaintext metrics
   // the bytes rate to receive the entire request
@@ -88,7 +85,7 @@ public class NetworkMetrics {
 
   public final Counter connectionTimeOutError;
   public final Counter networkClientIOError;
-  private static int networkClientIndex = 0;
+  private List<AtomicLong> networkClientPendingRequestList;
 
   public NetworkMetrics(MetricRegistry registry) {
     this.registry = registry;
@@ -142,7 +139,34 @@ public class NetworkMetrics {
     connectionTimeOutError = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionTimeOutError"));
     networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
 
-    selectorNodeMetricMap = new HashMap<String, SelectorNodeMetric>();
+    selectorActiveConnectionsList = new ArrayList<>();
+    networkClientPendingRequestList = new ArrayList<>();
+
+    final Gauge<Long> selectorActiveConnectionsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        long activeConnectionsCount = 0;
+        for (AtomicLong activeConnection : selectorActiveConnectionsList) {
+          activeConnectionsCount += activeConnection.get();
+        }
+        return activeConnectionsCount;
+      }
+    };
+    registry.register(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
+        selectorActiveConnectionsCount);
+
+    final Gauge<Long> networkClientPendingRequestsCount = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        long pendingRequestsCount = 0;
+        for (AtomicLong pendingRequest : networkClientPendingRequestList) {
+          pendingRequestsCount += pendingRequest.get();
+        }
+        return pendingRequestsCount;
+      }
+    };
+    registry.register(MetricRegistry.name(NetworkClient.class, "NetworkClientPendingConnectionsCount"),
+        networkClientPendingRequestsCount);
   }
 
   /**
@@ -150,14 +174,7 @@ public class NetworkMetrics {
    * @param numActiveConnections count of current active connections
    */
   void registerSelectorActiveConnections(final AtomicLong numActiveConnections) {
-    Gauge<Long> selectorActiveConnectionsCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return numActiveConnections.get();
-      }
-    };
-    registry.register(MetricRegistry.name(Selector.class, selectorIndex++ + "SelectorActiveConnectionsCount"),
-        selectorActiveConnectionsCount);
+    selectorActiveConnectionsList.add(numActiveConnections);
   }
 
   /**
@@ -165,60 +182,7 @@ public class NetworkMetrics {
    * @param numPendingConnections the count of pending connections to be checked out
    */
   void registerNetworkClientPendingConnections(final AtomicLong numPendingConnections) {
-    Gauge<Long> networkClientPendingConnectionsCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return numPendingConnections.get();
-      }
-    };
-    registry.register(
-        MetricRegistry.name(NetworkClient.class, networkClientIndex++ + "NetworkClientPendingConnectionsCount"),
-        networkClientPendingConnectionsCount);
-  }
-
-  public void initializeSelectorNodeMetricIfRequired(String hostname, int port) {
-    if (!selectorNodeMetricMap.containsKey(hostname + port)) {
-      SelectorNodeMetric nodeMetric = new SelectorNodeMetric(registry, hostname, port);
-      selectorNodeMetricMap.put(hostname + port, nodeMetric);
-    }
-  }
-
-  public void updateNodeSendMetric(String hostName, int port, long bytesSentCount, long timeTakenToSendInMs) {
-    if (!selectorNodeMetricMap.containsKey(hostName + port)) {
-      throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
-    }
-    SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
-    nodeMetric.sendCount.inc();
-    nodeMetric.bytesSentCount.inc(bytesSentCount);
-    nodeMetric.bytesSentLatency.update(timeTakenToSendInMs);
-  }
-
-  public void updateNodeReceiveMetric(String hostName, int port, long bytesReceivedCount, long timeTakenToReceiveInMs) {
-    if (!selectorNodeMetricMap.containsKey(hostName + port)) {
-      throw new IllegalArgumentException("Node " + hostName + " with port " + port + " does not exist in metric map");
-    }
-    SelectorNodeMetric nodeMetric = selectorNodeMetricMap.get(hostName + port);
-    nodeMetric.bytesReceivedCount.inc(bytesReceivedCount);
-    nodeMetric.bytesReceivedLatency.update(timeTakenToReceiveInMs);
-  }
-
-  class SelectorNodeMetric {
-    public final Counter sendCount;
-    public final Histogram bytesSentLatency;
-    public final Histogram bytesReceivedLatency;
-    public final Counter bytesSentCount;
-    public final Counter bytesReceivedCount;
-
-    public SelectorNodeMetric(MetricRegistry registry, String hostname, int port) {
-      sendCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-SendCount"));
-      bytesSentLatency =
-          registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesSentLatencyInMs"));
-      bytesReceivedLatency =
-          registry.histogram(MetricRegistry.name(Selector.class, hostname + "-" + port + "- BytesReceivedLatencyInMs"));
-      bytesSentCount = registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-BytesSentCount"));
-      bytesReceivedCount =
-          registry.counter(MetricRegistry.name(Selector.class, hostname + "-" + port + "-BytesReceivedCount"));
-    }
+    networkClientPendingRequestList.add(numPendingConnections);
   }
 }
 
