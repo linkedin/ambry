@@ -636,8 +636,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(chunkWriteTime);
       nettyMetrics.chunkResolutionProcessingTimeInMs.update(chunkResolutionProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(chunkWriteTime);
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(chunkResolutionProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker
+            .addToResponseProcessingTime(chunkWriteTime + chunkResolutionProcessingTime);
       }
     }
   }
@@ -782,8 +782,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
       nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(channelWriteTime);
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(responseAfterWriteProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker
+            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
       }
     }
   }
@@ -808,8 +808,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
       nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(channelWriteTime);
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(responseAfterWriteProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker
+            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
       }
     }
   }

@@ -154,6 +154,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
             ctx.fireExceptionCaught(cause);
           }
         }
+        ctx.close();
       }
     } catch (Exception e) {
       String uri = (request != null) ? request.getUri() : null;
@@ -204,16 +205,17 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     long currentTime = System.currentTimeMillis();
 
     boolean recognized = false;
+    boolean success = true;
     if (obj instanceof HttpRequest) {
       recognized = true;
-      handleRequest((HttpRequest) obj);
+      success = handleRequest((HttpRequest) obj);
     }
     // this is an if and not an else-if because a HttpObject can be both HttpRequest and HttpContent.
-    if (obj instanceof HttpContent) {
+    if (success && obj instanceof HttpContent) {
       recognized = true;
-      handleContent((HttpContent) obj);
+      success = handleContent((HttpContent) obj);
     }
-    if (!recognized) {
+    if (success && !recognized) {
       logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
       nettyMetrics.unknownHttpObjectError.inc();
       if (responseChannel == null || requestContentFullyReceived) {
@@ -238,10 +240,12 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * <p/>
    * In case of POST, delegates handling of {@link RestRequest} to the {@link RestRequestHandler}.
    * @param httpRequest the {@link HttpRequest} that needs to be handled.
+   * @return {@code true} if the handling succeeded without problems.
    * @throws RestServiceException if there is an error handling the current {@link HttpRequest}.
    */
-  private void handleRequest(HttpRequest httpRequest)
+  private boolean handleRequest(HttpRequest httpRequest)
       throws RestServiceException {
+    boolean success = true;
     if (responseChannel == null || requestContentFullyReceived) {
       // Once all content associated with a request has been received, this channel is clear to receive new requests.
       // If the client sends a request without waiting for the response, it is possible to screw things up a little
@@ -250,44 +254,49 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       resetState();
       nettyMetrics.requestArrivalRate.mark();
       if (!httpRequest.getDecoderResult().isSuccess()) {
+        success = false;
         logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel());
         nettyMetrics.malformedRequestError.inc();
-        throw new RestServiceException("Decoder failed because of malformed request",
-            RestServiceErrorCode.MalformedRequest);
-      }
-      try {
-        // We need to maintain state about the request itself for the subsequent parts (if any) that come in. We will
-        // attach content to the request as the content arrives.
-        if (HttpPostRequestDecoder.isMultipart(httpRequest)) {
-          nettyMetrics.multipartPostRequestRate.mark();
-          request = new NettyMultipartRequest(httpRequest, nettyMetrics);
-        } else {
-          request = new NettyRequest(httpRequest, nettyMetrics);
-        }
-        responseChannel.setRequest(request);
-        logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
-        // We send POST that is not multipart for handling immediately since we expect valid content with it that will
-        // be streamed in. In the case of POST that is multipart, all the content has to be received for Netty's
-        // decoder and NettyMultipartRequest to work. So it is scheduled for handling when LastHttpContent is received.
-        // With any other method that we support, we do not expect any valid content. LastHttpContent is a Netty thing.
-        // So we wait for LastHttpContent (throw an error if we don't receive it or receive something else) and then
-        // schedule the other methods for handling in handleContent().
-        if (request.getRestMethod().equals(RestMethod.POST) && !HttpPostRequestDecoder.isMultipart(httpRequest)) {
-          requestHandler.handleRequest(request, responseChannel);
-        }
-      } finally {
-        if (request != null) {
-          request.getMetricsTracker().nioMetricsTracker
-              .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
+        responseChannel.onResponseComplete(new RestServiceException("Decoder failed because of malformed request",
+            RestServiceErrorCode.MalformedRequest));
+      } else {
+        try {
+          // We need to maintain state about the request itself for the subsequent parts (if any) that come in. We will
+          // attach content to the request as the content arrives.
+          if (HttpPostRequestDecoder.isMultipart(httpRequest)) {
+            nettyMetrics.multipartPostRequestRate.mark();
+            request = new NettyMultipartRequest(httpRequest, nettyMetrics);
+          } else {
+            request = new NettyRequest(httpRequest, nettyMetrics);
+          }
+          responseChannel.setRequest(request);
+          logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
+          // We send POST that is not multipart for handling immediately since we expect valid content with it that will
+          // be streamed in. In the case of POST that is multipart, all the content has to be received for Netty's
+          // decoder and NettyMultipartRequest to work. So it is scheduled for handling when LastHttpContent is received.
+          // With any other method that we support, we do not expect any valid content. LastHttpContent is a Netty thing.
+          // So we wait for LastHttpContent (throw an error if we don't receive it or receive something else) and then
+          // schedule the other methods for handling in handleContent().
+          if (request.getRestMethod().equals(RestMethod.POST) && !HttpPostRequestDecoder.isMultipart(httpRequest)) {
+            requestHandler.handleRequest(request, responseChannel);
+          }
+        } finally {
+          if (request != null) {
+            request.getMetricsTracker().nioMetricsTracker
+                .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
+          }
         }
       }
     } else {
-      // We have received a request when we were not expecting one. This shouldn't happen and there is no good way to
-      // deal with it. So just update a metric and log an error.
-      logger.warn("Discarding unexpected request on channel {}. Request under processing: {}. Unexpected request: {}",
-          ctx.channel(), request.getUri(), httpRequest.getUri());
+      // We have received a request when we were not expecting one. This shouldn't happen and the channel is closed
+      // because it is in a bad state.
+      success = false;
+      logger.error("New request received when previous request is yet to be fully received on channel {}. Request under"
+          + " processing: {}. Unexpected request: {}", ctx.channel(), request.getUri(), httpRequest.getUri());
       nettyMetrics.duplicateRequestError.inc();
+      ctx.close();
     }
+    return success;
   }
 
   /**
@@ -298,10 +307,12 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * If the HTTP method for the request is something other than POST, delegates handling of {@link RestRequest} to the
    * {@link RestRequestHandler} when {@link LastHttpContent} is received.
    * @param httpContent the {@link HttpContent} that needs to be handled.
+   * @return {@code true} if the handling succeeded without problems.
    * @throws RestServiceException if there is an error handling the current {@link HttpContent}.
    */
-  private void handleContent(HttpContent httpContent)
+  private boolean handleContent(HttpContent httpContent)
       throws RestServiceException {
+    boolean success = true;
     if (request != null && !requestContentFullyReceived) {
       long processingStartTime = System.currentTimeMillis();
       nettyMetrics.bytesReadRate.mark(httpContent.content().readableBytes());
@@ -310,23 +321,27 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       try {
         request.addContent(httpContent);
       } catch (IllegalStateException e) {
+        success = false;
         nettyMetrics.contentAdditionError.inc();
-        throw new RestServiceException(e, RestServiceErrorCode.InvalidRequestState);
+        responseChannel.onResponseComplete(new RestServiceException(e, RestServiceErrorCode.InvalidRequestState));
       } finally {
         long chunkProcessingTime = System.currentTimeMillis() - processingStartTime;
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
         request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(chunkProcessingTime);
       }
-      if (!request.getRestMethod().equals(RestMethod.POST) || (request.isMultipart() && requestContentFullyReceived)) {
+      if (success && (!request.getRestMethod().equals(RestMethod.POST) || (request.isMultipart()
+          && requestContentFullyReceived))) {
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {
+      success = false;
       resetState();
       logger.warn("Received content when it was not expected on channel {}", ctx.channel());
       nettyMetrics.noRequestError.inc();
       responseChannel.onResponseComplete(
           new RestServiceException("Received content without a request", RestServiceErrorCode.InvalidRequestState));
     }
+    return success;
   }
 
   /**

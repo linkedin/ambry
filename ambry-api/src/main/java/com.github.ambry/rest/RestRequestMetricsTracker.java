@@ -70,8 +70,7 @@ public class RestRequestMetricsTracker {
     private long roundTripTimeInMs = 0;
 
     /**
-     * Adds to the time taken to process the request at the NIO layer. Also adds to the total time taken to service the
-     * request.
+     * Adds to the time taken to process the request at the NIO layer.
      * @param delta the time taken in ms to do the current piece of processing at the NIO layer for the request.
      * @return the total time taken in ms to process the request at the NIO layer, including the current piece, at this
      *          moment.
@@ -81,8 +80,7 @@ public class RestRequestMetricsTracker {
     }
 
     /**
-     * Adds to the time taken to process the response at the NIO layer. Also adds to the total time taken to service the
-     * request.
+     * Adds to the time taken to process the response at the NIO layer.
      * @param delta the time taken in ms to do the current piece of processing at the NIO layer for the response.
      * @return the total time taken in ms to process the response at the NIO layer, including the current piece, at this
      *          moment.
@@ -123,8 +121,7 @@ public class RestRequestMetricsTracker {
     private long roundTripTimeInMs = 0;
 
     /**
-     * Adds to the time taken to process a request at the scaling layer. Also adds to the total time taken to service
-     * the request.
+     * Adds to the time taken to process a request at the scaling layer.
      * @param delta the time taken in ms to do the current piece of processing at the scaling layer for the request.
      * @return the total time taken in ms to process this request at the scaling layer, including the current piece, at
      *          this moment.
@@ -134,8 +131,7 @@ public class RestRequestMetricsTracker {
     }
 
     /**
-     * Adds to the scaling layer processing wait time for a request. Also adds to the total time taken to service the
-     * request.
+     * Adds to the scaling layer processing wait time for a request.
      * @param delta the time in ms a request has spent waiting to be processed at the scaling layer.
      * @return the total time in ms this request has spent waiting to be processed at the scaling layer at this moment.
      */
@@ -144,8 +140,7 @@ public class RestRequestMetricsTracker {
     }
 
     /**
-     * Adds to the time taken to process a response at the scaling layer. Also adds to the total time taken to service
-     * the request.
+     * Adds to the time taken to process a response at the scaling layer.
      * @param delta the time taken in ms to do the current piece of processing at the scaling layer for the response.
      * @return the total time taken in ms to process the response at the scaling layer, including the current piece, at
      *          this moment.
@@ -155,8 +150,7 @@ public class RestRequestMetricsTracker {
     }
 
     /**
-     * Adds to the scaling layer processing wait time of a response. Also adds to the total time taken to service the
-     * request.
+     * Adds to the scaling layer processing wait time of a response.
      * @param delta the time in ms a response has spent waiting to be processed at the scaling layer.
      * @return the total time in ms this response has spent waiting to be processed at the scaling layer at this moment.
      */

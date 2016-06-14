@@ -124,7 +124,7 @@ class TestMetrics {
   private final long scRequestProcessingWaitTime = random.nextInt(Integer.MAX_VALUE);
   private final long scResponseProcessingWaitTime = random.nextInt(Integer.MAX_VALUE);
 
-  private final long failedCount;
+  private final long operationErrorCount;
 
   /**
    * Creates a new instance by generating new random metrics and updating it in the given {@code requestMetrics}.
@@ -133,7 +133,7 @@ class TestMetrics {
    */
   protected TestMetrics(RestRequestMetricsTracker requestMetrics, boolean induceFailure) {
     updateMetrics(requestMetrics, induceFailure);
-    failedCount = induceFailure ? 1 : 0;
+    operationErrorCount = induceFailure ? 1 : 0;
   }
 
   /**
@@ -165,7 +165,7 @@ class TestMetrics {
 
     assertEquals("Rate metric has not fired", 1,
         metricRegistry.getMeters().get(metricPrefix + RestRequestMetrics.OPERATION_RATE_SUFFIX).getCount());
-    assertEquals("Error metric value is not as expected", failedCount,
+    assertEquals("Error metric value is not as expected", operationErrorCount,
         metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.OPERATION_ERROR_SUFFIX).getCount());
   }
 
