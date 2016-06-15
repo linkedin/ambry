@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -254,7 +255,6 @@ class PutOperation {
     if (chunk.getChunkBlobId() == null) {
       // the overall operation has failed if any of the chunk fails.
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
-      routerMetrics.putBlobErrorCount.inc();
       operationCompleted = true;
     } else if (numDataChunks == 1 || chunk == metadataPutChunk) {
       blobId = chunk.getChunkBlobId();
@@ -699,6 +699,9 @@ class PutOperation {
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
           operationTracker.onResponse(entry.getValue().replicaId, false);
           chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
+          NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
+              routerMetrics.getDataNodeBasedMetrics(entry.getValue().replicaId.getDataNodeId());
+          dataNodeBasedMetrics.putRequestErrorCount.inc();
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -724,6 +727,7 @@ class PutOperation {
         correlationIdToPutChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
+        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestRate.mark();
       }
     }
 
@@ -773,9 +777,12 @@ class PutOperation {
         // before attempting the slipped put.
         // - the response is for an earlier chunk held by this PutChunk.
         return;
-      } else {
-        routerMetrics.routerRequestLatencyMs.update(time.milliseconds() - chunkPutRequestInfo.startTimeMs);
       }
+      long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
+      NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
+          routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId());
+      routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
+      dataNodeBasedMetrics.putRequestLatencyMs.update(requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
@@ -804,6 +811,7 @@ class PutOperation {
               logger.trace("The putRequest was successful");
               isSuccessful = true;
             } else {
+              // chunkException will be set within processServerError.
               processServerError(putResponse.getError());
               isSuccessful = false;
               logger.trace("Server returned an error: ", putResponse.getError());
@@ -819,6 +827,9 @@ class PutOperation {
       }
       operationTracker.onResponse(chunkPutRequestInfo.replicaId, isSuccessful);
       checkAndMaybeComplete();
+      if (!isSuccessful) {
+        dataNodeBasedMetrics.putRequestErrorCount.inc();
+      }
     }
 
     /**
@@ -850,9 +861,9 @@ class PutOperation {
      * A class that holds information about requests sent out by this PutChunk.
      */
     private class ChunkPutRequestInfo {
-      final ReplicaId replicaId;
-      final PutRequest putRequest;
-      final long startTimeMs;
+      private final ReplicaId replicaId;
+      private final PutRequest putRequest;
+      private final long startTimeMs;
 
       /**
        * Construct a ChunkPutRequestInfo

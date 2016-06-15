@@ -122,14 +122,18 @@ class NonBlockingRouter implements Router {
   @Override
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
     currentOperationsCount.incrementAndGet();
+    routerMetrics.getBlobInfoOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
     FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
     if (isOpen.get()) {
       getOperationController().getBlobInfo(blobId, futureResult, callback);
     } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null,
-          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
+      routerMetrics.getBlobInfoErrorCount.inc();
+      routerMetrics.countError(routerException);
+      operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
   }
@@ -154,14 +158,18 @@ class NonBlockingRouter implements Router {
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
     currentOperationsCount.incrementAndGet();
+    routerMetrics.getBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
     if (isOpen.get()) {
       getOperationController().getBlob(blobId, futureResult, callback);
     } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null,
-          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
+      routerMetrics.getBlobErrorCount.inc();
+      routerMetrics.countError(routerException);
+      operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
   }
@@ -191,14 +199,18 @@ class NonBlockingRouter implements Router {
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
     currentOperationsCount.incrementAndGet();
+    routerMetrics.putBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<String>();
     if (isOpen.get()) {
       getOperationController().putBlob(blobProperties, userMetadata, channel, futureResult, callback);
     } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null,
-          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
+      routerMetrics.putBlobErrorCount.inc();
+      routerMetrics.countError(routerException);
+      operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
   }
@@ -223,14 +235,18 @@ class NonBlockingRouter implements Router {
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
     currentOperationsCount.incrementAndGet();
+    routerMetrics.deleteBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (isOpen.get()) {
       getOperationController().deleteBlob(blobId, futureResult, callback);
     } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null,
-          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
+      routerMetrics.deleteBlobErrorCount.inc();
+      routerMetrics.countError(routerException);
+      operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
   }
@@ -361,13 +377,15 @@ class NonBlockingRouter implements Router {
     private void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
       if (!putManager.isOpen()) {
+        RouterException routerException =
+            new RouterException(" because Router is closed", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
-        operationCompleteCallback.completeOperation(futureResult, callback, null,
-            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+        routerMetrics.putBlobErrorCount.inc();
+        routerMetrics.countError(routerException);
+        operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
         // Close so that any existing operations are also disposed off.
         close();
       } else {
-        routerMetrics.putBlobOperationRate.mark();
         putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, futureResult, callback);
       }
     }

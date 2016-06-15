@@ -64,7 +64,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
       routerConfig = new RouterConfig(verifiableProperties);
       MetricRegistry registry = clusterMap.getMetricRegistry();
-      routerMetrics = new NonBlockingRouterMetrics(registry);
+      routerMetrics = new NonBlockingRouterMetrics(clusterMap);
       this.clusterMap = clusterMap;
       this.notificationSystem = notificationSystem;
       networkConfig = new NetworkConfig(verifiableProperties);

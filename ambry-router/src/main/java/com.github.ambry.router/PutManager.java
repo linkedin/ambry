@@ -121,6 +121,8 @@ class PutManager {
       putOperations.add(putOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.putBlobErrorCount.inc();
+      routerMetrics.countError(e);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -159,6 +161,8 @@ class PutManager {
       if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
         onComplete(putOperation);
       }
+    } else {
+      routerMetrics.ignoredResponseCount.inc();
     }
   }
 
@@ -176,8 +180,11 @@ class PutManager {
    * @param op the {@link PutOperation} that has completed.
    */
   void onComplete(PutOperation op) {
-    if (op.getOperationException() != null) {
+    Exception e = op.getOperationException();
+    if (e != null) {
       // @todo add blobs in the metadata chunk to ids_to_delete
+      routerMetrics.putBlobErrorCount.inc();
+      routerMetrics.countError(e);
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
     }
@@ -222,9 +229,13 @@ class PutManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (putOperations.remove(op)) {
+        RouterException routerException =
+            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
-        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null,
-            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+        routerMetrics.operationAbortCount.inc();
+        routerMetrics.putBlobErrorCount.inc();
+        routerMetrics.countError(routerException);
+        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, routerException);
       }
     }
   }

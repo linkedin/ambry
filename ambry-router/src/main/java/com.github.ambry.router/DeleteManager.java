@@ -100,10 +100,12 @@ class DeleteManager {
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
-          new DeleteOperation(routerConfig, responseHandler, blobId, futureResult, callback, time);
+          new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, futureResult, callback, time);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.deleteBlobErrorCount.inc();
+      routerMetrics.countError(e);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -138,6 +140,8 @@ class DeleteManager {
       if (deleteOperation.isOperationComplete() && deleteOperations.remove(deleteOperation)) {
         onComplete(deleteOperation);
       }
+    } else {
+      routerMetrics.ignoredResponseCount.inc();
     }
   }
 
@@ -147,10 +151,15 @@ class DeleteManager {
    * @param op The {@link DeleteOperation} that has completed.
    */
   void onComplete(DeleteOperation op) {
-    if (op.getOperationException() == null) {
+    Exception e = op.getOperationException();
+    if (e == null) {
       notificationSystem.onBlobDeleted(op.getBlobId().getID());
+    } else {
+      routerMetrics.deleteBlobErrorCount.inc();
+      routerMetrics.countError(e);
     }
     routerMetrics.operationDequeuingRate.mark();
+    routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
     operationCompleteCallback
         .completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(), op.getOperationException());
   }
@@ -165,9 +174,13 @@ class DeleteManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (deleteOperations.remove(op)) {
+        RouterException routerException =
+            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
-        operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null,
-            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed));
+        routerMetrics.operationAbortCount.inc();
+        routerMetrics.deleteBlobErrorCount.inc();
+        routerMetrics.countError(routerException);
+        operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, routerException);
       }
     }
   }
