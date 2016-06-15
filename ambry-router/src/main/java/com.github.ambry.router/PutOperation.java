@@ -696,7 +696,7 @@ class PutOperation {
           correlationIdToChunkPutRequestInfo.entrySet().iterator();
       while (inFlightRequestsIterator.hasNext()) {
         Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
-        if (time.milliseconds() - entry.getValue().getStartTimeMs() > routerConfig.routerRequestTimeoutMs) {
+        if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
           operationTracker.onResponse(entry.getValue().replicaId, false);
           chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
           NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
@@ -778,7 +778,7 @@ class PutOperation {
         // - the response is for an earlier chunk held by this PutChunk.
         return;
       }
-      long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.getStartTimeMs();
+      long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
       NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
           routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId());
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
@@ -861,9 +861,9 @@ class PutOperation {
      * A class that holds information about requests sent out by this PutChunk.
      */
     private class ChunkPutRequestInfo {
-      final ReplicaId replicaId;
-      final PutRequest putRequest;
-      final long startTimeMs;
+      private final ReplicaId replicaId;
+      private final PutRequest putRequest;
+      private final long startTimeMs;
 
       /**
        * Construct a ChunkPutRequestInfo
@@ -874,10 +874,6 @@ class PutOperation {
         this.replicaId = replicaId;
         this.putRequest = putRequest;
         this.startTimeMs = startTimeMs;
-      }
-
-      long getStartTimeMs() {
-        return startTimeMs;
       }
     }
 

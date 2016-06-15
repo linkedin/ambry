@@ -155,7 +155,7 @@ class DeleteOperation {
     }
     ReplicaId replica = deleteRequestInfo.replica;
     RouterErrorCode routerErrorCode;
-    long requestLatencyMs = time.milliseconds() - deleteRequestInfo.getStartTimeMs();
+    long requestLatencyMs = time.milliseconds() - deleteRequestInfo.startTimeMs;
     NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
         routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId());
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
@@ -202,16 +202,12 @@ class DeleteOperation {
    * A wrapper class that is used to check if a request has been expired.
    */
   private class DeleteRequestInfo {
-    final long startTimeMs;
-    final ReplicaId replica;
+    private final long startTimeMs;
+    private final ReplicaId replica;
 
     DeleteRequestInfo(long submissionTime, ReplicaId replica) {
       this.startTimeMs = submissionTime;
       this.replica = replica;
-    }
-
-    long getStartTimeMs() {
-      return startTimeMs;
     }
   }
 

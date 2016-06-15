@@ -75,7 +75,7 @@ public class NonBlockingRouterMetrics {
   public final Counter blobDoesNotExistErrorCount;
   public final Counter blobExpiredErrorCount;
   public final Counter unknownReplicaResponseError;
-  public final Counter closeErrorCount;
+  public final Counter errorCountOnRouterClose;
   public final Counter unknownErrorCountForOperation;
 
   // Misc metrics.
@@ -153,7 +153,7 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BlobExpiredErrorCount"));
     unknownReplicaResponseError =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownReplicaResponseError"));
-    closeErrorCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CloseErrorCount"));
+    errorCountOnRouterClose = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ErrorCountOnRouterClose"));
     unknownErrorCountForOperation =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownErrorCountForOperation"));
 
