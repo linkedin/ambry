@@ -11,10 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.frontend;
+package com.github.ambry.admin;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -51,21 +51,21 @@ import org.junit.Test;
 
 
 /**
- * Unit tests {@link AmbrySecurityService}
+ * Unit tests {@link AdminSecurityService}
  */
-public class AmbrySecurityServiceTest {
+public class AdminSecurityServiceTest {
 
-  private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
-  private static final String SERVICE_ID = "AmbrySecurityService";
+  private static final AdminConfig ADMIN_CONFIG = new AdminConfig(new VerifiableProperties(new Properties()));
+  private static final String SERVICE_ID = "AdminSecurityService";
   private static final String OWNER_ID = SERVICE_ID;
   private static final BlobInfo DEFAULT_INFO =
       new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time), null);
 
   private final SecurityService securityService =
-      new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()));
+      new AdminSecurityService(ADMIN_CONFIG, new AdminMetrics(new MetricRegistry()));
 
   /**
-   * Tests {@link AmbrySecurityService#processRequest(RestRequest, Callback)} for common as well as uncommon cases
+   * Tests {@link AdminSecurityService#processRequest(RestRequest, Callback)} for common as well as uncommon cases
    * @throws Exception
    */
   @Test
@@ -119,7 +119,7 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}  for
+   * Tests {@link AdminSecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}  for
    * common as well as uncommon cases
    * @throws Exception
    */
@@ -188,18 +188,18 @@ public class AmbrySecurityServiceTest {
     // GET Blob
     // less than chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID,
-            "image/gif", false, 10000), null);
+        new BlobProperties(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID, "image/gif",
+            false, 10000), null);
     testGetBlob(blobInfo);
     // == chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID,
-            "image/gif", false, 10000), null);
+        new BlobProperties(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes, SERVICE_ID, OWNER_ID, "image/gif",
+            false, 10000), null);
     testGetBlob(blobInfo);
     // more than chunk threshold size
     blobInfo = new BlobInfo(
-        new BlobProperties(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID,
-            "image/gif", false, 10000), null);
+        new BlobProperties(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes * 2, SERVICE_ID, OWNER_ID, "image/gif",
+            false, 10000), null);
     testGetBlob(blobInfo);
     // Get blob with content type null
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, true, 10000), null);
@@ -320,7 +320,7 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
+   * Tests {@link AdminSecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
    * {@link RestMethod#HEAD}.
    * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
    * @throws Exception
@@ -365,7 +365,7 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
+   * Tests {@link AdminSecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
    * {@link RestMethod#POST}.
    * @throws Exception
    */
@@ -462,7 +462,7 @@ public class AmbrySecurityServiceTest {
       }
     }
 
-    if (blobProperties.getBlobSize() < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
+    if (blobProperties.getBlobSize() < ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes) {
       Assert.assertEquals("Content length value mismatch", blobProperties.getBlobSize(),
           Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     } else {
@@ -481,8 +481,7 @@ public class AmbrySecurityServiceTest {
       Assert.assertTrue("Expires value should be in the future",
           RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES)).longValue() > System
               .currentTimeMillis());
-      Assert.assertEquals("Cache-Control value not as expected",
-          "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
+      Assert.assertEquals("Cache-Control value not as expected", "max-age=" + ADMIN_CONFIG.adminCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert
           .assertNull("Pragma value should not have been set", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));

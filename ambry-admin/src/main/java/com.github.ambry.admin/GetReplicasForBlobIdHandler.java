@@ -69,7 +69,7 @@ class GetReplicasForBlobIdHandler {
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
     } finally {
       long processingTime = System.currentTimeMillis() - startTime;
-      adminMetrics.getReplicasForBlobIdProcessingTimeInMs.update(processingTime);
+      restRequest.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(processingTime);
     }
     return channel;
   }
@@ -95,27 +95,22 @@ class GetReplicasForBlobIdHandler {
         PartitionId partitionId = new BlobId(blobIdStr, clusterMap).getPartition();
         if (partitionId == null) {
           logger.warn("Partition for blob id {} is null. The blob id might be invalid", blobIdStr);
-          adminMetrics.getReplicasForBlobIdPartitionNullError.inc();
           throw new RestServiceException("Partition for blob id " + blobIdStr + " is null. The id might be invalid",
               RestServiceErrorCode.NotFound);
         }
         return packageResult(partitionId.getReplicaIds());
       } catch (IllegalArgumentException e) {
-        adminMetrics.getReplicasForBlobIdInvalidBlobIdError.inc();
         throw new RestServiceException("Invalid blob id received for getReplicasForBlob request - " + blobIdStr, e,
             RestServiceErrorCode.NotFound);
       } catch (IOException e) {
-        adminMetrics.getReplicasForBlobIdObjectCreationError.inc();
         throw new RestServiceException(
             "BlobId object creation failed for getReplicasForBlobId request for blob id " + blobIdStr, e,
             RestServiceErrorCode.InternalObjectCreationError);
       } catch (JSONException e) {
-        adminMetrics.getReplicasForBlobIdResponseBuildingError.inc();
         throw new RestServiceException("Unable to construct result JSON object during getReplicasForBlobId", e,
             RestServiceErrorCode.ResponseBuildingFailure);
       }
     } else {
-      adminMetrics.getReplicasForBlobIdMissingParameterError.inc();
       throw new RestServiceException("Request for getReplicasForBlobId missing parameter - " + BLOB_ID_KEY,
           RestServiceErrorCode.MissingArgs);
     }

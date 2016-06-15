@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.frontend;
+package com.github.ambry.admin;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
@@ -22,19 +22,19 @@ import org.junit.Test;
 
 
 /**
- * Unit tests {@link AmbrySecurityServiceFactory}
+ * Unit tests {@link AdminSecurityServiceFactory}
  */
-public class AmbrySecurityServiceFactoryTest {
+public class AdminSecurityServiceFactoryTest {
 
   /**
-   * Tests intantiation of {@link AmbrySecurityServiceFactory}.
+   * Tests intantiation of {@link AdminSecurityServiceFactory}.
    * @throws InstantiationException
    */
   @Test
-  public void getAmbrySecurityServiceFactoryTest()
+  public void getAdminSecurityServiceFactoryTest()
       throws InstantiationException {
     SecurityService securityService =
-        new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry())
+        new AdminSecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry())
             .getSecurityService();
     Assert.assertNotNull(securityService);
   }

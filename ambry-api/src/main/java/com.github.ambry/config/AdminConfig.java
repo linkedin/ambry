@@ -13,9 +13,8 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
-import com.github.ambry.config.VerifiableProperties;
+import java.util.Arrays;
+import java.util.List;
 
 
 /**
@@ -30,7 +29,43 @@ public class AdminConfig {
   @Default("365*24*60*60")
   public final long adminCacheValiditySeconds;
 
+  /**
+   * The IdConverterFactory that needs to be used by AdminBlobStorageService to convert IDs.
+   */
+  @Config("admin.id.converter.factory")
+  @Default("com.github.ambry.admin.AdminIdConverterFactory")
+  public final String adminIdConverterFactory;
+
+  /**
+   * The SecurityServiceFactory that needs to be used by AdminBlobStorageService to validate requests.
+   */
+  @Config("admin.security.service.factory")
+  @Default("com.github.ambry.admin.AdminSecurityServiceFactory")
+  public final String adminSecurityServiceFactory;
+
+  /**
+   * The comma separated list of prefixes to remove from paths.
+   */
+  @Config("admin.path.prefixes.to.remove")
+  @Default("")
+  public final List<String> adminPathPrefixesToRemove;
+
+  /**
+   * Specifies the blob size in bytes beyond which chunked response will be sent for a getBlob() call
+   */
+  @Config("admin.chunked.get.response.threshold.in.bytes")
+  @Default("8192")
+  public final Integer adminChunkedGetResponseThresholdInBytes;
+
   public AdminConfig(VerifiableProperties verifiableProperties) {
     adminCacheValiditySeconds = verifiableProperties.getLong("admin.cache.validity.seconds", 365 * 24 * 60 * 60);
+    adminIdConverterFactory = verifiableProperties
+        .getString("admin.id.converter.factory", "com.github.ambry.admin.AdminIdConverterFactory");
+    adminSecurityServiceFactory = verifiableProperties
+        .getString("admin.security.service.factory", "com.github.ambry.admin.AdminSecurityServiceFactory");
+    adminPathPrefixesToRemove =
+        Arrays.asList(verifiableProperties.getString("admin.path.prefixes.to.remove", "").split(","));
+    adminChunkedGetResponseThresholdInBytes =
+        verifiableProperties.getInt("admin.chunked.get.response.threshold.in.bytes", 8192);
   }
 }

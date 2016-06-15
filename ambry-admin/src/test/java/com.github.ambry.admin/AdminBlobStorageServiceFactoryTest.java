@@ -21,7 +21,6 @@ import com.github.ambry.rest.MockRestRequestResponseHandler;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
-import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -38,11 +37,11 @@ public class AdminBlobStorageServiceFactoryTest {
   /**
    * Tests the instantiation of an {@link AdminBlobStorageService} instance through the
    * {@link AdminBlobStorageServiceFactory}.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void getAdminBlobStorageServiceTest()
-      throws IOException {
+      throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -58,11 +57,11 @@ public class AdminBlobStorageServiceFactoryTest {
 
   /**
    * Tests instantiation of {@link AdminBlobStorageServiceFactory} with bad input.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void getAdminBlobStorageServiceFactoryWithBadInputTest()
-      throws IOException {
+      throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
