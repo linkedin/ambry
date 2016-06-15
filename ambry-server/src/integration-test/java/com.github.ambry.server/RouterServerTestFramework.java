@@ -43,6 +43,14 @@ import java.util.concurrent.Future;
 import org.junit.Assert;
 
 
+/**
+ * This class provides a framework for creating router/server integration test cases. It instantiates a non-blocking
+ * and coordinator-backed router from the provided properties, cluster and notification system. The user defines
+ * chains of operations on a certain blob (i.e. putBlob, getBlobInfo, deleteBlob). These chains can be executed
+ * asynchronously using the {@link #startOperationChain(int, int, Queue)} method. The results of each stage of the
+ * chains can be checked using the {@link #checkOperationChains(List)} method. See {@link RouterServerPlaintextTest}
+ * and {@link RouterServerSSLTest} for example usage.
+ */
 class RouterServerTestFramework {
   static final int CHUNK_SIZE = 1024 * 1024;
   private final MockClusterMap clusterMap;
@@ -50,6 +58,14 @@ class RouterServerTestFramework {
   private final Router nonBlockingRouter;
   private final Router coordinatorBackedRouter;
 
+  /**
+   * Instantiate a framework for testing router-server interaction. Creates a non-blocking and coordinator-backed router
+   * to interact with the passed-in {@link MockCluster}.
+   * @param routerProps All of the properties to be used when instantiating the coordinator and routers
+   * @param cluster A {@link MockCluster} that contains the servers to be used in the tests.
+   * @param notificationSystem A {@link MockNotificationSystem} that is used to determine if
+   * @throws Exception
+   */
   RouterServerTestFramework(Properties routerProps, MockCluster cluster, MockNotificationSystem notificationSystem)
       throws Exception {
     this.clusterMap = cluster.getClusterMap();
@@ -67,6 +83,10 @@ class RouterServerTestFramework {
         new CoordinatorBackedRouter(routerConfig, coordinatorBackedRouterMetrics, coordinator);
   }
 
+  /**
+   * Close the instantiated routers.
+   * @throws IOException
+   */
   void cleanup()
       throws IOException {
     if (nonBlockingRouter != null) {
@@ -77,20 +97,27 @@ class RouterServerTestFramework {
     }
   }
 
-  void checkOperationChains(List<OperationInfo> opInfos)
+  /**
+   * Await completion of all {@link OperationChain}s in the {@code opChains} list. For each chain, check the results
+   * of each stage of the chain. Also check that the blobs put into the cluster are relatively balanced between
+   * partitions (no more than 3 times expected number of blobs per partition).
+   * @param opChains the {@link OperationChain}s to await and check.
+   * @throws Exception
+   */
+  void checkOperationChains(List<OperationChain> opChains)
       throws Exception {
     Map<PartitionId, Integer> partitionCount = new HashMap<>();
     double blobsPut = 0;
-    for (OperationInfo opInfo : opInfos) {
-      opInfo.latch.await();
-      synchronized (opInfo.futures) {
-        for (TestFuture future : opInfo.futures) {
-          future.check();
+    for (OperationChain opChain : opChains) {
+      opChain.latch.await();
+      synchronized (opChain.testFutures) {
+        for (TestFuture testFuture : opChain.testFutures) {
+          testFuture.check();
         }
       }
-      if (opInfo.blobId != null) {
+      if (opChain.blobId != null) {
         blobsPut++;
-        PartitionId partitionId = new BlobId(opInfo.blobId, clusterMap).getPartition();
+        PartitionId partitionId = new BlobId(opChain.blobId, clusterMap).getPartition();
         int count = partitionCount.containsKey(partitionId) ? partitionCount.get(partitionId) : 0;
         partitionCount.put(partitionId, count + 1);
       }
@@ -103,17 +130,30 @@ class RouterServerTestFramework {
     }
   }
 
-  OperationInfo startOperationChain(int blobSize, int operationId, Queue<OperationType> opChain) {
+  /**
+   * Create an {@link OperationChain} from a queue of {@link OperationType}s.  Start the operation chain asynchronously.
+   * @param blobSize the size of the blob generated for put operations.
+   * @param chainId a numeric identifying the operation chain.
+   * @param operations the queue of operations to perform in the chain
+   * @return an {@link OperationChain} object describing the started chain.
+   */
+  OperationChain startOperationChain(int blobSize, int chainId, Queue<OperationType> operations) {
     byte[] userMetadata = new byte[1000];
     byte[] data = new byte[blobSize];
     new Random().nextBytes(userMetadata);
     new Random().nextBytes(data);
     BlobProperties properties = new BlobProperties(blobSize, "serviceid1");
-    OperationInfo opInfo = new OperationInfo(operationId, properties, userMetadata, data, opChain);
-    continueChain(opInfo);
-    return opInfo;
+    OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
+    continueChain(opChain);
+    return opChain;
   }
 
+  /**
+   * Generate the properties needed by the router and coordinator.  NOTE: Properties for SSL interaction need
+   * to be added manually.
+   * @param routerDatacenter the datacenter name where the router will be running.
+   * @return a {@link Properties} object with the properties needed to instantiate the router/coordinator.
+   */
   static Properties getRouterProperties(String routerDatacenter) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
@@ -127,21 +167,38 @@ class RouterServerTestFramework {
     return properties;
   }
 
+  /**
+   * Check for blob ID validity.
+   * @param blobId the blobId
+   * @param operationName a name for the operation being checked
+   */
   private static void checkBlobId(String blobId, String operationName) {
     Assert.assertNotNull("Null blobId for operation: " + operationName, blobId);
   }
 
-  private static void checkBlobInfo(BlobInfo blobInfo, OperationInfo operationInfo, String operationName) {
+  /**
+   * Check that {@code blobInfo} matches {@code opChain.blobInfo}.
+   * @param blobInfo the {@link BlobInfo} to check
+   * @param opChain the {@link OperationChain} structure to compare against
+   * @param operationName a name for the operation being checked
+   */
+  private static void checkBlobInfo(BlobInfo blobInfo, OperationChain opChain, String operationName) {
     Assert.assertNotNull("Null blobInfo for operation: " + operationName, blobInfo);
     Assert.assertEquals("Blob size in info does not match expected for operation: " + operationName,
-        operationInfo.properties.getBlobSize(), blobInfo.getBlobProperties().getBlobSize());
+        opChain.properties.getBlobSize(), blobInfo.getBlobProperties().getBlobSize());
     Assert.assertEquals("Service ID in info does not match expected for operation: " + operationName,
-        operationInfo.properties.getServiceId(), blobInfo.getBlobProperties().getServiceId());
-    Assert.assertArrayEquals("Unexpected user metadata for operation: " + operationName, operationInfo.userMetadata,
+        opChain.properties.getServiceId(), blobInfo.getBlobProperties().getServiceId());
+    Assert.assertArrayEquals("Unexpected user metadata for operation: " + operationName, opChain.userMetadata,
         blobInfo.getUserMetadata());
   }
 
-  private static void checkBlob(ReadableStreamChannel channel, OperationInfo operationInfo, String operationName) {
+  /**
+   * Check that the blob read from {@code channel} matches {@code opChain.data}.
+   * @param channel the {@link ReadableStreamChannel} to check
+   * @param opChain the {@link OperationChain} structure to compare against
+   * @param operationName a name for the operation being checked
+   */
+  private static void checkBlob(ReadableStreamChannel channel, OperationChain opChain, String operationName) {
     Assert.assertNotNull("Null channel for operation: " + operationName, channel);
     try {
       ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
@@ -152,13 +209,13 @@ class RouterServerTestFramework {
         int bufLength = buf.remaining();
         Assert.assertTrue(
             "total content read should not be greater than length of put content, operation: " + operationName,
-            readBytes + bufLength <= operationInfo.data.length);
+            readBytes + bufLength <= opChain.data.length);
         while (buf.hasRemaining()) {
           Assert.assertEquals("Get and Put blob content should match, operation: " + operationName,
-              operationInfo.data[readBytes++], buf.get());
+              opChain.data[readBytes++], buf.get());
         }
         getChannel.resolveOldestChunk(null);
-      } while (readBytes < operationInfo.data.length);
+      } while (readBytes < opChain.data.length);
       Assert.assertEquals(
           "the returned length in the future should be the length of data written, operation: " + operationName,
           (long) readBytes, (long) readIntoFuture.get());
@@ -173,31 +230,42 @@ class RouterServerTestFramework {
     return name + (afterDelete ? "-deleted" : "") + (nonBlocking ? "-nb" : "-coord");
   }
 
-  private void startPutBlob(boolean nonBlocking, OperationInfo opInfo) {
-    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(opInfo.data));
-    Callback<String> callback = new TestCallback<String>(opInfo, false) {
+  /**
+   * Submit a putBlob operation.
+   * @param nonBlocking if {@code true}, use the non-blocking router.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startPutBlob(boolean nonBlocking, OperationChain opChain) {
+    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(opChain.data));
+    Callback<String> callback = new TestCallback<String>(opChain, false) {
       @Override
       void action(String result) {
-        opInfo.blobId = result;
+        opChain.blobId = result;
       }
     };
     Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
-    Future<String> future = router.putBlob(opInfo.properties, opInfo.userMetadata, putChannel, callback);
-    TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", nonBlocking, false), opInfo) {
+    Future<String> future = router.putBlob(opChain.properties, opChain.userMetadata, putChannel, callback);
+    TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", nonBlocking, false), opChain) {
       @Override
       void check() {
         checkBlobId(get(), getOperationName());
       }
     };
-    opInfo.futures.add(testFuture);
+    opChain.testFutures.add(testFuture);
   }
 
-  private void startGetBlobInfo(boolean nonBlocking, final boolean afterDelete, final OperationInfo opInfo) {
-    Callback<BlobInfo> callback = new TestCallback<>(opInfo, afterDelete);
+  /**
+   * Submit a getBlobInfo operation.
+   * @param nonBlocking if {@code true}, use the non-blocking router.
+   * @param afterDelete if {@code true}, verify that the blob info was not retrievable.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startGetBlobInfo(boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
+    Callback<BlobInfo> callback = new TestCallback<>(opChain, afterDelete);
     Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
-    Future<BlobInfo> future = router.getBlobInfo(opInfo.blobId, callback);
+    Future<BlobInfo> future = router.getBlobInfo(opChain.blobId, callback);
     TestFuture<BlobInfo> testFuture =
-        new TestFuture<BlobInfo>(future, genLabel("getBlobInfo", nonBlocking, afterDelete), opInfo) {
+        new TestFuture<BlobInfo>(future, genLabel("getBlobInfo", nonBlocking, afterDelete), opChain) {
           @Override
           void check() {
             if (afterDelete) {
@@ -207,19 +275,25 @@ class RouterServerTestFramework {
               } catch (Exception ignored) {
               }
             } else {
-              checkBlobInfo(get(), opInfo, getOperationName());
+              checkBlobInfo(get(), opChain, getOperationName());
             }
           }
         };
-    opInfo.futures.add(testFuture);
+    opChain.testFutures.add(testFuture);
   }
 
-  private void startGetBlob(boolean nonBlocking, final boolean afterDelete, final OperationInfo opInfo) {
-    Callback<ReadableStreamChannel> callback = new TestCallback<>(opInfo, afterDelete);
+  /**
+   * Submit a getBlob operation.
+   * @param nonBlocking if {@code true}, use the non-blocking router.
+   * @param afterDelete if {@code true}, verify that the blob was not retrievable.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startGetBlob(boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
+    Callback<ReadableStreamChannel> callback = new TestCallback<>(opChain, afterDelete);
     Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
-    Future<ReadableStreamChannel> future = router.getBlob(opInfo.blobId, callback);
+    Future<ReadableStreamChannel> future = router.getBlob(opChain.blobId, callback);
     TestFuture<ReadableStreamChannel> testFuture =
-        new TestFuture<ReadableStreamChannel>(future, genLabel("getBlob", nonBlocking, afterDelete), opInfo) {
+        new TestFuture<ReadableStreamChannel>(future, genLabel("getBlob", nonBlocking, afterDelete), opChain) {
           @Override
           void check() {
             if (afterDelete) {
@@ -229,76 +303,96 @@ class RouterServerTestFramework {
               } catch (Exception ignored) {
               }
             } else {
-              checkBlob(get(), opInfo, getOperationName());
+              checkBlob(get(), opChain, getOperationName());
             }
           }
         };
-    opInfo.futures.add(testFuture);
+    opChain.testFutures.add(testFuture);
   }
 
-  private void startDeleteBlob(boolean nonBlocking, final OperationInfo opInfo) {
-    Callback<Void> callback = new TestCallback<>(opInfo, false);
+  /**
+   * Submit a deleteBlob operation.
+   * @param nonBlocking if {@code true}, use the non-blocking router.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startDeleteBlob(boolean nonBlocking, final OperationChain opChain) {
+    Callback<Void> callback = new TestCallback<>(opChain, false);
     Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
-    Future<Void> future = router.deleteBlob(opInfo.blobId, callback);
-    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", nonBlocking, false), opInfo) {
+    Future<Void> future = router.deleteBlob(opChain.blobId, callback);
+    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", nonBlocking, false), opChain) {
       @Override
       void check() {
         get();
       }
     };
-    opInfo.futures.add(testFuture);
+    opChain.testFutures.add(testFuture);
   }
 
-  private void startAwaitCreation(final OperationInfo opInfo) {
-    notificationSystem.awaitBlobCreations(opInfo.blobId);
-    continueChain(opInfo);
+  /**
+   * Using the mock notification system, wait for the put blob in this operation chain to be replicated to all server
+   * nodes before continuing the chain.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startAwaitCreation(final OperationChain opChain) {
+    notificationSystem.awaitBlobCreations(opChain.blobId);
+    continueChain(opChain);
   }
 
-  private void startAwaitDeletion(final OperationInfo opInfo) {
-    notificationSystem.awaitBlobDeletions(opInfo.blobId);
-    continueChain(opInfo);
+  /**
+   * Using the mock notification system, wait for the deleted blob in this operation chain to be deleted from all server
+   * nodes before continuing the chain.
+   * @param opChain the {@link OperationChain} object that this operation is a part of.
+   */
+  private void startAwaitDeletion(final OperationChain opChain) {
+    notificationSystem.awaitBlobDeletions(opChain.blobId);
+    continueChain(opChain);
   }
 
-  private void continueChain(final OperationInfo opInfo) {
-    synchronized (opInfo.futures) {
-      OperationType nextOp = opInfo.opChain.poll();
+  /**
+   * Submit the next operation in the chain to the router. If there are no more operations in the queue,
+   * mark the chain as completed.
+   * @param opChain the {@link OperationChain} to get the next operation from.
+   */
+  private void continueChain(final OperationChain opChain) {
+    synchronized (opChain.testFutures) {
+      OperationType nextOp = opChain.operations.poll();
       if (nextOp == null) {
-        opInfo.latch.countDown();
+        opChain.latch.countDown();
         return;
       }
       switch (nextOp) {
         case PUT_NB:
         case PUT_COORD:
-          startPutBlob(nextOp.nonBlockingRouter, opInfo);
+          startPutBlob(nextOp.nonBlockingRouter, opChain);
           break;
         case GET_INFO_NB:
         case GET_INFO_DELETED_NB:
         case GET_INFO_COORD:
         case GET_INFO_DELETED_COORD:
-          startGetBlobInfo(nextOp.nonBlockingRouter, nextOp.afterDelete, opInfo);
+          startGetBlobInfo(nextOp.nonBlockingRouter, nextOp.afterDelete, opChain);
           break;
         case GET_NB:
         case GET_DELETED_NB:
         case GET_COORD:
         case GET_DELETED_COORD:
-          startGetBlob(nextOp.nonBlockingRouter, nextOp.afterDelete, opInfo);
+          startGetBlob(nextOp.nonBlockingRouter, nextOp.afterDelete, opChain);
           break;
         case DELETE_NB:
         case DELETE_COORD:
-          startDeleteBlob(nextOp.nonBlockingRouter, opInfo);
+          startDeleteBlob(nextOp.nonBlockingRouter, opChain);
           break;
         case AWAIT_CREATION:
-          startAwaitCreation(opInfo);
+          startAwaitCreation(opChain);
           break;
         case AWAIT_DELETION:
-          startAwaitDeletion(opInfo);
+          startAwaitDeletion(opChain);
           break;
       }
     }
   }
 
   /**
-   * Used to specify operations to perform on a blob in an operation chain
+   * Used to specify operations to perform on a blob in an operation chain.
    */
   enum OperationType {
     /**
@@ -364,7 +458,14 @@ class RouterServerTestFramework {
      */
     AWAIT_DELETION(false, false);
 
+    /**
+     * {@code true} if the non-blocking router should be used, {@code false} if the coordinator-backed router should
+     * be used.
+     */
     final boolean nonBlockingRouter;
+    /**
+     * {@code true} if this operation follows a delete operation.
+     */
     final boolean afterDelete;
 
     OperationType(boolean nonBlockingRouter, boolean afterDelete) {
@@ -376,23 +477,23 @@ class RouterServerTestFramework {
   /**
    * Describes an operation chain and provides useful metadata and operation results for testing.
    */
-  static class OperationInfo {
-    final int operationId;
+  static class OperationChain {
+    final int chainId;
     final BlobProperties properties;
     final byte[] userMetadata;
     final byte[] data;
-    final Queue<OperationType> opChain;
-    final List<TestFuture> futures = new ArrayList<>();
+    final Queue<OperationType> operations;
+    final List<TestFuture> testFutures = new ArrayList<>();
     final CountDownLatch latch = new CountDownLatch(1);
     String blobId;
 
-    OperationInfo(int operationId, BlobProperties properties, byte[] userMetadata, byte[] data,
-        Queue<OperationType> opChain) {
-      this.operationId = operationId;
+    OperationChain(int chainId, BlobProperties properties, byte[] userMetadata, byte[] data,
+        Queue<OperationType> operations) {
+      this.chainId = chainId;
       this.properties = properties;
       this.userMetadata = userMetadata;
       this.data = data;
-      this.opChain = opChain;
+      this.operations = operations;
     }
   }
 
@@ -405,12 +506,12 @@ class RouterServerTestFramework {
   private static abstract class TestFuture<T> {
     final Future<T> future;
     final String operationType;
-    final OperationInfo opInfo;
+    final OperationChain opChain;
 
-    TestFuture(Future<T> future, String operationType, OperationInfo opInfo) {
+    TestFuture(Future<T> future, String operationType, OperationChain opChain) {
       this.future = future;
       this.operationType = operationType;
-      this.opInfo = opInfo;
+      this.opChain = opChain;
     }
 
     /**
@@ -418,7 +519,7 @@ class RouterServerTestFramework {
      * @return the operation name
      */
     String getOperationName() {
-      return operationType + "-" + opInfo.operationId;
+      return operationType + "-" + opChain.chainId;
     }
 
     /**
@@ -448,22 +549,22 @@ class RouterServerTestFramework {
    * @param <T> The callback's result type
    */
   private class TestCallback<T> implements Callback<T> {
-    final OperationInfo opInfo;
+    final OperationChain opChain;
     final boolean expectError;
 
-    TestCallback(OperationInfo opInfo, boolean expectError) {
-      this.opInfo = opInfo;
+    TestCallback(OperationChain opChain, boolean expectError) {
+      this.opChain = opChain;
       this.expectError = expectError;
     }
 
     @Override
     public void onCompletion(T result, Exception exception) {
       if (exception != null && !expectError) {
-        opInfo.latch.countDown();
+        opChain.latch.countDown();
         return;
       }
       action(result);
-      continueChain(opInfo);
+      continueChain(opChain);
     }
 
     /**

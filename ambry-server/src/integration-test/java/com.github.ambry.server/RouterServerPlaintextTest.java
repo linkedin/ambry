@@ -13,7 +13,7 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.server.RouterServerTestFramework.OperationInfo;
+import com.github.ambry.server.RouterServerTestFramework.OperationChain;
 import com.github.ambry.server.RouterServerTestFramework.OperationType;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -22,8 +22,6 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -38,9 +36,6 @@ public class RouterServerPlaintextTest {
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-//    Logger.getRootLogger().setLevel(Level.ERROR);
-//    org.apache.log4j.BasicConfigurator.configure();
-
     MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
@@ -62,79 +57,112 @@ public class RouterServerPlaintextTest {
   @Test
   public void interleavedOperationsTest()
       throws Exception {
-    List<OperationInfo> opInfos = new ArrayList<>();
-    for (int i = 0; i < 100; i++) {
-      Queue<OperationType> opChain = new LinkedList<>();
-      opChain.add(OperationType.PUT_NB);
-      opChain.add(OperationType.AWAIT_CREATION);
-      opChain.add(OperationType.GET_INFO_NB);
-      opChain.add(OperationType.GET_NB);
-      opChain.add(OperationType.DELETE_NB);
-      opChain.add(OperationType.AWAIT_DELETION);
-      opChain.add(OperationType.GET_INFO_DELETED_NB);
-      opChain.add(OperationType.GET_DELETED_NB);
-      opInfos.add(testFramework.startOperationChain(32 * 1024, i, opChain));
+    List<OperationChain> opChains = new ArrayList<>();
+    for (int i = 0; i < 20; i++) {
+      Queue<OperationType> operations = new LinkedList<>();
+      switch (i % 4) {
+        case 0:
+          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.AWAIT_CREATION);
+          operations.add(OperationType.GET_NB);
+          operations.add(OperationType.GET_INFO_NB);
+          operations.add(OperationType.DELETE_NB);
+          operations.add(OperationType.AWAIT_DELETION);
+          operations.add(OperationType.GET_DELETED_NB);
+          operations.add(OperationType.GET_INFO_DELETED_NB);
+          break;
+        case 1:
+          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.AWAIT_CREATION);
+          operations.add(OperationType.GET_INFO_NB);
+          operations.add(OperationType.GET_NB);
+          operations.add(OperationType.GET_NB);
+          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.AWAIT_CREATION);
+          operations.add(OperationType.GET_INFO_NB);
+          operations.add(OperationType.GET_NB);
+          break;
+        case 2:
+          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.AWAIT_CREATION);
+          operations.add(OperationType.DELETE_NB);
+          operations.add(OperationType.AWAIT_DELETION);
+          operations.add(OperationType.GET_DELETED_NB);
+          operations.add(OperationType.GET_INFO_DELETED_NB);
+          operations.add(OperationType.GET_DELETED_NB);
+          operations.add(OperationType.GET_INFO_DELETED_NB);
+          break;
+        case 3:
+          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.AWAIT_CREATION);
+          operations.add(OperationType.GET_NB);
+          operations.add(OperationType.GET_NB);
+          operations.add(OperationType.GET_NB);
+          operations.add(OperationType.GET_INFO_NB);
+          break;
+      }
+      opChains.add(testFramework.startOperationChain(32 * 1024, i, operations));
     }
-    testFramework.checkOperationChains(opInfos);
+    testFramework.checkOperationChains(opChains);
   }
 
   @Test
   public void nonInterleavedOperationsTest()
       throws Exception {
     for (int i = 0; i < 10; i++) {
-      Queue<OperationType> opChain = new LinkedList<>();
-      opChain.add(OperationType.PUT_NB);
-      opChain.add(OperationType.AWAIT_CREATION);
-      opChain.add(OperationType.GET_INFO_NB);
-      opChain.add(OperationType.GET_NB);
-      opChain.add(OperationType.DELETE_NB);
-      opChain.add(OperationType.AWAIT_DELETION);
-      opChain.add(OperationType.GET_INFO_DELETED_NB);
-      opChain.add(OperationType.GET_DELETED_NB);
+      Queue<OperationType> operations = new LinkedList<>();
+      operations.add(OperationType.PUT_NB);
+      operations.add(OperationType.AWAIT_CREATION);
+      operations.add(OperationType.GET_INFO_NB);
+      operations.add(OperationType.GET_NB);
+      operations.add(OperationType.DELETE_NB);
+      operations.add(OperationType.AWAIT_DELETION);
+      operations.add(OperationType.GET_INFO_DELETED_NB);
+      operations.add(OperationType.GET_DELETED_NB);
       testFramework.checkOperationChains(
-          Collections.singletonList(testFramework.startOperationChain(32 * 1024, i, opChain)));
+          Collections.singletonList(testFramework.startOperationChain(32 * 1024, i, operations)));
     }
   }
 
   @Test
   public void largeBlobTest()
       throws Exception {
-    List<OperationInfo> opInfos = new ArrayList<>();
+    List<OperationChain> opChains = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
-      Queue<OperationType> opChain = new LinkedList<>();
-      opChain.add(OperationType.PUT_NB);
-      opChain.add(OperationType.AWAIT_CREATION);
-      opChain.add(OperationType.GET_INFO_NB);
-      opChain.add(OperationType.GET_NB);
-      opChain.add(OperationType.DELETE_NB);
-      opChain.add(OperationType.AWAIT_DELETION);
-      opChain.add(OperationType.GET_INFO_DELETED_NB);
-      opChain.add(OperationType.GET_DELETED_NB);
-      opInfos.add(testFramework.startOperationChain(RouterServerTestFramework.CHUNK_SIZE * 4 + 1, i, opChain));
+      Queue<OperationType> operations = new LinkedList<>();
+      operations.add(OperationType.PUT_NB);
+      operations.add(OperationType.AWAIT_CREATION);
+      operations.add(OperationType.GET_INFO_NB);
+      operations.add(OperationType.GET_NB);
+      operations.add(OperationType.DELETE_NB);
+      operations.add(OperationType.AWAIT_DELETION);
+      operations.add(OperationType.GET_INFO_DELETED_NB);
+      operations.add(OperationType.GET_DELETED_NB);
+      opChains.add(testFramework.startOperationChain(RouterServerTestFramework.CHUNK_SIZE * 4 + 1, i, operations));
     }
-    testFramework.checkOperationChains(opInfos);
+    testFramework.checkOperationChains(opChains);
   }
 
   @Test
   public void coordinatorNonBlockingCompatibilityTest()
       throws Exception {
-    List<OperationInfo> opInfos = new ArrayList<>();
+    List<OperationChain> opChains = new ArrayList<>();
     for (int i = 0; i < 10; i++) {
-      Queue<OperationType> opChain = new LinkedList<>();
-      opChain.add(i % 2 == 0 ? OperationType.PUT_NB : OperationType.PUT_COORD);
-      opChain.add(OperationType.AWAIT_CREATION);
-      opChain.add(OperationType.GET_INFO_COORD);
-      opChain.add(OperationType.GET_INFO_NB);
-      opChain.add(OperationType.GET_COORD);
-      opChain.add(OperationType.GET_NB);
-      opChain.add(i % 2 == 0 ? OperationType.DELETE_COORD : OperationType.DELETE_NB);
-      opChain.add(OperationType.AWAIT_DELETION);
-      opChain.add(OperationType.GET_INFO_DELETED_NB);
-      opChain.add(OperationType.GET_INFO_DELETED_COORD);
-      opChain.add(OperationType.GET_DELETED_NB);
-      opChain.add(OperationType.GET_DELETED_COORD);
-      opInfos.add(testFramework.startOperationChain(32 * 1024, i, opChain));
+      Queue<OperationType> operations = new LinkedList<>();
+      operations.add(i % 2 == 0 ? OperationType.PUT_NB : OperationType.PUT_COORD);
+      operations.add(OperationType.AWAIT_CREATION);
+      operations.add(OperationType.GET_INFO_COORD);
+      operations.add(OperationType.GET_INFO_NB);
+      operations.add(OperationType.GET_COORD);
+      operations.add(OperationType.GET_NB);
+      operations.add(i % 2 == 0 ? OperationType.DELETE_COORD : OperationType.DELETE_NB);
+      operations.add(OperationType.AWAIT_DELETION);
+      operations.add(OperationType.GET_INFO_DELETED_NB);
+      operations.add(OperationType.GET_INFO_DELETED_COORD);
+      operations.add(OperationType.GET_DELETED_NB);
+      operations.add(OperationType.GET_DELETED_COORD);
+      opChains.add(testFramework.startOperationChain(32 * 1024, i, operations));
     }
-    testFramework.checkOperationChains(opInfos);
+    testFramework.checkOperationChains(opChains);
   }
 }
