@@ -57,6 +57,7 @@ public class NettyMetrics {
   public final Histogram errorResponseProcessingTimeInMs;
   public final Histogram headerSetTimeInMs;
   public final Histogram responseFinishProcessingTimeInMs;
+  public final Histogram responseMetadataAfterWriteProcessingTimeInMs;
   public final Histogram responseMetadataProcessingTimeInMs;
   public final Histogram writeProcessingTimeInMs;
   // PublicAccessLogHandler
@@ -167,6 +168,8 @@ public class NettyMetrics {
     headerSetTimeInMs = metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "HeaderSetTimeInMs"));
     responseFinishProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ResponseFinishProcessingTimeInMs"));
+    responseMetadataAfterWriteProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(NettyResponseChannel.class, "ResponseMetadataAfterWriteProcessingTimeInMs"));
     responseMetadataProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyResponseChannel.class, "ResponseMetadataProcessingTimeInMs"));
     writeProcessingTimeInMs =

@@ -36,7 +36,6 @@ public class RestRequestMetrics {
   static final String SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX = "ScResponseProcessingWaitTimeInMs";
   static final String SC_ROUND_TRIP_TIME_SUFFIX = "ScRoundTripTimeInMs";
 
-  static final String TOTAL_CPU_TIME_SUFFIX = "TotalCpuTimeInMs";
   static final String OPERATION_RATE_SUFFIX = "Rate";
   static final String OPERATION_ERROR_SUFFIX = "Error";
 
@@ -50,7 +49,6 @@ public class RestRequestMetrics {
   final Histogram scResponseProcessingWaitTimeInMs;
   final Histogram scRoundTripTimeInMs;
 
-  final Histogram totalCpuTimeInMs;
   final Meter operationRate;
   final Counter operationError;
 
@@ -86,7 +84,6 @@ public class RestRequestMetrics {
     scRoundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_ROUND_TRIP_TIME_SUFFIX));
 
-    totalCpuTimeInMs = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + TOTAL_CPU_TIME_SUFFIX));
     operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
     operationError = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX));
   }

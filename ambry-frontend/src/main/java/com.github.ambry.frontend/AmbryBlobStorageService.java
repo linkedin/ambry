@@ -161,7 +161,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       frontendMetrics.getPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -190,7 +189,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       frontendMetrics.postPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -212,7 +210,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       frontendMetrics.deletePreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -234,7 +231,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       frontendMetrics.headPreProcessingTimeInMs.update(preProcessingTime);
-      restRequest.getMetricsTracker().addToTotalCpuTime(preProcessingTime);
     }
   }
 
@@ -547,7 +543,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       processingStartTime = System.currentTimeMillis();
       long operationTime = processingStartTime - operationStartTime;
       operationTimeTracker.update(operationTime);
-      restRequest.getMetricsTracker().addToTotalCpuTime(operationTime);
     }
 
     /**
@@ -557,7 +552,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Callback for {} of {} finished", operationType, blobId);
       long processingTime = System.currentTimeMillis() - processingStartTime;
       callbackProcessingTimeTracker.update(processingTime);
-      restRequest.getMetricsTracker().addToTotalCpuTime(processingTime);
     }
   }
 

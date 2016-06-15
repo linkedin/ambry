@@ -34,8 +34,10 @@ public class RestRequestMetricsTrackerTest {
    */
   @Test
   public void commonCaseTest() {
-    withDefaultsTest();
-    withInjectedMetricsTest();
+    withDefaultsTest(false);
+    withDefaultsTest(true);
+    withInjectedMetricsTest(false);
+    withInjectedMetricsTest(true);
   }
 
   /**
@@ -78,38 +80,34 @@ public class RestRequestMetricsTrackerTest {
 
   /**
    * Tests recording of metrics without setting a custom {@link RestRequestMetrics}.
+   * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  private void withDefaultsTest() {
+  private void withDefaultsTest(boolean induceFailure) {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
-    TestMetrics testMetrics = new TestMetrics(requestMetrics);
-    long additionalTime = 20;
-    requestMetrics.addToTotalCpuTime(additionalTime);
-    requestMetrics.markFailure();
+    TestMetrics testMetrics = new TestMetrics(requestMetrics, induceFailure);
     requestMetrics.recordMetrics();
     String metricPrefix =
         RestRequestMetricsTracker.class.getCanonicalName() + "." + RestRequestMetricsTracker.DEFAULT_REQUEST_TYPE;
-    testMetrics.compareMetrics(metricPrefix, metricRegistry, additionalTime);
+    testMetrics.compareMetrics(metricPrefix, metricRegistry);
   }
 
   /**
    * Tests recording of metrics after setting a custom {@link RestRequestMetrics}.
+   * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  private void withInjectedMetricsTest() {
+  private void withInjectedMetricsTest(boolean induceFailure) {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     String testRequestType = "Test";
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
     RestRequestMetrics restRequestMetrics = new RestRequestMetrics(getClass(), testRequestType, metricRegistry);
-    TestMetrics testMetrics = new TestMetrics(requestMetrics);
-    long additionalTime = 20;
-    requestMetrics.addToTotalCpuTime(additionalTime);
+    TestMetrics testMetrics = new TestMetrics(requestMetrics, induceFailure);
     requestMetrics.injectMetrics(restRequestMetrics);
-    requestMetrics.markFailure();
     requestMetrics.recordMetrics();
     String metricPrefix = getClass().getCanonicalName() + "." + testRequestType;
-    testMetrics.compareMetrics(metricPrefix, metricRegistry, additionalTime);
+    testMetrics.compareMetrics(metricPrefix, metricRegistry);
   }
 }
 
@@ -126,25 +124,25 @@ class TestMetrics {
   private final long scRequestProcessingWaitTime = random.nextInt(Integer.MAX_VALUE);
   private final long scResponseProcessingWaitTime = random.nextInt(Integer.MAX_VALUE);
 
+  private final long operationErrorCount;
+
   /**
    * Creates a new instance by generating new random metrics and updating it in the given {@code requestMetrics}.
    * @param requestMetrics the instance of {@link RestRequestMetricsTracker} where metrics have to be updated.
+   * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  protected TestMetrics(RestRequestMetricsTracker requestMetrics) {
-    updateMetrics(requestMetrics);
+  protected TestMetrics(RestRequestMetricsTracker requestMetrics, boolean induceFailure) {
+    updateMetrics(requestMetrics, induceFailure);
+    operationErrorCount = induceFailure ? 1 : 0;
   }
 
   /**
    * Compares metrics generated inside this instance with what was recorded in the given {@code metricRegistry}.
    * @param metricPrefix the prefix of the metrics to look for.
    * @param metricRegistry the {@link MetricRegistry} where metrics were recorded.
-   * @param additionalTime any additional time added to the total time via a call to
-   *                        {@link RestRequestMetricsTracker#addToTotalCpuTime(long)}.
    */
-  protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry, long additionalTime) {
-    long totalTime = getTotalTime() + additionalTime;
+  protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry) {
     Map<String, Histogram> histograms = metricRegistry.getHistograms();
-
     assertEquals("NIO request processing time unequal", nioLayerRequestProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.NIO_REQUEST_PROCESSING_TIME_SUFFIX).getSnapshot()
             .getValues()[0]);
@@ -165,19 +163,19 @@ class TestMetrics {
         histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX).getSnapshot()
             .getValues()[0]);
 
-    assertEquals("Request total CPU time unequal", totalTime,
-        histograms.get(metricPrefix + RestRequestMetrics.TOTAL_CPU_TIME_SUFFIX).getSnapshot().getValues()[0]);
     assertEquals("Rate metric has not fired", 1,
         metricRegistry.getMeters().get(metricPrefix + RestRequestMetrics.OPERATION_RATE_SUFFIX).getCount());
-    assertEquals("Error metric has not fired", 1,
+    assertEquals("Error metric value is not as expected", operationErrorCount,
         metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.OPERATION_ERROR_SUFFIX).getCount());
   }
 
   /**
    * Updates the generated metrics in the given {@code restRequestMetricsTracker}.
-   * @param restRequestMetricsTracker the instance of {@link RestRequestMetricsTracker} where metrics have to be updated.
+   * @param restRequestMetricsTracker the instance of {@link RestRequestMetricsTracker} where metrics have to be
+   *                                  updated.
+   * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  private void updateMetrics(RestRequestMetricsTracker restRequestMetricsTracker) {
+  private void updateMetrics(RestRequestMetricsTracker restRequestMetricsTracker, boolean induceFailure) {
     restRequestMetricsTracker.nioMetricsTracker.addToRequestProcessingTime(nioLayerRequestProcessingTime);
     restRequestMetricsTracker.nioMetricsTracker.addToResponseProcessingTime(nioLayerResponseProcessingTime);
 
@@ -185,14 +183,9 @@ class TestMetrics {
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingTime(scResponseProcessingTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingWaitTime(scRequestProcessingWaitTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingWaitTime(scResponseProcessingWaitTime);
-  }
 
-  /**
-   * Gets the total time by adding all the metrics generated by this instance.
-   * @return the total time obtained by adding all the metrics generated by this instance.
-   */
-  private long getTotalTime() {
-    return nioLayerRequestProcessingTime + nioLayerResponseProcessingTime + scRequestProcessingTime +
-        scResponseProcessingTime + scRequestProcessingWaitTime + scResponseProcessingWaitTime;
+    if (induceFailure) {
+      restRequestMetricsTracker.markFailure();
+    }
   }
 }

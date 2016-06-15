@@ -81,7 +81,6 @@ class NettyResponseChannel implements RestResponseChannel {
   // tracks whether response metadata write has been initiated. Rejects any more attempts at writing metadata after this
   // has been set to true.
   private final AtomicBoolean responseMetadataWriteInitiated = new AtomicBoolean(false);
-  private final ResponseMetadataWriteListener responseMetadataWriteListener = new ResponseMetadataWriteListener();
   private final AtomicLong totalBytesReceived = new AtomicLong(0);
   private final Queue<Chunk> chunksToWrite = new ConcurrentLinkedQueue<Chunk>();
   private final Queue<Chunk> chunksAwaitingCallback = new ConcurrentLinkedQueue<Chunk>();
@@ -115,7 +114,7 @@ class NettyResponseChannel implements RestResponseChannel {
   public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
     long writeProcessingStartTime = System.currentTimeMillis();
     if (!responseMetadataWriteInitiated.get()) {
-      maybeWriteResponseMetadata(responseMetadata, responseMetadataWriteListener);
+      maybeWriteResponseMetadata(responseMetadata, new ResponseMetadataWriteListener());
     }
     Chunk chunk = new Chunk(src, callback);
     chunksToWrite.add(chunk);
@@ -184,7 +183,7 @@ class NettyResponseChannel implements RestResponseChannel {
         logger.trace("Finished responding to current request on channel {}", ctx.channel());
         nettyMetrics.requestCompletionRate.mark();
         if (exception == null) {
-          if (!maybeWriteResponseMetadata(responseMetadata, responseMetadataWriteListener)) {
+          if (!maybeWriteResponseMetadata(responseMetadata, new ResponseMetadataWriteListener())) {
             // There were other writes. Let ChunkedWriteHandler finish if it has been kicked off.
             chunkedWriteHandler.resumeTransfer();
           }
@@ -637,8 +636,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(chunkWriteTime);
       nettyMetrics.chunkResolutionProcessingTimeInMs.update(chunkResolutionProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(chunkWriteTime);
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(chunkResolutionProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker
+            .addToResponseProcessingTime(chunkWriteTime + chunkResolutionProcessingTime);
       }
     }
   }
@@ -751,6 +750,7 @@ class NettyResponseChannel implements RestResponseChannel {
    * Callback for writes of response metadata.
    */
   private class ResponseMetadataWriteListener implements GenericFutureListener<ChannelFuture> {
+    private final long responseWriteStartTime = System.currentTimeMillis();
 
     /**
      * If the operation completed successfully, a write via the {@link ChunkedWriteHandler} is initiated. Otherwise,
@@ -759,13 +759,14 @@ class NettyResponseChannel implements RestResponseChannel {
      */
     @Override
     public void operationComplete(ChannelFuture future) {
+      long writeFinishTime = System.currentTimeMillis();
       if (future.isSuccess()) {
         if (finalResponseMetadata instanceof LastHttpContent) {
           // this is the case if finalResponseMetadata is a FullHttpResponse.
           // in this case there is nothing more to write.
           if (!writeFuture.isDone()) {
             writeFuture.setSuccess();
-            completeRequest(request == null || !request.isKeepAlive());
+            completeRequest(!HttpHeaders.isKeepAlive(finalResponseMetadata));
           }
         } else {
           // otherwise there is some content to write.
@@ -775,6 +776,14 @@ class NettyResponseChannel implements RestResponseChannel {
         }
       } else {
         handleChannelWriteFailure(future.cause(), true);
+      }
+      long responseAfterWriteProcessingTime = System.currentTimeMillis() - writeFinishTime;
+      long channelWriteTime = writeFinishTime - responseWriteStartTime;
+      nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
+      nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
+      if (request != null) {
+        request.getMetricsTracker().nioMetricsTracker
+            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
       }
     }
   }
@@ -788,17 +797,20 @@ class NettyResponseChannel implements RestResponseChannel {
     @Override
     public void operationComplete(ChannelFuture future)
         throws Exception {
-      long channelWriteTime = System.currentTimeMillis() - responseWriteStartTime;
-      if (!future.isSuccess()) {
-        logger.error("Swallowing write exception encountered while sending error response to client on channel {}",
-            ctx.channel(), future.cause());
-        nettyMetrics.channelWriteError.inc();
+      long writeFinishTime = System.currentTimeMillis();
+      long channelWriteTime = writeFinishTime - responseWriteStartTime;
+      if (future.isSuccess()) {
+        completeRequest(!HttpHeaders.isKeepAlive(finalResponseMetadata));
+      } else {
+        handleChannelWriteFailure(future.cause(), true);
       }
+      long responseAfterWriteProcessingTime = System.currentTimeMillis() - writeFinishTime;
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
+      nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(channelWriteTime);
+        request.getMetricsTracker().nioMetricsTracker
+            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
       }
-      completeRequest(!HttpHeaders.isKeepAlive(finalResponseMetadata) || !future.isSuccess());
     }
   }
 
