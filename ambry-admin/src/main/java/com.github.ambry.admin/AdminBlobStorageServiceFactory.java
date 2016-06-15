@@ -18,8 +18,11 @@ import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
+import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Router;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +39,8 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final ClusterMap clusterMap;
   private final RestResponseHandler responseHandler;
   private final Router router;
+  private final IdConverterFactory idConverterFactory;
+  private final SecurityServiceFactory securityServiceFactory;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -48,29 +53,20 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router) {
-    if (verifiableProperties != null && clusterMap != null && responseHandler != null && router != null) {
+      RestResponseHandler responseHandler, Router router)
+      throws Exception {
+    if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
+      throw new IllegalArgumentException("Null arguments were provided during instantiation!");
+    } else {
       adminConfig = new AdminConfig(verifiableProperties);
       adminMetrics = new AdminMetrics(clusterMap.getMetricRegistry());
       this.clusterMap = clusterMap;
       this.responseHandler = responseHandler;
       this.router = router;
-    } else {
-      StringBuilder errorMessage =
-          new StringBuilder("Null arg(s) received during instantiation of AdminBlobStorageServiceFactory -");
-      if (verifiableProperties == null) {
-        errorMessage.append(" [VerifiableProperties] ");
-      }
-      if (clusterMap == null) {
-        errorMessage.append(" [ClusterMap] ");
-      }
-      if (responseHandler == null) {
-        errorMessage.append(" [RestResponseHandler] ");
-      }
-      if (router == null) {
-        errorMessage.append(" [Router] ");
-      }
-      throw new IllegalArgumentException(errorMessage.toString());
+      idConverterFactory =
+          Utils.getObj(adminConfig.adminIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
+      securityServiceFactory =
+          Utils.getObj(adminConfig.adminSecurityServiceFactory, verifiableProperties, clusterMap.getMetricRegistry());
     }
     logger.trace("Instantiated AdminBlobStorageServiceFactory");
   }
@@ -81,6 +77,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new AdminBlobStorageService(adminConfig, adminMetrics, clusterMap, responseHandler, router);
+    return new AdminBlobStorageService(adminConfig, adminMetrics, responseHandler, router, idConverterFactory,
+        securityServiceFactory);
   }
 }

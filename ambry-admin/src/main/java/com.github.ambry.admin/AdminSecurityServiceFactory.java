@@ -11,33 +11,32 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.frontend;
+package com.github.ambry.admin;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 
 
 /**
- * Default implementation of {@link SecurityServiceFactory} for Ambry
+ * Default implementation of {@link SecurityServiceFactory} for Admin.
  * <p/>
- * Returns a new instance of {@link AmbrySecurityService} on {@link #getSecurityService()} call.
+ * Returns a new instance of {@link AdminSecurityService} on {@link #getSecurityService()} call.
  */
-public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
+public class AdminSecurityServiceFactory implements SecurityServiceFactory {
+  private final AdminConfig adminConfig;
+  private final AdminMetrics adminMetrics;
 
-  private final FrontendConfig frontendConfig;
-  private final FrontendMetrics frontendMetrics;
-
-  public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
-    frontendConfig = new FrontendConfig(verifiableProperties);
-    frontendMetrics = new FrontendMetrics(metricRegistry);
+  public AdminSecurityServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+    adminConfig = new AdminConfig(verifiableProperties);
+    adminMetrics = new AdminMetrics(metricRegistry);
   }
 
   @Override
   public SecurityService getSecurityService()
       throws InstantiationException {
-    return new AmbrySecurityService(frontendConfig, frontendMetrics);
+    return new AdminSecurityService(adminConfig, adminMetrics);
   }
 }
