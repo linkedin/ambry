@@ -202,8 +202,8 @@ class DeleteOperation {
    * A wrapper class that is used to check if a request has been expired.
    */
   private class DeleteRequestInfo {
-    private final long startTimeMs;
-    private final ReplicaId replica;
+    final long startTimeMs;
+    final ReplicaId replica;
 
     DeleteRequestInfo(long submissionTime, ReplicaId replica) {
       this.startTimeMs = submissionTime;

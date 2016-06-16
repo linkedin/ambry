@@ -14,7 +14,6 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -861,9 +860,9 @@ class PutOperation {
      * A class that holds information about requests sent out by this PutChunk.
      */
     private class ChunkPutRequestInfo {
-      private final ReplicaId replicaId;
-      private final PutRequest putRequest;
-      private final long startTimeMs;
+      final ReplicaId replicaId;
+      final PutRequest putRequest;
+      final long startTimeMs;
 
       /**
        * Construct a ChunkPutRequestInfo
