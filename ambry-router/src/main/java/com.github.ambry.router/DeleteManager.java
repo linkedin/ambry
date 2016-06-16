@@ -58,8 +58,8 @@ class DeleteManager {
     @Override
     public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo requestInfo) {
       requestListToFill.add(requestInfo);
-      correlationIdToDeleteOperation
-          .put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), deleteOperation);
+      correlationIdToDeleteOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(),
+          deleteOperation);
     }
   }
 
@@ -120,14 +120,14 @@ class DeleteManager {
     for (DeleteOperation op : deleteOperations) {
       try {
         op.poll(requestRegistrationCallback);
+        if (op.isOperationComplete() && deleteOperations.remove(op)) {
+          // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+          // operation actually gets removed from the set of operations. See comment within close().
+          onComplete(op);
+        }
       } catch (Exception e) {
-        op.setOperationException(new RouterException("Delete poll encountered unexpected error", e,
+        removeAndAbort(op, new RouterException("Delete poll encountered unexpected error", e,
             RouterErrorCode.UnexpectedInternalError));
-      }
-      if (op.isOperationComplete() && deleteOperations.remove(op)) {
-        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
-        // operation actually gets removed from the set of operations. See comment within close().
-        onComplete(op);
       }
     }
   }
@@ -143,13 +143,12 @@ class DeleteManager {
     if (deleteOperations.contains(deleteOperation)) {
       try {
         deleteOperation.handleResponse(responseInfo);
+        if (deleteOperation.isOperationComplete() && deleteOperations.remove(deleteOperation)) {
+          onComplete(deleteOperation);
+        }
       } catch (Exception e) {
-        deleteOperation.setOperationException(
-            new RouterException("Delete handleResponse encountered unexpected error", e,
-                RouterErrorCode.UnexpectedInternalError));
-      }
-      if (deleteOperation.isOperationComplete() && deleteOperations.remove(deleteOperation)) {
-        onComplete(deleteOperation);
+        removeAndAbort(deleteOperation, new RouterException("Delete handleResponse encountered unexpected error", e,
+            RouterErrorCode.UnexpectedInternalError));
       }
     } else {
       routerMetrics.ignoredResponseCount.inc();
@@ -171,8 +170,8 @@ class DeleteManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback
-        .completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(), op.getOperationException());
+    operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
+        op.getOperationException());
   }
 
   /**
@@ -181,18 +180,26 @@ class DeleteManager {
    */
   void close() {
     for (DeleteOperation op : deleteOperations) {
-      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
-      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
-      // from happening twice, complete it here only if the remove was successful.
-      if (deleteOperations.remove(op)) {
-        RouterException routerException =
-            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
-        routerMetrics.operationDequeuingRate.mark();
-        routerMetrics.operationAbortCount.inc();
-        routerMetrics.deleteBlobErrorCount.inc();
-        routerMetrics.countError(routerException);
-        operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, routerException);
-      }
+      removeAndAbort(op,
+          new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed));
+    }
+  }
+
+  /**
+   * Remove an operation from the set and abort.
+   * @param op the operation to abort
+   * @param abortCause the reason for aborting
+   */
+  private void removeAndAbort(DeleteOperation op, Exception abortCause) {
+    // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+    // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+    // from happening twice, complete it here only if the remove was successful.
+    if (deleteOperations.remove(op)) {
+      routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.operationAbortCount.inc();
+      routerMetrics.deleteBlobErrorCount.inc();
+      routerMetrics.countError(abortCause);
+      operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, abortCause);
     }
   }
 }
