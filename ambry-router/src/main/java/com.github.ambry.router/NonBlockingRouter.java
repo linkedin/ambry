@@ -434,9 +434,15 @@ class NonBlockingRouter implements Router {
         deleteManager.submitDeleteBlobOperation(blobId, new FutureResult<Void>(), null);
       }
       List<RequestInfo> requests = new ArrayList<RequestInfo>();
+      long lastTime = time.milliseconds();
       putManager.poll(requests);
+      routerMetrics.putManagerPollTimeMs.update(time.milliseconds() - lastTime);
+      lastTime = time.milliseconds();
       getManager.poll(requests);
+      routerMetrics.getManagerPollTimeMs.update(time.milliseconds() - lastTime);
+      lastTime = time.milliseconds();
       deleteManager.poll(requests);
+      routerMetrics.deleteManagerPollTimeMs.update(time.milliseconds() - lastTime);
       return requests;
     }
 
@@ -469,11 +475,22 @@ class NonBlockingRouter implements Router {
      */
     @Override
     public void run() {
+      long startTime;
+      long lastTime;
       try {
         while (isOpen.get()) {
+          startTime = time.milliseconds();
+          lastTime = startTime;
           List<RequestInfo> requestInfoList = pollForRequests();
+          routerMetrics.operationControllerPollforRequestTimeMs.update(time.milliseconds() - lastTime);
+          lastTime = time.milliseconds();
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList);
+          routerMetrics.numOfRequestInfosPerPoll.update(requestInfoList.size());
+          routerMetrics.operationControllerSendAndPollTimeMs.update(time.milliseconds() - lastTime);
+          lastTime = time.milliseconds();
           onResponse(responseInfoList);
+          routerMetrics.operationControllerProcessResponseTimeMs.update(time.milliseconds() - lastTime);
+          routerMetrics.operationControllerOnePollCycleTimeMs.update(time.milliseconds() - startTime);
         }
       } catch (Throwable e) {
         logger.error("Aborting, as requestResponseHandlerThread received an unexpected error: ", e);

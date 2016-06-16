@@ -254,14 +254,17 @@ class PutManager {
           boolean allChunksFilled = true;
           Iterator<PutOperation> iter = putOperations.iterator();
           while (iter.hasNext()) {
+            long startTime = time.milliseconds();
             PutOperation op = iter.next();
             if (!op.isChunkFillComplete()) {
               op.fillChunks();
               allChunksFilled = false;
             }
+            routerMetrics.chunkFillerOneCycleProcessingTimeMs.update(time.milliseconds() - startTime);
           }
           if (allChunksFilled) {
             Thread.sleep(sleepTimeWhenIdleMs);
+            routerMetrics.chunkFillerSleepRate.mark();
           }
         }
       } catch (Throwable e) {
