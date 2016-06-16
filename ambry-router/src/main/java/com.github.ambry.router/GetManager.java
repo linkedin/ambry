@@ -157,6 +157,7 @@ class GetManager {
    * @param requestListToFill list to be filled with the requests created
    */
   void poll(List<RequestInfo> requestListToFill) {
+    long startTime = time.milliseconds();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (GetOperation op : getOperations) {
       op.poll(requestRegistrationCallback);
@@ -164,6 +165,7 @@ class GetManager {
         remove(op);
       }
     }
+    routerMetrics.getManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
   /**

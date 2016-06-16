@@ -136,6 +136,7 @@ class PutManager {
    * @param requestListToFill list to be filled with the requests created
    */
   void poll(List<RequestInfo> requestListToFill) {
+    long startTime = time.milliseconds();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (PutOperation op : putOperations) {
       op.poll(requestRegistrationCallback);
@@ -145,6 +146,7 @@ class PutManager {
         onComplete(op);
       }
     }
+    routerMetrics.putManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
   /**

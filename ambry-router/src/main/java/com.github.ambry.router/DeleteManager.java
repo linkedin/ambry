@@ -116,6 +116,7 @@ class DeleteManager {
    * @param requestListToFill list to be filled with the requests created.
    */
   public void poll(List<RequestInfo> requestListToFill) {
+    long startTime = time.milliseconds();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (DeleteOperation op : deleteOperations) {
       op.poll(requestRegistrationCallback);
@@ -125,6 +126,7 @@ class DeleteManager {
         onComplete(op);
       }
     }
+    routerMetrics.deleteManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
   /**
