@@ -169,9 +169,14 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         // chunk retrievals and channel writes will need to happen and for that, this operation needs the GetManager to
         // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
         // notified during the channel read.
-        getBlobResult = getOperationException() == null ? new GetBlobResult() : null;
-        operationCompleteCallback
-            .completeOperation(operationFuture, operationCallback, getBlobResult, getOperationException());
+        routerMetrics.getBlobOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
+        Exception e = getOperationException();
+        getBlobResult = e == null ? new GetBlobResult() : null;
+        if (e != null) {
+          routerMetrics.getBlobErrorCount.inc();
+          routerMetrics.countError(e);
+        }
+        operationCompleteCallback.completeOperation(operationFuture, operationCallback, getBlobResult, e);
       }
     }
     chunk.postCompletionCleanup();
@@ -365,6 +370,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten, operationException.get());
         }
+        routerMetrics.getBlobOperationTotalTimeMs.update(time.milliseconds() - submissionTimeMs);
       }
       operationCompleted = true;
     }
@@ -486,7 +492,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       while (inFlightRequestsIterator.hasNext()) {
         Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
-          chunkOperationTracker.onResponse(entry.getValue().replicaId, false);
+          onErrorResponse(entry.getValue().replicaId);
           chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
           inFlightRequestsIterator.remove();
         } else {
@@ -512,6 +518,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
         correlationIdToGetChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(GetBlobOperation.this, request);
+        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestRate.mark();
         state = ChunkState.InProgress;
       }
     }
@@ -567,10 +574,14 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         // Ignore right away. This associated operation has completed.
         return;
       }
+      long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
+      routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs
+          .update(requestLatencyMs);
       if (responseInfo.getError() != null) {
         chunkException = new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut);
         responseHandler.onRequestResponseException(getRequestInfo.replicaId, new IOException("NetworkClient error"));
-        chunkOperationTracker.onResponse(getRequestInfo.replicaId, false);
+        onErrorResponse(getRequestInfo.replicaId);
       } else {
         try {
           GetResponse getResponse = GetResponse
@@ -580,11 +591,12 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
             // out over a connection id, and the response received on a connection id must be for the latest request
             // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
             // There is no other way to handle it.
+            routerMetrics.unknownReplicaResponseError.inc();
             chunkException = new RouterException(
                 "The correlation id in the GetResponse " + getResponse.getCorrelationId()
                     + " is not the same as the correlation id in the associated GetRequest: " + correlationId,
                 RouterErrorCode.UnexpectedInternalError);
-            chunkOperationTracker.onResponse(getRequestInfo.replicaId, false);
+            onErrorResponse(getRequestInfo.replicaId);
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             processGetBlobResponse(getRequestInfo, getResponse);
@@ -594,7 +606,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
           // detection.
           chunkException = new RouterException("Response deserialization received an unexpected error", e,
               RouterErrorCode.UnexpectedInternalError);
-          chunkOperationTracker.onResponse(getRequestInfo.replicaId, false);
+          onErrorResponse(getRequestInfo.replicaId);
         }
       }
       checkAndMaybeComplete();
@@ -630,14 +642,23 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
               // success target has been reached or not.
               chunkCompleted = true;
             } else {
-              chunkOperationTracker.onResponse(getRequestInfo.replicaId, false);
+              onErrorResponse(getRequestInfo.replicaId);
             }
           }
         }
       } else {
         responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
-        chunkOperationTracker.onResponse(getRequestInfo.replicaId, false);
+        onErrorResponse(getRequestInfo.replicaId);
       }
+    }
+
+    /**
+     * Perform the necessary actions when a request to a replica fails.
+     * @param replicaId the {@link ReplicaId} associated with the failed response.
+     */
+    void onErrorResponse(ReplicaId replicaId) {
+      chunkOperationTracker.onResponse(replicaId, false);
+      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestErrorCount.inc();
     }
 
     /**

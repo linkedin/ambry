@@ -154,17 +154,13 @@ class DeleteOperation {
       return;
     }
     ReplicaId replica = deleteRequestInfo.replica;
-    RouterErrorCode routerErrorCode;
     long requestLatencyMs = time.milliseconds() - deleteRequestInfo.startTimeMs;
-    NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-        routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId());
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-    dataNodeBasedMetrics.deleteRequestLatencyMs.update(requestLatencyMs);
+    routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
       responseHandler.onRequestResponseException(replica, new IOException(("NetworkClient error.")));
-      routerErrorCode = RouterErrorCode.OperationTimedOut;
-      updateOperationState(replica, routerErrorCode);
+      updateOperationState(replica, RouterErrorCode.OperationTimedOut);
     } else {
       try {
         DeleteResponse deleteResponse =
@@ -179,23 +175,18 @@ class DeleteOperation {
           setOperationException(
               new RouterException("Received wrong response that is not for the corresponding request.",
                   RouterErrorCode.UnexpectedInternalError));
-          routerErrorCode = RouterErrorCode.UnexpectedInternalError;
-          updateOperationState(replica, routerErrorCode);
+          updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
         } else {
           responseHandler.onRequestResponseError(replica, deleteResponse.getError());
           // The status of operation tracker will be updated within the processServerError method.
-          routerErrorCode = processServerError(replica, deleteResponse.getError());
+          processServerError(replica, deleteResponse.getError());
         }
       } catch (IOException e) {
         logger.error("Unable to recover a deleteResponse from received stream.");
-        routerErrorCode = RouterErrorCode.UnexpectedInternalError;
-        updateOperationState(replica, routerErrorCode);
+        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
       }
     }
     checkAndMaybeComplete();
-    if (routerErrorCode != null) {
-      dataNodeBasedMetrics.deleteRequestErrorCount.inc();
-    }
   }
 
   /**
@@ -223,7 +214,6 @@ class DeleteOperation {
         itr.remove();
         NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
             routerMetrics.getDataNodeBasedMetrics(deleteRequestInfo.replica.getDataNodeId());
-        dataNodeBasedMetrics.deleteRequestErrorCount.inc();
         updateOperationState(deleteRequestInfo.replica, RouterErrorCode.OperationTimedOut);
       }
     }
@@ -234,10 +224,8 @@ class DeleteOperation {
    * to a {@link RouterErrorCode}, and then makes corresponding state update.
    * @param replica The replica for which the ServerErrorCode was generated.
    * @param serverErrorCode The ServerErrorCode received from the replica.
-   * @return The resolved {@link RouterErrorCode}.
    */
-  private RouterErrorCode processServerError(ReplicaId replica, ServerErrorCode serverErrorCode) {
-    RouterErrorCode routerErrorCode = null;
+  private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode) {
     switch (serverErrorCode) {
       case No_Error:
         logger.trace("The delete request was successful.");
@@ -253,19 +241,15 @@ class DeleteOperation {
       case Blob_Not_Found:
       case Partition_Unknown:
         updateOperationState(replica, RouterErrorCode.BlobDoesNotExist);
-        routerErrorCode = RouterErrorCode.BlobDoesNotExist;
         break;
       case Disk_Unavailable:
         updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
-        routerErrorCode = RouterErrorCode.AmbryUnavailable;
         break;
       default:
         logger.trace("Server returned an error: ", serverErrorCode);
         updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
-        routerErrorCode = RouterErrorCode.UnexpectedInternalError;
         break;
     }
-    return routerErrorCode;
   }
 
   /**
@@ -287,6 +271,7 @@ class DeleteOperation {
       }
     }
     operationTracker.onResponse(replica, false);
+    routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestErrorCount.inc();
   }
 
   /**

@@ -105,6 +105,8 @@ class GetManager {
               callback, operationCompleteCallback, time);
       getOperations.add(getBlobInfoOperation);
     } catch (RouterException e) {
+      routerMetrics.getBlobInfoErrorCount.inc();
+      routerMetrics.countError(e);
       routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
@@ -124,6 +126,8 @@ class GetManager {
               operationCompleteCallback, blobIdFactory, time);
       getOperations.add(getBlobOperation);
     } catch (RouterException e) {
+      routerMetrics.getBlobErrorCount.inc();
+      routerMetrics.countError(e);
       routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
@@ -174,6 +178,8 @@ class GetManager {
       if (getOperation.isOperationComplete()) {
         remove(getOperation);
       }
+    } else {
+      routerMetrics.ignoredResponseCount.inc();
     }
   }
 
@@ -187,7 +193,11 @@ class GetManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (remove(op)) {
-        op.abort(new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+        RouterException e =
+            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed);
+        op.abort(e);
+        routerMetrics.operationAbortCount.inc();
+        routerMetrics.countError(e);
       }
     }
   }

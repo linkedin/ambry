@@ -48,6 +48,7 @@ abstract class GetOperation<T> {
   protected volatile boolean operationCompleted = false;
   protected final AtomicReference<Exception> operationException = new AtomicReference<>();
   protected T operationResult;
+  protected final long submissionTimeMs;
 
   private static final Logger logger = LoggerFactory.getLogger(GetOperation.class);
 
@@ -74,6 +75,7 @@ abstract class GetOperation<T> {
     this.operationFuture = futureResult;
     this.operationCallback = operationCallback;
     this.time = time;
+    submissionTimeMs = time.milliseconds();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
   }
 

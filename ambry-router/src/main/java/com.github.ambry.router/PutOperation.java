@@ -270,6 +270,7 @@ class PutOperation {
       logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
     }
+    routerMetrics.putChunkOperationLatencyMs.update(time.milliseconds() - chunk.getChunkReadyTimeMs());
     chunk.clear();
   }
 
@@ -435,6 +436,8 @@ class PutOperation {
     private int chunkIndex;
     // the blobId of the current chunk.
     protected BlobId chunkBlobId;
+    // the time at which this chunk became ready.
+    private long chunkReadyTimeMs;
     // The exception encountered while putting the current chunk. Not all errors are irrecoverable. An error may or
     // may not get overridden by a subsequent error, and this variable is meant to store the most relevant error.
     private RouterException chunkException;
@@ -548,6 +551,13 @@ class PutOperation {
     }
 
     /**
+     * @return return the time at which the chunk became ready.
+     */
+    long getChunkReadyTimeMs() {
+      return chunkReadyTimeMs;
+    }
+
+    /**
      * @return true if this PutChunk is free so a chunk of the overall blob can be filled in.
      */
     boolean isFree() {
@@ -617,6 +627,7 @@ class PutOperation {
     void onFillComplete() {
       buf.flip();
       prepareForSending();
+      chunkReadyTimeMs = time.milliseconds();
     }
 
     /**
@@ -696,11 +707,8 @@ class PutOperation {
       while (inFlightRequestsIterator.hasNext()) {
         Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
-          operationTracker.onResponse(entry.getValue().replicaId, false);
+          onErrorResponse(entry.getValue().replicaId);
           chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
-          NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-              routerMetrics.getDataNodeBasedMetrics(entry.getValue().replicaId.getDataNodeId());
-          dataNodeBasedMetrics.putRequestErrorCount.inc();
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.
@@ -778,10 +786,9 @@ class PutOperation {
         return;
       }
       long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
-      NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-          routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId());
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      dataNodeBasedMetrics.putRequestLatencyMs.update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs
+          .update(requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
@@ -797,6 +804,7 @@ class PutOperation {
             // out over a connection id, and the response received on a connection id must be for the latest request
             // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
             // There is no other way to handle it.
+            routerMetrics.unknownReplicaResponseError.inc();
             logger.error("The correlation id in the PutResponse " + putResponse.getCorrelationId()
                 + " is not the same as the correlation id in the associated PutRequest: " + correlationId);
             setChunkException(
@@ -824,11 +832,21 @@ class PutOperation {
           isSuccessful = false;
         }
       }
-      operationTracker.onResponse(chunkPutRequestInfo.replicaId, isSuccessful);
-      checkAndMaybeComplete();
-      if (!isSuccessful) {
-        dataNodeBasedMetrics.putRequestErrorCount.inc();
+      if (isSuccessful) {
+        operationTracker.onResponse(chunkPutRequestInfo.replicaId, true);
+      } else {
+        onErrorResponse(chunkPutRequestInfo.replicaId);
       }
+      checkAndMaybeComplete();
+    }
+
+    /**
+     * Perform the necessary actions when a request to a replica fails.
+     * @param replicaId the {@link ReplicaId} associated with the failed response.
+     */
+    void onErrorResponse(ReplicaId replicaId) {
+      operationTracker.onResponse(replicaId, false);
+      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
     }
 
     /**
