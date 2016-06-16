@@ -92,6 +92,7 @@ public class NetworkClient implements Closeable {
    */
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos)
       throws IOException {
+    logger.trace("Initiating Send and poll at " + time.milliseconds());
     long startTime = time.milliseconds();
     try {
       if (closed) {
@@ -111,6 +112,7 @@ public class NetworkClient implements Closeable {
     } finally {
       numPendingRequests.set(pendingRequests.size());
       networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime);
+      logger.trace("Time taken for this Send and poll cycle " + (time.milliseconds() - startTime));
     }
   }
 
@@ -155,8 +157,10 @@ public class NetworkClient implements Closeable {
             connId = selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
                 networkConfig.socketReceiveBufferBytes, port.getPortType());
             connectionTracker.startTrackingInitiatedConnection(host, port, connId);
+            logger.trace("Initiated a connection to " + host + ":" + port);
           }
         } else {
+          logger.trace("Connection checkout succeeded for " + host + ":" + port + " with connectionId " + connId);
           sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(),
               requestMetadata.clientNetworkRequestMetrics, time));
           connectionIdToRequestInFlight.put(connId, requestMetadata);
@@ -178,25 +182,31 @@ public class NetworkClient implements Closeable {
    *                         the selector events.
    */
   private void handleSelectorEvents(List<ResponseInfo> responseInfoList) {
+    logger.trace("Handling selector events at " + time.milliseconds());
     for (String connId : selector.connected()) {
+      logger.trace("Checking in connection back to connection tracker for connectionId " + connId);
       connectionTracker.checkInConnection(connId);
     }
 
     for (String connId : selector.disconnected()) {
+      logger.trace(
+          "Connection disconnected for connectionId " + connId + " and hence removing it from connection tracker");
       connectionTracker.removeConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       if (requestMetadata != null) {
-        responseInfoList
-            .add(new ResponseInfo(requestMetadata.requestInfo.getRequest(), NetworkClientErrorCode.NetworkError, null));
+        responseInfoList.add(
+            new ResponseInfo(requestMetadata.requestInfo.getRequest(), NetworkClientErrorCode.NetworkError, null));
       }
     }
 
     for (NetworkReceive recv : selector.completedReceives()) {
       String connId = recv.getConnectionId();
+      logger.trace("Receive completed for connectionId " + connId
+          + " and checking in the connection back to connection tracker");
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
-      responseInfoList
-          .add(new ResponseInfo(requestMetadata.requestInfo.getRequest(), null, recv.getReceivedBytes().getPayload()));
+      responseInfoList.add(
+          new ResponseInfo(requestMetadata.requestInfo.getRequest(), null, recv.getReceivedBytes().getPayload()));
       requestMetadata.onResponseReceive();
     }
   }
@@ -206,6 +216,7 @@ public class NetworkClient implements Closeable {
    */
   @Override
   public void close() {
+    logger.trace("Closing the NetworkClient");
     selector.close();
     closed = true;
   }
