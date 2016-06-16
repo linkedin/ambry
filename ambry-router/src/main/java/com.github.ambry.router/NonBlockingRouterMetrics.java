@@ -49,6 +49,7 @@ public class NonBlockingRouterMetrics {
   public final Histogram putChunkOperationLatencyMs;
   public final Histogram getBlobInfoOperationLatencyMs;
   public final Histogram getBlobOperationLatencyMs;
+  public final Histogram getBlobOperationTotalTimeMs;
   public final Histogram deleteBlobOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
 
@@ -73,7 +74,6 @@ public class NonBlockingRouterMetrics {
   public final Counter blobDoesNotExistErrorCount;
   public final Counter blobExpiredErrorCount;
   public final Counter unknownReplicaResponseError;
-  public final Counter errorCountOnRouterClose;
   public final Counter unknownErrorCountForOperation;
 
   // Misc metrics.
@@ -110,6 +110,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoOperationLatencyMs"));
     getBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationLatencyMs"));
+    getBlobOperationTotalTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationTotalTimeMs"));
     deleteBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationLatencyMs"));
     routerRequestLatencyMs =
@@ -150,8 +152,6 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BlobExpiredErrorCount"));
     unknownReplicaResponseError =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownReplicaResponseError"));
-    errorCountOnRouterClose =
-        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ErrorCountOnRouterClose"));
     unknownErrorCountForOperation =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownErrorCountForOperation"));
 
@@ -251,7 +251,7 @@ public class NonBlockingRouterMetrics {
           blobTooLargeErrorCount.inc();
           break;
         case BadInputChannel:
-          blobTooLargeErrorCount.inc();
+          badInputChannelErrorCount.inc();
           break;
         case InsufficientCapacity:
           insufficientCapacityErrorCount.inc();
