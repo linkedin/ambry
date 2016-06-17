@@ -140,14 +140,14 @@ class PutManager {
     for (PutOperation op : putOperations) {
       try {
         op.poll(requestRegistrationCallback);
+        if (op.isOperationComplete() && putOperations.remove(op)) {
+          // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
+          // operation actually gets removed from the set of operations. See comment within closePendingOperations().
+          onComplete(op);
+        }
       } catch (Exception e) {
-        op.setOperationException(
+        removeAndAbort(op,
             new RouterException("Put poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
-      }
-      if (op.isOperationComplete() && putOperations.remove(op)) {
-        // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
-        // operation actually gets removed from the set of operations. See comment within closePendingOperations().
-        onComplete(op);
       }
     }
   }
@@ -164,12 +164,12 @@ class PutManager {
     if (putOperations.contains(putOperation)) {
       try {
         putOperation.handleResponse(responseInfo);
+        if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
+          onComplete(putOperation);
+        }
       } catch (Exception e) {
-        putOperation.setOperationException(new RouterException("Put handleResponse encountered unexpected error", e,
+        removeAndAbort(putOperation, new RouterException("Put handleResponse encountered unexpected error", e,
             RouterErrorCode.UnexpectedInternalError));
-      }
-      if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
-        onComplete(putOperation);
       }
     } else {
       routerMetrics.ignoredResponseCount.inc();
@@ -200,8 +200,10 @@ class PutManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(),
-        op.getOperationException());
+    if (op.setCallbackInvoked()) {
+      operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(),
+          op.getOperationException());
+    }
   }
 
   /**
@@ -235,17 +237,28 @@ class PutManager {
    */
   void completePendingOperations() {
     for (PutOperation op : putOperations) {
-      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
-      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
-      // from happening twice, complete it here only if the remove was successful.
-      if (putOperations.remove(op)) {
-        RouterException routerException =
-            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
-        routerMetrics.operationDequeuingRate.mark();
-        routerMetrics.operationAbortCount.inc();
-        routerMetrics.putBlobErrorCount.inc();
-        routerMetrics.countError(routerException);
-        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, routerException);
+      removeAndAbort(op,
+          new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed));
+    }
+  }
+
+  /**
+   * Remove an operation from the set and abort.
+   * @param op the operation to abort
+   * @param abortCause the reason for aborting
+   */
+  private void removeAndAbort(PutOperation op, Exception abortCause) {
+    // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+    // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+    // from happening twice, complete it here only if the remove was successful.
+    if (putOperations.remove(op)) {
+      routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.operationAbortCount.inc();
+      routerMetrics.putBlobErrorCount.inc();
+      routerMetrics.countError(abortCause);
+      op.setOperationException(abortCause);
+      if (op.setCallbackInvoked()) {
+        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, abortCause);
       }
     }
   }

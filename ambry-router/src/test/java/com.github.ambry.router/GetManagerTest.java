@@ -25,6 +25,8 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -128,23 +130,36 @@ public class GetManagerTest {
       throws Exception {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize * 6 + 11);
-    final CountDownLatch callbackCalled = new CountDownLatch(1);
+    final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
+    final CountDownLatch getBlobCallbackCalled = new CountDownLatch(1);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
-    router.getBlobInfo(blobId, new Callback<BlobInfo>() {
-      @Override
-      public void onCompletion(BlobInfo result, Exception exception) {
-        callbackCalled.countDown();
-        throw new RuntimeException("Throwing an exception in the user callback");
+    List<Future> futures = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      if (i == 1) {
+        futures.add(router.getBlobInfo(blobId, new Callback<BlobInfo>() {
+          @Override
+          public void onCompletion(BlobInfo result, Exception exception) {
+            getBlobInfoCallbackCalled.countDown();
+            throw new RuntimeException("Throwing an exception in the user callback");
+          }
+        }));
+        futures.add(router.getBlob(blobId, new Callback<ReadableStreamChannel>() {
+          @Override
+          public void onCompletion(ReadableStreamChannel result, Exception exception) {
+            getBlobCallbackCalled.countDown();
+            throw new RuntimeException("Throwing an exception in the user callback");
+          }
+        }));
+      } else {
+        futures.add(router.getBlobInfo(blobId));
+        futures.add(router.getBlob(blobId));
       }
-    }).get();
-    router.getBlob(blobId, new Callback<ReadableStreamChannel>() {
-      @Override
-      public void onCompletion(ReadableStreamChannel result, Exception exception) {
-        callbackCalled.countDown();
-        throw new RuntimeException("Throwing an exception in the user callback");
-      }
-    }).get();
-    Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
+    }
+    for (Future future : futures) {
+      future.get();
+    }
+    Assert.assertTrue("getBlobInfo callback not called.", getBlobInfoCallbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertTrue("getBlob callback not called.", getBlobCallbackCalled.await(2, TimeUnit.SECONDS));
     Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
     Assert.assertTrue("Router should not be closed", router.isOpen());
 
@@ -227,8 +242,7 @@ public class GetManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
-    router = new NonBlockingRouter(new RouterConfig(vProps),
-        new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
         mockTime);

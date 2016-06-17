@@ -170,8 +170,10 @@ class DeleteManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
-        op.getOperationException());
+    if (op.setCallbackInvoked()) {
+      operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
+          op.getOperationException());
+    }
   }
 
   /**
@@ -199,7 +201,9 @@ class DeleteManager {
       routerMetrics.operationAbortCount.inc();
       routerMetrics.deleteBlobErrorCount.inc();
       routerMetrics.countError(abortCause);
-      operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, abortCause);
+      if (op.setCallbackInvoked()) {
+        operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, abortCause);
+      }
     }
   }
 }

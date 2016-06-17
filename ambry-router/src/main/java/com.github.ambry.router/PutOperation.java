@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,6 +113,8 @@ class PutOperation {
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
+  // marks if the callback has been invoked
+  private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
   // To find the PutChunk to hand over the response quickly.
   private final Map<Integer, PutChunk> correlationIdToPutChunk = new HashMap<Integer, PutChunk>();
   // The time at which the operation was submitted.
@@ -426,6 +429,14 @@ class PutOperation {
   void setOperationException(Exception exception) {
     operationException.set(exception);
     operationCompleted = true;
+  }
+
+  /**
+   * Return {@code true} if callback has not been invoked yet and mark the callback as invoked.
+   * @return {@code true} if callback has not been invoked, {@code false} otherwise
+   */
+  boolean setCallbackInvoked() {
+    return operationCallbackInvoked.compareAndSet(false, true);
   }
 
   /**

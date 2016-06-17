@@ -36,6 +36,7 @@ import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +48,7 @@ import org.slf4j.LoggerFactory;
  */
 class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   private final OperationCompleteCallback operationCompleteCallback;
+  private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
   private final SimpleOperationTracker operationTracker;
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
@@ -79,7 +81,9 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
 
   @Override
   void abort(Exception abortCause) {
-    operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
+    if (operationCallbackInvoked.compareAndSet(false, true)) {
+      operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
+    }
     operationCompleted = true;
   }
 
@@ -307,7 +311,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       operationCompleted = true;
     }
 
-    if (operationCompleted) {
+    if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
       Exception e = operationException.get();
       if (e != null) {
         routerMetrics.getBlobInfoErrorCount.inc();
