@@ -98,10 +98,6 @@ class PutOperation {
   private PutChunk chunkToFill;
   // counter for tracking the chunks being filled.
   private int chunkCounter;
-  // The start time to fill the current chunk.
-  private long timeStartFillingCurrentChunkMs;
-  // The time that the previous chunk was completely filled.
-  private long timeFilledPreviousChunkMs;
   // the current ByteBuffer/position in the chunkFillerChannel.
   private ByteBuffer channelReadBuffer;
   // denotes whether chunk filling is complete.
@@ -169,7 +165,6 @@ class PutOperation {
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
-    timeFilledPreviousChunkMs = time.milliseconds();
     bytesFilledSoFar = 0;
     chunkCounter = -1;
 
@@ -340,8 +335,6 @@ class PutOperation {
         chunkCounter++;
         chunk.prepareForBuilding(chunkCounter, getSizeOfChunkAt(chunkCounter));
         chunkToFill = chunk;
-        routerMetrics.chunkFillerWaitingTrunkTimeMs.update(time.milliseconds() - timeFilledPreviousChunkMs);
-        timeStartFillingCurrentChunkMs = time.milliseconds();
         break;
       }
     }
@@ -631,14 +624,10 @@ class PutOperation {
     /**
      * Do the actions required when the chunk has been completely built.
      */
-    void onFillComplete(boolean isDataChunk) {
+    void onFillComplete() {
       buf.flip();
       prepareForSending();
       chunkReadyTimeMs = time.milliseconds();
-      if(isDataChunk) {
-        routerMetrics.chunkFillerFillingChunkTimeMs.update(time.milliseconds() - timeStartFillingCurrentChunkMs);
-        timeFilledPreviousChunkMs = time.milliseconds();
-      }
     }
 
     /**
@@ -658,7 +647,7 @@ class PutOperation {
         buf.put(channelReadBuffer);
       }
       if (!buf.hasRemaining()) {
-        onFillComplete(true);
+        onFillComplete();
       }
       return toWrite;
     }
@@ -956,7 +945,7 @@ class PutOperation {
       chunksDone++;
       if (chunksDone == numDataChunks) {
         buf = MetadataContentSerDe.serializeMetadataContent(Arrays.asList(chunkIds));
-        onFillComplete(false);
+        onFillComplete();
       }
     }
 

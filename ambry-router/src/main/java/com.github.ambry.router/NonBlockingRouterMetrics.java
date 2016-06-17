@@ -33,6 +33,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class NonBlockingRouterMetrics {
   private final MetricRegistry metricRegistry;
   // @todo: Ensure all metrics here get updated appropriately.
+  // @todo: chunk filling rate metrics.
+  // @todo: More metrics for the RequestResponse handling (poll, handleResponse etc.)
 
   // Operation rate.
   public final Meter putBlobOperationRate;
@@ -73,14 +75,6 @@ public class NonBlockingRouterMetrics {
   public final Counter blobExpiredErrorCount;
   public final Counter unknownReplicaResponseError;
   public final Counter unknownErrorCountForOperation;
-
-  // ChunkFiller performance metrics.
-  public final Meter chunkFillerSleepRate;
-  public final Histogram chunkFillerOneCycleProcessingTimeMs;
-  // The time for a chunk filler to wait for a chunk to become available to fill.
-  public final Histogram chunkFillerWaitingTrunkTimeMs;
-  // The time for a chunk filler to fill a chunk.
-  public final Histogram chunkFillerFillingChunkTimeMs;
 
   // Performance metrics for operation managers.
   public final Histogram putManagerPollTimeMs;
@@ -168,15 +162,6 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownReplicaResponseError"));
     unknownErrorCountForOperation =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownErrorCountForOperation"));
-
-    // ChunkFiller performance metrics.
-    chunkFillerSleepRate = metricRegistry.meter(MetricRegistry.name(PutManager.class, "ChunkFillerSleepRate"));
-    chunkFillerOneCycleProcessingTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillerOneCycleProcessingTimeMs"));
-    chunkFillerWaitingTrunkTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillerWaitingTrunkTimeMs"));
-    chunkFillerFillingChunkTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillerFillingChunkTimeMs"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));
