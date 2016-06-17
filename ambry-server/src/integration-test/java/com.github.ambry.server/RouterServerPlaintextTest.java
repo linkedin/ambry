@@ -138,7 +138,7 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.AWAIT_DELETION);
       operations.add(OperationType.GET_INFO_DELETED_NB);
       operations.add(OperationType.GET_DELETED_NB);
-      opChains.add(testFramework.startOperationChain(RouterServerTestFramework.CHUNK_SIZE * 4 + 1, i, operations));
+      opChains.add(testFramework.startOperationChain(RouterServerTestFramework.CHUNK_SIZE * 2 + 1, i, operations));
     }
     testFramework.checkOperationChains(opChains);
   }
