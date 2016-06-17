@@ -216,7 +216,7 @@ class GetManager {
     if (remove(op)) {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
-      routerMetrics.countError(e);
+      routerMetrics.countError(abortCause);
     }
   }
 }

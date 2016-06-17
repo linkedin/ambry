@@ -66,6 +66,7 @@ class DeleteOperation {
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
+  private final OperationCompleteCallback operationCompleteCallback;
   private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
   // RouterErrorCode that is resolved from all the received ServerErrorCode for this operation.
   private RouterErrorCode resolvedRouterErrorCode;
@@ -85,7 +86,8 @@ class DeleteOperation {
    * @param time A {@link Time} reference.
    */
   DeleteOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ResponseHandler responsehandler,
-      BlobId blobId, FutureResult<Void> futureResult, Callback<Void> callback, Time time) {
+      BlobId blobId, FutureResult<Void> futureResult, Callback<Void> callback,
+      OperationCompleteCallback operationCompleteCallback, Time time) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -93,6 +95,7 @@ class DeleteOperation {
     this.blobId = blobId;
     this.futureResult = futureResult;
     this.callback = callback;
+    this.operationCompleteCallback = operationCompleteCallback;
     this.time = time;
     this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
     this.operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true,
@@ -372,11 +375,25 @@ class DeleteOperation {
   }
 
   /**
-   * Return {@code true} if callback has not been invoked yet and mark the callback as invoked.
-   * @return {@code true} if callback has not been invoked, {@code false} otherwise
+   * Invoke the {@link OperationCompleteCallback} with a specified exception if it has not been invoked yet
+   * for this operation.
+   * @param exception Send this exception to the callback
    */
-  boolean setCallbackInvoked() {
-    return operationCallbackInvoked.compareAndSet(false, true);
+  void invokeOperationCompleteCallback(Exception exception) {
+    if (operationCompleteCallback != null && operationCallbackInvoked.compareAndSet(false, true)) {
+      operationCompleteCallback.completeOperation(getFutureResult(), getCallback(), null, exception);
+    }
+  }
+
+  /**
+   * Invoke the {@link OperationCompleteCallback} with the operation result and exception if it has not been invoked yet
+   * for this operation.
+   */
+  void invokeOperationCompleteCallback() {
+    if (operationCompleteCallback != null && operationCallbackInvoked.compareAndSet(false, true)) {
+      operationCompleteCallback.completeOperation(getFutureResult(), getCallback(), getOperationResult(),
+          getOperationException());
+    }
   }
 
   long getSubmissionTimeMs() {

@@ -117,7 +117,7 @@ class PutManager {
     try {
       PutOperation putOperation =
           new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
-              channel, futureResult, callback, time);
+              channel, futureResult, callback, operationCompleteCallback, time);
       putOperations.add(putOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
@@ -200,10 +200,7 @@ class PutManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    if (op.setCallbackInvoked()) {
-      operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(),
-          op.getOperationException());
-    }
+    op.invokeOperationCompleteCallback();
   }
 
   /**
@@ -257,9 +254,7 @@ class PutManager {
       routerMetrics.putBlobErrorCount.inc();
       routerMetrics.countError(abortCause);
       op.setOperationException(abortCause);
-      if (op.setCallbackInvoked()) {
-        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, abortCause);
-      }
+      op.invokeOperationCompleteCallback(abortCause);
     }
   }
 

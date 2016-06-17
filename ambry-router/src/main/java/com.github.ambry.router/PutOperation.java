@@ -115,6 +115,7 @@ class PutOperation {
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // marks if the callback has been invoked
   private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
+  private final OperationCompleteCallback operationCompleteCallback;
   // To find the PutChunk to hand over the response quickly.
   private final Map<Integer, PutChunk> correlationIdToPutChunk = new HashMap<Integer, PutChunk>();
   // The time at which the operation was submitted.
@@ -142,7 +143,8 @@ class PutOperation {
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
-      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback, Time time)
+      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
+      OperationCompleteCallback operationCompleteCallback, Time time)
       throws RouterException {
     submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
@@ -166,6 +168,7 @@ class PutOperation {
     this.userMetadata = userMetadata;
     this.futureResult = futureResult;
     this.callback = callback;
+    this.operationCompleteCallback = operationCompleteCallback;
     this.time = time;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
@@ -432,11 +435,25 @@ class PutOperation {
   }
 
   /**
-   * Return {@code true} if callback has not been invoked yet and mark the callback as invoked.
-   * @return {@code true} if callback has not been invoked, {@code false} otherwise
+   * Invoke the {@link OperationCompleteCallback} with a specified exception if it has not been invoked yet
+   * for this operation.
+   * @param exception Send this exception to the callback
    */
-  boolean setCallbackInvoked() {
-    return operationCallbackInvoked.compareAndSet(false, true);
+  void invokeOperationCompleteCallback(Exception exception) {
+    if (operationCompleteCallback != null && operationCallbackInvoked.compareAndSet(false, true)) {
+      operationCompleteCallback.completeOperation(getFuture(), getCallback(), null, exception);
+    }
+  }
+
+  /**
+   * Invoke the {@link OperationCompleteCallback} with the operation result and exception if it has not been invoked yet
+   * for this operation.
+   */
+  void invokeOperationCompleteCallback() {
+    if (operationCompleteCallback != null && operationCallbackInvoked.compareAndSet(false, true)) {
+      operationCompleteCallback.completeOperation(getFuture(), getCallback(), getBlobIdString(),
+          getOperationException());
+    }
   }
 
   /**
@@ -801,8 +818,8 @@ class PutOperation {
       }
       long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs
-          .update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs.update(
+          requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));

@@ -100,7 +100,8 @@ class DeleteManager {
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
-          new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, futureResult, callback, time);
+          new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, futureResult, callback,
+              operationCompleteCallback, time);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
@@ -170,10 +171,7 @@ class DeleteManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    if (op.setCallbackInvoked()) {
-      operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
-          op.getOperationException());
-    }
+    op.invokeOperationCompleteCallback();
   }
 
   /**
@@ -201,9 +199,7 @@ class DeleteManager {
       routerMetrics.operationAbortCount.inc();
       routerMetrics.deleteBlobErrorCount.inc();
       routerMetrics.countError(abortCause);
-      if (op.setCallbackInvoked()) {
-        operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, abortCause);
-      }
+      op.invokeOperationCompleteCallback(abortCause);
     }
   }
 }
