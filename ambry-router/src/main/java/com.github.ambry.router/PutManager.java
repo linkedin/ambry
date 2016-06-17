@@ -154,6 +154,7 @@ class PutManager {
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
+    long startTime = time.milliseconds();
     int correlationId = ((PutRequest) responseInfo.getRequest()).getCorrelationId();
     // Get the PutOperation that generated the request.
     PutOperation putOperation = correlationIdToPutOperation.remove(correlationId);
@@ -163,6 +164,7 @@ class PutManager {
       if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
         onComplete(putOperation);
       }
+      routerMetrics.putManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }

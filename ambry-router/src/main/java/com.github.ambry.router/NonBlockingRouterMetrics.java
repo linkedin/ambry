@@ -77,13 +77,18 @@ public class NonBlockingRouterMetrics {
   // ChunkFiller performance metrics.
   public final Meter chunkFillerSleepRate;
   public final Histogram chunkFillerOneCycleProcessingTimeMs;
+  // The time for a chunk filler to wait for a chunk to become available to fill.
   public final Histogram chunkFillerWaitingTrunkTimeMs;
+  // The time for a chunk filler to fill a chunk.
   public final Histogram chunkFillerFillingChunkTimeMs;
 
   // Performance metrics for operation managers.
   public final Histogram putManagerPollTimeMs;
   public final Histogram getManagerPollTimeMs;
   public final Histogram deleteManagerPollTimeMs;
+  public final Histogram putManagerHandleResponseTimeMs;
+  public final Histogram getManagerHandleResponseTimeMs;
+  public final Histogram deleteManagerHandleResponseTimeMs;
 
   // Misc metrics.
   public final Meter operationErrorRate;
@@ -167,11 +172,9 @@ public class NonBlockingRouterMetrics {
     // ChunkFiller performance metrics.
     chunkFillerSleepRate = metricRegistry.meter(MetricRegistry.name(PutManager.class, "ChunkFillerSleepRate"));
     chunkFillerOneCycleProcessingTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillerOneCycleTime"));
-    // The time for a chunk filler to wait for a chunk to become available to fill.
+        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillerOneCycleProcessingTimeMs"));
     chunkFillerWaitingTrunkTimeMs =
         metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillerWaitingTrunkTimeMs"));
-    // The time for a chunk filler to fill a chunk.
     chunkFillerFillingChunkTimeMs =
         metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillerFillingChunkTimeMs"));
 
@@ -180,6 +183,12 @@ public class NonBlockingRouterMetrics {
     getManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerPollTimeMs"));
     deleteManagerPollTimeMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerPollTimeMs"));
+    putManagerHandleResponseTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerHandleResponseTimeMs"));
+    getManagerHandleResponseTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerHandleResponseTimeMs"));
+    deleteManagerHandleResponseTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerHandleResponseTimeMs"));
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));

@@ -173,6 +173,7 @@ class GetManager {
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
+    long startTime = time.milliseconds();
     GetRequest getRequest = (GetRequest) responseInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
@@ -180,6 +181,7 @@ class GetManager {
       if (getOperation.isOperationComplete()) {
         remove(getOperation);
       }
+      routerMetrics.getManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }
