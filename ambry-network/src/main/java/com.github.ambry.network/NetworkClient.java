@@ -92,8 +92,8 @@ public class NetworkClient implements Closeable {
    */
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos)
       throws IOException {
-    logger.trace("Initiating Send and poll at " + time.milliseconds());
     long startTime = time.milliseconds();
+    logger.trace("Initiating Send and poll at " + startTime);
     try {
       if (closed) {
         throw new IllegalStateException("The NetworkClient is closed.");
