@@ -157,6 +157,7 @@ class GetManager {
    * @param requestListToFill list to be filled with the requests created
    */
   void poll(List<RequestInfo> requestListToFill) {
+    long startTime = time.milliseconds();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (GetOperation op : getOperations) {
       op.poll(requestRegistrationCallback);
@@ -164,6 +165,7 @@ class GetManager {
         remove(op);
       }
     }
+    routerMetrics.getManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
   /**
@@ -171,6 +173,7 @@ class GetManager {
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
+    long startTime = time.milliseconds();
     GetRequest getRequest = (GetRequest) responseInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
@@ -178,6 +181,7 @@ class GetManager {
       if (getOperation.isOperationComplete()) {
         remove(getOperation);
       }
+      routerMetrics.getManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }

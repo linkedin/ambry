@@ -116,6 +116,7 @@ class DeleteManager {
    * @param requestListToFill list to be filled with the requests created.
    */
   public void poll(List<RequestInfo> requestListToFill) {
+    long startTime = time.milliseconds();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (DeleteOperation op : deleteOperations) {
       op.poll(requestRegistrationCallback);
@@ -125,6 +126,7 @@ class DeleteManager {
         onComplete(op);
       }
     }
+    routerMetrics.deleteManagerPollTimeMs.update(time.milliseconds() - startTime);
   }
 
   /**
@@ -132,6 +134,7 @@ class DeleteManager {
    * @param responseInfo the {@link ResponseInfo} containing the response.
    */
   void handleResponse(ResponseInfo responseInfo) {
+    long startTime = time.milliseconds();
     int correlationId = ((DeleteRequest) responseInfo.getRequest()).getCorrelationId();
     DeleteOperation deleteOperation = correlationIdToDeleteOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
@@ -140,6 +143,7 @@ class DeleteManager {
       if (deleteOperation.isOperationComplete() && deleteOperations.remove(deleteOperation)) {
         onComplete(deleteOperation);
       }
+      routerMetrics.deleteManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }

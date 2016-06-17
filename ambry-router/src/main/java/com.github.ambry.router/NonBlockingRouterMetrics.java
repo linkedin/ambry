@@ -76,6 +76,14 @@ public class NonBlockingRouterMetrics {
   public final Counter unknownReplicaResponseError;
   public final Counter unknownErrorCountForOperation;
 
+  // Performance metrics for operation managers.
+  public final Histogram putManagerPollTimeMs;
+  public final Histogram getManagerPollTimeMs;
+  public final Histogram deleteManagerPollTimeMs;
+  public final Histogram putManagerHandleResponseTimeMs;
+  public final Histogram getManagerHandleResponseTimeMs;
+  public final Histogram deleteManagerHandleResponseTimeMs;
+
   // Misc metrics.
   public final Meter operationErrorRate;
   public final Counter slippedPutSuccessCount;
@@ -154,6 +162,18 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownReplicaResponseError"));
     unknownErrorCountForOperation =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownErrorCountForOperation"));
+
+    // Performance metrics for operation managers.
+    putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));
+    getManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerPollTimeMs"));
+    deleteManagerPollTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerPollTimeMs"));
+    putManagerHandleResponseTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerHandleResponseTimeMs"));
+    getManagerHandleResponseTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerHandleResponseTimeMs"));
+    deleteManagerHandleResponseTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerHandleResponseTimeMs"));
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));
