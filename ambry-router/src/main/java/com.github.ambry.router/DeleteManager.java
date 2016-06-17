@@ -202,12 +202,4 @@ class DeleteManager {
       }
     }
   }
-
-  /**
-   * Remove an operation from the set and abort.
-   * @param op the operation to abort
-   * @param abortCause the reason for aborting
-   */
-  private void removeAndAbort(DeleteOperation op, Exception abortCause) {
-  }
 }
