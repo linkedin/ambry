@@ -99,7 +99,7 @@ public class PutOperationTest {
     FutureResult<String> future = new FutureResult<>();
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobProperties, userMetadata,
-            channel, future, null, null, time);
+            channel, future, null, time);
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;
     // Since this channel is in memory, one call to fill chunks would end up filling the maximum number of PutChunks.
