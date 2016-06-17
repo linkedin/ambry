@@ -141,9 +141,7 @@ class PutManager {
       try {
         op.poll(requestRegistrationCallback);
       } catch (Exception e) {
-        // This call sets the operation as completed.  If this is changed, we will need a flag to ensure the callback
-        // is called.
-        op.setOperationException(
+        op.setOperationExceptionAndComplete(
             new RouterException("Put poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
       }
       if (op.isOperationComplete() && putOperations.remove(op)) {
@@ -167,9 +165,7 @@ class PutManager {
       try {
         putOperation.handleResponse(responseInfo);
       } catch (Exception e) {
-        // This call sets the operation as completed.  If this is changed, we will need a flag to ensure the callback
-        // is called.
-        putOperation.setOperationException(new RouterException("Put handleResponse encountered unexpected error", e,
+        putOperation.setOperationExceptionAndComplete(new RouterException("Put handleResponse encountered unexpected error", e,
             RouterErrorCode.UnexpectedInternalError));
       }
       if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {

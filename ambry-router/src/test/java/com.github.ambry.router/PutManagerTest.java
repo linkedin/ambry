@@ -152,24 +152,22 @@ public class PutManagerTest {
     RequestAndResult req = new RequestAndResult(chunkSize * 5 + random.nextInt(chunkSize - 1) + 1);
     router = getNonBlockingRouter();
     final CountDownLatch callbackCalled = new CountDownLatch(1);
-    List<Future> futures = new ArrayList<>();
-    for (int i = 0; i < 5; i++) {
-      ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
-      if (i == 1) {
-        futures.add(router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new Callback<String>() {
+    requestAndResultsList.clear();
+    for (int i = 0; i < 4; i++) {
+      requestAndResultsList.add(new RequestAndResult(chunkSize + random.nextInt(5) * random.nextInt(chunkSize)));
+    }
+    instantiateNewRouterForPuts = false;
+    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
+    Future future = router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new Callback<String>() {
           @Override
           public void onCompletion(String result, Exception exception) {
             callbackCalled.countDown();
             throw new RuntimeException("Throwing an exception in the user callback");
           }
-        }));
-      } else {
-        futures.add(router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel));
-      }
-    }
-    for (Future future : futures) {
-      future.get();
-    }
+        });
+    submitPutsAndAssertSuccess(false);
+    //future.get() for operation with bad callback should still succeed
+    future.get();
     Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
     Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
     Assert.assertTrue("Router should not be closed", router.isOpen());

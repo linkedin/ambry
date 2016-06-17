@@ -179,9 +179,9 @@ class PutOperation {
       @Override
       public void onCompletion(Long result, Exception exception) {
         if (exception != null) {
-          setOperationException(exception);
+          setOperationExceptionAndComplete(exception);
         } else if (result != blobSize) {
-          setOperationException(new RouterException("Incorrect number of bytes: " + result +
+          setOperationExceptionAndComplete(new RouterException("Incorrect number of bytes: " + result +
               " read in from the channel, expected: " + blobSize, RouterErrorCode.BadInputChannel));
         }
       }
@@ -317,7 +317,7 @@ class PutOperation {
         }
       }
     } catch (Exception e) {
-      setOperationException(new RouterException("PutOperation fillChunks encountered unexpected error", e,
+      setOperationExceptionAndComplete(new RouterException("PutOperation fillChunks encountered unexpected error", e,
           RouterErrorCode.UnexpectedInternalError));
     }
   }
@@ -423,7 +423,7 @@ class PutOperation {
    * Set the irrecoverable exception associated with this operation. When this is called, the operation has failed.
    * @param exception the irrecoverable exception associated with this operation.
    */
-  void setOperationException(Exception exception) {
+  void setOperationExceptionAndComplete(Exception exception) {
     operationException.set(exception);
     operationCompleted = true;
   }
@@ -620,7 +620,7 @@ class PutOperation {
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
-        setOperationException(e);
+        setOperationExceptionAndComplete(e);
       }
     }
 
@@ -670,7 +670,7 @@ class PutOperation {
           } else {
             // this chunk could not be successfully put. The whole operation has to fail.
             chunkBlobId = null;
-            setOperationException(chunkException);
+            setOperationExceptionAndComplete(chunkException);
             done = true;
           }
         } else {
