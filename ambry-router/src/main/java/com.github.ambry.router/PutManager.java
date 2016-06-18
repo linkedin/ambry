@@ -26,7 +26,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -168,8 +167,9 @@ class PutManager {
       try {
         putOperation.handleResponse(responseInfo);
       } catch (Exception e) {
-        putOperation.setOperationExceptionAndComplete(new RouterException("Put handleResponse encountered unexpected error", e,
-            RouterErrorCode.UnexpectedInternalError));
+        putOperation.setOperationExceptionAndComplete(
+            new RouterException("Put handleResponse encountered unexpected error", e,
+                RouterErrorCode.UnexpectedInternalError));
       }
       if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
         onComplete(putOperation);
@@ -204,8 +204,8 @@ class PutManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(),
-        op.getOperationException());
+    operationCompleteCallback
+        .completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(), op.getOperationException());
   }
 
   /**
@@ -265,9 +265,7 @@ class PutManager {
       try {
         while (isOpen.get()) {
           boolean allChunksFilled = true;
-          Iterator<PutOperation> iter = putOperations.iterator();
-          while (iter.hasNext()) {
-            PutOperation op = iter.next();
+          for (PutOperation op : putOperations) {
             if (!op.isChunkFillComplete()) {
               op.fillChunks();
               allChunksFilled = false;
@@ -277,8 +275,8 @@ class PutManager {
             Thread.sleep(sleepTimeWhenIdleMs);
           }
         }
-      } catch (Throwable e) {
-        logger.error("ChunkFillerThread received an unexpected error: ", e);
+      } catch (InterruptedException e) {
+        logger.error("ChunkFillerThread received exception", e);
         if (isOpen.compareAndSet(true, false)) {
           completePendingOperations();
         }

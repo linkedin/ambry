@@ -144,8 +144,9 @@ class PutOperation {
     submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
     if (channel.getSize() != blobSize) {
-      throw new RouterException("Channel size: " + channel.getSize() + " different from size in BlobProperties: "
-          + blobProperties.getBlobSize(), RouterErrorCode.BadInputChannel);
+      throw new RouterException(
+          "Channel size: " + channel.getSize() + " different from size in BlobProperties: " + blobProperties
+              .getBlobSize(), RouterErrorCode.BadInputChannel);
     }
     // Set numDataChunks
     // the max blob size that can be supported is technically limited by the max chunk size configured.
@@ -732,8 +733,8 @@ class PutOperation {
         PutRequest putRequest = createPutRequest();
         RequestInfo request = new RequestInfo(hostname, port, putRequest);
         int correlationId = putRequest.getCorrelationId();
-        correlationIdToChunkPutRequestInfo.put(correlationId,
-            new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
+        correlationIdToChunkPutRequestInfo
+            .put(correlationId, new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
         correlationIdToPutChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
@@ -790,13 +791,13 @@ class PutOperation {
       }
       long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs.update(
-          requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs
+          .update(requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
-        responseHandler.onRequestResponseException(chunkPutRequestInfo.replicaId,
-            new IOException("NetworkClient error"));
+        responseHandler
+            .onRequestResponseException(chunkPutRequestInfo.replicaId, new IOException("NetworkClient error"));
         isSuccessful = false;
       } else {
         try {
