@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobIdFactory;
@@ -159,12 +158,12 @@ public class PutManagerTest {
     instantiateNewRouterForPuts = false;
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
     Future future = router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new Callback<String>() {
-          @Override
-          public void onCompletion(String result, Exception exception) {
-            callbackCalled.countDown();
-            throw new RuntimeException("Throwing an exception in the user callback");
-          }
-        });
+      @Override
+      public void onCompletion(String result, Exception exception) {
+        callbackCalled.countDown();
+        throw new RuntimeException("Throwing an exception in the user callback");
+      }
+    });
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
     future.get();
@@ -397,9 +396,8 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future =
-        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, null);
+    FutureResult<String> future = (FutureResult<String>) router
+        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     int pushedSoFar = 0;
     while (pushedSoFar < blobSize && !future.isDone()) {
@@ -428,9 +426,8 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future =
-        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, null);
+    FutureResult<String> future = (FutureResult<String>) router
+        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     int pushedSoFar = 0;
 
@@ -487,63 +484,13 @@ public class PutManagerTest {
     requestAndResult.putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future =
-        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, null);
+    FutureResult<String> future = (FutureResult<String>) router
+        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
     future.await();
     requestAndResult.result = future;
     Exception expectedException = new RouterException("", RouterErrorCode.BlobTooLarge);
     assertFailure(expectedException);
     assertCloseCleanup();
-  }
-
-  /**
-   * Test ChunkFillerThread exit flow. If the ChunkFillerThread exits on its own (due to an exception),
-   * then the router gets closed along with the completion of all the operations when the next put request comes in
-   * (this is to keep the whole close flow simple).
-   */
-  @Test
-  public void testRouterClosingOnChunkFillerThreadException()
-      throws Exception {
-    router = getNonBlockingRouter();
-    int blobSize = chunkSize * random.nextInt(10) + 1;
-    for (int i = 0; i < 2; i++) {
-      RequestAndResult requestAndResult = new RequestAndResult(blobSize);
-      requestAndResultsList.add(requestAndResult);
-    }
-    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    requestAndResultsList.get(0).result =
-        (FutureResult<String>) router.putBlob(requestAndResultsList.get(0).putBlobProperties,
-            requestAndResultsList.get(0).putUserMetadata, putChannel, null);
-    Thread chunkFillerThread = TestUtils.getThreadByThisName("ChunkFillerThread");
-    chunkFillerThread.interrupt();
-
-    // Now wait till the chunk filler thread dies
-    while (TestUtils.numThreadsByThisName("ChunkFillerThread") > 0) {
-      Thread.yield();
-    }
-
-    // Ensure that the existing operation was completed.
-    requestAndResultsList.get(0).result.await();
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
-    Assert.assertTrue("Router should still be open", router.isOpen());
-
-    // Now submit another job and ensure that the router gets closed.
-    requestAndResultsList.get(1).result =
-        (FutureResult<String>) router.putBlob(requestAndResultsList.get(1).putBlobProperties,
-            requestAndResultsList.get(1).putUserMetadata, null, null);
-
-    // Wait for operation completion.
-    requestAndResultsList.get(1).result.await();
-
-    // Ensure that both operations failed and with the right exceptions.
-    Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
-    assertFailure(expectedException);
-    Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
-        TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
-        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**
@@ -559,9 +506,8 @@ public class PutManagerTest {
       RequestAndResult requestAndResult = new RequestAndResult(blobSize);
       requestAndResultsList.add(requestAndResult);
       MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-      requestAndResult.result =
-          (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-              putChannel, null);
+      requestAndResult.result = (FutureResult<String>) router
+          .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
     }
 
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
@@ -667,8 +613,8 @@ public class PutManagerTest {
           try {
             ReadableStreamChannel putChannel =
                 new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
-            requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, null);
+            requestAndResult.result = (FutureResult<String>) router
+                .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
             requestAndResult.result.await();
           } catch (Exception e) {
             requestAndResult.result = new FutureResult<>();
@@ -725,8 +671,8 @@ public class PutManagerTest {
     PutRequest request = deserializePutRequest(serializedRequest);
     if (request.getBlobType() == BlobType.MetadataBlob) {
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
-      List<StoreKey> dataBlobIds = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
-          new BlobIdFactory(mockClusterMap));
+      List<StoreKey> dataBlobIds = MetadataContentSerDe
+          .deserializeMetadataContentRecord(ByteBuffer.wrap(data), new BlobIdFactory(mockClusterMap));
       byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
       int offset = 0;
       for (StoreKey key : dataBlobIds) {

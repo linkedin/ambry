@@ -166,8 +166,8 @@ class GetManager {
           remove(op);
         }
       } catch (Exception e) {
-        removeAndAbort(op, new RouterException("Get poll encountered unexpected error", e,
-            RouterErrorCode.UnexpectedInternalError));
+        removeAndAbort(op,
+            new RouterException("Get poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
       }
     }
     routerMetrics.getManagerPollTimeMs.update(time.milliseconds() - startTime);
