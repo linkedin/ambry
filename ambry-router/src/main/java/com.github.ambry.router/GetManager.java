@@ -160,9 +160,14 @@ class GetManager {
     long startTime = time.milliseconds();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (GetOperation op : getOperations) {
-      op.poll(requestRegistrationCallback);
-      if (op.isOperationComplete()) {
-        remove(op);
+      try {
+        op.poll(requestRegistrationCallback);
+        if (op.isOperationComplete()) {
+          remove(op);
+        }
+      } catch (Exception e) {
+        removeAndAbort(op, new RouterException("Get poll encountered unexpected error", e,
+            RouterErrorCode.UnexpectedInternalError));
       }
     }
     routerMetrics.getManagerPollTimeMs.update(time.milliseconds() - startTime);
@@ -177,9 +182,14 @@ class GetManager {
     GetRequest getRequest = (GetRequest) responseInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
-      getOperation.handleResponse(responseInfo);
-      if (getOperation.isOperationComplete()) {
-        remove(getOperation);
+      try {
+        getOperation.handleResponse(responseInfo);
+        if (getOperation.isOperationComplete()) {
+          remove(getOperation);
+        }
+      } catch (Exception e) {
+        removeAndAbort(getOperation, new RouterException("Get handleResponse encountered unexpected error", e,
+            RouterErrorCode.UnexpectedInternalError));
       }
       routerMetrics.getManagerHandleResponseTimeMs.update(time.milliseconds() - startTime);
     } else {
@@ -193,16 +203,24 @@ class GetManager {
    */
   void close() {
     for (GetOperation op : getOperations) {
-      // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
-      // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
-      // from happening twice, complete it here only if the remove was successful.
-      if (remove(op)) {
-        RouterException e =
-            new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed);
-        op.abort(e);
-        routerMetrics.operationAbortCount.inc();
-        routerMetrics.countError(e);
-      }
+      removeAndAbort(op,
+          new RouterException("Aborted operation because Router is closed", RouterErrorCode.RouterClosed));
+    }
+  }
+
+  /**
+   * Remove an operation from the set and abort.
+   * @param op the operation to abort
+   * @param abortCause the reason for aborting
+   */
+  private void removeAndAbort(GetOperation op, Exception abortCause) {
+    // There is a rare scenario where the operation gets removed from this set and gets completed concurrently by
+    // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
+    // from happening twice, complete it here only if the remove was successful.
+    if (remove(op)) {
+      op.abort(abortCause);
+      routerMetrics.operationAbortCount.inc();
+      routerMetrics.countError(abortCause);
     }
   }
 }

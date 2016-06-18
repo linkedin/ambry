@@ -143,6 +143,42 @@ public class PutManagerTest {
   }
 
   /**
+   * Test that a bad user defined callback will not crash the router.
+   * @throws Exception
+   */
+  @Test
+  public void testBadCallback()
+      throws Exception {
+    RequestAndResult req = new RequestAndResult(chunkSize * 5 + random.nextInt(chunkSize - 1) + 1);
+    router = getNonBlockingRouter();
+    final CountDownLatch callbackCalled = new CountDownLatch(1);
+    requestAndResultsList.clear();
+    for (int i = 0; i < 4; i++) {
+      requestAndResultsList.add(new RequestAndResult(chunkSize + random.nextInt(5) * random.nextInt(chunkSize)));
+    }
+    instantiateNewRouterForPuts = false;
+    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
+    Future future = router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new Callback<String>() {
+          @Override
+          public void onCompletion(String result, Exception exception) {
+            callbackCalled.countDown();
+            throw new RuntimeException("Throwing an exception in the user callback");
+          }
+        });
+    submitPutsAndAssertSuccess(false);
+    //future.get() for operation with bad callback should still succeed
+    future.get();
+    Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+    Assert.assertTrue("Router should not be closed", router.isOpen());
+    // Test that PutManager is still operational
+    requestAndResultsList.clear();
+    requestAndResultsList.add(new RequestAndResult(chunkSize + random.nextInt(5) * random.nextInt(chunkSize)));
+    instantiateNewRouterForPuts = false;
+    submitPutsAndAssertSuccess(true);
+  }
+
+  /**
    * Tests put of a blob with blob size 0.
    */
   @Test
@@ -361,8 +397,9 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future = (FutureResult<String>) router
-        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    FutureResult<String> future =
+        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+            putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     int pushedSoFar = 0;
     while (pushedSoFar < blobSize && !future.isDone()) {
@@ -391,8 +428,9 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future = (FutureResult<String>) router
-        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    FutureResult<String> future =
+        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+            putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     int pushedSoFar = 0;
 
@@ -449,8 +487,9 @@ public class PutManagerTest {
     requestAndResult.putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future = (FutureResult<String>) router
-        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    FutureResult<String> future =
+        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+            putChannel, null);
     future.await();
     requestAndResult.result = future;
     Exception expectedException = new RouterException("", RouterErrorCode.BlobTooLarge);
@@ -473,9 +512,9 @@ public class PutManagerTest {
       requestAndResultsList.add(requestAndResult);
     }
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    requestAndResultsList.get(0).result = (FutureResult<String>) router
-        .putBlob(requestAndResultsList.get(0).putBlobProperties, requestAndResultsList.get(0).putUserMetadata,
-            putChannel, null);
+    requestAndResultsList.get(0).result =
+        (FutureResult<String>) router.putBlob(requestAndResultsList.get(0).putBlobProperties,
+            requestAndResultsList.get(0).putUserMetadata, putChannel, null);
     Thread chunkFillerThread = TestUtils.getThreadByThisName("ChunkFillerThread");
     chunkFillerThread.interrupt();
 
@@ -490,9 +529,9 @@ public class PutManagerTest {
     Assert.assertTrue("Router should still be open", router.isOpen());
 
     // Now submit another job and ensure that the router gets closed.
-    requestAndResultsList.get(1).result = (FutureResult<String>) router
-        .putBlob(requestAndResultsList.get(1).putBlobProperties, requestAndResultsList.get(1).putUserMetadata, null,
-            null);
+    requestAndResultsList.get(1).result =
+        (FutureResult<String>) router.putBlob(requestAndResultsList.get(1).putBlobProperties,
+            requestAndResultsList.get(1).putUserMetadata, null, null);
 
     // Wait for operation completion.
     requestAndResultsList.get(1).result.await();
@@ -520,8 +559,9 @@ public class PutManagerTest {
       RequestAndResult requestAndResult = new RequestAndResult(blobSize);
       requestAndResultsList.add(requestAndResult);
       MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-      requestAndResult.result = (FutureResult<String>) router
-          .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+      requestAndResult.result =
+          (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+              putChannel, null);
     }
 
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
@@ -627,8 +667,8 @@ public class PutManagerTest {
           try {
             ReadableStreamChannel putChannel =
                 new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
-            requestAndResult.result = (FutureResult<String>) router
-                .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+            requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
+                requestAndResult.putUserMetadata, putChannel, null);
             requestAndResult.result.await();
           } catch (Exception e) {
             requestAndResult.result = new FutureResult<>();
@@ -685,8 +725,8 @@ public class PutManagerTest {
     PutRequest request = deserializePutRequest(serializedRequest);
     if (request.getBlobType() == BlobType.MetadataBlob) {
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
-      List<StoreKey> dataBlobIds = MetadataContentSerDe
-          .deserializeMetadataContentRecord(ByteBuffer.wrap(data), new BlobIdFactory(mockClusterMap));
+      List<StoreKey> dataBlobIds = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
+          new BlobIdFactory(mockClusterMap));
       byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
       int offset = 0;
       for (StoreKey key : dataBlobIds) {

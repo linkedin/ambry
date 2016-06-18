@@ -152,8 +152,8 @@ public class PutOperationTest {
     // reset the correlation id as they will be different between the two requests.
     resetCorrelationId(expectedRequestContent);
     resetCorrelationId(savedRequestContent);
-    Assert
-        .assertArrayEquals("Underlying buffer should not have be reused", expectedRequestContent, savedRequestContent);
+    Assert.assertArrayEquals("Underlying buffer should not have be reused", expectedRequestContent,
+        savedRequestContent);
 
     // now that all the requests associated with the original buffer have been read,
     // the next poll will free this buffer. We cannot actually verify it via the tests directly, as this is very

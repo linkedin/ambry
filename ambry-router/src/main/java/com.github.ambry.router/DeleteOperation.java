@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -169,8 +170,8 @@ class DeleteOperation {
         // not for its original request. We will immediately fail this operation.
         if (deleteResponse.getCorrelationId() != deleteRequest.getCorrelationId()) {
           logger.error("The correlation id in the DeleteResponse " + deleteResponse.getCorrelationId()
-              + " is not the same as the correlation id in the associated DeleteRequest: " + deleteRequest
-              .getCorrelationId());
+              + " is not the same as the correlation id in the associated DeleteRequest: "
+              + deleteRequest.getCorrelationId());
           routerMetrics.unknownReplicaResponseError.inc();
           setOperationException(
               new RouterException("Received wrong response that is not for the corresponding request.",

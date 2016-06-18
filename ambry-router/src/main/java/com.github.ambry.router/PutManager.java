@@ -139,7 +139,12 @@ class PutManager {
     long startTime = time.milliseconds();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     for (PutOperation op : putOperations) {
-      op.poll(requestRegistrationCallback);
+      try {
+        op.poll(requestRegistrationCallback);
+      } catch (Exception e) {
+        op.setOperationExceptionAndComplete(
+            new RouterException("Put poll encountered unexpected error", e, RouterErrorCode.UnexpectedInternalError));
+      }
       if (op.isOperationComplete() && putOperations.remove(op)) {
         // In order to ensure that an operation is completed only once, call onComplete() only at the place where the
         // operation actually gets removed from the set of operations. See comment within closePendingOperations().
@@ -160,7 +165,12 @@ class PutManager {
     PutOperation putOperation = correlationIdToPutOperation.remove(correlationId);
     // If it is still an active operation, hand over the response. Otherwise, ignore.
     if (putOperations.contains(putOperation)) {
-      putOperation.handleResponse(responseInfo);
+      try {
+        putOperation.handleResponse(responseInfo);
+      } catch (Exception e) {
+        putOperation.setOperationExceptionAndComplete(new RouterException("Put handleResponse encountered unexpected error", e,
+            RouterErrorCode.UnexpectedInternalError));
+      }
       if (putOperation.isOperationComplete() && putOperations.remove(putOperation)) {
         onComplete(putOperation);
       }
@@ -194,8 +204,8 @@ class PutManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback
-        .completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(), op.getOperationException());
+    operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(),
+        op.getOperationException());
   }
 
   /**
@@ -233,13 +243,12 @@ class PutManager {
       // the RequestResponseHandler thread when it is in poll() or handleResponse(). In order to avoid the completion
       // from happening twice, complete it here only if the remove was successful.
       if (putOperations.remove(op)) {
-        RouterException routerException =
-            new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
+        Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
         routerMetrics.putBlobErrorCount.inc();
-        routerMetrics.countError(routerException);
-        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, routerException);
+        routerMetrics.countError(e);
+        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, e);
       }
     }
   }

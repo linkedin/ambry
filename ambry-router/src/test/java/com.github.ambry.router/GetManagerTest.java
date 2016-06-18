@@ -25,10 +25,14 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
@@ -118,6 +122,66 @@ public class GetManagerTest {
   }
 
   /**
+   * Test that a bad user defined callback will not crash the router.
+   * @throws Exception
+   */
+  @Test
+  public void testBadCallback()
+      throws Exception {
+    router = getNonBlockingRouter();
+    setOperationParams(chunkSize * 6 + 11);
+    final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
+    final CountDownLatch getBlobCallbackCalled = new CountDownLatch(1);
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    List<Future<BlobInfo>> getBlobInfoFutures = new ArrayList<>();
+    List<Future<ReadableStreamChannel>> getBlobFutures = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      if (i == 1) {
+        getBlobInfoFutures.add(router.getBlobInfo(blobId, new Callback<BlobInfo>() {
+          @Override
+          public void onCompletion(BlobInfo result, Exception exception) {
+            getBlobInfoCallbackCalled.countDown();
+            throw new RuntimeException("Throwing an exception in the user callback");
+          }
+        }));
+        getBlobFutures.add(router.getBlob(blobId, new Callback<ReadableStreamChannel>() {
+          @Override
+          public void onCompletion(ReadableStreamChannel result, Exception exception) {
+            getBlobCallbackCalled.countDown();
+            throw new RuntimeException("Throwing an exception in the user callback");
+          }
+        }));
+      } else {
+        getBlobInfoFutures.add(router.getBlobInfo(blobId));
+        getBlobFutures.add(router.getBlob(blobId));
+      }
+    }
+    for (Future<ReadableStreamChannel> future : getBlobFutures) {
+      compareContent(future.get());
+    }
+    for (Future<BlobInfo> future : getBlobInfoFutures) {
+      BlobInfo blobInfo = future.get();
+      Assert.assertTrue("Blob properties should match",
+          RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
+      Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
+    }
+    Assert.assertTrue("getBlobInfo callback not called.", getBlobInfoCallbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertTrue("getBlob callback not called.", getBlobCallbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+    Assert.assertTrue("Router should not be closed", router.isOpen());
+
+    // Test that GetManager is still operational
+    setOperationParams(chunkSize);
+    blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    BlobInfo blobInfo = router.getBlobInfo(blobId).get();
+    Assert.assertTrue("Blob properties should match",
+        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
+    Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
+    getBlobAndCompareContent(blobId);
+    router.close();
+  }
+
+  /**
    * Tests the failure case where poll throws and closes the router. This also tests the case where the GetManager
    * gets closed with active operations, and ensures that operations get completed with the appropriate error.
    * @throws Exception
@@ -155,8 +219,12 @@ public class GetManagerTest {
    */
   private void getBlobAndCompareContent(String blobId)
       throws Exception {
+    compareContent(router.getBlob(blobId).get());
+  }
+
+  private void compareContent(ReadableStreamChannel readableStreamChannel) throws Exception {
     ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
-    Future<Long> readIntoFuture = router.getBlob(blobId).get().readInto(getChannel, null);
+    Future<Long> readIntoFuture = readableStreamChannel.readInto(getChannel, null);
     int readBytes = 0;
     do {
       ByteBuffer buf = getChannel.getNextChunk();
@@ -185,8 +253,7 @@ public class GetManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
-    router = new NonBlockingRouter(new RouterConfig(vProps),
-        new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
         mockTime);

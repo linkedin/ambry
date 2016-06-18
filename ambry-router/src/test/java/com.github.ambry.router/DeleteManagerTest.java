@@ -26,6 +26,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -111,6 +112,43 @@ public class DeleteManagerTest {
   }
 
   /**
+   * Test that a bad user defined callback will not crash the router.
+   * @throws Exception
+   */
+  @Test
+  public void testBadCallback()
+      throws Exception {
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
+    presetServerErrorCode(serverErrorCodes);
+    final CountDownLatch callbackCalled = new CountDownLatch(1);
+    List<Future> futures = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      if (i == 1) {
+        futures.add(router.deleteBlob(blobIdString, new Callback<Void>() {
+          @Override
+          public void onCompletion(Void result, Exception exception) {
+            callbackCalled.countDown();
+            throw new RuntimeException("Throwing an exception in the user callback");
+          }
+        }));
+      } else {
+        futures.add(router.deleteBlob(blobIdString));
+      }
+    }
+    for (Future future : futures) {
+      future.get();
+    }
+    Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+    Assert.assertTrue("Router should not be closed", router.isOpen());
+
+    //Test that DeleteManager is still operational
+    router.deleteBlob(blobIdString, new ClientCallback()).get();
+    Assert.assertTrue("Callback not called.", operationCompleteLatch.await(2, TimeUnit.SECONDS));
+  }
+
+  /**
    * Test the cases for invalid blobId strings.
    */
   @Test
@@ -164,8 +202,8 @@ public class DeleteManagerTest {
     map.put(ServerErrorCode.Partition_Unknown, RouterErrorCode.BlobDoesNotExist);
     map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
-      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted && !map
-          .containsKey(serverErrorCode)) {
+      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted
+          && !map.containsKey(serverErrorCode)) {
         map.put(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
       }
     }
