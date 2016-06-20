@@ -149,9 +149,11 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
             logger.error("Swallowing error on channel {}", ctx.channel(), errorCode, cause);
           }
         } else {
-          logger.error("Swallowing error on channel {}", ctx.channel(), cause);
-          if (!(cause instanceof Exception)) {
-            ctx.fireExceptionCaught(cause);
+          if(ctx.channel().isActive()) {
+            logger.error("Swallowing error on channel {}", ctx.channel(), cause);
+            if (!(cause instanceof Exception)) {
+              ctx.fireExceptionCaught(cause);
+            }
           }
         }
         ctx.close();
