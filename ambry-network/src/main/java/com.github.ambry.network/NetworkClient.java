@@ -156,10 +156,10 @@ public class NetworkClient implements Closeable {
             connId = selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
                 networkConfig.socketReceiveBufferBytes, port.getPortType());
             connectionTracker.startTrackingInitiatedConnection(host, port, connId);
-            logger.trace("Initiated a connection to " + host + ":" + port);
+            logger.trace("Initiated a connection to {}:{} ", host, port);
           }
         } else {
-          logger.trace("Connection checkout succeeded for " + host + ":" + port + " with connectionId " + connId);
+          logger.trace("Connection checkout succeeded for {}:{} with connectionId {} ", host, port, connId);
           sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(),
               requestMetadata.clientNetworkRequestMetrics, time));
           connectionIdToRequestInFlight.put(connId, requestMetadata);
@@ -182,13 +182,12 @@ public class NetworkClient implements Closeable {
    */
   private void handleSelectorEvents(List<ResponseInfo> responseInfoList) {
     for (String connId : selector.connected()) {
-      logger.trace("Checking in connection back to connection tracker for connectionId " + connId);
+      logger.trace("Checking in connection back to connection tracker for connectionId {} ", connId);
       connectionTracker.checkInConnection(connId);
     }
 
     for (String connId : selector.disconnected()) {
-      logger.trace(
-          "Connection disconnected for connectionId " + connId + " and hence removing it from connection tracker");
+      logger.trace("Connection disconnected for connectionId {} and hence removing it from connection tracker", connId);
       connectionTracker.removeConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       if (requestMetadata != null) {
@@ -199,8 +198,8 @@ public class NetworkClient implements Closeable {
 
     for (NetworkReceive recv : selector.completedReceives()) {
       String connId = recv.getConnectionId();
-      logger.trace("Receive completed for connectionId " + connId
-          + " and checking in the connection back to connection tracker");
+      logger.trace("Receive completed for connectionId {} and checking in the connection back to connection tracker",
+          connId);
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       responseInfoList.add(
