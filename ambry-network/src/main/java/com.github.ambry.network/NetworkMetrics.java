@@ -32,9 +32,9 @@ public class NetworkMetrics {
   public final Counter sendInFlight;
   public final Counter selectorConnectionClosed;
   public final Counter selectorConnectionCreated;
-  public final Counter selectorSelectRate;
+  public final Counter selectorSelectCount;
   public final Histogram selectorSelectTime;
-  public final Counter selectorIORate;
+  public final Counter selectorIOCount;
   public final Histogram selectorIOTime;
   public final Counter selectorNioCloseErrorCount;
   public final Counter selectorDisconnectedErrorCount;
@@ -92,8 +92,8 @@ public class NetworkMetrics {
     sendInFlight = registry.counter(MetricRegistry.name(Selector.class, "SendInFlight"));
     selectorConnectionClosed = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionClosed"));
     selectorConnectionCreated = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionCreated"));
-    selectorSelectRate = registry.counter(MetricRegistry.name(Selector.class, "SelectorSelectRate"));
-    selectorIORate = registry.counter(MetricRegistry.name(Selector.class, "SelectorIORate"));
+    selectorSelectCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorSelectCount"));
+    selectorIOCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorIOCount"));
     selectorSelectTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorSelectTime"));
     selectorIOTime = registry.histogram(MetricRegistry.name(Selector.class, "SelectorIOTime"));
     selectorNioCloseErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorNioCloseErrorCount"));
