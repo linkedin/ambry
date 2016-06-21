@@ -512,22 +512,24 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param exception the {@link Exception} that has to be logged.
    */
   private void log(Exception exception) {
-    String uri = "unknown";
-    RestMethod restMethod = RestMethod.UNKNOWN;
-    if (request != null) {
-      uri = request.getUri();
-      restMethod = request.getRestMethod();
-    }
-    if (exception instanceof RestServiceException) {
-      RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
-      ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
-      if (responseStatus == ResponseStatus.InternalServerError) {
-        logger.error("Internal error handling request {} with method {}.", uri, restMethod, exception);
-      } else {
-        logger.trace("Error handling request {} with method {}.", uri, restMethod, exception);
+    if(ctx.channel().isActive()) {
+      String uri = "unknown";
+      RestMethod restMethod = RestMethod.UNKNOWN;
+      if (request != null) {
+        uri = request.getUri();
+        restMethod = request.getRestMethod();
       }
-    } else {
-      logger.error("Unexpected error handling request {} with method {}.", uri, restMethod, exception);
+      if (exception instanceof RestServiceException) {
+        RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
+        ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
+        if (responseStatus == ResponseStatus.InternalServerError) {
+          logger.error("Internal error handling request {} with method {}.", uri, restMethod, exception);
+        } else {
+          logger.trace("Error handling request {} with method {}.", uri, restMethod, exception);
+        }
+      } else {
+        logger.error("Unexpected error handling request {} with method {}.", uri, restMethod, exception);
+      }
     }
   }
 
