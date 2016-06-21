@@ -512,7 +512,7 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param exception the {@link Exception} that has to be logged.
    */
   private void log(Exception exception) {
-    if(ctx.channel().isActive()) {
+    if (ctx.channel().isActive()) {
       String uri = "unknown";
       RestMethod restMethod = RestMethod.UNKNOWN;
       if (request != null) {

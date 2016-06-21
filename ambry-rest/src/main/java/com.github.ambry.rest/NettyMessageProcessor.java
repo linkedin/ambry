@@ -140,7 +140,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       nettyMetrics.processorExceptionCaughtCount.inc();
       if (request != null && request.isOpen() && cause instanceof Exception) {
         responseChannel.onResponseComplete((Exception) cause);
-      } else if(ctx.channel().isActive()) {
+      } else if (ctx.channel().isActive()) {
         if (cause instanceof RestServiceException) {
           RestServiceErrorCode errorCode = ((RestServiceException) cause).getErrorCode();
           if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.BadRequest) {
@@ -148,11 +148,13 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           } else {
             logger.error("Swallowing error on channel {}", ctx.channel(), cause);
           }
+        } else if (cause instanceof Exception) {
+          // at this point, it is certain that the server hasn't made any mistakes and the exception is probably
+          // due to the client closing the connection. Therefore this is logged at the DEBUG level.
+          nettyMetrics.ignoredExceptionCount.inc();
+          logger.debug("Swallowing error on channel {}", ctx.channel(), cause);
         } else {
-          logger.error("Swallowing error on channel {}", ctx.channel(), cause);
-          if (!(cause instanceof Exception)) {
-            ctx.fireExceptionCaught(cause);
-          }
+          ctx.fireExceptionCaught(cause);
         }
         ctx.close();
       }
