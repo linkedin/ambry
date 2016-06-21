@@ -101,6 +101,7 @@ public class NettyMetrics {
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
   public final Counter idleConnectionCloseCount;
+  public final Counter ignoredExceptionCount;
   public final Counter processorExceptionCaughtCount;
   // NettyResponseChannel
   public final Counter badRequestCount;
@@ -244,6 +245,8 @@ public class NettyMetrics {
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));
     idleConnectionCloseCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionCloseCount"));
+    ignoredExceptionCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IgnoredExceptionCount"));
     processorExceptionCaughtCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtCount"));
     // NettyResponseChannel
