@@ -32,9 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class NonBlockingRouterMetrics {
   private final MetricRegistry metricRegistry;
-  // @todo: Ensure all metrics here get updated appropriately.
-  // @todo: chunk filling rate metrics.
-  // @todo: More metrics for the RequestResponse handling (poll, handleResponse etc.)
 
   // Operation rate.
   public final Meter putBlobOperationRate;
@@ -83,6 +80,10 @@ public class NonBlockingRouterMetrics {
   public final Histogram putManagerHandleResponseTimeMs;
   public final Histogram getManagerHandleResponseTimeMs;
   public final Histogram deleteManagerHandleResponseTimeMs;
+  // time spent in getting a chunk filled once it is available. This is reported per chunk.
+  public final Histogram chunkFillTimeMs;
+  // time spent waiting for a free chunk. This is reported once per operation across all its chunks.
+  public final Histogram waitTimeForFreeChunkAvailabilityMs;
 
   // Misc metrics.
   public final Meter operationErrorRate;
@@ -174,6 +175,9 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerHandleResponseTimeMs"));
     deleteManagerHandleResponseTimeMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerHandleResponseTimeMs"));
+    chunkFillTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillTimeMs"));
+    waitTimeForFreeChunkAvailabilityMs =
+        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "WaitTimeForFreeChunkAvailabilityMs"));
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));
