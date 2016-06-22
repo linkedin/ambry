@@ -144,16 +144,14 @@ public class RestUtils {
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
   /**
-   * Builds {@link BlobProperties} given a {@link RestRequest}.
-   * @param restRequest the {@link RestRequest} to use.
-   * @return the {@link BlobProperties} extracted from {@code restRequest}.
-   * @throws RestServiceException if required headers aren't present or if they aren't in the format or number
+   * Builds {@link BlobProperties} given the arguments associated with a request.
+   * @param args the arguments associated with the request.
+   * @return the {@link BlobProperties} extracted from the arguments.
+   * @throws RestServiceException if required arguments aren't present or if they aren't in the format or number
    *                                    expected.
    */
-  public static BlobProperties buildBlobProperties(RestRequest restRequest)
+  public static BlobProperties buildBlobProperties(Map<String, Object> args)
       throws RestServiceException {
-    Map<String, Object> args = restRequest.getArgs();
-
     String blobSizeStr = null;
     long blobSize;
     try {
@@ -232,14 +230,14 @@ public class RestUtils {
    */
 
   /**
-   * Builds user metadata given a {@link RestRequest}.
-   * @param restRequest the {@link RestRequest} to use.
-   * @return the user metadata extracted from {@code restRequest}.
+   * Builds user metadata given the arguments associated with a request.
+   * @param args the arguments associated with the request.
+   * @return the user metadata extracted from arguments.
+   * @throws RestServiceException if usermetadata arguments have null values.
    */
-  public static byte[] buildUsermetadata(RestRequest restRequest)
+  public static byte[] buildUsermetadata(Map<String, Object> args)
       throws RestServiceException {
     ByteBuffer userMetadata;
-    Map<String, Object> args = restRequest.getArgs();
     if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
       userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
     } else {
