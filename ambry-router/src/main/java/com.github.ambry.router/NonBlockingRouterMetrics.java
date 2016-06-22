@@ -56,6 +56,7 @@ public class NonBlockingRouterMetrics {
   public final Counter getBlobErrorCount;
   public final Counter deleteBlobErrorCount;
   public final Counter operationAbortCount;
+  public final Counter routerRequestErrorCount;
 
   // Count for various errors.
   public final Counter ambryUnavailableErrorCount;
@@ -133,6 +134,8 @@ public class NonBlockingRouterMetrics {
     getBlobErrorCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
+    routerRequestErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RouterRequestErrorCount"));
 
     // Counters for various errors.
     ambryUnavailableErrorCount =

@@ -658,6 +658,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      */
     void onErrorResponse(ReplicaId replicaId) {
       chunkOperationTracker.onResponse(replicaId, false);
+      routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestErrorCount.inc();
     }
 
@@ -668,6 +669,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      * @param errorCode the {@link ServerErrorCode} to process.
      */
     void processServerError(ServerErrorCode errorCode) {
+      logger.trace("Server returned an error: ", errorCode);
       setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
     }
 
@@ -790,17 +792,15 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      */
     @Override
     void processServerError(ServerErrorCode errorCode) {
+      logger.trace("Server returned an error: ", errorCode);
       switch (errorCode) {
         case Blob_Deleted:
-          logger.trace("Requested blob was deleted");
           setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDeleted));
           break;
         case Blob_Expired:
-          logger.trace("Requested blob is expired");
           setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobExpired));
           break;
         case Blob_Not_Found:
-          logger.trace("Requested blob was not found on this server");
           setChunkException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDoesNotExist));
           break;
         default:

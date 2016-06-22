@@ -119,7 +119,7 @@ class PutOperation {
   // The point in time at which the most recent wait for free chunk availability started.
   private long startTimeForChunkAvailabilityWaitMs;
   // The time spent in waiting for a chunk to become available to be filled when the channel had data.
-  private long waitTimeForNextChunkAvailabilityMs;
+  private long waitTimeForCurrentChunkAvailabilityMs;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -312,7 +312,7 @@ class PutOperation {
               maybeUpdateTrackedWaitTime();
               bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
               if (chunkToFill.isReady()) {
-                routerMetrics.waitTimeForFreeChunkAvailabilityMs.update(waitTimeForNextChunkAvailabilityMs);
+                routerMetrics.waitTimeForFreeChunkAvailabilityMs.update(waitTimeForCurrentChunkAvailabilityMs);
                 resetWaitTimeTracking();
               }
               if (!channelReadBuffer.hasRemaining()) {
@@ -343,6 +343,8 @@ class PutOperation {
       // this is the first point in time after the last chunk filling (if any) when the filling was blocked due to
       // chunk unavailability, so mark this time.
       startTimeForChunkAvailabilityWaitMs = time.milliseconds();
+    } else {
+      // the wait was already initiated, so do nothing.
     }
   }
 
@@ -352,7 +354,7 @@ class PutOperation {
   private void maybeUpdateTrackedWaitTime() {
     if (startTimeForChunkAvailabilityWaitMs != 0) {
       // this is the first point in time since the last wait that a chunk became available for filling.
-      waitTimeForNextChunkAvailabilityMs += time.milliseconds() - startTimeForChunkAvailabilityWaitMs;
+      waitTimeForCurrentChunkAvailabilityMs = time.milliseconds() - startTimeForChunkAvailabilityWaitMs;
       startTimeForChunkAvailabilityWaitMs = 0;
     }
   }
@@ -362,7 +364,7 @@ class PutOperation {
    */
   private void resetWaitTimeTracking() {
     startTimeForChunkAvailabilityWaitMs = 0;
-    waitTimeForNextChunkAvailabilityMs = 0;
+    waitTimeForCurrentChunkAvailabilityMs = 0;
   }
 
   /**
@@ -670,7 +672,6 @@ class PutOperation {
       buf.flip();
       prepareForSending();
       chunkReadyAtMs = time.milliseconds();
-      routerMetrics.chunkFillTimeMs.update(chunkReadyAtMs - chunkFreeAtMs);
     }
 
     /**
@@ -691,6 +692,7 @@ class PutOperation {
       }
       if (!buf.hasRemaining()) {
         onFillComplete();
+        routerMetrics.chunkFillTimeMs.update(chunkReadyAtMs - chunkFreeAtMs);
       }
       return toWrite;
     }
@@ -864,7 +866,6 @@ class PutOperation {
               // chunkException will be set within processServerError.
               processServerError(putResponse.getError());
               isSuccessful = false;
-              logger.trace("Server returned an error: ", putResponse.getError());
             }
           }
         } catch (IOException e) {
@@ -889,6 +890,7 @@ class PutOperation {
      */
     void onErrorResponse(ReplicaId replicaId) {
       operationTracker.onResponse(replicaId, false);
+      routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
     }
 
@@ -912,6 +914,7 @@ class PutOperation {
       // BlobId_Already_Exists are outliers (should not really happen) that those should really
       // result in Ambry_Unavailable or UnexpectedInternalError.
       // However, for metrics, we will need to distinguish them here.
+      logger.trace("Server returned an error: ", error);
       setChunkException(new RouterException("Could not complete operation, server returned: " + error,
           RouterErrorCode.AmbryUnavailable));
     }

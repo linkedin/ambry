@@ -199,7 +199,6 @@ public class DeleteManagerTest {
     HashMap<ServerErrorCode, RouterErrorCode> map = new HashMap<>();
     map.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
-    map.put(ServerErrorCode.Partition_Unknown, RouterErrorCode.BlobDoesNotExist);
     map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
       if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted
