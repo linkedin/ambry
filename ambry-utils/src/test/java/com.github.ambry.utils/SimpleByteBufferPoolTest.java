@@ -49,7 +49,7 @@ public class SimpleByteBufferPoolTest {
 
   /**
    * This scenario tests when a {@link SimpleByteBufferPool} tries to allocate a {@link ByteBuffer} that is larger
-   * than its capacity. This operation should occur an {@link IllegalArgumentException}.
+   * than its capacity. This operation should result in an {@link IllegalArgumentException}.
    */
   @Test
   public void testRequestExceedPoolCapacity()
@@ -113,10 +113,16 @@ public class SimpleByteBufferPoolTest {
     ByteBuffer buffer = pool.allocate(size, 0);
     pool.deallocate(buffer);
     try {
-      buffer = pool.allocate(size, -maxBlockTimeInMs);
+      pool.allocate(size, -maxBlockTimeInMs);
+      fail("IllegalArgumentException should have been thrown when timeToBlockInMs is negative.");
     } catch (IllegalArgumentException e) {
     }
-    pool.deallocate(buffer);
+    try {
+      pool.allocate((int) capacity + 1, maxBlockTimeInMs);
+      fail(
+          "IllegalArgumentException should have been thrown when requested buffer size is larger than the buffer pool's capacity.");
+    } catch (IllegalArgumentException e) {
+    }
     assertEquals(size, pool.capacity());
   }
 
@@ -290,8 +296,11 @@ public class SimpleByteBufferPoolTest {
       try {
         buffer = pool.allocate(size, maxBlockTimeInMs);
         allocated.countDown();
-        used.await();
-        pool.deallocate(buffer);
+        if (used.await(1000, TimeUnit.MILLISECONDS)) {
+          pool.deallocate(buffer);
+        } else {
+          exception = new IllegalStateException("BufferConsumer takes too long time to release buffer.");
+        }
       } catch (Exception e) {
         exception = e;
       }
