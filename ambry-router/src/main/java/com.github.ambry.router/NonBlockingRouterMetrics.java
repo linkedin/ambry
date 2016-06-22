@@ -80,9 +80,9 @@ public class NonBlockingRouterMetrics {
   public final Histogram putManagerHandleResponseTimeMs;
   public final Histogram getManagerHandleResponseTimeMs;
   public final Histogram deleteManagerHandleResponseTimeMs;
-  // time spent in getting a chunk filled once it is available. This is reported per chunk.
+  // time spent in getting a chunk filled once it is available.
   public final Histogram chunkFillTimeMs;
-  // time spent waiting for a free chunk. This is reported once per operation across all its chunks.
+  // time spent waiting for a chunk to become available for filling once data is available.
   public final Histogram waitTimeForFreeChunkAvailabilityMs;
 
   // Misc metrics.

@@ -118,8 +118,8 @@ class PutOperation {
   private final long submissionTimeMs;
   // The point in time at which the most recent wait for free chunk availability started.
   private long startTimeForChunkAvailabilityWaitMs;
-  // The time spent in waiting for a free chunk to become available when the channel had data.
-  private long waitTimeForFreeChunkAvailabilityMs;
+  // The time spent in waiting for a chunk to become available to be filled when the channel had data.
+  private long waitTimeForNextChunkAvailabilityMs;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -311,6 +311,10 @@ class PutOperation {
               // channel has data, and there is a chunk that can be filled.
               maybeUpdateTrackedWaitTime();
               bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+              if (chunkToFill.isReady()) {
+                routerMetrics.waitTimeForFreeChunkAvailabilityMs.update(waitTimeForNextChunkAvailabilityMs);
+                resetWaitTimeTracking();
+              }
               if (!channelReadBuffer.hasRemaining()) {
                 chunkFillerChannel.resolveOldestChunk(null);
                 channelReadBuffer = null;
@@ -323,7 +327,6 @@ class PutOperation {
         } while (bytesFilledSoFar < blobSize);
         if (bytesFilledSoFar == blobSize) {
           chunkFillingCompleted = true;
-          routerMetrics.waitTimeForFreeChunkAvailabilityMs.update(waitTimeForFreeChunkAvailabilityMs);
         }
       }
     } catch (Exception e) {
@@ -349,9 +352,17 @@ class PutOperation {
   private void maybeUpdateTrackedWaitTime() {
     if (startTimeForChunkAvailabilityWaitMs != 0) {
       // this is the first point in time since the last wait that a chunk became available for filling.
-      waitTimeForFreeChunkAvailabilityMs += time.milliseconds() - startTimeForChunkAvailabilityWaitMs;
+      waitTimeForNextChunkAvailabilityMs += time.milliseconds() - startTimeForChunkAvailabilityWaitMs;
       startTimeForChunkAvailabilityWaitMs = 0;
     }
+  }
+
+  /**
+   * Reset time variables associated with tracking wait times.
+   */
+  private void resetWaitTimeTracking() {
+    startTimeForChunkAvailabilityWaitMs = 0;
+    waitTimeForNextChunkAvailabilityMs = 0;
   }
 
   /**
