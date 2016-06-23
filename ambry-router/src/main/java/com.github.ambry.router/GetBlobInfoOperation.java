@@ -142,6 +142,10 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
       requestRegistrationCallback.registerRequestToSend(this, request);
       replicaIterator.remove();
+      if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
+        logger.trace("Making request to a remote replica in", replicaId.getDataNodeId().getDatacenterName());
+        routerMetrics.crossColoRequestCount.inc();
+      }
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestRate.mark();
     }
   }
@@ -226,6 +230,11 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
         if (getError == ServerErrorCode.No_Error) {
           handleBody(getResponse.getInputStream());
           operationTracker.onResponse(getRequestInfo.replicaId, true);
+          if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
+            logger.trace("Cross colo request successful for remote replica in ",
+                getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
+            routerMetrics.crossColoSuccessCount.inc();
+          }
         } else {
           // process and set the most relevant exception.
           processServerError(getError);

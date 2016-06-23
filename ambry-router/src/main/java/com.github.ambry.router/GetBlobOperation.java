@@ -518,6 +518,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
         correlationIdToGetChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(GetBlobOperation.this, request);
+        if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
+          logger.trace("Making request to a remote replica in", replicaId.getDataNodeId().getDatacenterName());
+          routerMetrics.crossColoRequestCount.inc();
+        }
         routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getRequestRate.mark();
         state = ChunkState.InProgress;
       }
@@ -634,6 +638,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
           if (getError == ServerErrorCode.No_Error) {
             handleBody(getResponse.getInputStream());
             chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
+            if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
+              logger.trace("Cross colo request successful for remote replica in ",
+                  getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
+              routerMetrics.crossColoSuccessCount.inc();
+            }
           } else {
             // process and set the most relevant exception.
             processServerError(getError);

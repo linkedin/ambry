@@ -90,8 +90,11 @@ public class NonBlockingRouterMetrics {
 
   // Misc metrics.
   public final Meter operationErrorRate;
+  public final Counter slippedPutAttemptCount;
   public final Counter slippedPutSuccessCount;
   public final Counter ignoredResponseCount;
+  public final Counter crossColoRequestCount;
+  public final Counter crossColoSuccessCount;
   public Gauge<Long> chunkFillerThreadRunning;
   public Gauge<Long> requestResponseHandlerThreadRunning;
   public Gauge<Integer> activeOperations;
@@ -188,8 +191,13 @@ public class NonBlockingRouterMetrics {
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));
-    slippedPutSuccessCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutSuccessCount"));
     ignoredResponseCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "IgnoredRequestCount"));
+    slippedPutAttemptCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutAttemptCount"));
+    slippedPutSuccessCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutSuccessCount"));
+    crossColoRequestCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoRequestCount"));
+    crossColoSuccessCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoSuccessCount"));
 
     // Track metrics at the DataNode level.
     dataNodeToMetrics = new HashMap<>();

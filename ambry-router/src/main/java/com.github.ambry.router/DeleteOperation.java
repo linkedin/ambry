@@ -124,6 +124,10 @@ class DeleteOperation {
       RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
+      if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+        logger.trace("Making request to a remote replica in", replica.getDataNodeId().getDatacenterName());
+        routerMetrics.crossColoRequestCount.inc();
+      }
       routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestRate.mark();
     }
   }
@@ -228,10 +232,13 @@ class DeleteOperation {
   private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode) {
     switch (serverErrorCode) {
       case No_Error:
-        operationTracker.onResponse(replica, true);
-        break;
       case Blob_Deleted:
         operationTracker.onResponse(replica, true);
+        if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+          logger.trace("Cross colo request successful for remote replica in ",
+              replica.getDataNodeId().getDatacenterName());
+          routerMetrics.crossColoSuccessCount.inc();
+        }
         break;
       case Blob_Expired:
         updateOperationState(replica, RouterErrorCode.BlobExpired);

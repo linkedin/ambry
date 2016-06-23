@@ -14,7 +14,9 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.RouterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,5 +46,16 @@ class RouterUtils {
       throw new RouterException("BlobId is invalid " + blobIdString, RouterErrorCode.InvalidBlobId);
     }
     return blobId;
+  }
+
+  /**
+   * Checks if the given {@link ReplicaId} is in a different data center relative to a router with the
+   * given {@link RouterConfig}
+   * @param routerConfig the {@link RouterConfig} associated with a router
+   * @param replicaId the {@link ReplicaId} whose status (local/remote) is to be determined.
+   * @return true if the replica is remote, false otherwise.
+   */
+  static boolean isRemoteReplica(RouterConfig routerConfig, ReplicaId replicaId) {
+    return !routerConfig.routerDatacenterName.equals(replicaId.getDataNodeId().getDatacenterName());
   }
 }
