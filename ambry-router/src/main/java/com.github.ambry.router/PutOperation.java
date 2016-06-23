@@ -313,7 +313,7 @@ class PutOperation {
               bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
               if (chunkToFill.isReady()) {
                 routerMetrics.waitTimeForFreeChunkAvailabilityMs.update(waitTimeForCurrentChunkAvailabilityMs);
-                waitTimeForCurrentChunkAvailabilityMs = 0;
+                resetWaitTimeTracking();
               }
               if (!channelReadBuffer.hasRemaining()) {
                 chunkFillerChannel.resolveOldestChunk(null);
@@ -357,6 +357,14 @@ class PutOperation {
       waitTimeForCurrentChunkAvailabilityMs = time.milliseconds() - startTimeForChunkAvailabilityWaitMs;
       startTimeForChunkAvailabilityWaitMs = 0;
     }
+  }
+
+  /**
+   * Reset time variables associated with tracking wait times.
+   */
+  private void resetWaitTimeTracking() {
+    startTimeForChunkAvailabilityWaitMs = 0;
+    waitTimeForCurrentChunkAvailabilityMs = 0;
   }
 
   /**
