@@ -32,9 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class NonBlockingRouterMetrics {
   private final MetricRegistry metricRegistry;
-  // @todo: Ensure all metrics here get updated appropriately.
-  // @todo: chunk filling rate metrics.
-  // @todo: More metrics for the RequestResponse handling (poll, handleResponse etc.)
 
   // Operation rate.
   public final Meter putBlobOperationRate;
@@ -59,6 +56,7 @@ public class NonBlockingRouterMetrics {
   public final Counter getBlobErrorCount;
   public final Counter deleteBlobErrorCount;
   public final Counter operationAbortCount;
+  public final Counter routerRequestErrorCount;
 
   // Count for various errors.
   public final Counter ambryUnavailableErrorCount;
@@ -83,6 +81,12 @@ public class NonBlockingRouterMetrics {
   public final Histogram putManagerHandleResponseTimeMs;
   public final Histogram getManagerHandleResponseTimeMs;
   public final Histogram deleteManagerHandleResponseTimeMs;
+  // time spent in getting a chunk filled once it is available.
+  public final Histogram chunkFillTimeMs;
+  // time spent waiting for a chunk to become available for filling once data is available.
+  public final Histogram waitTimeForFreeChunkAvailabilityMs;
+  // time spent by a chunk waiting for data to become available in the channel.
+  public final Histogram waitTimeForChannelDataAvailabilityMs;
 
   // Misc metrics.
   public final Meter operationErrorRate;
@@ -132,6 +136,8 @@ public class NonBlockingRouterMetrics {
     getBlobErrorCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
+    routerRequestErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RouterRequestErrorCount"));
 
     // Counters for various errors.
     ambryUnavailableErrorCount =
@@ -174,6 +180,11 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetManagerHandleResponseTimeMs"));
     deleteManagerHandleResponseTimeMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerHandleResponseTimeMs"));
+    chunkFillTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillTimeMs"));
+    waitTimeForFreeChunkAvailabilityMs =
+        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "WaitTimeForFreeChunkAvailabilityMs"));
+    waitTimeForChannelDataAvailabilityMs =
+        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "WaitTimeForChannelDataAvailabilityMs"));
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));

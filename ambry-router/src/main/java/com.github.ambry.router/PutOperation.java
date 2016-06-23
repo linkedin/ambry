@@ -116,6 +116,14 @@ class PutOperation {
   private final Map<Integer, PutChunk> correlationIdToPutChunk = new HashMap<Integer, PutChunk>();
   // The time at which the operation was submitted.
   private final long submissionTimeMs;
+  // The point in time at which the most recent wait for free chunk availability started.
+  private long startTimeForChunkAvailabilityWaitMs;
+  // The point in time at which the most recent wait for channel data availability started.
+  private long startTimeForChannelDataAvailabilityMs;
+  // The time spent in waiting for a chunk to become available to be filled when the channel had data.
+  private long waitTimeForCurrentChunkAvailabilityMs;
+  // The time spent by a chunk for data to be available in the channel.
+  private long waitTimeForChannelDataAvailabilityMs;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -270,7 +278,7 @@ class PutOperation {
       logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
     }
-    routerMetrics.putChunkOperationLatencyMs.update(time.milliseconds() - chunk.getChunkReadyTimeMs());
+    routerMetrics.putChunkOperationLatencyMs.update(time.milliseconds() - chunk.chunkReadyAtMs);
     chunk.clear();
   }
 
@@ -298,18 +306,30 @@ class PutOperation {
             channelReadBuffer = chunkFillerChannel.getNextChunk(0);
           }
           if (channelReadBuffer != null) {
+            maybeStopTrackingWaitForChannelDataTime();
             chunkToFill = getChunkToFill();
             if (chunkToFill == null) {
-              // no chunks are free to be filled yet.
+              // channel has data, but no chunks are free to be filled yet.
+              maybeStartTrackingWaitForChunkTime();
               break;
-            }
-            bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
-            if (!channelReadBuffer.hasRemaining()) {
-              chunkFillerChannel.resolveOldestChunk(null);
-              channelReadBuffer = null;
+            } else {
+              // channel has data, and there is a chunk that can be filled.
+              maybeStopTrackingWaitForChunkTime();
+              bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+              if (chunkToFill.isReady()) {
+                updateChunkFillerWaitTimeMetrics();
+              }
+              if (!channelReadBuffer.hasRemaining()) {
+                chunkFillerChannel.resolveOldestChunk(null);
+                channelReadBuffer = null;
+              }
             }
           } else {
             // channel does not have more data yet.
+            if (getFreeChunk() != null) {
+              // this means there is a chunk available to be filled, but no data in the channel.
+              maybeStartTrackingWaitForChannelDataTime();
+            }
             break;
           }
         } while (bytesFilledSoFar < blobSize);
@@ -324,25 +344,91 @@ class PutOperation {
   }
 
   /**
+   * Called whenever the channel has data but no free or building chunk is available to be filled.
+   */
+  private void maybeStartTrackingWaitForChunkTime() {
+    if (startTimeForChunkAvailabilityWaitMs == 0) {
+      // this is the first point in time after the last chunk filling (if any) when the filling was blocked due to
+      // chunk unavailability, so mark this time.
+      startTimeForChunkAvailabilityWaitMs = time.milliseconds();
+    } else {
+      // the wait was already initiated, so do nothing.
+    }
+  }
+
+  /**
+   * Called whenever the channel has data and there is a free or building chunk available to be filled.
+   */
+  private void maybeStopTrackingWaitForChunkTime() {
+    if (startTimeForChunkAvailabilityWaitMs != 0) {
+      // this is the first point in time since the last wait that a chunk became available for filling.
+      waitTimeForCurrentChunkAvailabilityMs = time.milliseconds() - startTimeForChunkAvailabilityWaitMs;
+      startTimeForChunkAvailabilityWaitMs = 0;
+    }
+  }
+
+  /**
+   * Called whenever a chunk is available to be filled but there is no data available in the channel.
+   */
+  private void maybeStartTrackingWaitForChannelDataTime() {
+    if (startTimeForChannelDataAvailabilityMs == 0) {
+      // this is the first point in time after the last time data was read from the channel that data became
+      // unavailable in the channel, so mark this time.
+      startTimeForChannelDataAvailabilityMs = time.milliseconds();
+    } else {
+      // the wait was already initiated, so do nothing.
+    }
+  }
+
+  /**
+   * Called whenever data becomes available in the channel.
+   */
+  private void maybeStopTrackingWaitForChannelDataTime() {
+    if (startTimeForChannelDataAvailabilityMs != 0) {
+      // this is the first point in time since the last wait that data became available in the channel.
+      waitTimeForChannelDataAvailabilityMs += time.milliseconds() - startTimeForChannelDataAvailabilityMs;
+      startTimeForChannelDataAvailabilityMs = 0;
+    }
+  }
+
+  /**
+   * Update metrics related to how long a channel had to wait for a chunk to become available for filling, and
+   * how long the chunk had to wait for data to become available in the channel.
+   */
+  private void updateChunkFillerWaitTimeMetrics() {
+    routerMetrics.waitTimeForFreeChunkAvailabilityMs.update(waitTimeForCurrentChunkAvailabilityMs);
+    routerMetrics.waitTimeForChannelDataAvailabilityMs.update(waitTimeForChannelDataAvailabilityMs);
+    waitTimeForCurrentChunkAvailabilityMs = 0;
+    waitTimeForChannelDataAvailabilityMs = 0;
+  }
+
+  /**
    * Get the chunk to be filled. At most one chunk for an operation will ever be in Building state. If there is such
    * a chunk, that is returned. If not, if there is a Free chunk, that is returned. If no Free chunks are available
    * either, then null is returned.
    * @return the chunk to fill, or null if there are no chunks eligible for filling.
    */
   private PutChunk getChunkToFill() {
-    if (chunkToFill != null && chunkToFill.isBuilding()) {
-      return chunkToFill;
-    }
-    chunkToFill = null;
-    for (PutChunk chunk : putChunks) {
-      if (chunk.isFree()) {
+    if (chunkToFill == null || !chunkToFill.isBuilding()) {
+      chunkToFill = getFreeChunk();
+      if (chunkToFill != null) {
         chunkCounter++;
-        chunk.prepareForBuilding(chunkCounter, getSizeOfChunkAt(chunkCounter));
-        chunkToFill = chunk;
-        break;
+        chunkToFill.prepareForBuilding(chunkCounter, getSizeOfChunkAt(chunkCounter));
       }
     }
     return chunkToFill;
+  }
+
+  /**
+   * @return A free chunk, if one is available; null otherwise.
+   */
+  private PutChunk getFreeChunk() {
+    for (PutChunk chunk : putChunks) {
+      if (chunk.isFree()) {
+        return chunk;
+      }
+    }
+    return null;
   }
 
   /**
@@ -440,8 +526,10 @@ class PutOperation {
     private int chunkIndex;
     // the blobId of the current chunk.
     protected BlobId chunkBlobId;
-    // the time at which this chunk became ready.
-    private long chunkReadyTimeMs;
+    // the most recent time at which this chunk became Free.
+    private long chunkFreeAtMs;
+    // the most recent time time at which this chunk became ready.
+    private long chunkReadyAtMs;
     // The exception encountered while putting the current chunk. Not all errors are irrecoverable. An error may or
     // may not get overridden by a subsequent error, and this variable is meant to store the most relevant error.
     private RouterException chunkException;
@@ -486,6 +574,7 @@ class PutOperation {
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
+      chunkFreeAtMs = time.milliseconds();
     }
 
     /**
@@ -552,13 +641,6 @@ class PutOperation {
      */
     BlobId getChunkBlobId() {
       return chunkBlobId;
-    }
-
-    /**
-     * @return return the time at which the chunk became ready.
-     */
-    long getChunkReadyTimeMs() {
-      return chunkReadyTimeMs;
     }
 
     /**
@@ -631,7 +713,7 @@ class PutOperation {
     void onFillComplete() {
       buf.flip();
       prepareForSending();
-      chunkReadyTimeMs = time.milliseconds();
+      chunkReadyAtMs = time.milliseconds();
     }
 
     /**
@@ -652,6 +734,7 @@ class PutOperation {
       }
       if (!buf.hasRemaining()) {
         onFillComplete();
+        routerMetrics.chunkFillTimeMs.update(chunkReadyAtMs - chunkFreeAtMs);
       }
       return toWrite;
     }
@@ -825,7 +908,6 @@ class PutOperation {
               // chunkException will be set within processServerError.
               processServerError(putResponse.getError());
               isSuccessful = false;
-              logger.trace("Server returned an error: ", putResponse.getError());
             }
           }
         } catch (IOException e) {
@@ -850,6 +932,7 @@ class PutOperation {
      */
     void onErrorResponse(ReplicaId replicaId) {
       operationTracker.onResponse(replicaId, false);
+      routerMetrics.routerRequestErrorCount.inc();
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestErrorCount.inc();
     }
 
@@ -860,7 +943,6 @@ class PutOperation {
      * @param exception the exception that may be set as the chunkException.
      */
     private void setChunkException(RouterException exception) {
-      // @todo: update error metric.
       chunkException = exception;
     }
 
@@ -874,6 +956,7 @@ class PutOperation {
       // BlobId_Already_Exists are outliers (should not really happen) that those should really
       // result in Ambry_Unavailable or UnexpectedInternalError.
       // However, for metrics, we will need to distinguish them here.
+      logger.trace("Server returned an error: ", error);
       setChunkException(new RouterException("Could not complete operation, server returned: " + error,
           RouterErrorCode.AmbryUnavailable));
     }

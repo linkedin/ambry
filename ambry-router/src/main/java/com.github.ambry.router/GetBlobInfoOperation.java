@@ -250,6 +250,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    */
   void onErrorResponse(ReplicaId replicaId) {
     operationTracker.onResponse(replicaId, false);
+    routerMetrics.routerRequestErrorCount.inc();
     routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestErrorCount.inc();
   }
 
@@ -276,6 +277,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    * @param errorCode the {@link ServerErrorCode} to process.
    */
   private void processServerError(ServerErrorCode errorCode) {
+    logger.trace("Server returned an error: ", errorCode);
     switch (errorCode) {
       case Blob_Deleted:
         logger.trace("Requested blob was deleted");
