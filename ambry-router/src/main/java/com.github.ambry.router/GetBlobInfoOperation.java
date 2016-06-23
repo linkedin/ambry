@@ -143,6 +143,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       requestRegistrationCallback.registerRequestToSend(this, request);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
+        logger.trace("Making request to a remote replica in", replicaId.getDataNodeId().getDatacenterName());
         routerMetrics.crossColoRequestCount.inc();
       }
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestRate.mark();
