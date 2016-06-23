@@ -750,6 +750,7 @@ class PutOperation {
           failedAttempts++;
           if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts) {
             logger.trace("Attempt to put chunk with id: " + chunkBlobId + " failed, attempting slipped put");
+            routerMetrics.slippedPutAttemptCount.inc();
             prepareForSending();
           } else {
             // this chunk could not be successfully put. The whole operation has to fail.
@@ -821,6 +822,10 @@ class PutOperation {
         correlationIdToPutChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
+        if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
+          logger.trace("Making request to a remote replica in", replicaId.getDataNodeId().getDatacenterName());
+          routerMetrics.crossColoRequestCount.inc();
+        }
         routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestRate.mark();
       }
     }
@@ -920,6 +925,11 @@ class PutOperation {
       }
       if (isSuccessful) {
         operationTracker.onResponse(chunkPutRequestInfo.replicaId, true);
+        if (RouterUtils.isRemoteReplica(routerConfig, chunkPutRequestInfo.replicaId)) {
+          logger.trace("Cross colo request successful for remote replica in ",
+              chunkPutRequestInfo.replicaId.getDataNodeId().getDatacenterName());
+          routerMetrics.crossColoSuccessCount.inc();
+        }
       } else {
         onErrorResponse(chunkPutRequestInfo.replicaId);
       }
