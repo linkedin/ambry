@@ -118,6 +118,7 @@ class PutOperation {
   private final long submissionTimeMs;
   // The point in time at which the most recent wait for free chunk availability started.
   private long startTimeForChunkAvailabilityWaitMs;
+  // The point in time at which the most recent wait for channel data availability started.
   private long startTimeForChannelDataAvailabilityMs;
   // The time spent in waiting for a chunk to become available to be filled when the channel had data.
   private long waitTimeForCurrentChunkAvailabilityMs;
