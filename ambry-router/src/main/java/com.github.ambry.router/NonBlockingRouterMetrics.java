@@ -85,8 +85,6 @@ public class NonBlockingRouterMetrics {
   public final Histogram chunkFillTimeMs;
   // time spent waiting for a chunk to become available for filling once data is available.
   public final Histogram waitTimeForFreeChunkAvailabilityMs;
-  // time spent by a chunk waiting for data to become available in the channel.
-  public final Histogram waitTimeForChannelDataAvailabilityMs;
 
   // Misc metrics.
   public final Meter operationErrorRate;
@@ -183,8 +181,6 @@ public class NonBlockingRouterMetrics {
     chunkFillTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillTimeMs"));
     waitTimeForFreeChunkAvailabilityMs =
         metricRegistry.histogram(MetricRegistry.name(PutManager.class, "WaitTimeForFreeChunkAvailabilityMs"));
-    waitTimeForChannelDataAvailabilityMs =
-        metricRegistry.histogram(MetricRegistry.name(PutManager.class, "WaitTimeForChannelDataAvailabilityMs"));
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));
