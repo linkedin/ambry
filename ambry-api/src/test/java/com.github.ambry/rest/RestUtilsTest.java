@@ -44,7 +44,7 @@ public class RestUtilsTest {
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 
   /**
-   * Tests building of {@link BlobProperties} given good input (all headers in the number and format expected).
+   * Tests building of {@link BlobProperties} given good input (all arguments in the number and format expected).
    * @throws Exception
    */
   @Test
@@ -617,7 +617,8 @@ public class RestUtilsTest {
   // getBlobPropertiesVariedInputTest() helpers.
 
   /**
-   * Verifies that {@link RestUtils#buildBlobProperties(Map<String,Object>)} fails if given a request with bad headers.
+   * Verifies that {@link RestUtils#buildBlobProperties(Map<String,Object>)} fails if given a request with bad
+   * arguments.
    * @param headers the headers that were provided to the request.
    * @param expectedCode the expected {@link RestServiceErrorCode} because of the failure.
    * @throws JSONException
@@ -668,6 +669,9 @@ public class RestUtilsTest {
     }
   }
 
+  /**
+   * Tests {@link RestUtils#toSecondsPrecisionInMs(long)}.
+   */
   @Test
   public void toSecondsPrecisionInMsTest() {
     assertEquals(0, RestUtils.toSecondsPrecisionInMs(999));
@@ -675,6 +679,9 @@ public class RestUtilsTest {
     assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1001));
   }
 
+  /**
+   * Tests {@link RestUtils#getTimeFromDateString(String)}.
+   */
   @Test
   public void getTimeFromDateStringTest() {
     SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
