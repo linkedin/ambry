@@ -30,6 +30,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.router.RouterTestHelpers.ErrorCodeChecker;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
@@ -52,6 +53,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+
+import static com.github.ambry.router.RouterTestHelpers.testWithErrorCodes;
 
 
 /**
@@ -109,6 +112,22 @@ public class GetBlobOperationTest {
 
   private final AtomicInteger operationsCount = new AtomicInteger(0);
   private final OperationCompleteCallback operationCompleteCallback = new OperationCompleteCallback(operationsCount);
+
+  /**
+   * An checker that either asserts that a get operation succeeds or returns the specified error code.
+   */
+  private final ErrorCodeChecker defaultErrorCodeChecker = new ErrorCodeChecker() {
+    @Override
+    public void check(RouterErrorCode expectedError)
+        throws Exception {
+      if (expectedError == null) {
+        getAndAssertSuccess();
+      } else {
+        GetBlobOperation op = createOperationAndComplete(null);
+        checkErrorCode(op, expectedError);
+      }
+    }
+  };
 
   @After
   public void after() {
@@ -259,11 +278,7 @@ public class GetBlobOperationTest {
   public void testRouterRequestTimeoutAllFailure()
       throws Exception {
     doPut();
-    operationsCount.incrementAndGet();
-    GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
-    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    GetBlobOperation op = createOperation(null);
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
       time.sleep(routerConfig.routerRequestTimeoutMs + 1);
@@ -273,8 +288,7 @@ public class GetBlobOperationTest {
     // and cross-colo proxying is enabled by default.
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
-    RouterException routerException = (RouterException) op.getOperationException();
-    Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
+    checkErrorCode(op, RouterErrorCode.OperationTimedOut);
   }
 
   /**
@@ -285,32 +299,24 @@ public class GetBlobOperationTest {
   public void testNetworkClientTimeoutAllFailure()
       throws Exception {
     doPut();
-    operationsCount.incrementAndGet();
-    GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
-    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
-
+    GetBlobOperation op = createOperation(null);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
-      for (RequestInfo requestInfo : requestListToFill) {
+      for (RequestInfo requestInfo : requestRegistrationCallback.requestListToFill) {
         ResponseInfo fakeResponse = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
         op.handleResponse(fakeResponse, null);
         if (op.isOperationComplete()) {
           break;
         }
       }
-      requestListToFill.clear();
+      requestRegistrationCallback.requestListToFill.clear();
     }
 
     // At this time requests would have been created for all replicas, as none of them were delivered,
     // and cross-colo proxying is enabled by default.
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
-    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
-    RouterException routerException = (RouterException) op.getOperationException();
-    Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
+    checkErrorCode(op, RouterErrorCode.OperationTimedOut);
   }
 
   /**
@@ -322,36 +328,17 @@ public class GetBlobOperationTest {
   public void testBlobNotFoundCase()
       throws Exception {
     doPut();
-    operationsCount.incrementAndGet();
-    GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
-    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
-
-    for (MockServer server : mockServerLayout.getMockServers()) {
-      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
-    }
-
-    while (!op.isOperationComplete()) {
-      op.poll(requestRegistrationCallback);
-      List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-      for (ResponseInfo responseInfo : responses) {
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
-            : null;
-        op.handleResponse(responseInfo, getResponse);
-        if (op.isOperationComplete()) {
-          break;
-        }
-      }
-    }
-
-    Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
-        correlationIdToGetOperation.size());
-    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
-    RouterException routerException = (RouterException) op.getOperationException();
-    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
+    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.Blob_Not_Found, replicasCount), mockServerLayout,
+        RouterErrorCode.BlobDoesNotExist, new ErrorCodeChecker() {
+          @Override
+          public void check(RouterErrorCode expectedError)
+              throws Exception {
+            GetBlobOperation op = createOperationAndComplete(null);
+            Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+                correlationIdToGetOperation.size());
+            checkErrorCode(op, expectedError);
+          }
+        });
   }
 
   /**
@@ -367,55 +354,11 @@ public class GetBlobOperationTest {
     serverErrorToRouterError.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
     serverErrorToRouterError.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     for (Map.Entry<ServerErrorCode, RouterErrorCode> entry : serverErrorToRouterError.entrySet()) {
-      int indexToSetCustomError = random.nextInt(replicasCount);
-      ServerErrorCode[] serverErrorCodesInOrder = new ServerErrorCode[9];
-      for (int j = 0; j < serverErrorCodesInOrder.length; j++) {
-        if (j == indexToSetCustomError) {
-          serverErrorCodesInOrder[j] = entry.getKey();
-        } else {
-          serverErrorCodesInOrder[j] = ServerErrorCode.Blob_Not_Found;
-        }
-      }
-      testErrorPrecedence(serverErrorCodesInOrder, entry.getValue());
+      Map<ServerErrorCode, Integer> errorCounts = new HashMap<>();
+      errorCounts.put(ServerErrorCode.Blob_Not_Found, replicasCount - 1);
+      errorCounts.put(entry.getKey(), 1);
+      testWithErrorCodes(errorCounts, mockServerLayout, entry.getValue(), defaultErrorCodeChecker);
     }
-  }
-
-  /**
-   * Help test error precedence.
-   * @param serverErrorCodesInOrder the list of error codes to set the mock servers with.
-   * @param expectedErrorCode the expected router error code for the operation.
-   * @throws Exception
-   */
-  private void testErrorPrecedence(ServerErrorCode[] serverErrorCodesInOrder, RouterErrorCode expectedErrorCode)
-      throws Exception {
-    operationsCount.incrementAndGet();
-    GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
-    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
-
-    int i = 0;
-    for (MockServer server : mockServerLayout.getMockServers()) {
-      server.setServerErrorForAllRequests(serverErrorCodesInOrder[i++]);
-    }
-
-    while (!op.isOperationComplete()) {
-      op.poll(requestRegistrationCallback);
-      List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-      for (ResponseInfo responseInfo : responses) {
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
-            : null;
-        op.handleResponse(responseInfo, getResponse);
-        if (op.isOperationComplete()) {
-          break;
-        }
-      }
-    }
-
-    RouterException routerException = (RouterException) op.getOperationException();
-    Assert.assertEquals(expectedErrorCode, routerException.getErrorCode());
   }
 
   /**
@@ -512,22 +455,7 @@ public class GetBlobOperationTest {
       }
     };
 
-    operationsCount.incrementAndGet();
-    GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
-    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
-    requestRegistrationCallback.requestListToFill = requestListToFill;
-    while (!op.isOperationComplete()) {
-      op.poll(requestRegistrationCallback);
-      List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-      for (ResponseInfo responseInfo : responses) {
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
-            : null;
-        op.handleResponse(responseInfo, getResponse);
-      }
-    }
+    GetBlobOperation op = createOperationAndComplete(callback);
 
     readCompleteLatch.await();
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
@@ -538,6 +466,58 @@ public class GetBlobOperationTest {
       throw readCompleteException.get();
     }
     Assert.assertEquals("Size read must equal size written", blobSize, readCompleteResult.get());
+  }
+
+  /**
+   * Create a getBlob operation with the specified callback and poll until completion.
+   * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
+   * @return the operation
+   * @throws Exception
+   */
+  private GetBlobOperation createOperationAndComplete(Callback<ReadableStreamChannel> callback)
+      throws Exception {
+    GetBlobOperation op = createOperation(callback);
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
+      for (ResponseInfo response : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
+            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
+            : null;
+        op.handleResponse(response, getResponse);
+      }
+    }
+    return op;
+  }
+
+  /**
+   * Create a getBlob operation with the specified callback
+   * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
+   * @return the operation
+   * @throws Exception
+   */
+  private GetBlobOperation createOperation(Callback<ReadableStreamChannel> callback)
+      throws Exception {
+    operationsCount.incrementAndGet();
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
+            callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+    requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    return op;
+  }
+
+  /**
+   * Check that an operation is complete and has the specified {@link RouterErrorCode} set.
+   * @param op The operation to check.
+   * @param expectedError The error code expected.
+   */
+  private void checkErrorCode(GetBlobOperation op, RouterErrorCode expectedError) {
+    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+    RouterException routerException = (RouterException) op.getOperationException();
+    if (routerException == null) {
+      Assert.fail("Expected getBlobOperation to fail");
+    }
+    Assert.assertEquals(expectedError, routerException.getErrorCode());
   }
 
   /**

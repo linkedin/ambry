@@ -41,7 +41,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +54,6 @@ class MockServer {
   private ServerErrorCode hardError = null;
   private LinkedList<ServerErrorCode> serverErrors = new LinkedList<ServerErrorCode>();
   private final Map<String, ByteBuffer> blobs = new ConcurrentHashMap<String, ByteBuffer>();
-  private final HashMap<String, ServerErrorCode> blobIdToServerErrorCode = new HashMap<String, ServerErrorCode>();
   private boolean shouldRespond = true;
   private final ClusterMap clusterMap;
   private final String dataCenter;
@@ -178,9 +176,8 @@ class MockServer {
             byteBufferSize =
                 (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
             byteBuffer = ByteBuffer.allocate(byteBufferSize);
-            MessageFormatRecord.Blob_Format_V2
-                .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize(),
-                    originalBlobPutReq.getBlobType());
+            MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
+                (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
             byteBuffer.put(
                 Utils.readBytesFromStream(originalBlobPutReq.getBlobStream(), (int) originalBlobPutReq.getBlobSize()));
             Crc32 crc = new Crc32();
@@ -228,10 +225,6 @@ class MockServer {
    */
   DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError)
       throws IOException {
-    String blobIdString = deleteRequest.getBlobId().getID();
-    if (deleteError == ServerErrorCode.No_Error) {
-      deleteError = getErrorFromBlobIdStr(blobIdString);
-    }
     return new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), deleteError);
   }
 
@@ -303,26 +296,6 @@ class MockServer {
    */
   public void setShouldRespond(boolean shouldRespond) {
     this.shouldRespond = shouldRespond;
-  }
-
-  /**
-   * Get the pre-defined {@link ServerErrorCode} that this server should return for a given {@code blobIdString}.
-   * @param blobIdString The blob for which a {@link ServerErrorCode} needs to be returned.
-   * @return A {@code ServerErrorCode} if it is present. Otherwise {@code ServerErrorCode.Blob_Not_Found}.
-   */
-  public ServerErrorCode getErrorFromBlobIdStr(String blobIdString) {
-    return blobIdToServerErrorCode.containsKey(blobIdString) ? blobIdToServerErrorCode.get(blobIdString)
-        : ServerErrorCode.Blob_Not_Found;
-  }
-
-  /**
-   * Set the mapping relationship between a {@code blobIdString} and the {@link ServerErrorCode} this server should
-   * return.
-   * @param blobIdString The key in this mapping relation.
-   * @param code The {@link ServerErrorCode} for the {@code blobIdString}.
-   */
-  public void setBlobIdToServerErrorCode(String blobIdString, ServerErrorCode code) {
-    blobIdToServerErrorCode.put(blobIdString, code);
   }
 }
 
