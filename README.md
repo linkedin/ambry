@@ -10,6 +10,11 @@ Ambry is a distributed object store that supports storage of trillion of small i
 ## Documentation
 Detailed documentation is available at https://github.com/linkedin/ambry/wiki
 
+## Research
+Paper introducing Ambry at [SIGMOD 2016](http://sigmod2016.org/) -> http://dprg.cs.uiuc.edu/docs/SIGMOD2016-a/ambry.pdf
+
+Reach out to us at ambrydev@googlegroups.com if you would like us to list a paper that is based off of research on Ambry.
+
 ## Getting Started
 ##### Step 1: Download the code, build it and prepare for deployment.
 To get the latest code and build it, do

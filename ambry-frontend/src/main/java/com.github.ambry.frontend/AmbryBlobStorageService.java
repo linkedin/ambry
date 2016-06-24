@@ -174,8 +174,8 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
       long propsBuildStartTime = System.currentTimeMillis();
-      BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest);
-      byte[] usermetadata = RestUtils.buildUsermetadata(restRequest);
+      BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
+      byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
       frontendMetrics.blobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
       logger.trace("Blob properties of blob being POSTed - {}", blobProperties);
       PostCallback routerCallback =

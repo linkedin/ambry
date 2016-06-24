@@ -44,7 +44,7 @@ public class RestUtilsTest {
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 
   /**
-   * Tests building of {@link BlobProperties} given good input (all headers in the number and format expected).
+   * Tests building of {@link BlobProperties} given good input (all arguments in the number and format expected).
    * @throws Exception
    */
   @Test
@@ -161,7 +161,7 @@ public class RestUtilsTest {
   @Test
   public void getUserMetadataTest()
       throws Exception {
-    byte[] usermetadata = RestUtils.buildUsermetadata(createRestRequest(RestMethod.POST, "/", null));
+    byte[] usermetadata = RestUtils.buildUsermetadata(new HashMap<String, Object>());
     assertArrayEquals("Unexpected user metadata", new byte[0], usermetadata);
   }
 
@@ -179,7 +179,6 @@ public class RestUtilsTest {
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     setUserMetadataHeaders(headers, userMetadata);
-    verifyBlobPropertiesConstructionSuccess(headers);
     verifyUserMetadataConstructionSuccess(headers, userMetadata);
   }
 
@@ -196,7 +195,7 @@ public class RestUtilsTest {
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.MultipartPost.USER_METADATA_PART, ByteBuffer.wrap(original));
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] rcvd = RestUtils.buildUsermetadata(restRequest);
+    byte[] rcvd = RestUtils.buildUsermetadata(restRequest.getArgs());
     assertArrayEquals("Received user metadata does not match with original", original, rcvd);
   }
 
@@ -220,10 +219,9 @@ public class RestUtilsTest {
     // empty value
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key4", "");
     setUserMetadataHeaders(headers, userMetadata);
-    verifyBlobPropertiesConstructionSuccess(headers);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
+    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
 
     // key1, output should be same as input
@@ -251,10 +249,9 @@ public class RestUtilsTest {
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
     setUserMetadataHeaders(headers, userMetadata);
-    verifyBlobPropertiesConstructionSuccess(headers);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest);
+    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
     assertNull("UserMetadata should have been null ", userMetadataMap);
   }
@@ -573,7 +570,7 @@ public class RestUtilsTest {
   private void verifyBlobPropertiesConstructionSuccess(JSONObject headers)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest);
+    BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
     assertEquals("Blob size does not match", headers.getLong(RestUtils.Headers.BLOB_SIZE),
         blobProperties.getBlobSize());
     long expectedTTL = Utils.Infinite_Time;
@@ -605,7 +602,7 @@ public class RestUtilsTest {
   private void verifyUserMetadataConstructionSuccess(JSONObject headers, Map<String, String> inputUserMetadata)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] userMetadata = RestUtils.buildUsermetadata(restRequest);
+    byte[] userMetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadata);
     assertEquals("Total number of entries doesnt match ", inputUserMetadata.size(), userMetadataMap.size());
     for (String key : userMetadataMap.keySet()) {
@@ -620,7 +617,8 @@ public class RestUtilsTest {
   // getBlobPropertiesVariedInputTest() helpers.
 
   /**
-   * Verifies that {@link RestUtils#buildBlobProperties(RestRequest)} fails if given a request with bad headers.
+   * Verifies that {@link RestUtils#buildBlobProperties(Map<String,Object>)} fails if given a request with bad
+   * arguments.
    * @param headers the headers that were provided to the request.
    * @param expectedCode the expected {@link RestServiceErrorCode} because of the failure.
    * @throws JSONException
@@ -631,7 +629,7 @@ public class RestUtilsTest {
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     try {
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-      RestUtils.buildBlobProperties(restRequest);
+      RestUtils.buildBlobProperties(restRequest.getArgs());
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", expectedCode, e.getErrorCode());
@@ -651,7 +649,7 @@ public class RestUtilsTest {
     String uri = "?" + extraValueHeader + "=extraVal1&" + extraValueHeader + "=extraVal2";
     try {
       RestRequest restRequest = createRestRequest(RestMethod.POST, uri, headers);
-      RestUtils.buildBlobProperties(restRequest);
+      RestUtils.buildBlobProperties(restRequest.getArgs());
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
@@ -671,6 +669,9 @@ public class RestUtilsTest {
     }
   }
 
+  /**
+   * Tests {@link RestUtils#toSecondsPrecisionInMs(long)}.
+   */
   @Test
   public void toSecondsPrecisionInMsTest() {
     assertEquals(0, RestUtils.toSecondsPrecisionInMs(999));
@@ -678,6 +679,9 @@ public class RestUtilsTest {
     assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1001));
   }
 
+  /**
+   * Tests {@link RestUtils#getTimeFromDateString(String)}.
+   */
   @Test
   public void getTimeFromDateStringTest() {
     SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
