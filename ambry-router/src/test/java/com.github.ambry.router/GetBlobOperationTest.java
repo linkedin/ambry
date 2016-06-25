@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -80,7 +79,9 @@ public class GetBlobOperationTest {
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
   private final ResponseHandler responseHandler;
   private final NonBlockingRouter router;
+  private final MockNetworkClient mockNetworkClient;
   private final NetworkClient networkClient;
+  private final ReadyForPollCallback readyForPollCallback;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -134,10 +135,11 @@ public class GetBlobOperationTest {
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
-    router =
-        new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
-            new LoggingNotificationSystem(), mockClusterMap, time);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
+        new LoggingNotificationSystem(), mockClusterMap, time);
     networkClient = networkClientFactory.getNetworkClient();
+    mockNetworkClient = new MockNetworkClient();
+    readyForPollCallback = new ReadyForPollCallback(mockNetworkClient);
   }
 
   /**
@@ -175,7 +177,7 @@ public class GetBlobOperationTest {
     // test a bad case
     try {
       new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", operationFuture,
-          operationCallback, operationCompleteCallback, blobIdFactory, time);
+          operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert.assertEquals("Unexpected exception received on creating GetBlobOperation", RouterErrorCode.InvalidBlobId,
@@ -187,7 +189,7 @@ public class GetBlobOperationTest {
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            operationCallback, operationCompleteCallback, blobIdFactory, time);
+            operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
 
     Assert.assertEquals("Callbacks must match", operationCallback, op.getCallback());
     Assert.assertEquals("Futures must match", operationFuture, op.getFuture());
@@ -257,7 +259,7 @@ public class GetBlobOperationTest {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, blobIdFactory, time);
+            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
@@ -283,7 +285,7 @@ public class GetBlobOperationTest {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, blobIdFactory, time);
+            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -321,7 +323,7 @@ public class GetBlobOperationTest {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, blobIdFactory, time);
+            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -384,7 +386,7 @@ public class GetBlobOperationTest {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            null, operationCompleteCallback, blobIdFactory, time);
+            null, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -505,7 +507,7 @@ public class GetBlobOperationTest {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            callback, operationCompleteCallback, blobIdFactory, time);
+            callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     while (!op.isOperationComplete()) {
@@ -538,6 +540,8 @@ public class GetBlobOperationTest {
       ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
       long written;
       Future<Long> readIntoFuture = readableStreamChannel.readInto(asyncWritableChannel, null);
+      Assert.assertTrue("ReadyForPollCallback should have been invoked as readInto() was called",
+          mockNetworkClient.getAndClearWokenUpStatus());
       // Compare byte by byte.
       int readBytes = 0;
       do {
@@ -549,6 +553,8 @@ public class GetBlobOperationTest {
           Assert.assertEquals("Get and Put blob content should match", putContent[readBytes++], buf.get());
         }
         asyncWritableChannel.resolveOldestChunk(null);
+        Assert.assertTrue("ReadyForPollCallback should have been invoked as writable channel callback was called",
+            mockNetworkClient.getAndClearWokenUpStatus());
       } while (readBytes < putContent.length);
       written = readIntoFuture.get();
       Assert.assertEquals("the returned length in the future should be the length of data written", (long) readBytes,

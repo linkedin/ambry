@@ -43,8 +43,7 @@ import org.junit.Test;
 public class PutOperationTest {
   private final RouterConfig routerConfig;
   private final MockClusterMap mockClusterMap = new MockClusterMap();
-  private final NonBlockingRouterMetrics routerMetrics =
-      new NonBlockingRouterMetrics(mockClusterMap);
+  private final NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
   private final ResponseHandler responseHandler;
   private final Time time;
   private final Map<Integer, PutOperation> correlationIdToPutOperation = new TreeMap<>();
@@ -97,13 +96,16 @@ public class PutOperationTest {
     random.nextBytes(content);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
     FutureResult<String> future = new FutureResult<>();
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobProperties, userMetadata,
-            channel, future, null, time);
+            channel, future, null, new ReadyForPollCallback(mockNetworkClient), null, time);
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;
     // Since this channel is in memory, one call to fill chunks would end up filling the maximum number of PutChunks.
     op.fillChunks();
+    Assert.assertTrue("ReadyForPollCallback should have been invoked as chunks were fully filled",
+        mockNetworkClient.getAndClearWokenUpStatus());
     // A poll should therefore return requestParallelism number of requests from each chunk
     op.poll(requestRegistrationCallback);
     Assert.assertEquals(NonBlockingRouter.MAX_IN_MEM_CHUNKS * requestParallelism, requestInfos.size());
@@ -152,8 +154,8 @@ public class PutOperationTest {
     // reset the correlation id as they will be different between the two requests.
     resetCorrelationId(expectedRequestContent);
     resetCorrelationId(savedRequestContent);
-    Assert.assertArrayEquals("Underlying buffer should not have be reused", expectedRequestContent,
-        savedRequestContent);
+    Assert
+        .assertArrayEquals("Underlying buffer should not have be reused", expectedRequestContent, savedRequestContent);
 
     // now that all the requests associated with the original buffer have been read,
     // the next poll will free this buffer. We cannot actually verify it via the tests directly, as this is very

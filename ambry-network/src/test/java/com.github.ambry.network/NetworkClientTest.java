@@ -218,6 +218,16 @@ public class NetworkClientTest {
   }
 
   /**
+   * Test that the NetworkClient wakeUp wakes up the associated Selector.
+   */
+  @Test
+  public void testWakeUp() {
+    Assert.assertFalse("Selector should not have been woken up at this point", selector.getWakeUpState());
+    networkClient.wakeup();
+    Assert.assertTrue("Selector should have been woken up at this point", selector.getWakeUpState());
+  }
+
+  /**
    * Test to ensure subsequent operations after a close throw an {@link IllegalStateException}.
    */
   @Test
@@ -347,6 +357,7 @@ class MockSelector extends Selector {
   private List<NetworkSend> sends = new ArrayList<NetworkSend>();
   private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
   private MockSelectorState state = MockSelectorState.Good;
+  private boolean wakeUpCalled = false;
 
   /**
    * Create a MockSelector
@@ -458,6 +469,28 @@ class MockSelector extends Selector {
     List<NetworkReceive> toReturn = receives;
     receives = new ArrayList<NetworkReceive>();
     return toReturn;
+  }
+
+  /**
+   * Clear the wakeup state of this NetworkClient.
+   */
+  public void clearWakeUpState() {
+    wakeUpCalled = false;
+  }
+
+  /**
+   * @return true if wakeup() was called.
+   */
+  public boolean getWakeUpState() {
+    return wakeUpCalled;
+  }
+
+  /**
+   * wakes up the MockSelector if sleeping.
+   */
+  @Override
+  public void wakeup() {
+    wakeUpCalled = true;
   }
 
   /**

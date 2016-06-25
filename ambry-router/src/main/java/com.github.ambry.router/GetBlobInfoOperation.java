@@ -117,8 +117,10 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
       if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
         onErrorResponse(entry.getValue().replicaId);
+        responseHandler.onRequestResponseException(entry.getValue().replicaId,
+            new IOException("Timed out waiting for a response"));
         setOperationException(
-            new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut));
+            new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
         inFlightRequestsIterator.remove();
       } else {
         // the entries are ordered by correlation id and time. Break on the first request that has not timed out.

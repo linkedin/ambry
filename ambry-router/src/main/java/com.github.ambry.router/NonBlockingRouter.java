@@ -333,12 +333,13 @@ class NonBlockingRouter implements Router {
     OperationController(int index)
         throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
+      ReadyForPollCallback readyForPollCallback = new ReadyForPollCallback(networkClient);
       putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCompleteCallback, index, time);
-      getManager =
-          new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback, time);
+          operationCompleteCallback, readyForPollCallback, index, time);
+      getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback,
+          readyForPollCallback, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCompleteCallback, time);
+          operationCompleteCallback, readyForPollCallback, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + index, this, true);
       requestResponseHandlerThread.start();
       routerMetrics.initializeOperationControllerMetrics(requestResponseHandlerThread);
@@ -524,3 +525,33 @@ class OperationCompleteCallback {
     }
   }
 }
+
+/**
+ * Callback passed to the operation managers for them to use to notify the NonBlockingRouter when a poll-eligible
+ * event occurs for any operation. A poll-eligible event is any event that occurs asynchronously to the
+ * RequestResponseHandler thread such that there is a high chance of meaningful work getting done when the operation is
+ * subsequently polled. When the callback is invoked, the RequestResponseHandler thread which could be
+ * sleeping in a {@link NetworkClient#sendAndPoll(java.util.List)} is woken up so that the operations can be polled
+ * without additional delays. For example, when a chunk gets filled by the ChunkFillerThread within the
+ * {@link PutManager}, this callback is invoked so that the RequestResponseHandler immediately polls the operation to
+ * send out the request for the chunk.
+ */
+class ReadyForPollCallback {
+  NetworkClient networkClient;
+
+  /**
+   * Construct the ReadyForPollCallback
+   * @param networkClient the {@link NetworkClient} associated with this callback.
+   */
+  ReadyForPollCallback(NetworkClient networkClient) {
+    this.networkClient = networkClient;
+  }
+
+  /**
+   * Wake up the associated {@link NetworkClient}.
+   */
+  public void onPollReady() {
+    networkClient.wakeup();
+  }
+}
+

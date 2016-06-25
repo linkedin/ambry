@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobProperties;
@@ -46,6 +47,11 @@ class PutManager {
   private final NotificationSystem notificationSystem;
   private final Time time;
   private final Thread chunkFillerThread;
+  //private final AtomicInteger operationSetState = new AtomicInteger(0);
+  private final Object chunkFillerSynchronizer = new Object();
+  private volatile boolean isChunkFillerThreadAsleep = false;
+  private volatile boolean chunkFillerThreadSleepDisabled = false;
+  private volatile boolean areChunksAvailableForFilling = false;
   // This helps the PutManager quickly find the appropriate PutOperation to hand over the response to.
   // Requests are added before they are sent out and get cleaned up as and when responses come in.
   // Because there is a guaranteed response from the NetworkClient for every request sent out, entries
@@ -53,6 +59,8 @@ class PutManager {
   private final Map<Integer, PutOperation> correlationIdToPutOperation;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
   private final OperationCompleteCallback operationCompleteCallback;
+  private final ReadyForPollCallback readyForPollCallback;
+  private final ByteBufferAsyncWritableChannel.ChannelEventListener chunkArrivalListener;
 
   // shared by all PutOperations
   private final ClusterMap clusterMap;
@@ -83,18 +91,35 @@ class PutManager {
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
+   * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
+   *                             operations.
    * @param index the index of the {@link NonBlockingRouter.OperationController} in the {@link NonBlockingRouter}
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      OperationCompleteCallback operationCompleteCallback, int index, Time time) {
+      OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback, int index,
+      Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.operationCompleteCallback = operationCompleteCallback;
+    this.readyForPollCallback = readyForPollCallback;
+    this.chunkArrivalListener = new ByteBufferAsyncWritableChannel.ChannelEventListener() {
+      @Override
+      public void onEvent(ByteBufferAsyncWritableChannel.EventType e) {
+        synchronized (chunkFillerSynchronizer) {
+          // At this point, the chunk for which this notification came in (if any) could already have been consumed by
+          // the chunk filler, and this might unnecessarily wake it up from its sleep, which should be okay.
+          areChunksAvailableForFilling = true;
+          if (isChunkFillerThreadAsleep) {
+            chunkFillerSynchronizer.notify();
+          }
+        }
+      }
+    };
     this.time = time;
     putOperations = Collections.newSetFromMap(new ConcurrentHashMap<PutOperation, Boolean>());
     correlationIdToPutOperation = new HashMap<Integer, PutOperation>();
@@ -116,7 +141,7 @@ class PutManager {
     try {
       PutOperation putOperation =
           new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
-              channel, futureResult, callback, time);
+              channel, futureResult, callback, readyForPollCallback, chunkArrivalListener, time);
       putOperations.add(putOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
@@ -221,6 +246,12 @@ class PutManager {
    */
   void close() {
     if (isOpen.compareAndSet(true, false)) {
+      synchronized (chunkFillerSynchronizer) {
+        if (isChunkFillerThreadAsleep) {
+          chunkFillerThreadSleepDisabled = true;
+          chunkFillerSynchronizer.notify();
+        }
+      }
       try {
         chunkFillerThread.join(NonBlockingRouter.SHUTDOWN_WAIT_MS);
       } catch (InterruptedException e) {
@@ -259,24 +290,28 @@ class PutManager {
    * by the {@link ReadableStreamChannel} associated with the operation.
    */
   private class ChunkFiller implements Runnable {
-    private final int sleepTimeWhenIdleMs = 10;
-
     public void run() {
       try {
         while (isOpen.get()) {
-          boolean allChunksFilled = true;
+          boolean idleIteration = true;
           for (PutOperation op : putOperations) {
             if (!op.isChunkFillComplete()) {
               op.fillChunks();
-              allChunksFilled = false;
+              idleIteration = false;
             }
           }
-          if (allChunksFilled) {
-            Thread.sleep(sleepTimeWhenIdleMs);
+          if (idleIteration && !areChunksAvailableForFilling && !chunkFillerThreadSleepDisabled) {
+            synchronized (chunkFillerSynchronizer) {
+              while (!areChunksAvailableForFilling && !chunkFillerThreadSleepDisabled) {
+                isChunkFillerThreadAsleep = true;
+                chunkFillerSynchronizer.wait();
+              }
+              isChunkFillerThreadAsleep = false;
+            }
           }
         }
       } catch (InterruptedException e) {
-        logger.error("ChunkFillerThread received exception", e);
+        logger.error("ChunkFillerThread was interrupted", e);
         if (isOpen.compareAndSet(true, false)) {
           completePendingOperations();
         }

@@ -216,8 +216,8 @@ class DeleteOperation {
       DeleteRequestInfo deleteRequestInfo = itr.next().getValue();
       if (time.milliseconds() - deleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
-        NonBlockingRouterMetrics.NodeLevelMetrics dataNodeBasedMetrics =
-            routerMetrics.getDataNodeBasedMetrics(deleteRequestInfo.replica.getDataNodeId());
+        responseHandler
+            .onRequestResponseException(deleteRequestInfo.replica, new IOException("Timed out waiting for a response"));
         updateOperationState(deleteRequestInfo.replica, RouterErrorCode.OperationTimedOut);
       }
     }
