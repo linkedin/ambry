@@ -136,7 +136,7 @@ public class RouterConfig {
    * @param verifiableProperties the properties map to refer to.
    */
   public RouterConfig(VerifiableProperties verifiableProperties) {
-    routerScalingUnitCount = verifiableProperties.getIntInRange("router.scaling.unit.count", 1, 1, 200);
+    routerScalingUnitCount = verifiableProperties.getIntInRange("router.scaling.unit.count", 1, 1, Integer.MAX_VALUE);
     routerHostname = verifiableProperties.getString("router.hostname");
     routerDatacenterName = verifiableProperties.getString("router.datacenter.name");
     routerScalingUnitMaxConnectionsPerPortPlainText =
