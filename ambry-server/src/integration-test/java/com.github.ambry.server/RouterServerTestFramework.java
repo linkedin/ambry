@@ -21,6 +21,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.coordinator.AmbryCoordinator;
+import com.github.ambry.coordinator.CoordinatorError;
+import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
@@ -29,6 +31,9 @@ import com.github.ambry.router.CoordinatorBackedRouterMetrics;
 import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -39,7 +44,9 @@ import java.util.Properties;
 import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 
 
@@ -52,6 +59,7 @@ import org.junit.Assert;
  * and {@link RouterServerSSLTest} for example usage.
  */
 class RouterServerTestFramework {
+  static final int AWAIT_TIMEOUT = 20;
   static final int CHUNK_SIZE = 1024 * 1024;
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
@@ -109,7 +117,7 @@ class RouterServerTestFramework {
     Map<PartitionId, Integer> partitionCount = new HashMap<>();
     double blobsPut = 0;
     for (OperationChain opChain : opChains) {
-      opChain.latch.await();
+      opChain.latch.await(AWAIT_TIMEOUT, TimeUnit.SECONDS);
       synchronized (opChain.testFutures) {
         for (TestFuture testFuture : opChain.testFutures) {
           testFuture.check();
@@ -122,11 +130,14 @@ class RouterServerTestFramework {
         partitionCount.put(partitionId, count + 1);
       }
     }
-    double blobBalanceThreshold = 3.0 * Math.ceil(blobsPut / (double) clusterMap.getWritablePartitionIds().size());
-    for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
-      Assert.assertTrue("Number of blobs is " + entry.getValue() + " on partition: " + entry.getKey()
-              + ", which is greater than the threshold of " + blobBalanceThreshold,
-          entry.getValue() <= blobBalanceThreshold);
+    double numPartitions = clusterMap.getWritablePartitionIds().size();
+    if (opChains.size() > numPartitions) {
+      double blobBalanceThreshold = 3.0 * Math.ceil(blobsPut / numPartitions);
+      for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
+        Assert.assertTrue("Number of blobs is " + entry.getValue() + " on partition: " + entry.getKey()
+                + ", which is greater than the threshold of " + blobBalanceThreshold,
+            entry.getValue() <= blobBalanceThreshold);
+      }
     }
   }
 
@@ -218,7 +229,7 @@ class RouterServerTestFramework {
       } while (readBytes < opChain.data.length);
       Assert.assertEquals(
           "the returned length in the future should be the length of data written, operation: " + operationName,
-          (long) readBytes, (long) readIntoFuture.get());
+          (long) readBytes, (long) readIntoFuture.get(AWAIT_TIMEOUT, TimeUnit.SECONDS));
       Assert.assertNull("There should be no more data in the channel, operation: " + operationName,
           getChannel.getNextChunk(0));
     } catch (Exception e) {
@@ -247,7 +258,8 @@ class RouterServerTestFramework {
     Future<String> future = router.putBlob(opChain.properties, opChain.userMetadata, putChannel, callback);
     TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", nonBlocking, false), opChain) {
       @Override
-      void check() {
+      void check()
+          throws Exception {
         checkBlobId(get(), getOperationName());
       }
     };
@@ -260,20 +272,17 @@ class RouterServerTestFramework {
    * @param afterDelete if {@code true}, verify that the blob info was not retrievable.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startGetBlobInfo(boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
+  private void startGetBlobInfo(final boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
     Callback<BlobInfo> callback = new TestCallback<>(opChain, afterDelete);
     Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
     Future<BlobInfo> future = router.getBlobInfo(opChain.blobId, callback);
     TestFuture<BlobInfo> testFuture =
         new TestFuture<BlobInfo>(future, genLabel("getBlobInfo", nonBlocking, afterDelete), opChain) {
           @Override
-          void check() {
+          void check()
+              throws Exception {
             if (afterDelete) {
-              try {
-                future.get();
-                Assert.fail("Blob should have been deleted in operation: " + getOperationName());
-              } catch (Exception ignored) {
-              }
+              checkDeleted(nonBlocking);
             } else {
               checkBlobInfo(get(), opChain, getOperationName());
             }
@@ -288,20 +297,17 @@ class RouterServerTestFramework {
    * @param afterDelete if {@code true}, verify that the blob was not retrievable.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startGetBlob(boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
+  private void startGetBlob(final boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
     Callback<ReadableStreamChannel> callback = new TestCallback<>(opChain, afterDelete);
     Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
     Future<ReadableStreamChannel> future = router.getBlob(opChain.blobId, callback);
     TestFuture<ReadableStreamChannel> testFuture =
         new TestFuture<ReadableStreamChannel>(future, genLabel("getBlob", nonBlocking, afterDelete), opChain) {
           @Override
-          void check() {
+          void check()
+              throws Exception {
             if (afterDelete) {
-              try {
-                future.get();
-                Assert.fail("Blob should have been deleted in operation: " + getOperationName());
-              } catch (Exception ignored) {
-              }
+              checkDeleted(nonBlocking);
             } else {
               checkBlob(get(), opChain, getOperationName());
             }
@@ -321,7 +327,8 @@ class RouterServerTestFramework {
     Future<Void> future = router.deleteBlob(opChain.blobId, callback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", nonBlocking, false), opChain) {
       @Override
-      void check() {
+      void check()
+          throws Exception {
         get();
       }
     };
@@ -523,24 +530,52 @@ class RouterServerTestFramework {
     }
 
     /**
-     * Return the value inside the future or throw an {@link AssertionError} if an exception
+     * Return the value inside the future or throw an {@link Exception} if an exception
      * occurred.
      * @return the value inside the future
      */
-    T get() {
+    T get()
+        throws Exception {
       try {
-        return this.future.get();
+        return future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
       } catch (Exception e) {
-        e.printStackTrace();
-        Assert.fail("Exception occured in operation: " + getOperationName() + ", exception: " + e);
-        return null;
+        throw new Exception("Exception occured in operation: " + getOperationName(), e);
+      }
+    }
+
+    /**
+     * Check that a requested blob is deleted.
+     * @param nonBlocking {@code true} if the non-blocking router was used.
+     * @throws Exception
+     */
+    void checkDeleted(boolean nonBlocking)
+        throws Exception {
+      try {
+        future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
+        Assert.fail("Blob should have been deleted in operation: " + getOperationName());
+      } catch (ExecutionException e) {
+        Throwable rootCause = Utils.getRootCause(e);
+        if (nonBlocking) {
+          Assert.assertTrue("Exception cause is not RouterException in operation: " + getOperationName(),
+              rootCause instanceof RouterException);
+          Assert.assertEquals("Error code is not BlobDeleted in operation: " + getOperationName(),
+              RouterErrorCode.BlobDeleted, ((RouterException) rootCause).getErrorCode());
+        } else {
+          Assert.assertTrue("Exception cause is not CoordinatorException in operation: " + getOperationName(),
+              rootCause instanceof CoordinatorException);
+          Assert.assertEquals("Error code is not BlobDeleted in operation: " + getOperationName(),
+              CoordinatorError.BlobDeleted, ((CoordinatorException) rootCause).getErrorCode());
+        }
+      } catch (Exception e) {
+        throw new Exception("Unexpected exception occured in operation: " + getOperationName(), e);
       }
     }
 
     /**
      * Implement any testing logic here.
      */
-    abstract void check();
+    abstract void check()
+        throws Exception;
   }
 
   /**

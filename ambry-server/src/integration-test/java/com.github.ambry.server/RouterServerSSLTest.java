@@ -69,7 +69,7 @@ public class RouterServerSSLTest {
     List<OperationChain> opChains = new ArrayList<>();
     for (int i = 0; i < 10; i++) {
       Queue<OperationType> operations = new LinkedList<>();
-      switch (i % 4) {
+      switch (i % 3) {
         case 0:
           operations.add(OperationType.PUT_NB);
           operations.add(OperationType.AWAIT_CREATION);
@@ -83,17 +83,6 @@ public class RouterServerSSLTest {
         case 1:
           operations.add(OperationType.PUT_NB);
           operations.add(OperationType.AWAIT_CREATION);
-          operations.add(OperationType.GET_INFO_NB);
-          operations.add(OperationType.GET_NB);
-          operations.add(OperationType.GET_NB);
-          operations.add(OperationType.PUT_NB);
-          operations.add(OperationType.AWAIT_CREATION);
-          operations.add(OperationType.GET_INFO_NB);
-          operations.add(OperationType.GET_NB);
-          break;
-        case 2:
-          operations.add(OperationType.PUT_NB);
-          operations.add(OperationType.AWAIT_CREATION);
           operations.add(OperationType.DELETE_NB);
           operations.add(OperationType.AWAIT_DELETION);
           operations.add(OperationType.GET_DELETED_NB);
@@ -101,7 +90,7 @@ public class RouterServerSSLTest {
           operations.add(OperationType.GET_DELETED_NB);
           operations.add(OperationType.GET_INFO_DELETED_NB);
           break;
-        case 3:
+        case 2:
           operations.add(OperationType.PUT_NB);
           operations.add(OperationType.AWAIT_CREATION);
           operations.add(OperationType.GET_NB);
