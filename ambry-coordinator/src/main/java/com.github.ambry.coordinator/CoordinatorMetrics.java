@@ -37,6 +37,7 @@ public class CoordinatorMetrics {
   public final Histogram getBlobPropertiesOperationLatencyInMs;
   public final Histogram getBlobUserMetadataOperationLatencyInMs;
   public final Histogram getBlobOperationLatencyInMs;
+  public final Histogram operationRequestQueuingTimeInMs;
 
   public final Meter putBlobOperationRate;
   public final Meter deleteBlobOperationRate;
@@ -92,6 +93,8 @@ public class CoordinatorMetrics {
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobUserMetadataOperationLatencyInMs"));
     getBlobOperationLatencyInMs =
         registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "getBlobOperationLatencyInMs"));
+    operationRequestQueuingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryCoordinator.class, "operationRequestQueuingTimeInMs"));
 
     putBlobOperationRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "putBlobOperationRate"));
     deleteBlobOperationRate = registry.meter(MetricRegistry.name(AmbryCoordinator.class, "deleteBlobOperationRate"));
