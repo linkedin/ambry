@@ -155,6 +155,8 @@ public class SimpleByteBufferPoolTest {
     }
     assertEquals(0, pool.availableMemory());
     consumerThreads[1].start();
+    Thread.sleep(1);
+    assertEquals(Thread.State.TIMED_WAITING, consumerThreads[1].getState());
     used[0].countDown();
     consumerThreads[0].join();
     used[1].countDown();
