@@ -256,6 +256,7 @@ abstract class OperationRequest implements Runnable {
   private final BlobId blobId;
   protected final ReplicaId replicaId;
   private final RequestOrResponse request;
+  private final long operationQueuingTimeInMs = System.currentTimeMillis();
   private ResponseHandler responseHandler;
   protected boolean sslEnabled;
   private Port port;
@@ -295,6 +296,7 @@ abstract class OperationRequest implements Runnable {
   public void run() {
     ConnectedChannel connectedChannel = null;
     long startTimeInMs = System.currentTimeMillis();
+    context.getCoordinatorMetrics().operationRequestQueuingTimeInMs.update(startTimeInMs - operationQueuingTimeInMs);
 
     try {
       logger.trace("{} {} checking out connection", context, replicaId);
