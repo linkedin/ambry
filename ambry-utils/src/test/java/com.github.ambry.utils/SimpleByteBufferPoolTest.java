@@ -155,8 +155,7 @@ public class SimpleByteBufferPoolTest {
     }
     assertEquals(0, pool.availableMemory());
     consumerThreads[1].start();
-    Thread.sleep(1);
-    assertEquals(Thread.State.TIMED_WAITING, consumerThreads[1].getState());
+    assertEquals("BufferConsumer-1 should not have got buffer from the buffer pool.", 1, allocated[1].getCount());
     used[0].countDown();
     consumerThreads[0].join();
     used[1].countDown();
