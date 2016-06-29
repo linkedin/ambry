@@ -32,19 +32,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  /**
-   * Instantiates and returns a singleton instance of {@link ConnectionStatsHandler} if not instantiated already.
-   * @param metrics the {@link NettyMetrics} instance to use
-   * @return an instance of {@link ConnectionStatsHandler}
-   */
-  public static ConnectionStatsHandler getInstance(NettyMetrics metrics) {
-    if (instance == null) {
-      instance = new ConnectionStatsHandler(metrics);
-    }
-    return instance;
-  }
-
-  private ConnectionStatsHandler(NettyMetrics metrics) {
+  public ConnectionStatsHandler(NettyMetrics metrics) {
     this.metrics = metrics;
     openConnections = new AtomicLong(0);
     metrics.registerConnectionsStatsHandler(openConnections);

@@ -121,12 +121,13 @@ public class NettyServerTest {
     final RestRequestHandler requestHandler = new MockRestRequestResponseHandler();
     final PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
     final RestServerState restServerState = new RestServerState("/healthCheck");
+    final ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
     return new NettyServer(nettyConfig, nettyMetrics, new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) {
         ch.pipeline()
             // connection stats handler to track connection related metrics
-            .addLast("ConnectionStatsHandler", ConnectionStatsHandler.getInstance(nettyMetrics))
+            .addLast("ConnectionStatsHandler", connectionStatsHandler)
                 // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
                 // to go here.
             .addLast("codec", new HttpServerCodec())
