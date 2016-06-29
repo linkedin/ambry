@@ -54,12 +54,13 @@ public class NettyServerFactory implements NioServerFactory {
     } else {
       nettyConfig = new NettyConfig(verifiableProperties);
       nettyMetrics = new NettyMetrics(metricRegistry);
+      final ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
       channelInitializer = new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) {
           ch.pipeline()
               // connection stats handler to track connection related metrics
-              .addLast("connectionStatsHandler", ConnectionStatsHandler.getInstance(nettyMetrics))
+              .addLast("connectionStatsHandler", connectionStatsHandler)
                   // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
                   // to go here.
               .addLast("codec", new HttpServerCodec())
