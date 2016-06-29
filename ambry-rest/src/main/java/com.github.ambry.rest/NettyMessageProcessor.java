@@ -257,7 +257,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       nettyMetrics.requestArrivalRate.mark();
       if (!httpRequest.getDecoderResult().isSuccess()) {
         success = false;
-        logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel());
+        logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel(),
+            httpRequest.getDecoderResult().cause());
         nettyMetrics.malformedRequestError.inc();
         responseChannel.onResponseComplete(new RestServiceException("Decoder failed because of malformed request",
             RestServiceErrorCode.MalformedRequest));
