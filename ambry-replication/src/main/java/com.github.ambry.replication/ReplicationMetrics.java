@@ -19,6 +19,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
@@ -346,9 +347,10 @@ public class ReplicationMetrics {
   }
 
   public void addRemoteReplicaToLagMetrics(final RemoteReplicaInfo remoteReplicaInfo) {
-    final String metricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
-        remoteReplicaInfo.getReplicaId().getReplicaPath() + "-replicaLagInBytes";
+    ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+    DataNodeId dataNodeId = replicaId.getDataNodeId();
+    final String metricName =
+        dataNodeId.getHostname() + "-" + dataNodeId.getPort() + "-" + replicaId.getPartitionId() + "-replicaLagInBytes";
     Gauge<Long> replicaLag = new Gauge<Long>() {
       @Override
       public Long getValue() {
