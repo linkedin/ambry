@@ -189,6 +189,7 @@ public class CoordinatorBackedRouter implements Router {
       Callback callback) {
     if (routerOpen.get()) {
       try {
+        metrics.totalOperationsInFlight.incrementAndGet();
         coordinatorOperation.onQueue();
         operationPool.submit(coordinatorOperation);
       } catch (Exception e) {
@@ -229,6 +230,7 @@ public class CoordinatorBackedRouter implements Router {
       }
     } finally {
       metrics.operationPostProcessingTimeInMs.update(System.currentTimeMillis() - postProcessingStartTime);
+      metrics.totalOperationsInFlight.decrementAndGet();
     }
   }
 }
@@ -387,6 +389,7 @@ class CoordinatorOperation implements Runnable {
         operationTotalTimeTracker.update(System.currentTimeMillis() - operationStartTime);
       }
       router.completeOperation(futureResult, callback, operationResult, exception);
+      router.metrics.totalOperationsInExecution.decrementAndGet();
     }
   }
 
@@ -402,6 +405,7 @@ class CoordinatorOperation implements Runnable {
    * Tracks metrics on dequeuing of operation.
    */
   private void onDequeue() {
+    router.metrics.totalOperationsInExecution.incrementAndGet();
     if (operationQueueStartTime != null) {
       long queueTime = System.currentTimeMillis() - operationQueueStartTime;
       router.metrics.operationQueuingTimeInMs.update(queueTime);
