@@ -355,9 +355,9 @@ abstract class OperationRequest implements Runnable {
       }
       markRequest();
       updateRequest(System.currentTimeMillis() - startTimeInMs);
+      context.getCoordinatorMetrics().totalRequestsInExecution.decrementAndGet();
+      context.getCoordinatorMetrics().totalRequestsInFlight.decrementAndGet();
     }
-    context.getCoordinatorMetrics().totalRequestsInExecution.decrementAndGet();
-    context.getCoordinatorMetrics().totalRequestsInFlight.decrementAndGet();
   }
 
   private void countError(MessageFormatErrorCodes error) {
