@@ -317,6 +317,7 @@ class CoordinatorOperation implements Runnable {
   @Override
   public void run() {
     long operationStartTime = System.currentTimeMillis();
+    router.metrics.totalOperationsInExecution.incrementAndGet();
     onDequeue();
     Histogram operationTotalTimeTracker = null;
     Object operationResult = null;
@@ -405,7 +406,6 @@ class CoordinatorOperation implements Runnable {
    * Tracks metrics on dequeuing of operation.
    */
   private void onDequeue() {
-    router.metrics.totalOperationsInExecution.incrementAndGet();
     if (operationQueueStartTime != null) {
       long queueTime = System.currentTimeMillis() - operationQueueStartTime;
       router.metrics.operationQueuingTimeInMs.update(queueTime);
