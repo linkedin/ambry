@@ -14,9 +14,11 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -65,6 +67,9 @@ public class CoordinatorBackedRouterMetrics {
   // CoordinatorOperation
   public final Counter operationError;
   public final Counter queueStartTimeNotRecordedError;
+
+  public final AtomicInteger totalOperationsInFlight = new AtomicInteger(0);
+  public final AtomicInteger totalOperationsInExecution = new AtomicInteger(0);
 
   /**
    * Creates an instance of CoordinatorBackedRouterMetrics using the given {@code metricRegistry}.
@@ -125,5 +130,23 @@ public class CoordinatorBackedRouterMetrics {
     operationError = metricRegistry.counter(MetricRegistry.name(CoordinatorOperation.class, "OperationError"));
     queueStartTimeNotRecordedError =
         metricRegistry.counter(MetricRegistry.name(CoordinatorOperation.class, "QueueStartTimeNotRecordedError"));
+
+    Gauge<Integer> operationsInFlight = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return totalOperationsInFlight.get();
+      }
+    };
+    metricRegistry
+        .register(MetricRegistry.name(CoordinatorBackedRouter.class, "TotalOperationsInFlight"), operationsInFlight);
+
+    Gauge<Integer> operationsInExecution = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return totalOperationsInExecution.get();
+      }
+    };
+    metricRegistry.register(MetricRegistry.name(CoordinatorBackedRouter.class, "TotalOperationsInExecution"),
+        operationsInExecution);
   }
 }
