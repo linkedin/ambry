@@ -193,6 +193,8 @@ public class ByteBufferAsyncWritableChannelTest {
             }
           }
         });
+    assertFalse("No chunk arrival notification should have come in before any write", chunkArrivalNotified.get());
+    assertFalse("No close event notification should have come in before a close", closeNotified.get());
     channel.write(ByteBuffer.allocate(5), null);
     assertTrue("Write should have been notified", chunkArrivalNotified.get());
     channel.close();

@@ -222,9 +222,9 @@ public class NetworkClientTest {
    */
   @Test
   public void testWakeUp() {
-    Assert.assertFalse("Selector should not have been woken up at this point", selector.getWakeUpState());
+    Assert.assertFalse("Selector should not have been woken up at this point", selector.getAndClearWokenUpStatus());
     networkClient.wakeup();
-    Assert.assertTrue("Selector should have been woken up at this point", selector.getWakeUpState());
+    Assert.assertTrue("Selector should have been woken up at this point", selector.getAndClearWokenUpStatus());
   }
 
   /**
@@ -472,17 +472,13 @@ class MockSelector extends Selector {
   }
 
   /**
-   * Clear the wakeup state of this NetworkClient.
+   * Return whether wakeup() was called and clear the woken up status before returning.
+   * @return true if wakeup() was called previously.
    */
-  public void clearWakeUpState() {
+  public boolean getAndClearWokenUpStatus() {
+    boolean ret = wakeUpCalled;
     wakeUpCalled = false;
-  }
-
-  /**
-   * @return true if wakeup() was called.
-   */
-  public boolean getWakeUpState() {
-    return wakeUpCalled;
+    return ret;
   }
 
   /**
