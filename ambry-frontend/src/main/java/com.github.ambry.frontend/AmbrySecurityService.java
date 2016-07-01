@@ -60,6 +60,21 @@ class AmbrySecurityService implements SecurityService {
       if (restRequest == null) {
         throw new IllegalArgumentException("RestRequest is null");
       }
+      RestMethod restMethod = restRequest.getRestMethod();
+      switch (restMethod) {
+        case GET:
+          RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
+          if (subresource != null) {
+            switch (subresource) {
+              case BlobInfo:
+              case UserMetadata:
+                break;
+              default:
+                exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET", RestServiceErrorCode.BadRequest);
+            }
+          }
+          break;
+      }
     }
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (callback != null) {

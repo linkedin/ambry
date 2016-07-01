@@ -15,6 +15,7 @@ package com.github.ambry.admin;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -22,6 +23,8 @@ import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.router.InMemoryRouterFactory;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
@@ -33,28 +36,23 @@ import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
-import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
-import io.netty.handler.codec.http.multipart.FileUpload;
-import io.netty.handler.codec.http.multipart.HttpDataFactory;
-import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
-import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import junit.framework.Assert;
+import org.json.JSONException;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -69,7 +67,7 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class AdminIntegrationTest {
-  private static final int SERVER_PORT = 1174;
+  private static final int SERVER_PORT = 16503;
   private static final ClusterMap CLUSTER_MAP;
 
   static {
@@ -82,6 +80,7 @@ public class AdminIntegrationTest {
 
   private static RestServer adminRestServer = null;
   private static NettyClient nettyClient = null;
+  private static InMemoryRouter router = null;
 
   /**
    * Running it many times so that keep-alive bugs are caught.
@@ -101,6 +100,7 @@ public class AdminIntegrationTest {
   public static void setup()
       throws InstantiationException, InterruptedException {
     adminRestServer = new RestServer(buildAdminVProps(), CLUSTER_MAP, new LoggingNotificationSystem());
+    router = InMemoryRouterFactory.getLatestInstance();
     adminRestServer.start();
     nettyClient = new NettyClient("localhost", SERVER_PORT);
   }
@@ -119,27 +119,23 @@ public class AdminIntegrationTest {
   }
 
   /**
-   * Tests blob POST, GET, HEAD and DELETE operations.
+   * Tests blob GET, HEAD and DELETE operations with blobs posted as both non multipart and multipart.
    * @throws Exception
    */
   @Test
-  public void postGetHeadDeleteTest()
+  public void getHeadDeleteTest()
       throws Exception {
-    doPostGetHeadDeleteTest(0, false);
-    doPostGetHeadDeleteTest(1024, false);
-    doPostGetHeadDeleteTest(8192, false);
-    doPostGetHeadDeleteTest(10000, false);
-  }
+    doGetHeadDeleteTest(0, false);
+    doGetHeadDeleteTest(0, true);
 
-  /**
-   * Tests multipart POST and verifies it via GET operations.
-   * @throws Exception
-   */
-  @Test
-  public void multipartPostGetHeadTest()
-      throws Exception {
-    doPostGetHeadDeleteTest(0, true);
-    doPostGetHeadDeleteTest(1024, true);
+    doGetHeadDeleteTest(1024, false);
+    doGetHeadDeleteTest(1024, true);
+
+    doGetHeadDeleteTest(8192, false);
+    doGetHeadDeleteTest(8192, true);
+
+    doGetHeadDeleteTest(10000, false);
+    doGetHeadDeleteTest(8192, true);
   }
 
   /*
@@ -254,20 +250,20 @@ public class AdminIntegrationTest {
     return new VerifiableProperties(properties);
   }
 
-  // postGetHeadDeleteTest() and multipartPostGetHeadTest() helpers
+  // getHeadDeleteTest() helpers
 
   /**
-   * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
+   * Utility to test blob GET, HEAD and DELETE operations for a specified size
    * @param contentSize the size of the blob to be tested
    * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
    * @throws Exception
    */
-  private void doPostGetHeadDeleteTest(int contentSize, boolean multipartPost)
+  private void doGetHeadDeleteTest(int contentSize, boolean multipartPost)
       throws Exception {
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(contentSize));
-    String serviceId = "postGetHeadDeleteServiceID";
+    String serviceId = "getHeadDeleteServiceID";
     String contentType = "application/octet-stream";
-    String ownerId = "postGetHeadDeleteOwnerID";
+    String ownerId = "getHeadDeleteOwnerID";
     HttpHeaders headers = new DefaultHttpHeaders();
     setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
     headers.set(HttpHeaders.Names.CONTENT_LENGTH, content.capacity());
@@ -275,12 +271,11 @@ public class AdminIntegrationTest {
     byte[] usermetadata = null;
     if (multipartPost) {
       usermetadata = UtilsTest.getRandomString(32).getBytes();
-      blobId = multipartPostBlobAndVerify(headers, content, ByteBuffer.wrap(usermetadata));
     } else {
       headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
       headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
-      blobId = postBlobAndVerify(headers, content);
     }
+    blobId = putBlob(headers, content, usermetadata);
     getBlobAndVerify(blobId, headers, content);
     getNotModifiedBlobAndVerify(blobId);
     getUserMetadataAndVerify(blobId, headers, usermetadata);
@@ -306,9 +301,11 @@ public class AdminIntegrationTest {
    * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
+   * @throws org.json.JSONException
    */
   private void setAmbryHeaders(HttpHeaders httpHeaders, long contentLength, long ttlInSecs, boolean isPrivate,
-      String serviceId, String contentType, String ownerId) {
+      String serviceId, String contentType, String ownerId)
+      throws JSONException {
     if (httpHeaders != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       httpHeaders.add(RestUtils.Headers.BLOB_SIZE, contentLength);
       httpHeaders.add(RestUtils.Headers.TTL, ttlInSecs);
@@ -324,30 +321,27 @@ public class AdminIntegrationTest {
   }
 
   /**
-   * Posts a blob with the given {@code headers} and {@code content}.
+   * Puts a blob with the given {@code headers} and {@code content}.
    * @param headers the headers required.
    * @param content the content of the blob.
+   * @param usermetadata the usermetadata associated with the blob if mimicking multipart POST. {@code null} otherwise.
    * @return the blob ID of the blob.
-   * @throws ExecutionException
-   * @throws InterruptedException
+   * @throws Exception
    */
-  private String postBlobAndVerify(HttpHeaders headers, ByteBuffer content)
-      throws ExecutionException, InterruptedException {
-    FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
-    assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.getStatus());
-    assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
-    assertTrue("No " + RestUtils.Headers.CREATION_TIME,
-        HttpHeaders.getHeader(response, RestUtils.Headers.CREATION_TIME, null) != null);
-    assertEquals("Content-Length is not 0", 0, HttpHeaders.getContentLength(response));
-    String blobId = HttpHeaders.getHeader(response, HttpHeaders.Names.LOCATION, null);
-
-    if (blobId == null) {
-      fail("postBlobAndVerify did not return a blob ID");
+  private String putBlob(HttpHeaders headers, ByteBuffer content, byte[] usermetadata)
+      throws Exception {
+    Map<String, Object> args = new HashMap<>();
+    for (Map.Entry<String, String> entry : headers.entries()) {
+      args.put(entry.getKey(), entry.getValue());
     }
-    discardContent(responseParts, 1);
-    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
+    BlobProperties blobProperties = RestUtils.buildBlobProperties(args);
+    if (usermetadata == null) {
+      usermetadata = RestUtils.buildUsermetadata(args);
+    }
+    String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content)).get();
+    if (blobId == null) {
+      fail("putBlobInRouter did not return a blob ID");
+    }
     return blobId;
   }
 
@@ -574,59 +568,5 @@ public class AdminIntegrationTest {
   private void checkCommonGetHeadHeaders(HttpHeaders receivedHeaders) {
     assertTrue("No Date header", receivedHeaders.get(HttpHeaders.Names.DATE) != null);
     assertTrue("No Last-Modified header", receivedHeaders.get(HttpHeaders.Names.LAST_MODIFIED) != null);
-  }
-
-  /**
-   * Posts a blob with the given {@code headers} and {@code content}.
-   * @param headers the headers required.
-   * @param content the content of the blob.
-   * @param usermetadata the {@link ByteBuffer} that represents user metadata
-   * @return the blob ID of the blob.
-   * @throws Exception
-   */
-  private String multipartPostBlobAndVerify(HttpHeaders headers, ByteBuffer content, ByteBuffer usermetadata)
-      throws Exception {
-    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
-    HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, usermetadata);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
-    assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.getStatus());
-    assertTrue("No Date header", HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE, null) != null);
-    assertTrue("No " + RestUtils.Headers.CREATION_TIME,
-        HttpHeaders.getHeader(response, RestUtils.Headers.CREATION_TIME, null) != null);
-    assertEquals("Content-Length is not 0", 0, HttpHeaders.getContentLength(response));
-    String blobId = HttpHeaders.getHeader(response, HttpHeaders.Names.LOCATION, null);
-
-    if (blobId == null) {
-      fail("postBlobAndVerify did not return a blob ID");
-    }
-    discardContent(responseParts, 1);
-    assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
-    return blobId;
-  }
-
-  /**
-   * Creates a {@link HttpPostRequestEncoder} that encodes the given {@code request} and {@code blobContent}.
-   * @param request the {@link HttpRequest} containing headers and other metadata about the request.
-   * @param blobContent the {@link ByteBuffer} that represents the content of the blob.
-   * @param usermetadata the {@link ByteBuffer} that represents user metadata
-   * @return a {@link HttpPostRequestEncoder} that can encode the {@code request} and {@code blobContent}.
-   * @throws HttpPostRequestEncoder.ErrorDataEncoderException
-   * @throws IOException
-   */
-  private HttpPostRequestEncoder createEncoder(HttpRequest request, ByteBuffer blobContent, ByteBuffer usermetadata)
-      throws HttpPostRequestEncoder.ErrorDataEncoderException, IOException {
-    HttpDataFactory httpDataFactory = new DefaultHttpDataFactory(false);
-    HttpPostRequestEncoder encoder = new HttpPostRequestEncoder(httpDataFactory, request, true);
-    FileUpload fileUpload = new MemoryFileUpload(RestUtils.MultipartPost.BLOB_PART, RestUtils.MultipartPost.BLOB_PART,
-        "application/octet-stream", "", Charset.forName("UTF-8"), blobContent.remaining());
-    fileUpload.setContent(Unpooled.wrappedBuffer(blobContent));
-    encoder.addBodyHttpData(fileUpload);
-    fileUpload =
-        new MemoryFileUpload(RestUtils.MultipartPost.USER_METADATA_PART, RestUtils.MultipartPost.USER_METADATA_PART,
-            "application/octet-stream", "", Charset.forName("UTF-8"), usermetadata.remaining());
-    fileUpload.setContent(Unpooled.wrappedBuffer(usermetadata));
-    encoder.addBodyHttpData(fileUpload);
-    return encoder;
   }
 }

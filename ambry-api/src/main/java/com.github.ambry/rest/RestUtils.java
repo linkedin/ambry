@@ -129,7 +129,11 @@ public class RestUtils {
     /**
      * User metadata on its own i.e., no "blob properties" headers returned with response.
      */
-    UserMetadata
+    UserMetadata,
+    /**
+     * All the replicas of the blob ID returned as content (Admin only).
+     */
+    Replicas
   }
 
   public static final class MultipartPost {

@@ -170,7 +170,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
         responseMetadata.put(RESPONSE_STATUS_KEY, status);
         onEventComplete(Event.SetStatus);
       } catch (JSONException e) {
-        throw new RestServiceException("Unable to set Status", RestServiceErrorCode.ResponseBuildingFailure);
+        throw new RestServiceException("Unable to set Status", RestServiceErrorCode.InternalServerError);
       }
     } else {
       throw new IllegalStateException("Cannot change response metadata after it has been finalized");
@@ -249,7 +249,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
           onEventComplete(eventToFire);
         } catch (JSONException e) {
           throw new RestServiceException("Unable to set " + headerName + " to " + headerValue,
-              RestServiceErrorCode.ResponseBuildingFailure);
+              RestServiceErrorCode.InternalServerError);
         }
       } else {
         throw new IllegalStateException("Cannot change response metadata after it has been finalized");

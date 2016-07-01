@@ -62,9 +62,6 @@ public class AdminIdConverterFactoryTest {
     testConversion(idConverter, RestMethod.GET, input, input);
     // with leading slash
     testConversion(idConverter, RestMethod.GET, inputWithLeadingSlash, input);
-    // POST
-    // without leading slash (there will be no leading slashes returned from the Router)
-    testConversion(idConverter, RestMethod.POST, input, inputWithLeadingSlash);
 
     idConverter.close();
     IdConversionCallback callback = new IdConversionCallback();

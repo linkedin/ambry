@@ -96,25 +96,29 @@ public class AmbrySecurityServiceTest {
       callback.reset();
     }
 
+    // with GET sub resources
+    callback.reset();
+    for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+      RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
+      switch (subResource) {
+        case BlobInfo:
+        case UserMetadata:
+          securityService.processRequest(restRequest, callback).get();
+          Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+          Assert.assertNull("Exception should not have been thrown", callback.exception);
+          break;
+        default:
+          testExceptionCasesProcessRequest(restRequest, RestServiceErrorCode.BadRequest);
+          break;
+      }
+
+      callback.reset();
+    }
+
     // security service closed
-    callback = new SecurityServiceCallback();
     securityService.close();
     for (RestMethod restMethod : methods) {
-      RestRequest restRequest = createRestRequest(restMethod, "/", null);
-      try {
-        securityService.processRequest(restRequest, callback).get();
-        Assert.fail("Process Request should have failed because Security Service is closed");
-      } catch (ExecutionException e) {
-        Assert.assertTrue("Exception should have been an instance of RestServiceException",
-            e.getCause() instanceof RestServiceException);
-        RestServiceException re = (RestServiceException) e.getCause();
-        Assert.assertEquals("Unexpected RestServerErrorCode (Future)", RestServiceErrorCode.ServiceUnavailable,
-            re.getErrorCode());
-        re = (RestServiceException) callback.exception;
-        Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", RestServiceErrorCode.ServiceUnavailable,
-            re.getErrorCode());
-      }
-      callback.reset();
+      testExceptionCasesProcessRequest(createRestRequest(restMethod, "/", null) ,RestServiceErrorCode.ServiceUnavailable);
     }
   }
 
@@ -258,6 +262,30 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
+   * Tests exception cases for {@link SecurityService#processRequest(RestRequest, Callback)}
+   * @param restRequest the {@link RestRequest} to provide as input.
+   * @param expectedErrorCode the {@link RestServiceErrorCode} expected in the exception returned.
+   * @throws Exception
+   */
+  private void testExceptionCasesProcessRequest(RestRequest restRequest, RestServiceErrorCode expectedErrorCode)
+      throws Exception {
+    SecurityServiceCallback callback = new SecurityServiceCallback();
+    try {
+      securityService.processRequest(restRequest, callback).get();
+      Assert.fail("Should have thrown Exception");
+    } catch (ExecutionException e) {
+      Assert.assertTrue("Exception should have been an instance of RestServiceException",
+          e.getCause() instanceof RestServiceException);
+      RestServiceException re = (RestServiceException) e.getCause();
+      Assert.assertEquals("Unexpected RestServerErrorCode (Future)", expectedErrorCode, re.getErrorCode());
+      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+      Assert.assertNotNull("Exception should have been thrown", callback.exception);
+      re = (RestServiceException) callback.exception;
+      Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
+    }
+  }
+
+  /**
    * Verifies that there are no values for all headers in {@code headers}.
    * @param restResponseChannel the {@link MockRestResponseChannel} over which response has been received.
    * @param headers the headers that must have no values.
@@ -388,8 +416,8 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests exception cases for {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}
-   * with a {@link BadRestResponseChannel}
+   * Tests exception cases for
+   * {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}
    * @param restMethod the {@link RestMethod} of the request to be made
    * @param restResponseChannel the {@link RestResponseChannel} to write responses over.
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}

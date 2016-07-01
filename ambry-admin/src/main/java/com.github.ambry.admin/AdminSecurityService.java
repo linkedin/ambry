@@ -109,18 +109,16 @@ class AdminSecurityService implements SecurityService {
                 setGetBlobResponseHeaders(responseChannel, blobInfo);
               }
             } else {
-              responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
-                  new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-              if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
-                setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+              switch (subResource) {
+                case BlobInfo:
+                  setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+                  // no break on purpose.
+                case UserMetadata:
+                  responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+                      new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+                  break;
               }
             }
-            break;
-          case POST:
-            responseChannel.setStatus(ResponseStatus.Created);
-            responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-            responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
-                new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
             break;
           default:
             exception = new RestServiceException("Cannot process response for request with method " + restMethod,

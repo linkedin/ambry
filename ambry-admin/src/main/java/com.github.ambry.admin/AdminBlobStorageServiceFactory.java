@@ -77,7 +77,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new AdminBlobStorageService(adminConfig, adminMetrics, responseHandler, router, idConverterFactory,
-        securityServiceFactory);
+    return new AdminBlobStorageService(adminConfig, adminMetrics, clusterMap, responseHandler, router,
+        idConverterFactory, securityServiceFactory);
   }
 }

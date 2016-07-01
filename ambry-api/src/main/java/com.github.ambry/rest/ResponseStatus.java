@@ -84,9 +84,7 @@ public enum ResponseStatus {
       case InvalidRequestState:
       case MalformedRequest:
       case MissingArgs:
-      case UnknownHttpObject:
       case UnsupportedHttpMethod:
-      case UnsupportedOperation:
         return ResponseStatus.BadRequest;
       case ResourceDirty:
         return ResponseStatus.Forbidden;
@@ -96,10 +94,8 @@ public enum ResponseStatus {
         return ResponseStatus.ProxyAuthenticationRequired;
       case IdConverterServiceError:
       case InternalServerError:
-      case InternalObjectCreationError:
       case RequestChannelClosed:
       case RequestResponseQueuingFailure:
-      case ResponseBuildingFailure:
       case ServiceUnavailable:
       case UnsupportedRestMethod:
       default:
