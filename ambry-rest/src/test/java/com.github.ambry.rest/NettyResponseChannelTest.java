@@ -459,6 +459,9 @@ public class NettyResponseChannelTest {
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
+    HttpResponse response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.getStatus());
+    assertFalse("Inconsistent value for Connection header", HttpHeaders.isKeepAlive(response));
     // drain the channel of content.
     while (channel.readOutbound() != null) {
     }

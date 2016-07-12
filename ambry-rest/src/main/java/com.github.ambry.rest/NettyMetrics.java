@@ -101,8 +101,13 @@ public class NettyMetrics {
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
   public final Counter idleConnectionCloseCount;
-  public final Counter ignoredExceptionCount;
+  public final Counter processorErrorAfterCloseCount;
   public final Counter processorExceptionCaughtCount;
+  public final Counter processorIOExceptionCount;
+  public final Counter processorRestServiceExceptionCount;
+  public final Counter processorThrowableCount;
+  public final Counter processorUnknownExceptionCount;
+
   // NettyResponseChannel
   public final Counter badRequestCount;
   public final Counter unauthorizedCount;
@@ -245,10 +250,18 @@ public class NettyMetrics {
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));
     idleConnectionCloseCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IdleConnectionCloseCount"));
-    ignoredExceptionCount =
-        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IgnoredExceptionCount"));
+    processorErrorAfterCloseCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ErrorAfterCloseCount"));
     processorExceptionCaughtCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ExceptionCaughtCount"));
+    processorIOExceptionCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "IOExceptionCount"));
+    processorRestServiceExceptionCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "RestServiceExceptionCount"));
+    processorThrowableCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "ThrowableCount"));
+    processorUnknownExceptionCount =
+        metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "UnknownExceptionCount"));
     // NettyResponseChannel
     badRequestCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount"));
     unauthorizedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnauthorizedCount"));
