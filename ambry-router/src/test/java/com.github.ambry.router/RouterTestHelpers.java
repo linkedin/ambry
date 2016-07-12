@@ -70,7 +70,7 @@ class RouterTestHelpers {
    * Test that an operation returns a certain result when each server in the layout returns a certain error code.
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers in {@code serverLayout}.  If
    *                                there are more values in this array than there are servers, an exception is thrown.
-   *                                If there are less, the rest of the servers are set to
+   *                                If there are fewer, the rest of the servers are set to
    *                                {@link ServerErrorCode#No_Error}
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @param expectedError The {@link RouterErrorCode} expected, or null if no error is expected.
@@ -81,7 +81,7 @@ class RouterTestHelpers {
       RouterErrorCode expectedError, ErrorCodeChecker errorCodeChecker)
       throws Exception {
     setServerErrorCodes(serverErrorCodesInOrder, serverLayout);
-    errorCodeChecker.check(expectedError);
+    errorCodeChecker.testAndAssert(expectedError);
     resetServerErrorCodes(serverLayout);
   }
 
@@ -89,8 +89,9 @@ class RouterTestHelpers {
    * Test that an operation returns a certain result when each server in a partition returns a certain error code.
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers returned by
    *                                {@link PartitionId#getReplicaIds()}. If there are more values in this array than
-   *                                there are servers, an exception is thrown. If there are less, the rest of the
-   *                                servers are set to {@link ServerErrorCode#No_Error}
+   *                                there are servers containing the partition, an exception is thrown. If there are
+   *                                fewer, the rest of the servers are set to {@link ServerErrorCode#No_Error}
+   * @param partition The partition contained by the servers to set error codes on.
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @param expectedError The {@link RouterErrorCode} expected, or null if no error is expected.
    * @param errorCodeChecker Performs the checks that ensure that the expected {@link RouterErrorCode} is returned .
@@ -100,18 +101,17 @@ class RouterTestHelpers {
       MockServerLayout serverLayout, RouterErrorCode expectedError, ErrorCodeChecker errorCodeChecker)
       throws Exception {
     setServerErrorCodes(serverErrorCodesInOrder, partition, serverLayout);
-    errorCodeChecker.check(expectedError);
+    errorCodeChecker.testAndAssert(expectedError);
     resetServerErrorCodes(serverLayout);
   }
 
   /**
    * Set the servers in the specified layout to respond with the designated error codes.
-   * @param serverErrorCodesInOrder The error codes to set in the order of the servers in {@code serverLayout}.  If
-   *                                there are more values in this array than there are servers, an exception is thrown.
-   *                                If there are less, the rest of the servers are set to
-   *                                {@link ServerErrorCode#No_Error}
+   * @param serverErrorCodesInOrder The error codes to set in the order of the servers in {@code serverLayout}.
+   *                                If there are fewer error codes in this array than there are servers,
+   *                                the rest of the servers are set to {@link ServerErrorCode#No_Error}
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
-   * @throws Exception
+   * @throws IllegalArgumentException If there are more error codes in the input array then there are servers.
    */
   static void setServerErrorCodes(ServerErrorCode[] serverErrorCodesInOrder, MockServerLayout serverLayout) {
     Collection<MockServer> servers = serverLayout.getMockServers();
@@ -129,13 +129,14 @@ class RouterTestHelpers {
   }
 
   /**
-   * Set the servers in the specified partition to respond with the designated error codes.
+   * Set the servers containing the specified partition to respond with the designated error codes.
    * @param serverErrorCodesInOrder The error codes to set in the order of the servers returned by
-   *                                {@link PartitionId#getReplicaIds()}. If there are more values in this array than
-   *                                there are servers, an exception is thrown. If there are less, the rest of the
-   *                                servers are set to {@link ServerErrorCode#No_Error}
+   *                                {@link PartitionId#getReplicaIds()}. If there are fewer error codes in this array
+   *                                than there are servers containing the partition, the rest of the servers are set to
+   *                                {@link ServerErrorCode#No_Error}
+   * @param partition The partition contained by the servers to set error codes on.
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
-   * @throws Exception
+   * @throws IllegalArgumentException If there are more error codes in the input array then there are servers.
    */
   static void setServerErrorCodes(ServerErrorCode[] serverErrorCodesInOrder, PartitionId partition,
       MockServerLayout serverLayout) {
@@ -167,12 +168,12 @@ class RouterTestHelpers {
    */
   interface ErrorCodeChecker {
     /**
-     * Make assertions related to the expected error code.
+     * Test and make assertions related to the expected error code.
      * @param expectedError The {@link RouterErrorCode} that an operation is expected to report, or {@code null} if no
      *                      error is expected.
      * @throws Exception
      */
-    void check(RouterErrorCode expectedError)
+    void testAndAssert(RouterErrorCode expectedError)
         throws Exception;
   }
 }

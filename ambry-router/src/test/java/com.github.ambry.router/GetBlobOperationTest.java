@@ -114,11 +114,11 @@ public class GetBlobOperationTest {
   private final OperationCompleteCallback operationCompleteCallback = new OperationCompleteCallback(operationsCount);
 
   /**
-   * An checker that either asserts that a get operation succeeds or returns the specified error code.
+   * A checker that either asserts that a get operation succeeds or returns the specified error code.
    */
-  private final ErrorCodeChecker defaultErrorCodeChecker = new ErrorCodeChecker() {
+  private final ErrorCodeChecker getErrorCodeChecker = new ErrorCodeChecker() {
     @Override
-    public void check(RouterErrorCode expectedError)
+    public void testAndAssert(RouterErrorCode expectedError)
         throws Exception {
       if (expectedError == null) {
         getAndAssertSuccess();
@@ -331,7 +331,7 @@ public class GetBlobOperationTest {
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.Blob_Not_Found, replicasCount), mockServerLayout,
         RouterErrorCode.BlobDoesNotExist, new ErrorCodeChecker() {
           @Override
-          public void check(RouterErrorCode expectedError)
+          public void testAndAssert(RouterErrorCode expectedError)
               throws Exception {
             GetBlobOperation op = createOperationAndComplete(null);
             Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
@@ -357,7 +357,7 @@ public class GetBlobOperationTest {
       Map<ServerErrorCode, Integer> errorCounts = new HashMap<>();
       errorCounts.put(ServerErrorCode.Blob_Not_Found, replicasCount - 1);
       errorCounts.put(entry.getKey(), 1);
-      testWithErrorCodes(errorCounts, mockServerLayout, entry.getValue(), defaultErrorCodeChecker);
+      testWithErrorCodes(errorCounts, mockServerLayout, entry.getValue(), getErrorCodeChecker);
     }
   }
 
