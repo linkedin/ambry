@@ -44,10 +44,11 @@ import org.slf4j.LoggerFactory;
 public class NettyServer implements NioServer {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final EventLoopGroup bossGroup;
-  private final EventLoopGroup workerGroup;
   private final ChannelInitializer<SocketChannel> channelInitializer;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+
+  private EventLoopGroup bossGroup;
+  private EventLoopGroup workerGroup;
 
   /**
    * Creates a new instance of NettyServer.
@@ -60,8 +61,6 @@ public class NettyServer implements NioServer {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
     this.channelInitializer = channelInitializer;
-    bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
-    workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
     logger.trace("Instantiated NettyServer");
   }
 
@@ -71,6 +70,8 @@ public class NettyServer implements NioServer {
     long startupBeginTime = System.currentTimeMillis();
     try {
       logger.trace("Starting NettyServer deployment");
+      bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
+      workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
       ServerBootstrap b = new ServerBootstrap();
       // Netty creates a new instance of every class in the pipeline for every connection
       // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
@@ -93,8 +94,8 @@ public class NettyServer implements NioServer {
 
   @Override
   public void shutdown() {
-    if (!bossGroup.isTerminated() || !workerGroup.isTerminated()) {
-      logger.info("Shutting down NettyServer");
+    logger.info("Shutting down NettyServer");
+    if (bossGroup != null && workerGroup != null && (!bossGroup.isTerminated() || !workerGroup.isTerminated())) {
       long shutdownBeginTime = System.currentTimeMillis();
       workerGroup.shutdownGracefully();
       bossGroup.shutdownGracefully();
