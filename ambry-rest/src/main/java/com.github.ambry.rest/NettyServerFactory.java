@@ -63,7 +63,9 @@ public class NettyServerFactory implements NioServerFactory {
               .addLast("connectionStatsHandler", connectionStatsHandler)
                   // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
                   // to go here.
-              .addLast("codec", new HttpServerCodec())
+              .addLast("codec",
+                  new HttpServerCodec(nettyConfig.nettyServerMaxInitialLineLength, nettyConfig.nettyServerMaxHeaderSize,
+                      nettyConfig.nettyServerMaxChunkSize))
                   // for health check request handling
               .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
                   // for public access logging
