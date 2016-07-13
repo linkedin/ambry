@@ -470,10 +470,15 @@ class NonBlockingRouter implements Router {
      */
     @Override
     public void run() {
+      // The timeout for the network client poll should be a function of the request timeout,
+      // as the poll timeout should not cause the request to not time out for a lot longer than the configured request
+      // timeout. In the worst case, the request will time out in (request_timeout_ms + poll_timeout_ms), so the poll
+      // timeout should be at least an order of magnitude smaller.
+      final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestTimeoutMs / 10;
       try {
         while (isOpen.get()) {
           List<RequestInfo> requestInfoList = pollForRequests();
-          List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList);
+          List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, NETWORK_CLIENT_POLL_TIMEOUT);
           onResponse(responseInfoList);
         }
       } catch (Throwable e) {
@@ -531,8 +536,8 @@ class OperationCompleteCallback {
  * event occurs for any operation. A poll-eligible event is any event that occurs asynchronously to the
  * RequestResponseHandler thread such that there is a high chance of meaningful work getting done when the operation is
  * subsequently polled. When the callback is invoked, the RequestResponseHandler thread which could be
- * sleeping in a {@link NetworkClient#sendAndPoll(java.util.List)} is woken up so that the operations can be polled
- * without additional delays. For example, when a chunk gets filled by the ChunkFillerThread within the
+ * sleeping in a {@link NetworkClient#sendAndPoll(List, int)} is woken up so that the operations can be
+ * polled without additional delays. For example, when a chunk gets filled by the ChunkFillerThread within the
  * {@link PutManager}, this callback is invoked so that the RequestResponseHandler immediately polls the operation to
  * send out the request for the chunk.
  */

@@ -74,18 +74,17 @@ public class NonBlockingRouterTest {
   public void testNonBlockingRouterFactory()
       throws Exception {
     MockClusterMap mockClusterMap = new MockClusterMap();
+    Properties props = getNonBlockingRouterProperties("NotInClusterMap");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     try {
-      Properties props = getNonBlockingRouterProperties("NotInClusterMap");
-      VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
           new LoggingNotificationSystem()).getRouter();
       Assert.fail("NonBlockingRouterFactory instantiation should have failed because the router datacenter is not in "
           + "the cluster map");
     } catch (IllegalStateException e) {
-
     }
-    Properties props = getNonBlockingRouterProperties("DC1");
-    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    props = getNonBlockingRouterProperties("DC1");
+    verifiableProperties = new VerifiableProperties((props));
     router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
         new LoggingNotificationSystem()).getRouter();
     assertExpectedThreadCounts(1);

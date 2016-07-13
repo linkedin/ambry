@@ -77,6 +77,7 @@ class PutOperation {
   private final ResponseHandler responseHandler;
   private final BlobProperties blobProperties;
   private final byte[] userMetadata;
+  private final ReadableStreamChannel channel;
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
@@ -152,7 +153,7 @@ class PutOperation {
       ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
       ReadyForPollCallback readyForPollCallback,
-      ByteBufferAsyncWritableChannel.ChannelEventListener channelEventListener, Time time)
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, Time time)
       throws RouterException {
     submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
@@ -175,6 +176,7 @@ class PutOperation {
     this.responseHandler = responseHandler;
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
+    this.channel = channel;
     this.futureResult = futureResult;
     this.callback = callback;
     this.readyForPollCallback = readyForPollCallback;
@@ -188,8 +190,13 @@ class PutOperation {
       putChunks[i] = new PutChunk();
     }
     metadataPutChunk = numDataChunks > 1 ? new MetadataPutChunk() : null;
+    chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
+  }
 
-    chunkFillerChannel = new ByteBufferAsyncWritableChannel(channelEventListener);
+  /**
+   * Start reading from the channel containing the data for this operation.
+   */
+  void startReadingFromChannel() {
     channel.readInto(chunkFillerChannel, new Callback<Long>() {
       @Override
       public void onCompletion(Long result, Exception exception) {

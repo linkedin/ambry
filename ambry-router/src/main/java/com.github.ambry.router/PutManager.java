@@ -47,10 +47,8 @@ class PutManager {
   private final NotificationSystem notificationSystem;
   private final Time time;
   private final Thread chunkFillerThread;
-  //private final AtomicInteger operationSetState = new AtomicInteger(0);
   private final Object chunkFillerSynchronizer = new Object();
   private volatile boolean isChunkFillerThreadAsleep = false;
-  private volatile boolean chunkFillerThreadSleepDisabled = false;
   private volatile boolean areChunksAvailableForFilling = false;
   // This helps the PutManager quickly find the appropriate PutOperation to hand over the response to.
   // Requests are added before they are sent out and get cleaned up as and when responses come in.
@@ -143,6 +141,7 @@ class PutManager {
           new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
               channel, futureResult, callback, readyForPollCallback, chunkArrivalListener, time);
       putOperations.add(putOperation);
+      putOperation.startReadingFromChannel();
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.putBlobErrorCount.inc();
@@ -248,7 +247,6 @@ class PutManager {
     if (isOpen.compareAndSet(true, false)) {
       synchronized (chunkFillerSynchronizer) {
         if (isChunkFillerThreadAsleep) {
-          chunkFillerThreadSleepDisabled = true;
           chunkFillerSynchronizer.notify();
         }
       }
@@ -300,13 +298,14 @@ class PutManager {
               idleIteration = false;
             }
           }
-          if (idleIteration && !areChunksAvailableForFilling && !chunkFillerThreadSleepDisabled) {
+          if (idleIteration && !areChunksAvailableForFilling) {
             synchronized (chunkFillerSynchronizer) {
-              while (!areChunksAvailableForFilling && !chunkFillerThreadSleepDisabled) {
+              while (isOpen.get() && !areChunksAvailableForFilling) {
                 isChunkFillerThreadAsleep = true;
                 chunkFillerSynchronizer.wait();
               }
               isChunkFillerThreadAsleep = false;
+              areChunksAvailableForFilling = false;
             }
           }
         }

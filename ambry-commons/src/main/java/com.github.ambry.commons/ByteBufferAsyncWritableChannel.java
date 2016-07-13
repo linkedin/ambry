@@ -36,7 +36,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * List of events of interest to the consumer of the content in this channel.
    */
   public enum EventType {
-    ChunkArrival,
+    Write,
     Close,
   }
 
@@ -87,7 +87,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     ChunkData chunkData = new ChunkData(src, callback);
     chunks.add(chunkData);
     if (channelEventListener != null) {
-      channelEventListener.onEvent(EventType.ChunkArrival);
+      channelEventListener.onEvent(EventType.Write);
     }
     if (!isOpen()) {
       resolveAllRemainingChunks(new ClosedChannelException());

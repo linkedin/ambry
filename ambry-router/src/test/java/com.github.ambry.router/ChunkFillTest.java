@@ -117,6 +117,7 @@ public class ChunkFillTest {
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
         putUserMetadata, putChannel, futureResult, null,
         new ReadyForPollCallback(networkClientFactory.getNetworkClient()), null, new MockTime());
+    op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     // largeBlobSize is not a multiple of chunkSize
     int expectedNumChunks = (int) (blobSize / chunkSize + 1);
@@ -202,6 +203,7 @@ public class ChunkFillTest {
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
         putUserMetadata, putChannel, futureResult, null,
         new ReadyForPollCallback(networkClientFactory.getNetworkClient()), null, time);
+    op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     compositeBuffers = new ByteBuffer[numChunks];
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);
