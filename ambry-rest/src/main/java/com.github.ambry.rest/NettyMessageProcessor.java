@@ -64,7 +64,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   // variables that will live through the life of the channel.
-  private AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private ChannelHandlerContext ctx = null;
 
   // variables that will live for the life of a single request.
@@ -105,8 +105,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   }
 
   /**
-   * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed. Any tasks
-   * that are performed at this point in time cannot communicate with the client.
+   * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed (either by
+   * the server or the remote end). Any tasks that are performed at this point in time cannot communicate with the
+   * client.
    * <p/>
    * This is called exactly once in the lifetime of the channel. If there is no keepalive, this will be called
    * after one request (since the channel lives to serve exactly one request). If there is keepalive, this will be
