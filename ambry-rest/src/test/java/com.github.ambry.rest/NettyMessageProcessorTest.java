@@ -22,6 +22,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.InMemoryRouter;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpResponse;
@@ -67,7 +68,9 @@ public class NettyMessageProcessorTest {
   private final MockRestRequestResponseHandler requestHandler;
   private final HelperNotificationSystem notificationSystem = new HelperNotificationSystem();
 
-  private static final AtomicLong requestIdGenerator = new AtomicLong(0);
+  private static final AtomicLong REQUEST_ID_GENERATOR = new AtomicLong(0);
+  private static final NettyMetrics NETTY_METRICS = new NettyMetrics(new MetricRegistry());
+  private static final NettyConfig NETTY_CONFIG = new NettyConfig(new VerifiableProperties(new Properties()));
 
   /**
    * Sets up the mock services that {@link NettyMessageProcessor} can use.
@@ -183,6 +186,7 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     HttpResponse response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertFalse("Channel is not closed", channel.isOpen());
 
     // content without request on a channel that was kept alive
     channel = createChannel();
@@ -200,6 +204,7 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertFalse("Channel is not closed", channel.isOpen());
 
     // content when no content is expected.
     channel = createChannel();
@@ -207,10 +212,39 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertFalse("Channel is not closed", channel.isOpen());
 
     // wrong HTTPObject.
     channel = createChannel();
     channel.writeInbound(new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK));
+    response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertFalse("Channel is not closed", channel.isOpen());
+
+    // request while another request is in progress.
+    channel = createChannel();
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+    // channel should be closed by now
+    assertFalse("Channel is not closed", channel.isOpen());
+    response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+
+    // decoding failure
+    channel = createChannel();
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.GET, "/", null);
+    httpRequest.setDecoderResult(DecoderResult.failure(new IllegalStateException("Induced failure")));
+    channel.writeInbound(httpRequest);
+    // channel should be closed by now
+    assertFalse("Channel is not closed", channel.isOpen());
+    response = (HttpResponse) channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+
+    // unsupported method
+    channel = createChannel();
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.OPTIONS, "/", null));
+    // channel should be closed by now
+    assertFalse("Channel is not closed", channel.isOpen());
     response = (HttpResponse) channel.readOutbound();
     assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
   }
@@ -246,9 +280,7 @@ public class NettyMessageProcessorTest {
    * @return an {@link EmbeddedChannel} that incorporates an instance of {@link NettyMessageProcessor}.
    */
   private EmbeddedChannel createChannel() {
-    NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    NettyConfig nettyConfig = new NettyConfig(new VerifiableProperties(new Properties()));
-    NettyMessageProcessor processor = new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler);
+    NettyMessageProcessor processor = new NettyMessageProcessor(NETTY_METRICS, NETTY_CONFIG, requestHandler);
     return new EmbeddedChannel(new ChunkedWriteHandler(), processor);
   }
 
@@ -264,7 +296,7 @@ public class NettyMessageProcessorTest {
   private void sendRequestCheckResponse(EmbeddedChannel channel, HttpMethod httpMethod, RestMethod restMethod,
       boolean isKeepAlive)
       throws IOException {
-    long requestId = requestIdGenerator.getAndIncrement();
+    long requestId = REQUEST_ID_GENERATOR.getAndIncrement();
     String uri = MockBlobStorageService.ECHO_REST_METHOD + requestId;
     HttpRequest httpRequest = RestTestUtils.createRequest(httpMethod, uri, null);
     HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);

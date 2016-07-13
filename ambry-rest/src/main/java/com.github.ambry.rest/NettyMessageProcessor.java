@@ -23,7 +23,9 @@ import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +64,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   // variables that will live through the life of the channel.
+  private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private ChannelHandlerContext ctx = null;
 
   // variables that will live for the life of a single request.
@@ -102,8 +105,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   }
 
   /**
-   * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed. Any tasks
-   * that are performed at this point in time cannot communicate with the client.
+   * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed (either by
+   * the server or the remote end). Any tasks that are performed at this point in time cannot communicate with the
+   * client.
    * <p/>
    * This is called exactly once in the lifetime of the channel. If there is no keepalive, this will be called
    * after one request (since the channel lives to serve exactly one request). If there is keepalive, this will be
@@ -117,8 +121,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     logger.trace("Channel {} inactive", ctx.channel());
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
-      logger.error("Request {} was aborted because the channel became inactive", request.getUri());
-      responseChannel.onResponseComplete(new ClosedChannelException());
+      logger.error("Request {} was aborted because the channel {} became inactive", request.getUri(), ctx.channel());
+      onRequestAborted(new ClosedChannelException());
+    } else {
+      close();
     }
   }
 
@@ -137,33 +143,41 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
       throws Exception {
     try {
-      nettyMetrics.processorExceptionCaughtCount.inc();
       if (request != null && request.isOpen() && cause instanceof Exception) {
-        responseChannel.onResponseComplete((Exception) cause);
-      } else if (ctx.channel().isActive()) {
+        nettyMetrics.processorExceptionCaughtCount.inc();
+        onRequestAborted((Exception) cause);
+      } else if (isOpen()) {
         if (cause instanceof RestServiceException) {
+          nettyMetrics.processorRestServiceExceptionCount.inc();
           RestServiceErrorCode errorCode = ((RestServiceException) cause).getErrorCode();
           if (ResponseStatus.getResponseStatus(errorCode) == ResponseStatus.BadRequest) {
             logger.debug("Swallowing error on channel {}", ctx.channel(), cause);
           } else {
             logger.error("Swallowing error on channel {}", ctx.channel(), cause);
           }
-        } else if (cause instanceof Exception) {
-          // at this point, it is certain that the server hasn't made any mistakes and the exception is probably
+        } else if (cause instanceof IOException) {
+          // for this case, it is certain that the server hasn't made any mistakes and the exception is probably
           // due to the client closing the connection. Therefore this is logged at the DEBUG level.
-          nettyMetrics.ignoredExceptionCount.inc();
+          nettyMetrics.processorIOExceptionCount.inc();
           logger.debug("Swallowing error on channel {}", ctx.channel(), cause);
+        } else if (cause instanceof Exception) {
+          nettyMetrics.processorUnknownExceptionCount.inc();
+          logger.error("Swallowing error on channel {}", ctx.channel(), cause);
         } else {
+          nettyMetrics.processorThrowableCount.inc();
           ctx.fireExceptionCaught(cause);
         }
-        ctx.close();
+        close();
+      } else {
+        nettyMetrics.processorErrorAfterCloseCount.inc();
+        logger.debug("Caught error on channel {} after it was closed", ctx.channel(), cause);
       }
     } catch (Exception e) {
       String uri = (request != null) ? request.getUri() : null;
       nettyMetrics.exceptionCaughtTasksError.inc();
       logger.error("Swallowing exception during exceptionCaught tasks on channel {} for request {}", ctx.channel(), uri,
           e);
-      ctx.close();
+      close();
     }
   }
 
@@ -177,15 +191,14 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   public void userEventTriggered(ChannelHandlerContext ctx, Object event) {
     // NOTE: This is specifically in place to handle connections that close unexpectedly from the client side.
     // Even in that situation, any cleanup code that we have in the handlers will have to be called.
-    // This ensures that multiple chunk requests that a handler may be tracking is cleaned up properly. We need this
-    // especially because request handlers handle multiple requests at the same time and might have some state for each
-    // connection.
     if (event instanceof IdleStateEvent && ((IdleStateEvent) event).state() == IdleState.ALL_IDLE) {
       logger.info("Channel {} has been idle for {} seconds. Closing it", ctx.channel(),
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
-        responseChannel.onResponseComplete(new ClosedChannelException());
+        onRequestAborted(new ClosedChannelException());
+      } else {
+        close();
       }
     }
   }
@@ -203,35 +216,40 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
       throws RestServiceException {
-    logger.trace("Reading on channel {}", ctx.channel());
-    long currentTime = System.currentTimeMillis();
+    if (isOpen()) {
+      logger.trace("Reading on channel {}", ctx.channel());
+      long currentTime = System.currentTimeMillis();
 
-    boolean recognized = false;
-    boolean success = true;
-    if (obj instanceof HttpRequest) {
-      recognized = true;
-      success = handleRequest((HttpRequest) obj);
-    }
-    // this is an if and not an else-if because a HttpObject can be both HttpRequest and HttpContent.
-    if (success && obj instanceof HttpContent) {
-      recognized = true;
-      success = handleContent((HttpContent) obj);
-    }
-    if (success && !recognized) {
-      logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
-      nettyMetrics.unknownHttpObjectError.inc();
-      if (responseChannel == null || requestContentFullyReceived) {
-        resetState();
+      boolean recognized = false;
+      boolean success = true;
+      if (obj instanceof HttpRequest) {
+        recognized = true;
+        success = handleRequest((HttpRequest) obj);
       }
-      responseChannel.onResponseComplete(new RestServiceException("HttpObject received is null or not of a known type",
-          RestServiceErrorCode.UnknownHttpObject));
-    }
+      // this is an if and not an else-if because a HttpObject can be both HttpRequest and HttpContent.
+      if (success && obj instanceof HttpContent) {
+        recognized = true;
+        success = handleContent((HttpContent) obj);
+      }
+      if (success && !recognized) {
+        logger.warn("Received null/unrecognized HttpObject {} on channel {}", obj, ctx.channel());
+        nettyMetrics.unknownHttpObjectError.inc();
+        if (responseChannel == null || requestContentFullyReceived) {
+          resetState();
+        }
+        onRequestAborted(new RestServiceException("HttpObject received is null or not of a known type",
+            RestServiceErrorCode.UnknownHttpObject));
+      }
 
-    if (lastChannelReadTime != null) {
-      nettyMetrics.channelReadIntervalInMs.update(currentTime - lastChannelReadTime);
-      logger.trace("Delay between channel reads is {} ms", (currentTime - lastChannelReadTime));
+      if (lastChannelReadTime != null) {
+        nettyMetrics.channelReadIntervalInMs.update(currentTime - lastChannelReadTime);
+        logger.trace("Delay between channel reads is {} ms for channel {}", (currentTime - lastChannelReadTime),
+            ctx.channel());
+      }
+      lastChannelReadTime = currentTime;
+    } else {
+      logger.debug("Read on channel {} ignored because it is inactive", ctx.channel());
     }
-    lastChannelReadTime = currentTime;
   }
 
   /**
@@ -260,7 +278,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel(),
             httpRequest.getDecoderResult().cause());
         nettyMetrics.malformedRequestError.inc();
-        responseChannel.onResponseComplete(new RestServiceException("Decoder failed because of malformed request",
+        onRequestAborted(new RestServiceException("Decoder failed because of malformed request",
             RestServiceErrorCode.MalformedRequest));
       } else {
         try {
@@ -283,6 +301,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           if (request.getRestMethod().equals(RestMethod.POST) && !HttpPostRequestDecoder.isMultipart(httpRequest)) {
             requestHandler.handleRequest(request, responseChannel);
           }
+        } catch (RestServiceException e) {
+          success = false;
+          onRequestAborted(e);
         } finally {
           if (request != null) {
             request.getMetricsTracker().nioMetricsTracker
@@ -297,7 +318,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       logger.error("New request received when previous request is yet to be fully received on channel {}. Request under"
           + " processing: {}. Unexpected request: {}", ctx.channel(), request.getUri(), httpRequest.getUri());
       nettyMetrics.duplicateRequestError.inc();
-      ctx.close();
+      onRequestAborted(new RestServiceException("Received request in the middle of another request",
+          RestServiceErrorCode.BadRequest));
     }
     return success;
   }
@@ -320,13 +342,13 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       long processingStartTime = System.currentTimeMillis();
       nettyMetrics.bytesReadRate.mark(httpContent.content().readableBytes());
       requestContentFullyReceived = httpContent instanceof LastHttpContent;
-      logger.trace("Received content for request - {}", request.getUri());
+      logger.trace("Received content for request {} on channel {}", request.getUri(), ctx.channel());
       try {
         request.addContent(httpContent);
       } catch (IllegalStateException e) {
         success = false;
         nettyMetrics.contentAdditionError.inc();
-        responseChannel.onResponseComplete(new RestServiceException(e, RestServiceErrorCode.InvalidRequestState));
+        onRequestAborted(new RestServiceException(e, RestServiceErrorCode.InvalidRequestState));
       } finally {
         long chunkProcessingTime = System.currentTimeMillis() - processingStartTime;
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
@@ -341,7 +363,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       resetState();
       logger.warn("Received content when it was not expected on channel {}", ctx.channel());
       nettyMetrics.noRequestError.inc();
-      responseChannel.onResponseComplete(
+      onRequestAborted(
           new RestServiceException("Received content without a request", RestServiceErrorCode.InvalidRequestState));
     }
     return success;
@@ -356,5 +378,37 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     requestContentFullyReceived = false;
     responseChannel = new NettyResponseChannel(ctx, nettyMetrics);
     logger.trace("Refreshed state for channel {}", ctx.channel());
+  }
+
+  /**
+   * Aborts the request and sets state to indicate that the channel is no longer usable.
+   * @param exception the {@link Exception} to send to the client if possible.
+   */
+  private void onRequestAborted(Exception exception) {
+    if (responseChannel != null) {
+      logger.trace("Aborting request on channel {}", ctx.channel());
+      responseChannel.close(exception);
+      channelOpen.set(false);
+    } else {
+      logger.debug("No response channel available for channel {}. Closing it immediately", ctx.channel());
+      close();
+    }
+  }
+
+  /**
+   * Indicates whether the channel backing this handler is usable.
+   * @return {@code true} if the channel backing this handler is usable, {@code false} otherwise.
+   */
+  private boolean isOpen() {
+    return channelOpen.get() && ctx.channel().isActive();
+  }
+
+  /**
+   * Closes the channel and marks it as unusable.
+   */
+  private void close() {
+    logger.trace("Closing channel {}", ctx.channel());
+    ctx.close();
+    channelOpen.set(false);
   }
 }

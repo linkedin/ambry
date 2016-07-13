@@ -171,8 +171,7 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   @Override
   public void close() {
-    forceClose = true;
-    onResponseComplete(new ClosedChannelException());
+    close(new ClosedChannelException());
   }
 
   @Override
@@ -256,7 +255,7 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param request the {@link NettyRequest} whose response is being served through this instance of
    *                NettyResponseChannel.
    */
-  protected void setRequest(NettyRequest request) {
+  void setRequest(NettyRequest request) {
     if (request != null) {
       if (this.request == null) {
         this.request = request;
@@ -268,6 +267,19 @@ class NettyResponseChannel implements RestResponseChannel {
     } else {
       throw new IllegalArgumentException("RestRequest provided is null");
     }
+  }
+
+  /**
+   * Sends a response to the client based on the {@code exception} and marks the channel as closed. The process of
+   * closing the network channel is also initiated.
+   * <p/>
+   * Functionality is the same as {@link #onResponseComplete(Exception)} except that the channel is always closed after
+   * the response sending is complete.
+   * @param exception the {@link Exception} to use while constructing an error message for the client.
+   */
+  void close(Exception exception) {
+    forceClose = true;
+    onResponseComplete(exception);
   }
 
   /**
@@ -289,7 +301,7 @@ class NettyResponseChannel implements RestResponseChannel {
       GenericFutureListener<ChannelFuture> listener) {
     long writeProcessingStartTime = System.currentTimeMillis();
     boolean writtenThisTime = false;
-    if (responseMetadataWriteInitiated.compareAndSet(false, true)) {
+    if (responseMetadataWriteInitiated.compareAndSet(false, true) && ctx.channel().isActive()) {
       // we do some manipulation here for chunking. According to the HTTP spec, we can have either a Content-Length
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked. Note that sending HttpContent chunks data anyway - we are just explicitly specifying
@@ -355,14 +367,13 @@ class NettyResponseChannel implements RestResponseChannel {
     logger.trace("Sending error response to client on channel {}", ctx.channel());
     FullHttpResponse errorResponse = getErrorResponse(exception);
     if (maybeWriteResponseMetadata(errorResponse, new ErrorResponseWriteListener())) {
-      logger.trace("Successfully sent error response on channel {}", ctx.channel());
+      logger.trace("Scheduled error response sending on channel {}", ctx.channel());
       responseStatus = errorResponseStatus;
       responseSent = true;
       long processingTime = System.currentTimeMillis() - processingStartTime;
       nettyMetrics.errorResponseProcessingTimeInMs.update(processingTime);
     } else {
-      logger
-          .debug("Could not send error response on channel {} because a response has already been sent", ctx.channel());
+      logger.debug("Could not send error response on channel {}", ctx.channel());
     }
     return responseSent;
   }
@@ -400,7 +411,7 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setContentLength(response, fullMsg.length());
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    boolean keepAlive = HttpHeaders.isKeepAlive(responseMetadata) &&
+    boolean keepAlive = !forceClose && HttpHeaders.isKeepAlive(responseMetadata) &&
         request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES
         .contains(status);
     HttpHeaders.setKeepAlive(response, keepAlive);
@@ -530,6 +541,8 @@ class NettyResponseChannel implements RestResponseChannel {
       } else {
         logger.error("Unexpected error handling request {} with method {}.", uri, restMethod, exception);
       }
+    } else {
+      logger.debug("Exception encountered after channel {} became inactive", ctx.channel(), exception);
     }
   }
 

@@ -441,8 +441,12 @@ class NettyRequest implements RestRequest {
   private Set<Cookie> convertHttpToJavaCookies(Set<io.netty.handler.codec.http.Cookie> httpCookies) {
     Set<javax.servlet.http.Cookie> cookies = new HashSet<Cookie>();
     for (io.netty.handler.codec.http.Cookie cookie : httpCookies) {
-      javax.servlet.http.Cookie javaCookie = new javax.servlet.http.Cookie(cookie.getName(), cookie.getValue());
-      cookies.add(javaCookie);
+      try {
+        javax.servlet.http.Cookie javaCookie = new javax.servlet.http.Cookie(cookie.getName(), cookie.getValue());
+        cookies.add(javaCookie);
+      } catch (IllegalArgumentException e) {
+        logger.debug("Could not create cookie with name [{}]", cookie.getName(), e);
+      }
     }
     return cookies;
   }
