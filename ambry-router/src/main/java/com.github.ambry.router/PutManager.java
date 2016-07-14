@@ -49,7 +49,7 @@ class PutManager {
   private final Thread chunkFillerThread;
   private final Object chunkFillerSynchronizer = new Object();
   private volatile boolean isChunkFillerThreadAsleep = false;
-  private volatile boolean areChunksAvailableForFilling = false;
+  private volatile boolean chunkFillerThreadMaySleep = false;
   // This helps the PutManager quickly find the appropriate PutOperation to hand over the response to.
   // Requests are added before they are sent out and get cleaned up as and when responses come in.
   // Because there is a guaranteed response from the NetworkClient for every request sent out, entries
@@ -111,7 +111,7 @@ class PutManager {
         synchronized (chunkFillerSynchronizer) {
           // At this point, the chunk for which this notification came in (if any) could already have been consumed by
           // the chunk filler, and this might unnecessarily wake it up from its sleep, which should be okay.
-          areChunksAvailableForFilling = true;
+          chunkFillerThreadMaySleep = false;
           if (isChunkFillerThreadAsleep) {
             chunkFillerSynchronizer.notify();
           }
@@ -247,6 +247,7 @@ class PutManager {
     if (isOpen.compareAndSet(true, false)) {
       synchronized (chunkFillerSynchronizer) {
         if (isChunkFillerThreadAsleep) {
+          chunkFillerThreadMaySleep = false;
           chunkFillerSynchronizer.notify();
         }
       }
@@ -291,21 +292,20 @@ class PutManager {
     public void run() {
       try {
         while (isOpen.get()) {
-          boolean idleIteration = true;
+          chunkFillerThreadMaySleep = true;
           for (PutOperation op : putOperations) {
             if (!op.isChunkFillComplete()) {
               op.fillChunks();
-              idleIteration = false;
+              chunkFillerThreadMaySleep = false;
             }
           }
-          if (idleIteration && !areChunksAvailableForFilling) {
+          if (chunkFillerThreadMaySleep) {
             synchronized (chunkFillerSynchronizer) {
-              while (isOpen.get() && !areChunksAvailableForFilling) {
+              while (chunkFillerThreadMaySleep) {
                 isChunkFillerThreadAsleep = true;
                 chunkFillerSynchronizer.wait();
               }
               isChunkFillerThreadAsleep = false;
-              areChunksAvailableForFilling = false;
             }
           }
         }

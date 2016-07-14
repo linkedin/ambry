@@ -28,6 +28,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -530,6 +531,59 @@ public class PutManagerTest {
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  @Test
+  public void testChunkFillerSleep()
+      throws Exception {
+    router = getNonBlockingRouter();
+    // At this time there are no put operations, so the ChunkFillerThread will eventually go into WAITING state.
+    Thread chunkFillerThread = TestUtils.getThreadByThisName("ChunkFillerThread");
+    Assert.assertTrue("ChunkFillerThread should have gone to WAITING state as there are no active operations",
+        waitForThreadState(chunkFillerThread, Thread.State.WAITING));
+    int blobSize = chunkSize * 2;
+    RequestAndResult requestAndResult = new RequestAndResult(blobSize);
+    requestAndResultsList.add(requestAndResult);
+    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+    FutureResult<String> future = (FutureResult<String>) router
+        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
+    // There will be two chunks written to the underlying writable channel, and so two events will be fired.
+    int writeSize = blobSize / 2;
+    ByteBuffer buf = ByteBuffer.allocate(writeSize);
+    src.get(buf.array());
+    putChannel.write(buf);
+    // The first write will wake up (or will have woken up) the ChunkFiller thread and it will not go to WAITING until
+    // the operation is complete as an attempt to fill chunks will be done by the ChunkFiller in every iteration
+    // until the operation is complete.
+    Assert.assertTrue(
+        "ChunkFillerThread should have gone to RUNNABLE state as there is an active operation that is not yet complete",
+        waitForThreadState(chunkFillerThread, Thread.State.RUNNABLE));
+    buf.rewind();
+    src.get(buf.array());
+    putChannel.write(buf);
+    // At this time all writes have finished, so the ChunkFiller thread will eventually go (or will have already gone)
+    // to WAITING due to this write.
+    Assert
+        .assertTrue("ChunkFillerThread should have gone to WAITING state as the only active operation is now complete",
+            waitForThreadState(chunkFillerThread, Thread.State.WAITING));
+    future.await();
+    requestAndResult.result = future;
+    assertSuccess();
+    assertCloseCleanup();
+  }
+
+  private boolean waitForThreadState(Thread thread, Thread.State state) {
+    long MAX_WAIT_MS = 2000;
+    long checkStartTimeMs = SystemTime.getInstance().milliseconds();
+    while (thread.getState() != state) {
+      if (SystemTime.getInstance().milliseconds() - checkStartTimeMs > MAX_WAIT_MS) {
+        return false;
+      } else {
+        Thread.yield();
+      }
+    }
+    return true;
   }
 
   // Methods used by the tests
