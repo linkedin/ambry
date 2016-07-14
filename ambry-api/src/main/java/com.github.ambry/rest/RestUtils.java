@@ -132,6 +132,9 @@ public class RestUtils {
     UserMetadata,
     /**
      * All the replicas of the blob ID returned as content (Admin only).
+     * <p/>
+     * "replicas" here means the string representation of all the replicas (i.e. host:port/path) where the blob might
+     * reside.
      */
     Replicas
   }

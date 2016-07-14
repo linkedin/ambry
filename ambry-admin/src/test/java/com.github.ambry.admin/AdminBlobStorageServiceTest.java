@@ -384,8 +384,8 @@ public class AdminBlobStorageServiceTest {
   /**
    * Tests {@link GetReplicasHandler#getReplicas(String, RestResponseChannel)}
    * <p/>
-   * For the each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created. The replica list returned
-   * from {@link GetReplicasHandler#getReplicas(String, RestResponseChannel)}is checked for equality against a locally
+   * For each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created. The replica list returned from
+   * {@link GetReplicasHandler#getReplicas(String, RestResponseChannel)}is checked for equality against a locally
    * obtained replica list.
    * @throws Exception
    */

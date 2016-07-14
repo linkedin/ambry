@@ -78,7 +78,7 @@ class AdminBlobStorageService implements BlobStorageService {
    * response handler controller and a router.
    * @param adminConfig the {@link AdminConfig} with configuration parameters.
    * @param adminMetrics the metrics instance to use in the form of {@link AdminMetrics}.
-   * @param clusterMap the {@link ClusterMap} to use.
+   * @param clusterMap the {@link ClusterMap} that contains information about the cluster.
    * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
    *                        out.
    * @param router the {@link Router} instance to use to perform blob operations.
@@ -327,7 +327,8 @@ class AdminBlobStorageService implements BlobStorageService {
     /**
      * Forwards request to the {@link Router} once ID conversion is complete.
      * </p>
-     * In the case of some sub-resources, executes the operation without forwarding to the {@link Router}.
+     * In the case of some sub-resources (e.g., {@link RestUtils.SubResource#Replicas}), the request is not forwarded to
+     * the {@link Router}.
      * @param result The converted ID. This would be non null when the request executed successfully
      * @param exception The exception that was reported on execution of the request
      * @throws IllegalStateException if both {@code result} and {@code exception} are null.

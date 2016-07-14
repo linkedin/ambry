@@ -57,7 +57,7 @@ public class AdminIdConverterFactory implements IdConverterFactory {
 
     /**
      * {@inheritDoc}
-     * On any other {@link RestMethod}, removes the leading slash in order to convert the path into an ID that the
+     * On any {@link RestMethod}, removes the leading slash in order to convert the path into an ID that the
      * {@link com.github.ambry.router.Router} will understand.
      * @param restRequest {@link RestRequest} representing the request.
      * @param input the ID that needs to be converted.
