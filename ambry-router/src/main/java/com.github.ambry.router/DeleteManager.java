@@ -46,7 +46,6 @@ class DeleteManager {
   private final ClusterMap clusterMap;
   private final RouterConfig routerConfig;
   private final OperationCompleteCallback operationCompleteCallback;
-  private final ReadyForPollCallback readyForPollCallback;
 
   private static final Logger logger = LoggerFactory.getLogger(DeleteManager.class);
 
@@ -75,20 +74,17 @@ class DeleteManager {
    * @param routerConfig The {@link RouterConfig} containing the configs for the DeleteManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
-   * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
-   *                             operations.
    * @param time The {@link Time} instance to use.
    */
   DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback, Time time) {
+      OperationCompleteCallback operationCompleteCallback, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.operationCompleteCallback = operationCompleteCallback;
-    this.readyForPollCallback = readyForPollCallback;
     this.time = time;
     deleteOperations = Collections.newSetFromMap(new ConcurrentHashMap<DeleteOperation, Boolean>());
     correlationIdToDeleteOperation = new HashMap<Integer, DeleteOperation>();
@@ -106,7 +102,6 @@ class DeleteManager {
       DeleteOperation deleteOperation =
           new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, futureResult, callback, time);
       deleteOperations.add(deleteOperation);
-      readyForPollCallback.onPollReady();
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.deleteBlobErrorCount.inc();

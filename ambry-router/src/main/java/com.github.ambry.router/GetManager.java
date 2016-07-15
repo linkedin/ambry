@@ -109,7 +109,6 @@ class GetManager {
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, futureResult,
               callback, operationCompleteCallback, time);
       getOperations.add(getBlobInfoOperation);
-      readyForPollCallback.onPollReady();
     } catch (RouterException e) {
       routerMetrics.getBlobInfoErrorCount.inc();
       routerMetrics.countError(e);
@@ -131,7 +130,6 @@ class GetManager {
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, futureResult, callback,
               operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       getOperations.add(getBlobOperation);
-      readyForPollCallback.onPollReady();
     } catch (RouterException e) {
       routerMetrics.getBlobErrorCount.inc();
       routerMetrics.countError(e);

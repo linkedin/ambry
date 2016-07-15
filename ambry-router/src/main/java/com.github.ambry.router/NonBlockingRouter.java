@@ -324,6 +324,7 @@ class NonBlockingRouter implements Router {
     private final NetworkClient networkClient;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
+    private final ReadyForPollCallback readyForPollCallback;
 
     /**
      * Constructs an OperationController
@@ -333,13 +334,13 @@ class NonBlockingRouter implements Router {
     OperationController(int index)
         throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
-      ReadyForPollCallback readyForPollCallback = new ReadyForPollCallback(networkClient);
+      readyForPollCallback = new ReadyForPollCallback(networkClient);
       putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
           operationCompleteCallback, readyForPollCallback, index, time);
       getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback,
           readyForPollCallback, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCompleteCallback, readyForPollCallback, time);
+          operationCompleteCallback, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + index, this, true);
       requestResponseHandlerThread.start();
       routerMetrics.initializeOperationControllerMetrics(requestResponseHandlerThread);
@@ -353,6 +354,7 @@ class NonBlockingRouter implements Router {
      */
     private void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
       getManager.submitGetBlobInfoOperation(blobId, futureResult, callback);
+      readyForPollCallback.onPollReady();
     }
 
     /**
@@ -365,6 +367,7 @@ class NonBlockingRouter implements Router {
     private void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
         Callback<ReadableStreamChannel> callback) {
       getManager.submitGetBlobOperation(blobId, futureResult, callback);
+      readyForPollCallback.onPollReady();
     }
 
     /**
@@ -388,6 +391,7 @@ class NonBlockingRouter implements Router {
         close();
       } else {
         putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, futureResult, callback);
+        readyForPollCallback.onPollReady();
       }
     }
 
@@ -400,6 +404,7 @@ class NonBlockingRouter implements Router {
      */
     private void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
       deleteManager.submitDeleteBlobOperation(blobId, futureResult, callback);
+      readyForPollCallback.onPollReady();
     }
 
     /**
