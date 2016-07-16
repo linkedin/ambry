@@ -54,6 +54,7 @@ import org.junit.Test;
  * A class to test the Put implementation of the {@link NonBlockingRouter}.
  */
 public class PutManagerTest {
+  private static final long MAX_WAIT_MS = 2000;
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
@@ -533,6 +534,11 @@ public class PutManagerTest {
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
+  /**
+   * Test to verify that the chunk filler goes to sleep when there are no active operations and is woken up when
+   * operations become active.
+   * @throws Exception
+   */
   @Test
   public void testChunkFillerSleep()
       throws Exception {
@@ -567,14 +573,20 @@ public class PutManagerTest {
     Assert
         .assertTrue("ChunkFillerThread should have gone to WAITING state as the only active operation is now complete",
             waitForThreadState(chunkFillerThread, Thread.State.WAITING));
-    future.await();
+    Assert
+        .assertTrue("Operation should not take too long to complete", future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS));
     requestAndResult.result = future;
     assertSuccess();
     assertCloseCleanup();
   }
 
+  /**
+   * Wait for the given thread to reach the given thread state.
+   * @param thread the thread whose state needs to be checked.
+   * @param state the state that needs to be reached.
+   * @return true if the state is reached within a predetermined timeout, false on timing out.
+   */
   private boolean waitForThreadState(Thread thread, Thread.State state) {
-    long MAX_WAIT_MS = 2000;
     long checkStartTimeMs = SystemTime.getInstance().milliseconds();
     while (thread.getState() != state) {
       if (SystemTime.getInstance().milliseconds() - checkStartTimeMs > MAX_WAIT_MS) {
