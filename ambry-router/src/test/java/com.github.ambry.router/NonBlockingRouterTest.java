@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -52,10 +51,10 @@ public class NonBlockingRouterTest {
    * the {@link NonBlockingRouter}.
    * @return the created VerifiableProperties instance.
    */
-  private Properties getNonBlockingRouterProperties() {
+  private Properties getNonBlockingRouterProperties(String routerDataCenter) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.datacenter.name", routerDataCenter);
     return properties;
   }
 
@@ -74,9 +73,18 @@ public class NonBlockingRouterTest {
   @Test
   public void testNonBlockingRouterFactory()
       throws Exception {
-    Properties props = getNonBlockingRouterProperties();
-    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();
+    Properties props = getNonBlockingRouterProperties("NotInClusterMap");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    try {
+      router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
+          new LoggingNotificationSystem()).getRouter();
+      Assert.fail("NonBlockingRouterFactory instantiation should have failed because the router datacenter is not in "
+          + "the cluster map");
+    } catch (IllegalStateException e) {
+    }
+    props = getNonBlockingRouterProperties("DC1");
+    verifiableProperties = new VerifiableProperties((props));
     router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
         new LoggingNotificationSystem()).getRouter();
     assertExpectedThreadCounts(1);
@@ -90,12 +98,11 @@ public class NonBlockingRouterTest {
   @Test
   public void testRouterBasic()
       throws Exception {
-    Properties props = getNonBlockingRouterProperties();
+    Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();
     MockTime mockTime = new MockTime();
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties),
-        new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
         mockClusterMap, mockTime);
@@ -106,11 +113,10 @@ public class NonBlockingRouterTest {
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
-    router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
-    // @todo to be enabled when these operation managers are implemented.
-    // router.getBlob("nonExistentBlobId");
-    // router.getBlobInfo("nonExistentBlobid");
-    // router.deleteBlob("nonExistentBlobId");
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    router.getBlob(blobId);
+    router.getBlobInfo(blobId);
+    router.deleteBlob(blobId);
     router.close();
     assertExpectedThreadCounts(0);
 
@@ -125,13 +131,12 @@ public class NonBlockingRouterTest {
   public void testMultipleScalingUnit()
       throws Exception {
     final int SCALING_UNITS = 3;
-    Properties props = getNonBlockingRouterProperties();
+    Properties props = getNonBlockingRouterProperties("DC1");
     props.setProperty("router.scaling.unit.count", Integer.toString(SCALING_UNITS));
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();
     MockTime mockTime = new MockTime();
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties),
-        new NonBlockingRouterMetrics(mockClusterMap),
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
         mockClusterMap, mockTime);

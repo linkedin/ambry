@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The NetworkClient provides a method for sending a list of requests in the form of {@link Send} to a host:port,
- * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(List)} call,
+ * and receive responses for sent requests. Requests that come in via {@link #sendAndPoll(List, int)} call,
  * that could not be immediately sent is queued and an attempt will be made in subsequent invocations of the call (or
  * until they time out).
  * (Note: We will empirically determine whether, rather than queueing a request,
@@ -49,8 +49,6 @@ public class NetworkClient implements Closeable {
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
   private final AtomicLong numPendingRequests;
   private final int checkoutTimeoutMs;
-  // @todo: this needs to be empirically determined.
-  private final int POLL_TIMEOUT_MS = 1;
   private boolean closed = false;
   private static final Logger logger = LoggerFactory.getLogger(NetworkClient.class);
 
@@ -80,17 +78,18 @@ public class NetworkClient implements Closeable {
   }
 
   /**
-   * Attempt to send the given requests and poll for responses from the network. Any requests that could not be
-   * sent out will be added to a queue. Every time this method is called, it will first attempt sending the requests
-   * in the queue (or time them out) and then attempt sending the newly added requests.
+   * Attempt to send the given requests and poll for responses from the network via the associated selector. Any
+   * requests that could not be sent out will be added to a queue. Every time this method is called, it will first
+   * attempt sending the requests in the queue (or time them out) and then attempt sending the newly added requests.
    * @param requestInfos the list of {@link RequestInfo} representing the requests that need to be sent out. This
    *                     could be empty.
+   * @param pollTimeoutMs the poll timeout.
    * @return a list of {@link ResponseInfo} representing the responses received for any requests that were sent out
    * so far.
    * @throws IOException if the {@link Selector} associated with this NetworkClient throws
    * @throws IllegalStateException if the NetworkClient is closed.
    */
-  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos)
+  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos, int pollTimeoutMs)
       throws IOException {
     long startTime = time.milliseconds();
     try {
@@ -105,7 +104,7 @@ public class NetworkClient implements Closeable {
         pendingRequests.add(new RequestMetadata(time.milliseconds(), requestInfo, clientNetworkRequestMetrics));
       }
       List<NetworkSend> sends = prepareSends(responseInfoList);
-      selector.poll(POLL_TIMEOUT_MS, sends);
+      selector.poll(pollTimeoutMs, sends);
       handleSelectorEvents(responseInfoList);
       return responseInfoList;
     } finally {
@@ -191,8 +190,8 @@ public class NetworkClient implements Closeable {
       connectionTracker.removeConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       if (requestMetadata != null) {
-        responseInfoList.add(
-            new ResponseInfo(requestMetadata.requestInfo.getRequest(), NetworkClientErrorCode.NetworkError, null));
+        responseInfoList
+            .add(new ResponseInfo(requestMetadata.requestInfo.getRequest(), NetworkClientErrorCode.NetworkError, null));
       }
     }
 
@@ -202,8 +201,8 @@ public class NetworkClient implements Closeable {
           connId);
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
-      responseInfoList.add(
-          new ResponseInfo(requestMetadata.requestInfo.getRequest(), null, recv.getReceivedBytes().getPayload()));
+      responseInfoList
+          .add(new ResponseInfo(requestMetadata.requestInfo.getRequest(), null, recv.getReceivedBytes().getPayload()));
       requestMetadata.onResponseReceive();
     }
   }
@@ -216,6 +215,16 @@ public class NetworkClient implements Closeable {
     logger.trace("Closing the NetworkClient");
     selector.close();
     closed = true;
+  }
+
+  /**
+   * Wake up the NetworkClient if it is within a {@link #sendAndPoll(List, int)} sleep. This wakes
+   * up the {@link Selector}, which in turn wakes up the {@link java.nio.channels.Selector}.
+   * <br>
+   * @see java.nio.channels.Selector#wakeup()
+   */
+  public void wakeup() {
+    selector.wakeup();
   }
 
   /**

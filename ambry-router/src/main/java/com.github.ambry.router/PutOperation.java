@@ -77,9 +77,11 @@ class PutOperation {
   private final ResponseHandler responseHandler;
   private final BlobProperties blobProperties;
   private final byte[] userMetadata;
+  private final ReadableStreamChannel channel;
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
+  private final ReadyForPollCallback readyForPollCallback;
   private final Time time;
 
   // Parameters associated with the state.
@@ -142,12 +144,16 @@ class PutOperation {
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
+   * @param readyForPollCallback The callback to be used to notify the router of any state changes within this
+   *                             operation.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
-      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback, Time time)
+      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
+      ReadyForPollCallback readyForPollCallback,
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, Time time)
       throws RouterException {
     submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
@@ -170,8 +176,10 @@ class PutOperation {
     this.responseHandler = responseHandler;
     this.blobProperties = blobProperties;
     this.userMetadata = userMetadata;
+    this.channel = channel;
     this.futureResult = futureResult;
     this.callback = callback;
+    this.readyForPollCallback = readyForPollCallback;
     this.time = time;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
@@ -182,8 +190,13 @@ class PutOperation {
       putChunks[i] = new PutChunk();
     }
     metadataPutChunk = numDataChunks > 1 ? new MetadataPutChunk() : null;
+    chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
+  }
 
-    chunkFillerChannel = new ByteBufferAsyncWritableChannel();
+  /**
+   * Start reading from the channel containing the data for this operation.
+   */
+  void startReadingFromChannel() {
     channel.readInto(chunkFillerChannel, new Callback<Long>() {
       @Override
       public void onCompletion(Long result, Exception exception) {
@@ -317,6 +330,7 @@ class PutOperation {
               maybeStopTrackingWaitForChunkTime();
               bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
               if (chunkToFill.isReady()) {
+                readyForPollCallback.onPollReady();
                 updateChunkFillerWaitTimeMetrics();
               }
               if (!channelReadBuffer.hasRemaining()) {
@@ -338,6 +352,7 @@ class PutOperation {
         }
       }
     } catch (Exception e) {
+      readyForPollCallback.onPollReady();
       setOperationExceptionAndComplete(new RouterException("PutOperation fillChunks encountered unexpected error", e,
           RouterErrorCode.UnexpectedInternalError));
     }
@@ -796,7 +811,9 @@ class PutOperation {
         Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(entry.getValue().replicaId);
-          chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
+          responseHandler.onRequestResponseException(entry.getValue().replicaId,
+              new IOException("Timed out waiting for a response"));
+          chunkException = new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut);
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.

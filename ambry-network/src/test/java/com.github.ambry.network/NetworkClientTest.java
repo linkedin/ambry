@@ -89,7 +89,7 @@ public class NetworkClientTest {
     int responseCount = 0;
 
     do {
-      responseInfoList = networkClient.sendAndPoll(requestInfoList);
+      responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         MockSend send = (MockSend) responseInfo.getRequest();
@@ -105,7 +105,7 @@ public class NetworkClientTest {
     } while (requestCount > responseCount);
     Assert.assertEquals("Should receive only as many responses as there were requests", requestCount, responseCount);
 
-    responseInfoList = networkClient.sendAndPoll(requestInfoList);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
   }
@@ -123,7 +123,7 @@ public class NetworkClientTest {
     int requestCount = requestInfoList.size();
     int responseCount = 0;
 
-    responseInfoList = networkClient.sendAndPoll(requestInfoList);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     requestInfoList.clear();
     // The first sendAndPoll() initiates the connections. So, after the selector poll, new connections
     // would have been established, but no new responses or disconnects, so the NetworkClient should not have been
@@ -133,7 +133,7 @@ public class NetworkClientTest {
     time.sleep(CHECKOUT_TIMEOUT_MS + 1);
 
     do {
-      responseInfoList = networkClient.sendAndPoll(requestInfoList);
+      responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         NetworkClientErrorCode error = responseInfo.getError();
@@ -145,7 +145,7 @@ public class NetworkClientTest {
         responseCount++;
       }
     } while (requestCount > responseCount);
-    responseInfoList = networkClient.sendAndPoll(requestInfoList);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
   }
@@ -166,7 +166,7 @@ public class NetworkClientTest {
     // set beBad so that requests end up failing due to "network error".
     selector.setState(MockSelectorState.DisconnectOnSend);
     do {
-      responseInfoList = networkClient.sendAndPoll(requestInfoList);
+      responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
         NetworkClientErrorCode error = responseInfo.getError();
@@ -178,7 +178,7 @@ public class NetworkClientTest {
         responseCount++;
       }
     } while (requestCount > responseCount);
-    responseInfoList = networkClient.sendAndPoll(requestInfoList);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     requestInfoList.clear();
     Assert.assertEquals("No responses are expected at this time", 0, responseInfoList.size());
     selector.setState(MockSelectorState.Good);
@@ -194,7 +194,7 @@ public class NetworkClientTest {
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
     selector.setState(MockSelectorState.ThrowExceptionOnConnect);
     try {
-      networkClient.sendAndPoll(requestInfoList);
+      networkClient.sendAndPoll(requestInfoList, 100);
     } catch (IOException e) {
       Assert.fail("If selector throws on connect, sendAndPoll() should not throw");
     }
@@ -210,11 +210,21 @@ public class NetworkClientTest {
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
     selector.setState(MockSelectorState.ThrowExceptionOnPoll);
     try {
-      networkClient.sendAndPoll(requestInfoList);
+      networkClient.sendAndPoll(requestInfoList, 100);
       Assert.fail("If selector throws on poll, sendAndPoll() should throw as well");
     } catch (IOException e) {
     }
     selector.setState(MockSelectorState.Good);
+  }
+
+  /**
+   * Test that the NetworkClient wakeup wakes up the associated Selector.
+   */
+  @Test
+  public void testWakeup() {
+    Assert.assertFalse("Selector should not have been woken up at this point", selector.getAndClearWokenUpStatus());
+    networkClient.wakeup();
+    Assert.assertTrue("Selector should have been woken up at this point", selector.getAndClearWokenUpStatus());
   }
 
   /**
@@ -226,7 +236,7 @@ public class NetworkClientTest {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     networkClient.close();
     try {
-      networkClient.sendAndPoll(requestInfoList);
+      networkClient.sendAndPoll(requestInfoList, 100);
       Assert.fail("Polling after close should throw");
     } catch (IllegalStateException e) {
     }
@@ -347,6 +357,7 @@ class MockSelector extends Selector {
   private List<NetworkSend> sends = new ArrayList<NetworkSend>();
   private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
   private MockSelectorState state = MockSelectorState.Good;
+  private boolean wakeUpCalled = false;
 
   /**
    * Create a MockSelector
@@ -458,6 +469,24 @@ class MockSelector extends Selector {
     List<NetworkReceive> toReturn = receives;
     receives = new ArrayList<NetworkReceive>();
     return toReturn;
+  }
+
+  /**
+   * Return whether wakeup() was called and clear the woken up status before returning.
+   * @return true if wakeup() was called previously.
+   */
+  public boolean getAndClearWokenUpStatus() {
+    boolean ret = wakeUpCalled;
+    wakeUpCalled = false;
+    return ret;
+  }
+
+  /**
+   * wakes up the MockSelector if sleeping.
+   */
+  @Override
+  public void wakeup() {
+    wakeUpCalled = true;
   }
 
   /**

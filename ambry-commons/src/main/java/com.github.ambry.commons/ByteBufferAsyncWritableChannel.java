@@ -31,10 +31,46 @@ import java.util.concurrent.locks.ReentrantLock;
  * retrieved and resolved by an external thread.
  */
 public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
+
+  /**
+   * List of events of interest to the consumer of the content in this channel.
+   */
+  public enum EventType {
+    Write,
+    Close,
+  }
+
+  /**
+   * Callback that can be used to listen to events that happen inside this channel.
+   */
+  public interface ChannelEventListener {
+    /**
+     * Called when an event of the given type completes within this channel.
+     * @param e the {@link EventType} of the event that completed.
+     */
+    public void onEvent(EventType e);
+  }
+
   private final LinkedBlockingQueue<ChunkData> chunks = new LinkedBlockingQueue<ChunkData>();
   private final Queue<ChunkData> chunksAwaitingResolution = new LinkedBlockingQueue<ChunkData>();
   private final ReentrantLock lock = new ReentrantLock();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
+  private final ChannelEventListener channelEventListener;
+
+  /**
+   * Construct a ByteBufferAsyncWritableChannel with a null {@link ChannelEventListener}
+   */
+  public ByteBufferAsyncWritableChannel() {
+    this(null);
+  }
+
+  /**
+   * Construct a ByteBufferAsyncWritableChannel with the given {@link ChannelEventListener}
+   * @param channelEventListener the {@link ChannelEventListener} that will be notified on consumable events.
+   */
+  public ByteBufferAsyncWritableChannel(ChannelEventListener channelEventListener) {
+    this.channelEventListener = channelEventListener;
+  }
 
   /**
    * If the channel is open, simply queues the buffer to be handled later.
@@ -50,6 +86,9 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
     }
     ChunkData chunkData = new ChunkData(src, callback);
     chunks.add(chunkData);
+    if (channelEventListener != null) {
+      channelEventListener.onEvent(EventType.Write);
+    }
     if (!isOpen()) {
       resolveAllRemainingChunks(new ClosedChannelException());
     }
@@ -69,6 +108,9 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
   public void close() {
     if (channelOpen.compareAndSet(true, false)) {
       resolveAllRemainingChunks(new ClosedChannelException());
+    }
+    if (channelEventListener != null) {
+      channelEventListener.onEvent(EventType.Close);
     }
   }
 

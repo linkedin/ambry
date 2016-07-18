@@ -94,6 +94,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   // The result of this operation. This is instantiated if/when the first bytes of the result arrive and just before
   // the operation callback is invoked.
   private GetBlobResult getBlobResult;
+  private final ReadyForPollCallback readyForPollCallback;
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
 
@@ -107,6 +108,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param operationCompleteCallback the {@link OperationCompleteCallback} to use to complete operations.
+   * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
+   *                             operations.
    * @param blobIdFactory the factory to use to deserialize keys in a metadata chunk.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
@@ -114,10 +117,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, FutureResult<ReadableStreamChannel> futureResult,
       Callback<ReadableStreamChannel> callback, OperationCompleteCallback operationCompleteCallback,
-      BlobIdFactory blobIdFactory, Time time)
+      ReadyForPollCallback readyForPollCallback, BlobIdFactory blobIdFactory, Time time)
       throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
+    this.readyForPollCallback = readyForPollCallback;
     this.blobIdFactory = blobIdFactory;
     firstChunk = new FirstGetChunk(blobId);
   }
@@ -281,6 +285,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
           operationException.set(exception);
         }
         numChunksWrittenOut++;
+        readyForPollCallback.onPollReady();
       }
     };
 
@@ -305,6 +310,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       if (operationException.get() != null) {
         completeRead();
       }
+      readyForPollCallback.onPollReady();
       return readIntoFuture;
     }
 
@@ -493,7 +499,9 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(entry.getValue().replicaId);
-          chunkException = new RouterException("Timed out waiting for responses", RouterErrorCode.OperationTimedOut);
+          responseHandler.onRequestResponseException(entry.getValue().replicaId,
+              new IOException("Timed out waiting for a response"));
+          chunkException = new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut);
           inFlightRequestsIterator.remove();
         } else {
           // the entries are ordered by correlation id and time. Break on the first request that has not timed out.

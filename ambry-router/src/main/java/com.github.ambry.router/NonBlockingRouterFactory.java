@@ -63,6 +63,10 @@ public class NonBlockingRouterFactory implements RouterFactory {
       throws GeneralSecurityException, IOException {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
       routerConfig = new RouterConfig(verifiableProperties);
+      if (!clusterMap.hasDatacenter(routerConfig.routerDatacenterName)) {
+        throw new IllegalStateException(
+            "Router datacenter " + routerConfig.routerDatacenterName + " is not part of the clustermap");
+      }
       MetricRegistry registry = clusterMap.getMetricRegistry();
       routerMetrics = new NonBlockingRouterMetrics(clusterMap);
       this.clusterMap = clusterMap;

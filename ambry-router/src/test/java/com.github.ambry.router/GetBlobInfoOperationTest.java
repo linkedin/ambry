@@ -432,10 +432,10 @@ public class GetBlobInfoOperationTest {
     List<ResponseInfo> responseList = new ArrayList<>();
     int sendCount = requestList.size();
     Collections.shuffle(requestList);
-    responseList.addAll(networkClient.sendAndPoll(requestList));
+    responseList.addAll(networkClient.sendAndPoll(requestList, 100));
     requestList.clear();
     while (responseList.size() < sendCount) {
-      responseList.addAll(networkClient.sendAndPoll(requestList));
+      responseList.addAll(networkClient.sendAndPoll(requestList, 100));
     }
     return responseList;
   }

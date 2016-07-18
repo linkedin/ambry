@@ -177,6 +177,33 @@ public class ByteBufferAsyncWritableChannelTest {
     assertNull("There should have been no chunk returned", channel.getNextChunk(0));
   }
 
+  /**
+   * Test to verify notification for all channel events.
+   */
+  @Test
+  public void testChannelEventNotification()
+      throws Exception {
+    final AtomicBoolean writeNotified = new AtomicBoolean(false);
+    final AtomicBoolean closeNotified = new AtomicBoolean(false);
+    ByteBufferAsyncWritableChannel channel =
+        new ByteBufferAsyncWritableChannel(new ByteBufferAsyncWritableChannel.ChannelEventListener() {
+          @Override
+          public void onEvent(ByteBufferAsyncWritableChannel.EventType e) {
+            if (e == ByteBufferAsyncWritableChannel.EventType.Write) {
+              writeNotified.set(true);
+            } else if (e == ByteBufferAsyncWritableChannel.EventType.Close) {
+              closeNotified.set(true);
+            }
+          }
+        });
+    assertFalse("No write notification should have come in before any write", writeNotified.get());
+    channel.write(ByteBuffer.allocate(5), null);
+    assertTrue("Write should have been notified", writeNotified.get());
+    assertFalse("No close event notification should have come in before a close", closeNotified.get());
+    channel.close();
+    assertTrue("Close should have been notified", closeNotified.get());
+  }
+
   // helpers
 
   // checkoutMultipleChunksAndResolveTest() helpers.

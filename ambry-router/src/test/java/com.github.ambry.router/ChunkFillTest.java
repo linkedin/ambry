@@ -112,8 +112,12 @@ public class ChunkFillTest {
     random.nextBytes(putUserMetadata);
     final MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
     FutureResult<String> futureResult = new FutureResult<String>();
+    MockTime time = new MockTime();
+    MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
-        putUserMetadata, putChannel, futureResult, null, new MockTime());
+        putUserMetadata, putChannel, futureResult, null,
+        new ReadyForPollCallback(networkClientFactory.getNetworkClient()), null, new MockTime());
+    op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     // largeBlobSize is not a multiple of chunkSize
     int expectedNumChunks = (int) (blobSize / chunkSize + 1);
@@ -194,8 +198,12 @@ public class ChunkFillTest {
     random.nextBytes(putContent);
     final ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     FutureResult<String> futureResult = new FutureResult<String>();
+    MockTime time = new MockTime();
+    MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
-        putUserMetadata, putChannel, futureResult, null, new MockTime());
+        putUserMetadata, putChannel, futureResult, null,
+        new ReadyForPollCallback(networkClientFactory.getNetworkClient()), null, time);
+    op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     compositeBuffers = new ByteBuffer[numChunks];
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);

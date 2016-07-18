@@ -324,6 +324,7 @@ class NonBlockingRouter implements Router {
     private final NetworkClient networkClient;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
+    private final ReadyForPollCallback readyForPollCallback;
 
     /**
      * Constructs an OperationController
@@ -333,10 +334,11 @@ class NonBlockingRouter implements Router {
     OperationController(int index)
         throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
+      readyForPollCallback = new ReadyForPollCallback(networkClient);
       putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCompleteCallback, index, time);
-      getManager =
-          new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback, time);
+          operationCompleteCallback, readyForPollCallback, index, time);
+      getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback,
+          readyForPollCallback, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
           operationCompleteCallback, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + index, this, true);
@@ -352,6 +354,7 @@ class NonBlockingRouter implements Router {
      */
     private void getBlobInfo(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
       getManager.submitGetBlobInfoOperation(blobId, futureResult, callback);
+      readyForPollCallback.onPollReady();
     }
 
     /**
@@ -364,6 +367,7 @@ class NonBlockingRouter implements Router {
     private void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
         Callback<ReadableStreamChannel> callback) {
       getManager.submitGetBlobOperation(blobId, futureResult, callback);
+      readyForPollCallback.onPollReady();
     }
 
     /**
@@ -387,6 +391,7 @@ class NonBlockingRouter implements Router {
         close();
       } else {
         putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, futureResult, callback);
+        readyForPollCallback.onPollReady();
       }
     }
 
@@ -399,6 +404,7 @@ class NonBlockingRouter implements Router {
      */
     private void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
       deleteManager.submitDeleteBlobOperation(blobId, futureResult, callback);
+      readyForPollCallback.onPollReady();
     }
 
     /**
@@ -469,10 +475,15 @@ class NonBlockingRouter implements Router {
      */
     @Override
     public void run() {
+      // The timeout for the network client poll should be a function of the request timeout,
+      // as the poll timeout should not cause the request to not time out for a lot longer than the configured request
+      // timeout. In the worst case, the request will time out in (request_timeout_ms + poll_timeout_ms), so the poll
+      // timeout should be at least an order of magnitude smaller.
+      final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestTimeoutMs / 10;
       try {
         while (isOpen.get()) {
           List<RequestInfo> requestInfoList = pollForRequests();
-          List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList);
+          List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, NETWORK_CLIENT_POLL_TIMEOUT);
           onResponse(responseInfoList);
         }
       } catch (Throwable e) {
@@ -524,3 +535,33 @@ class OperationCompleteCallback {
     }
   }
 }
+
+/**
+ * Callback passed to the operation managers for them to use to notify the NonBlockingRouter when a poll-eligible
+ * event occurs for any operation. A poll-eligible event is any event that occurs asynchronously to the
+ * RequestResponseHandler thread such that there is a high chance of meaningful work getting done when the operation is
+ * subsequently polled. When the callback is invoked, the RequestResponseHandler thread which could be
+ * sleeping in a {@link NetworkClient#sendAndPoll(List, int)} is woken up so that the operations can be
+ * polled without additional delays. For example, when a chunk gets filled by the ChunkFillerThread within the
+ * {@link PutManager}, this callback is invoked so that the RequestResponseHandler immediately polls the operation to
+ * send out the request for the chunk.
+ */
+class ReadyForPollCallback {
+  NetworkClient networkClient;
+
+  /**
+   * Construct the ReadyForPollCallback
+   * @param networkClient the {@link NetworkClient} associated with this callback.
+   */
+  ReadyForPollCallback(NetworkClient networkClient) {
+    this.networkClient = networkClient;
+  }
+
+  /**
+   * Wake up the associated {@link NetworkClient}.
+   */
+  public void onPollReady() {
+    networkClient.wakeup();
+  }
+}
+
