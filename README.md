@@ -7,6 +7,7 @@ Ambry is a distributed object store that supports storage of trillion of small i
 4. Cost effective
 5. Easy to use
 
+Requires JDK 1.7 or higher.
 ## Documentation
 Detailed documentation is available at https://github.com/linkedin/ambry/wiki
 
@@ -19,7 +20,7 @@ Reach out to us at ambrydev@googlegroups.com if you would like us to list a pape
 ##### Step 1: Download the code, build it and prepare for deployment.
 To get the latest code and build it, do
 
-    $ git clone git@github.com:linkedin/ambry.git
+    $ git clone https://github.com/linkedin/ambry.git 
     $ cd ambry
     $ ./gradlew allJar
     $ cd target
