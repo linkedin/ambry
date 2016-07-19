@@ -819,8 +819,8 @@ public class AdminBlobStorageServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
     assertTrue(RestUtils.Headers.CREATION_TIME + " header missing",
         restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
-    if (expectedHeaders.get(RestUtils.Headers.TTL) != Utils.Infinite_Time) {
-      assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.get(RestUtils.Headers.TTL),
+    if ((long) expectedHeaders.get(RestUtils.Headers.TTL) != Utils.Infinite_Time) {
+      assertEquals(RestUtils.Headers.TTL + " does not match", (long) expectedHeaders.get(RestUtils.Headers.TTL),
           Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.TTL)));
     }
     if (expectedHeaders.containsKey(RestUtils.Headers.OWNER_ID)) {
