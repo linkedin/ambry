@@ -168,6 +168,13 @@ class AdminBlobStorageService implements BlobStorageService {
     }
   }
 
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * POST is not supported by {@link AdminBlobStorageService}.
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   */
   @Override
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     handlePrechecks(restRequest, restResponseChannel);
