@@ -82,18 +82,9 @@ public enum RestServiceErrorCode {
    */
   MissingArgs,
   /**
-   * Indicates that HttpObject received was not of a recognized type (Currently this is internal to Netty and this
-   * error indicates that the received HttpObject was neither HttpRequest nor HttpContent).
-   */
-  UnknownHttpObject,
-  /**
    * Client is requesting a HTTP method that is not supported.
    */
   UnsupportedHttpMethod,
-  /**
-   * Client has requested for an operation that is not supported by the {@link BlobStorageService}.
-   */
-  UnsupportedOperation,
 
   /**
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
@@ -105,10 +96,6 @@ public enum RestServiceErrorCode {
    */
   IdConverterServiceError,
   /**
-   * Indicates that an object that is needed for the request could not be created due to an internal server error.
-   */
-  InternalObjectCreationError,
-  /**
    * Indicates that a {@link RestRequest} has been closed and an operation could not be performed on it.
    */
   RequestChannelClosed,
@@ -116,10 +103,6 @@ public enum RestServiceErrorCode {
    * Indicates that the submitted request or response could not be queued in the AsyncRequestResponseHandler.
    */
   RequestResponseQueuingFailure,
-  /**
-   * Indicates that there was a problem building the response.
-   */
-  ResponseBuildingFailure,
   /**
    * Indicates that an internal service is unavailable either because it is not started, is shutdown or has crashed.
    */

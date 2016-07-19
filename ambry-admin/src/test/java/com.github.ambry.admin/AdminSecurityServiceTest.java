@@ -18,7 +18,6 @@ import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
@@ -31,8 +30,6 @@ import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -45,7 +42,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import junit.framework.Assert;
-import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -80,16 +76,16 @@ public class AdminSecurityServiceTest {
     }
 
     // without callbacks
-    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    RestMethod[] methods = new RestMethod[]{RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
-      RestRequest restRequest = createRestRequest(restMethod, "/", null);
+      RestRequest restRequest = AdminTestUtils.createRestRequest(restMethod, "/", null, null);
       securityService.processRequest(restRequest, null).get();
     }
 
     // with callbacks
     callback = new SecurityServiceCallback();
     for (RestMethod restMethod : methods) {
-      RestRequest restRequest = createRestRequest(restMethod, "/", null);
+      RestRequest restRequest = AdminTestUtils.createRestRequest(restMethod, "/", null, null);
       securityService.processRequest(restRequest, callback).get();
       Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
       Assert.assertNull("Exception should not have been thrown", callback.exception);
@@ -100,7 +96,7 @@ public class AdminSecurityServiceTest {
     callback = new SecurityServiceCallback();
     securityService.close();
     for (RestMethod restMethod : methods) {
-      RestRequest restRequest = createRestRequest(restMethod, "/", null);
+      RestRequest restRequest = AdminTestUtils.createRestRequest(restMethod, "/", null, null);
       try {
         securityService.processRequest(restRequest, callback).get();
         Assert.fail("Process Request should have failed because Security Service is closed");
@@ -126,7 +122,7 @@ public class AdminSecurityServiceTest {
   @Test
   public void processResponseTest()
       throws Exception {
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, "/", null, null);
     //rest request being null
     try {
       securityService.processResponse(null, new MockRestResponseChannel(), DEFAULT_INFO, null).get();
@@ -149,9 +145,9 @@ public class AdminSecurityServiceTest {
     }
 
     // without callbacks
-    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.HEAD};
+    RestMethod[] methods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
-      restRequest = createRestRequest(restMethod, "/", null);
+      restRequest = AdminTestUtils.createRestRequest(restMethod, "/", null, null);
       securityService.processResponse(restRequest, new MockRestResponseChannel(), DEFAULT_INFO, null).get();
     }
 
@@ -181,9 +177,6 @@ public class AdminSecurityServiceTest {
     testGetSubResource(RestUtils.SubResource.BlobInfo);
     // GET UserMetadata
     testGetSubResource(RestUtils.SubResource.UserMetadata);
-
-    // POST
-    testPostBlob();
 
     // GET Blob
     // less than chunk threshold size
@@ -224,37 +217,14 @@ public class AdminSecurityServiceTest {
         RestServiceErrorCode.InternalServerError);
     testExceptionCasesProcessResponse(RestMethod.GET, new BadRestResponseChannel(), blobInfo,
         RestServiceErrorCode.InternalServerError);
-    testExceptionCasesProcessResponse(RestMethod.POST, new BadRestResponseChannel(), blobInfo,
-        RestServiceErrorCode.InternalServerError);
 
     // security service closed
     securityService.close();
-    methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    methods = new RestMethod[]{RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), blobInfo,
           RestServiceErrorCode.ServiceUnavailable);
     }
-  }
-
-  /**
-   * Method to easily create {@link RestRequest} objects containing a specific request.
-   * @param restMethod the {@link RestMethod} desired.
-   * @param uri string representation of the desired URI.
-   * @param headers any associated headers as a {@link JSONObject}.
-   * @return A {@link RestRequest} object that defines the request required by the input.
-   * @throws org.json.JSONException
-   * @throws java.io.UnsupportedEncodingException
-   * @throws java.net.URISyntaxException
-   */
-  private RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers)
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
-    JSONObject request = new JSONObject();
-    request.put(MockRestRequest.REST_METHOD_KEY, restMethod);
-    request.put(MockRestRequest.URI_KEY, uri);
-    if (headers != null) {
-      request.put(MockRestRequest.HEADERS_KEY, headers);
-    }
-    return new MockRestRequest(request, null);
   }
 
   /**
@@ -279,7 +249,7 @@ public class AdminSecurityServiceTest {
       throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, "/", null, null);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
@@ -304,7 +274,7 @@ public class AdminSecurityServiceTest {
     Date date = new Date(ifModifiedSinceMs);
     String dateStr = dateFormat.format(date);
     headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/abc", headers);
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, "/abc", headers, null);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
@@ -329,7 +299,7 @@ public class AdminSecurityServiceTest {
       throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", null);
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.HEAD, "/", null, null);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
@@ -346,7 +316,7 @@ public class AdminSecurityServiceTest {
       throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null, null);
     securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
@@ -365,29 +335,6 @@ public class AdminSecurityServiceTest {
   }
 
   /**
-   * Tests {@link AdminSecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
-   * {@link RestMethod#POST}.
-   * @throws Exception
-   */
-  private void testPostBlob()
-      throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
-    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert
-        .assertEquals("Response status should have been set", ResponseStatus.Created, restResponseChannel.getStatus());
-    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
-    Assert.assertEquals("Creation time should have been set correctly",
-        RestUtils.toSecondsPrecisionInMs(DEFAULT_INFO.getBlobProperties().getCreationTimeInMs()),
-        RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME)).longValue());
-    Assert.assertEquals("Content-Length should have been 0", "0",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
-  }
-
-  /**
    * Tests exception cases for {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}
    * with a {@link BadRestResponseChannel}
    * @param restMethod the {@link RestMethod} of the request to be made
@@ -399,7 +346,7 @@ public class AdminSecurityServiceTest {
   private void testExceptionCasesProcessResponse(RestMethod restMethod, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo, RestServiceErrorCode expectedErrorCode)
       throws Exception {
-    RestRequest restRequest = createRestRequest(restMethod, "/", null);
+    RestRequest restRequest = AdminTestUtils.createRestRequest(restMethod, "/", null, null);
     SecurityServiceCallback callback = new SecurityServiceCallback();
     try {
       securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();

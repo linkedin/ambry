@@ -880,7 +880,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       handleContent((HttpContent) obj);
     } else {
       throw new RestServiceException("HttpObject received is null or not of a known type",
-          RestServiceErrorCode.UnknownHttpObject);
+          RestServiceErrorCode.MalformedRequest);
     }
   }
 

@@ -238,9 +238,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           resetState();
         }
         onRequestAborted(new RestServiceException("HttpObject received is null or not of a known type",
-            RestServiceErrorCode.UnknownHttpObject));
+            RestServiceErrorCode.MalformedRequest));
       }
-
       if (lastChannelReadTime != null) {
         nettyMetrics.channelReadIntervalInMs.update(currentTime - lastChannelReadTime);
         logger.trace("Delay between channel reads is {} ms for channel {}", (currentTime - lastChannelReadTime),

@@ -25,6 +25,8 @@ import com.github.ambry.notification.NotificationSystem;
  * {@link #getRouter()}.
  */
 public class InMemoryRouterFactory implements RouterFactory {
+  private static InMemoryRouter latestInstance = null;
+
   private final VerifiableProperties verifiableProperties;
   private final NotificationSystem notificationSystem;
 
@@ -37,6 +39,15 @@ public class InMemoryRouterFactory implements RouterFactory {
   @Override
   public Router getRouter()
       throws InstantiationException {
-    return new InMemoryRouter(verifiableProperties, notificationSystem);
+    latestInstance = new InMemoryRouter(verifiableProperties, notificationSystem);
+    return latestInstance;
+  }
+
+  /**
+   * Gets the instance of {@link InMemoryRouter} that was intanstiated most recently (helps in tests).
+   * @return the instance of {@link InMemoryRouter} instantiated most recently.
+   */
+  public static InMemoryRouter getLatestInstance() {
+    return latestInstance;
   }
 }
