@@ -25,11 +25,10 @@ public interface IFilter extends Closeable {
   public abstract void add(ByteBuffer key);
 
   /**
-   * Determines if the given key is present. This is a non deterministic
-   * api. If the key is present, it would return true. If the key is not
-   * present, it may or may not return true.
+   * Determines if the given key was previously added to this filter with a
+   * possibility of false positives (but not false negatives).
    * @param key The key to do the presence check
-   * @return True, if key is present. False, if key may or may not be present.
+   * @return true means "possibly present"; false means "definitely not present".
    */
   public abstract boolean isPresent(ByteBuffer key);
 
