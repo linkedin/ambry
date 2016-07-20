@@ -61,6 +61,8 @@ import org.junit.Assert;
 class RouterServerTestFramework {
   static final int AWAIT_TIMEOUT = 20;
   static final int CHUNK_SIZE = 1024 * 1024;
+  private static final double BALANCE_FACTOR = 3.0;
+
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
   private final Router nonBlockingRouter;
@@ -117,7 +119,9 @@ class RouterServerTestFramework {
     Map<PartitionId, Integer> partitionCount = new HashMap<>();
     double blobsPut = 0;
     for (OperationChain opChain : opChains) {
-      opChain.latch.await(AWAIT_TIMEOUT, TimeUnit.SECONDS);
+      if (!opChain.latch.await(AWAIT_TIMEOUT, TimeUnit.SECONDS)) {
+        Assert.fail("Timeout waiting for operation chain " + opChain.chainId + " to finish.");
+      }
       synchronized (opChain.testFutures) {
         for (TestFuture testFuture : opChain.testFutures) {
           testFuture.check();
@@ -132,7 +136,7 @@ class RouterServerTestFramework {
     }
     double numPartitions = clusterMap.getWritablePartitionIds().size();
     if (opChains.size() > numPartitions) {
-      double blobBalanceThreshold = 3.0 * Math.ceil(blobsPut / numPartitions);
+      double blobBalanceThreshold = BALANCE_FACTOR * Math.ceil(blobsPut / numPartitions);
       for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
         Assert.assertTrue("Number of blobs is " + entry.getValue() + " on partition: " + entry.getKey()
                 + ", which is greater than the threshold of " + blobBalanceThreshold,
@@ -170,7 +174,7 @@ class RouterServerTestFramework {
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDatacenter);
     properties.setProperty("router.connection.checkout.timeout.ms", "5000");
-    properties.setProperty("router.request.timeout.ms", "20000");
+    properties.setProperty("router.request.timeout.ms", "10000");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(CHUNK_SIZE));
     properties.setProperty("router.put.success.target", "1");
     properties.setProperty("coordinator.hostname", "localhost");
