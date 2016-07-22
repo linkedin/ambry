@@ -47,6 +47,8 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -418,14 +420,118 @@ public class GetBlobOperationTest {
     getAndAssertSuccess();
   }
 
-  // @todo: test the case where read is not called before chunks come in.
-  // @todo: test the case where read comes in immediately after callback, and chunks come in delayed.
-  // @todo: test the case where operation callback is called with exception.
-  // @todo: test the case where async write results in an exception. - read should be notified,
-  //        operation should get completed.
-  // @todo: test the case where a subsequent chunk fails at the router. the read should fail in that case.
-  // @todo: maybe a test for legacy blobs.
-  // @todo: possibly tests where intermediate chunks get expired/deleted.
+  /**
+   * Test that read succeeds when all chunks are received before read is called.
+   * @throws Exception
+   */
+  @Test
+  public void testReadNotCalledBeforeChunkArrival()
+      throws Exception {
+    // 3 chunks so blob can be cached completely before reading
+    blobSize = maxChunkSize * 2 + 1;
+    doPut();
+    getAndAssertSuccess(true, null);
+  }
+
+  /**
+   * Test that read succeeds when read is called immediately after callback, and chunks come in delayed.
+   * @throws Exception
+   */
+  @Test
+  public void testDelayedChunks()
+      throws Exception {
+    doPut();
+    final CountDownLatch readIntoLatch = new CountDownLatch(1);
+    RouterTestHelpers.setDataBlobGetLatchForAllServers(readIntoLatch, mockServerLayout);
+    getAndAssertSuccess(false, readIntoLatch);
+    RouterTestHelpers.setDataBlobGetLatchForAllServers(null, mockServerLayout);
+  }
+
+  /**
+   * Test that data chunk errors notify the reader callback and set the error code correctly.
+   * @throws Exception
+   */
+  @Test
+  public void testDataChunkFailure()
+      throws Exception {
+    for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
+      if (serverErrorCode != ServerErrorCode.No_Error) {
+        testDataChunkError(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
+      }
+    }
+  }
+
+  /**
+   * Test that gets work for blobs with the old blob format (V1).
+   * @throws Exception
+   */
+  @Test
+  public void testLegacyBlobGetSuccess()
+      throws Exception {
+    RouterTestHelpers.setBlobFormatForAllServers(false, mockServerLayout);
+    for (int i = 0; i < 10; i++) {
+      // blobSize in the range [1, maxChunkSize]
+      blobSize = random.nextInt(maxChunkSize) + 1;
+      doPut();
+      getAndAssertSuccess();
+    }
+    RouterTestHelpers.setBlobFormatForAllServers(true, mockServerLayout);
+  }
+
+  // @todo: test operation completion behavior when stream is not read completely. This will require addin
+
+  private void testDataChunkError(ServerErrorCode serverErrorCode, final RouterErrorCode expectedErrorCode)
+      throws Exception {
+    blobSize = maxChunkSize * 2 + 1;
+    doPut();
+    final CountDownLatch readCompleteLatch = new CountDownLatch(1);
+    final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
+    final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
+    RouterTestHelpers.setGetErrorOnDataBlobOnlyForAllServers(true, mockServerLayout);
+    RouterTestHelpers.testWithErrorCodes(Collections.singletonMap(serverErrorCode, 9), mockServerLayout,
+        expectedErrorCode, new ErrorCodeChecker() {
+          @Override
+          public void testAndAssert(RouterErrorCode expectedError)
+              throws Exception {
+            Callback<ReadableStreamChannel> callback = new Callback<ReadableStreamChannel>() {
+              @Override
+              public void onCompletion(final ReadableStreamChannel result, final Exception exception) {
+                if (exception != null) {
+                  asyncWritableChannel.close();
+                  readCompleteLatch.countDown();
+                } else {
+                  Utils.newThread(new Runnable() {
+                    @Override
+                    public void run() {
+                      try {
+                        result.readInto(asyncWritableChannel, new Callback<Long>() {
+                          @Override
+                          public void onCompletion(Long result, Exception exception) {
+                            asyncWritableChannel.close();
+                          }
+                        });
+                        asyncWritableChannel.getNextChunk();
+                      } catch (Exception e) {
+                        readCompleteException.set(e);
+                      } finally {
+                        readCompleteLatch.countDown();
+                      }
+                    }
+                  }, false).start();
+                }
+              }
+            };
+            GetBlobOperation op = createOperationAndComplete(callback);
+            Assert.assertTrue(readCompleteLatch.await(2, TimeUnit.SECONDS));
+            Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+            if (readCompleteException.get() != null) {
+              throw readCompleteException.get();
+            }
+            Assert.assertFalse("AsyncWriteableChannel should have been closed.", asyncWritableChannel.isOpen());
+            checkErrorCode(op, expectedError);
+          }
+        });
+  }
 
   /**
    * Construct GetBlob operations with appropriate callbacks, then poll those operations until they complete,
@@ -433,10 +539,24 @@ public class GetBlobOperationTest {
    */
   private void getAndAssertSuccess()
       throws Exception {
+    getAndAssertSuccess(false, null);
+  }
+
+  /**
+   * Construct GetBlob operations with appropriate callbacks, then poll those operations until they complete,
+   * and ensure that the whole blob data is read out and the contents match.
+   * @param getChunksBeforeRead {@code true} if all chunks should be cached by the router before reading from the
+   *                            stream.
+   * @param readIntoLatch if non-null, this latch will be flipped right after
+   *                      {@link ReadableStreamChannel#readInto(AsyncWritableChannel, Callback)} is called
+   */
+  private void getAndAssertSuccess(final boolean getChunksBeforeRead, final CountDownLatch readIntoLatch)
+      throws Exception {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
     final AtomicLong readCompleteResult = new AtomicLong(0);
     final AtomicReference<Exception> operationException = new AtomicReference<>(null);
+    final AtomicReference<GetBlobOperation> opRef = new AtomicReference<>(null);
 
     Callback<ReadableStreamChannel> callback = new Callback<ReadableStreamChannel>() {
       @Override
@@ -448,14 +568,23 @@ public class GetBlobOperationTest {
           Utils.newThread(new Runnable() {
             @Override
             public void run() {
-              assertSuccess(result, readCompleteLatch, readCompleteResult, readCompleteException);
+              if (getChunksBeforeRead) {
+                try {
+                  // wait for all 3 chunks to be received
+                  while (opRef.get() == null || opRef.get().getNumChunksRetrieved() < opRef.get().getNumChunksTotal()) {
+                    Thread.sleep(10);
+                  }
+                } catch (InterruptedException ignored) {
+                }
+              }
+              assertSuccess(result, readCompleteLatch, readCompleteResult, readCompleteException, readIntoLatch);
             }
           }, false).start();
         }
       }
     };
 
-    GetBlobOperation op = createOperationAndComplete(callback);
+    GetBlobOperation op = createOperationAndComplete(callback, opRef);
 
     readCompleteLatch.await();
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
@@ -476,7 +605,20 @@ public class GetBlobOperationTest {
    */
   private GetBlobOperation createOperationAndComplete(Callback<ReadableStreamChannel> callback)
       throws Exception {
-    GetBlobOperation op = createOperation(callback);
+    return createOperationAndComplete(callback, null);
+  }
+
+  /**
+   * Create a getBlob operation with the specified callback and poll until completion.
+   * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
+   * @param opReference if non-null, this will point to the {@link GetBlobOperation} right after creation
+   * @return the operation
+   * @throws Exception
+   */
+  private GetBlobOperation createOperationAndComplete(Callback<ReadableStreamChannel> callback,
+      AtomicReference<GetBlobOperation> opReference)
+      throws Exception {
+    GetBlobOperation op = createOperation(callback, opReference);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
@@ -498,11 +640,27 @@ public class GetBlobOperationTest {
    */
   private GetBlobOperation createOperation(Callback<ReadableStreamChannel> callback)
       throws Exception {
+    return createOperation(callback, null);
+  }
+
+  /**
+   * Create a getBlob operation with the specified callback
+   * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
+   * @param opReference if non-null, this will point to the {@link GetBlobOperation} right after creation
+   * @return the operation
+   * @throws Exception
+   */
+  private GetBlobOperation createOperation(Callback<ReadableStreamChannel> callback,
+      AtomicReference<GetBlobOperation> opReference)
+      throws Exception {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
             callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
+    if (opReference != null) {
+      opReference.set(op);
+    }
     return op;
   }
 
@@ -526,11 +684,14 @@ public class GetBlobOperationTest {
    * be ready.
    */
   private void assertSuccess(ReadableStreamChannel readableStreamChannel, CountDownLatch readCompleteLatch,
-      AtomicLong readCompleteResult, AtomicReference<Exception> readCompleteException) {
+      AtomicLong readCompleteResult, AtomicReference<Exception> readCompleteException, CountDownLatch readIntoLatch) {
     try {
       ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
       long written;
       Future<Long> readIntoFuture = readableStreamChannel.readInto(asyncWritableChannel, null);
+      if (readIntoLatch != null) {
+        readIntoLatch.countDown();
+      }
       Assert.assertTrue("ReadyForPollCallback should have been invoked as readInto() was called",
           mockNetworkClient.getAndClearWokenUpStatus());
       // Compare byte by byte.

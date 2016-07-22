@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BoundedByteBufferReceive;
 import com.github.ambry.network.ByteBufferSend;
@@ -41,10 +42,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -54,7 +58,11 @@ class MockServer {
   private ServerErrorCode hardError = null;
   private LinkedList<ServerErrorCode> serverErrors = new LinkedList<ServerErrorCode>();
   private final Map<String, ByteBuffer> blobs = new ConcurrentHashMap<String, ByteBuffer>();
+  private final Set<String> dataBlobs = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
   private boolean shouldRespond = true;
+  private boolean useBlobFormatV2 = true;
+  private boolean getErrorOnDataBlobOnly = false;
+  private CountDownLatch dataBlobGetLatch = null;
   private final ClusterMap clusterMap;
   private final String dataCenter;
 
@@ -138,15 +146,33 @@ class MockServer {
 
     ServerErrorCode serverError;
     ServerErrorCode partitionError;
-    // getError could be at the server level or the partition level. For partition level errors,
-    // set it in the partitionResponseInfo
-    if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired
-        || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found) {
-      partitionError = getError;
-      serverError = ServerErrorCode.No_Error;
+    boolean isDataBlob = false;
+    try {
+      String id = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0).getID();
+      isDataBlob = dataBlobs.contains(id);
+    } catch (Exception ignored) {
+    }
+
+    if (dataBlobGetLatch != null && isDataBlob) {
+      try {
+        dataBlobGetLatch.await();
+      } catch (InterruptedException ignored) {
+      }
+    }
+
+    if (!getErrorOnDataBlobOnly || isDataBlob) {
+      // getError could be at the server level or the partition level. For partition level errors,
+      // set it in the partitionResponseInfo
+      if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found) {
+        partitionError = getError;
+        serverError = ServerErrorCode.No_Error;
+      } else {
+        serverError = getError;
+        // does not matter - this will not be checked if serverError is not No_Error.
+        partitionError = ServerErrorCode.No_Error;
+      }
     } else {
-      serverError = getError;
-      // does not matter - this will not be checked if serverError is not No_Error.
+      serverError = ServerErrorCode.No_Error;
       partitionError = ServerErrorCode.No_Error;
     }
 
@@ -173,11 +199,19 @@ class MockServer {
             MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             break;
           case Blob:
-            byteBufferSize =
-                (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
-            byteBuffer = ByteBuffer.allocate(byteBufferSize);
-            MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
-                (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
+            if (useBlobFormatV2) {
+              byteBufferSize =
+                  (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+              byteBuffer = ByteBuffer.allocate(byteBufferSize);
+              MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
+                  (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
+            } else {
+              byteBufferSize =
+                  (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+              byteBuffer = ByteBuffer.allocate(byteBufferSize);
+              MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer,
+                  (int) originalBlobPutReq.getBlobSize());
+            }
             byteBuffer.put(
                 Utils.readBytesFromStream(originalBlobPutReq.getBlobStream(), (int) originalBlobPutReq.getBlobSize()));
             Crc32 crc = new Crc32();
@@ -241,6 +275,9 @@ class MockServer {
     putRequest.writeTo(bufChannel);
     buf.flip();
     blobs.put(id, buf);
+    if (putRequest.getBlobType() == BlobType.DataBlob) {
+      dataBlobs.add(id);
+    }
   }
 
   /**
@@ -282,12 +319,22 @@ class MockServer {
   }
 
   /**
+   * Set whether the mock server should set the error code for all blobs or just data blobs on get requests.
+   * @param getErrorOnDataBlobOnly {@code true} if the preset error code should be set only on data blobs in a get
+   *                               request, {@code false} otherwise
+   */
+  public void setGetErrorOnDataBlobOnly(boolean getErrorOnDataBlobOnly) {
+    this.getErrorOnDataBlobOnly = getErrorOnDataBlobOnly;
+  }
+
+  /**
    * Clear the error for subsequent requests. That is all responses from this point onwards will be successful
    * ({@link ServerErrorCode#No_Error}) until/unless another set error method is invoked.
    */
   public void resetServerErrors() {
     this.serverErrors.clear();
     this.hardError = null;
+    this.getErrorOnDataBlobOnly = false;
   }
 
   /**
@@ -296,6 +343,22 @@ class MockServer {
    */
   public void setShouldRespond(boolean shouldRespond) {
     this.shouldRespond = shouldRespond;
+  }
+
+  /**
+   * Set whether or not the server should respond to get requests with blob format v2.
+   * @param useBlobFormatV2 {@code true} if v2 should be used, otherwise use v1
+   */
+  public void setBlobFormat(boolean useBlobFormatV2) {
+    this.useBlobFormatV2 = useBlobFormatV2;
+  }
+
+  /**
+   * Introduce a latch that the server will wait for before responding to a data blob get request.
+   * @param dataBlobGetLatch The {@link CountDownLatch} to wait for.
+   */
+  public void setDataBlobGetLatch(CountDownLatch dataBlobGetLatch) {
+    this.dataBlobGetLatch = dataBlobGetLatch;
   }
 }
 

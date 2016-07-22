@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -163,6 +164,43 @@ class RouterTestHelpers {
     }
   }
 
+
+  /**
+   * Set whether all servers should respond to get requests with blob format v2.
+   * @param useBlobFormatV2 {@code true} if v2 should be used, otherwise use v1
+   * @param serverLayout A {@link MockServerLayout} containing the {@link MockServer}s to change settings on.
+   */
+  static void setBlobFormatForAllServers(boolean useBlobFormatV2, MockServerLayout serverLayout) {
+    ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
+    for (MockServer mockServer : mockServers) {
+      mockServer.setBlobFormat(useBlobFormatV2);
+    }
+  }
+
+  /**
+   * Set whether all servers should send the preset error code on data blob get requests
+   * only
+   * @param getErrorOnDataBlobOnly {@code true} if the preset error code should only be used for data blobs requests
+   * @param serverLayout A {@link MockServerLayout} containing the {@link MockServer}s to change settings on.
+   */
+  static void setGetErrorOnDataBlobOnlyForAllServers(boolean getErrorOnDataBlobOnly, MockServerLayout serverLayout) {
+    ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
+    for (MockServer mockServer : mockServers) {
+      mockServer.setGetErrorOnDataBlobOnly(getErrorOnDataBlobOnly);
+    }
+  }
+
+  /**
+   * Introduce a latch that all mock servers will wait for before performing data blob get operations.
+   * @param dataBlobGetLatch The {@link CountDownLatch} to wait for.
+   * @param serverLayout A {@link MockServerLayout} containing the {@link MockServer}s to change settings on.
+   */
+  static void setDataBlobGetLatchForAllServers(CountDownLatch dataBlobGetLatch, MockServerLayout serverLayout) {
+    ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
+    for (MockServer mockServer : mockServers) {
+      mockServer.setDataBlobGetLatch(dataBlobGetLatch);
+    }
+  }
   /**
    * Implement this interface to provide {@link #testWithErrorCodes} with custom verification logic.
    */

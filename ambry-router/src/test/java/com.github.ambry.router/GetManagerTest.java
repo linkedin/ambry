@@ -122,16 +122,72 @@ public class GetManagerTest {
   }
 
   /**
-   * Test that a bad user defined callback will not crash the router.
+   * Test that an exception thrown in a user defined callback will not crash the router
    * @throws Exception
    */
   @Test
-  public void testBadCallback()
+  public void testCallbackRuntimeException()
+      throws Exception {
+    final CountDownLatch getBlobCallbackCalled = new CountDownLatch(1);
+    testBadCallback(new Callback<ReadableStreamChannel>() {
+      @Override
+      public void onCompletion(ReadableStreamChannel result, Exception exception) {
+        getBlobCallbackCalled.countDown();
+        throw new RuntimeException("Throwing an exception in the user callback");
+      }
+    }, getBlobCallbackCalled, true);
+  }
+
+  /**
+   * Test the case where async write results in an exception. Read should be notified,
+   * operation should get completed.
+   */
+  @Test
+  public void testAsyncWriteException()
+      throws Exception {
+    final CountDownLatch getBlobCallbackCalled = new CountDownLatch(1);
+    testBadCallback(new Callback<ReadableStreamChannel>() {
+      @Override
+      public void onCompletion(final ReadableStreamChannel result, final Exception exception) {
+        getBlobCallbackCalled.countDown();
+        AsyncWritableChannel asyncWritableChannel = new AsyncWritableChannel() {
+          boolean open = true;
+
+          @Override
+          public Future<Long> write(ByteBuffer src, Callback<Long> callback) {
+            throw new RuntimeException("This will be thrown when the channel is written to.");
+          }
+
+          @Override
+          public boolean isOpen() {
+            return open;
+          }
+
+          @Override
+          public void close()
+              throws IOException {
+            open = false;
+          }
+        };
+        result.readInto(asyncWritableChannel, null);
+      }
+    }, getBlobCallbackCalled, false);
+  }
+
+  /**
+   * Test that a bad user defined callback will not crash the router.
+   * @param getBlobCallback User defined callback to be called after getBlob operation.
+   * @param getBlobCallbackCalled This latch should be at 0 after {@code getBlobCallback} has been called.
+   * @param checkBadCallbackBlob {@code true} if the blob contents provided by the getBlob operation with the bad
+   *                             callback should be inspected for correctness.
+   * @throws Exception
+   */
+  public void testBadCallback(Callback<ReadableStreamChannel> getBlobCallback, CountDownLatch getBlobCallbackCalled,
+      Boolean checkBadCallbackBlob)
       throws Exception {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize * 6 + 11);
     final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
-    final CountDownLatch getBlobCallbackCalled = new CountDownLatch(1);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     List<Future<BlobInfo>> getBlobInfoFutures = new ArrayList<>();
     List<Future<ReadableStreamChannel>> getBlobFutures = new ArrayList<>();
@@ -144,20 +200,16 @@ public class GetManagerTest {
             throw new RuntimeException("Throwing an exception in the user callback");
           }
         }));
-        getBlobFutures.add(router.getBlob(blobId, new Callback<ReadableStreamChannel>() {
-          @Override
-          public void onCompletion(ReadableStreamChannel result, Exception exception) {
-            getBlobCallbackCalled.countDown();
-            throw new RuntimeException("Throwing an exception in the user callback");
-          }
-        }));
+        getBlobFutures.add(router.getBlob(blobId, getBlobCallback));
       } else {
         getBlobInfoFutures.add(router.getBlobInfo(blobId));
         getBlobFutures.add(router.getBlob(blobId));
       }
     }
-    for (Future<ReadableStreamChannel> future : getBlobFutures) {
-      compareContent(future.get());
+    for (int i = 0; i < getBlobFutures.size(); i++) {
+      if (i != 1 || checkBadCallbackBlob) {
+        compareContent(getBlobFutures.get(i).get());
+      }
     }
     for (Future<BlobInfo> future : getBlobInfoFutures) {
       BlobInfo blobInfo = future.get();
