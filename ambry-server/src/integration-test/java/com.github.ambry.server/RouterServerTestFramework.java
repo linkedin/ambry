@@ -241,6 +241,16 @@ class RouterServerTestFramework {
     }
   }
 
+  /**
+   * Generate a readable label for a router operation.  For example, for a "getBlob" operation after a delete on
+   * the coordinator backed-router, this function will generate the label "getBlob-deleted-coord". This is used
+   * by {@link TestFuture} to provide tracking info to the user if a test assertion fails.
+   * @param name the type of operation (i.e. putBlob, getBlob, etc.)
+   * @param nonBlocking {@code true} if the operation uses the non-blocking router, {@code false} if it uses the
+   *                    coordinator-backed router.
+   * @param afterDelete {@code true} if the operation comes after a blob was deleted.
+   * @return
+   */
   private static String genLabel(String name, boolean nonBlocking, boolean afterDelete) {
     return name + (afterDelete ? "-deleted" : "") + (nonBlocking ? "-nb" : "-coord");
   }

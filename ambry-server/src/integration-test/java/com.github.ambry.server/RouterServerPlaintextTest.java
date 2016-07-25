@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Random;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -54,10 +55,16 @@ public class RouterServerPlaintextTest {
     System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
+  /**
+   * Test that the non blocking router can handle a large number of concurrent (small blob) operations without errors.
+   * This test creates chains of operations without waiting for previous operations to finish.
+   * @throws Exception
+   */
   @Test
   public void interleavedOperationsTest()
       throws Exception {
     List<OperationChain> opChains = new ArrayList<>();
+    Random random = new Random();
     for (int i = 0; i < 20; i++) {
       Queue<OperationType> operations = new LinkedList<>();
       switch (i % 3) {
@@ -90,14 +97,21 @@ public class RouterServerPlaintextTest {
           operations.add(OperationType.GET_INFO_NB);
           break;
       }
-      opChains.add(testFramework.startOperationChain(32 * 1024, i, operations));
+      int blobSize = random.nextInt(100 * 1024);
+      opChains.add(testFramework.startOperationChain(blobSize, i, operations));
     }
     testFramework.checkOperationChains(opChains);
   }
 
+  /**
+   * Test that the non-blocking router can handle simple operation chains where each chain is completed before
+   * the next one runs. This means that operations on only one blob are being dealt with at a time.
+   * @throws Exception
+   */
   @Test
   public void nonInterleavedOperationsTest()
       throws Exception {
+    Random random = new Random();
     for (int i = 0; i < 10; i++) {
       Queue<OperationType> operations = new LinkedList<>();
       operations.add(OperationType.PUT_NB);
@@ -108,14 +122,20 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.AWAIT_DELETION);
       operations.add(OperationType.GET_INFO_DELETED_NB);
       operations.add(OperationType.GET_DELETED_NB);
+      int blobSize = random.nextInt(100 * 1024);
       testFramework.checkOperationChains(
-          Collections.singletonList(testFramework.startOperationChain(32 * 1024, i, operations)));
+          Collections.singletonList(testFramework.startOperationChain(blobSize, i, operations)));
     }
   }
 
+  /**
+   * Test that the non-blocking router can handle multi-chunk blobs.
+   * @throws Exception
+   */
   @Test
   public void largeBlobTest()
       throws Exception {
+    final int blobSize = RouterServerTestFramework.CHUNK_SIZE * 2 + 1;
     List<OperationChain> opChains = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
       Queue<OperationType> operations = new LinkedList<>();
@@ -127,15 +147,22 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.AWAIT_DELETION);
       operations.add(OperationType.GET_INFO_DELETED_NB);
       operations.add(OperationType.GET_DELETED_NB);
-      opChains.add(testFramework.startOperationChain(RouterServerTestFramework.CHUNK_SIZE * 2 + 1, i, operations));
+      opChains.add(testFramework.startOperationChain(blobSize, i, operations));
     }
     testFramework.checkOperationChains(opChains);
   }
 
+  /**
+   * Test that the coordinator-backed and non-blocking router are compatible with each other for operations on
+   * single-chunk blobs.  This performs puts and deletes with either the non-blocking or coordinator backed
+   * router and tests get operations with both types of routers.
+   * @throws Exception
+   */
   @Test
   public void coordinatorNonBlockingCompatibilityTest()
       throws Exception {
     List<OperationChain> opChains = new ArrayList<>();
+    Random random = new Random();
     for (int i = 0; i < 10; i++) {
       Queue<OperationType> operations = new LinkedList<>();
       operations.add(i % 2 == 0 ? OperationType.PUT_NB : OperationType.PUT_COORD);
@@ -150,7 +177,8 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.GET_INFO_DELETED_COORD);
       operations.add(OperationType.GET_DELETED_NB);
       operations.add(OperationType.GET_DELETED_COORD);
-      opChains.add(testFramework.startOperationChain(32 * 1024, i, operations));
+      int blobSize = random.nextInt(100 * 1024);
+      opChains.add(testFramework.startOperationChain(blobSize, i, operations));
     }
     testFramework.checkOperationChains(opChains);
   }
