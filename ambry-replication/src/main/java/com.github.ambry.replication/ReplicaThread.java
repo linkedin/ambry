@@ -305,7 +305,7 @@ class ReplicaThread implements Runnable {
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
             } catch (Exception e) {
-              replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
+              replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
               logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
                   " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
               responseHandler.onRequestResponseException(remoteReplicaInfo.getReplicaId(), e);
@@ -314,7 +314,7 @@ class ReplicaThread implements Runnable {
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
             }
           } else {
-            replicationMetrics.updateMetadataRequestError(remoteReplicaInfo);
+            replicationMetrics.updateMetadataRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
                 remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
             ExchangeMetadataResponse exchangeMetadataResponse =
@@ -698,13 +698,13 @@ class ReplicaThread implements Runnable {
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
             } catch (StoreException e) {
               if (e.getErrorCode() != StoreErrorCodes.Already_Exist) {
-                replicationMetrics.updateLocalStoreError(remoteReplicaInfo);
+                replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
                 logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
                     " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
               }
             }
           } else {
-            replicationMetrics.updateGetRequestError(remoteReplicaInfo);
+            replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
                 remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           }

@@ -14,8 +14,7 @@
                     ],
                     "hardwareState": "AVAILABLE",
                     "hostname": "localhost",
-                    "port": 6670,
-                    "sslport": 7670
+                    "port": 6670
                 },
                 {
                     "disks": [
@@ -27,8 +26,7 @@
                     ],
                     "hardwareState": "AVAILABLE",
                     "hostname": "localhost",
-                    "port": 6671,
-                    "sslport": 7671
+                    "port": 6671
                 }
                 ,
                 {
@@ -41,8 +39,7 @@
                     ],
                     "hardwareState": "AVAILABLE",
                     "hostname": "localhost",
-                    "port": 6672,
-                    "sslport": 7672
+                    "port": 6672
                 }
             ],
             "name": "Datacenter"
