@@ -1,0 +1,51 @@
+{
+    "clusterName": "LocalSetUp_ThreeNodeOneDisk_OnePartitionThreeReplicas_Ssl",
+    "version": 1,
+    "datacenters": [
+        {
+            "dataNodes": [
+                {
+                    "disks": [
+                        {
+                            "capacityInBytes": 21474836480,
+                            "hardwareState": "AVAILABLE",
+                            "mountPath": "/tmp/1"
+                        }
+                    ],
+                    "hardwareState": "AVAILABLE",
+                    "hostname": "localhost",
+                    "port": 6670,
+                    "sslport": 7670
+                },
+                {
+                    "disks": [
+                        {
+                            "capacityInBytes": 21474836480,
+                            "hardwareState": "AVAILABLE",
+                            "mountPath": "/tmp/2"
+                        }
+                    ],
+                    "hardwareState": "AVAILABLE",
+                    "hostname": "localhost",
+                    "port": 6671,
+                    "sslport": 7671
+                }
+                ,
+                {
+                    "disks": [
+                        {
+                            "capacityInBytes": 21474836480,
+                            "hardwareState": "AVAILABLE",
+                            "mountPath": "/tmp/3"
+                        }
+                    ],
+                    "hardwareState": "AVAILABLE",
+                    "hostname": "localhost",
+                    "port": 6672,
+                    "sslport": 7672
+                }
+            ],
+            "name": "Datacenter"
+        }
+    ]
+}
