@@ -23,6 +23,7 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.Time;
 import java.util.Collections;
@@ -143,8 +144,9 @@ abstract class GetOperation<T> {
   /**
    * Handle the given {@link ResponseInfo} received for a request that was sent out.
    * @param responseInfo the {@link ResponseInfo} to be handled.
+   * @param getResponse the {@link GetResponse} associated with this response.
    */
-  abstract void handleResponse(ResponseInfo responseInfo);
+  abstract void handleResponse(ResponseInfo responseInfo, GetResponse getResponse);
 
   /**
    * Abort operation by invoking any callbacks and updating futures with an exception.

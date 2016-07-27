@@ -33,7 +33,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -255,11 +254,12 @@ class PutOperation {
   /**
    * Handle the given {@link ResponseInfo} by handing it over to the correct {@link PutChunk} that issued the request.
    * @param responseInfo the {@link ResponseInfo} to be handled.
+   * @param putResponse the {@link PutResponse} associated with this response.
    */
-  void handleResponse(ResponseInfo responseInfo) {
-    PutChunk putChunk =
-        correlationIdToPutChunk.remove(((RequestOrResponse) responseInfo.getRequest()).getCorrelationId());
-    putChunk.handleResponse(responseInfo);
+  void handleResponse(ResponseInfo responseInfo, PutResponse putResponse) {
+    PutChunk putChunk = correlationIdToPutChunk
+        .remove(((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
+    putChunk.handleResponse(responseInfo, putResponse);
     if (putChunk.isComplete()) {
       onChunkOperationComplete(putChunk);
     }
@@ -784,7 +784,8 @@ class PutOperation {
     }
 
     /**
-     * This is one of two main entry points to this class, the other being {@link #handleResponse(ResponseInfo)}.
+     * This is one of two main entry points to this class, the other being
+     * {@link #handleResponse(ResponseInfo, PutResponse)}.
      * Apart from fetching requests to send out, this also checks for timeouts of issued requests,
      * status of the operation and anything else that needs to be done within this PutChunk. The callers guarantee
      * that this method is called on all the PutChunks of an operation until either the operation,
@@ -832,7 +833,7 @@ class PutOperation {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
         PutRequest putRequest = createPutRequest();
-        RequestInfo request = new RequestInfo(hostname, port, putRequest);
+        RouterRequestInfo request = new RouterRequestInfo(hostname, port, putRequest, replicaId);
         int correlationId = putRequest.getCorrelationId();
         correlationIdToChunkPutRequestInfo
             .put(correlationId, new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
@@ -882,9 +883,10 @@ class PutOperation {
      * Finally, a check is done to determine whether the operation on the chunk is eligible for completion,
      * if so the operation is completed right away.
      * @param responseInfo the response received for a request sent out on behalf of this chunk.
+     * @param putResponse the {@link PutResponse} associated with this response.
      */
-    void handleResponse(ResponseInfo responseInfo) {
-      int correlationId = ((PutRequest) responseInfo.getRequest()).getCorrelationId();
+    void handleResponse(ResponseInfo responseInfo, PutResponse putResponse) {
+      int correlationId = ((PutRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
       ChunkPutRequestInfo chunkPutRequestInfo = correlationIdToChunkPutRequestInfo.remove(correlationId);
       if (chunkPutRequestInfo == null) {
         // Ignore right away. This could mean:
@@ -901,13 +903,13 @@ class PutOperation {
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
-        responseHandler
-            .onRequestResponseException(chunkPutRequestInfo.replicaId, new IOException("NetworkClient error"));
         isSuccessful = false;
       } else {
-        try {
-          PutResponse putResponse =
-              PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
+        if (putResponse == null) {
+          setChunkException(new RouterException("Response deserialization received an unexpected error",
+              RouterErrorCode.UnexpectedInternalError));
+          isSuccessful = false;
+        } else {
           if (putResponse.getCorrelationId() != correlationId) {
             // The NetworkClient associates a response with a request based on the fact that only one request is sent
             // out over a connection id, and the response received on a connection id must be for the latest request
@@ -922,7 +924,6 @@ class PutOperation {
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
             ServerErrorCode putError = putResponse.getError();
-            responseHandler.onRequestResponseError(chunkPutRequestInfo.replicaId, putError);
             if (putError == ServerErrorCode.No_Error) {
               logger.trace("The putRequest was successful");
               isSuccessful = true;
@@ -932,12 +933,6 @@ class PutOperation {
               isSuccessful = false;
             }
           }
-        } catch (IOException e) {
-          // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
-          // detection.
-          setChunkException(new RouterException("Response deserialization received an unexpected error", e,
-              RouterErrorCode.UnexpectedInternalError));
-          isSuccessful = false;
         }
       }
       if (isSuccessful) {

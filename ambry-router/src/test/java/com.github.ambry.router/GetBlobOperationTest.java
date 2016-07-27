@@ -28,9 +28,12 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -292,9 +295,8 @@ public class GetBlobOperationTest {
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       for (RequestInfo requestInfo : requestListToFill) {
-        ResponseInfo fakeResponse =
-            new ResponseInfo(requestInfo.getRequest(), NetworkClientErrorCode.NetworkError, null);
-        op.handleResponse(fakeResponse);
+        ResponseInfo fakeResponse = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
+        op.handleResponse(fakeResponse, null);
         if (op.isOperationComplete()) {
           break;
         }
@@ -334,8 +336,11 @@ public class GetBlobOperationTest {
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-      for (ResponseInfo response : responses) {
-        op.handleResponse(response);
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
+            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
+            : null;
+        op.handleResponse(responseInfo, getResponse);
         if (op.isOperationComplete()) {
           break;
         }
@@ -398,8 +403,11 @@ public class GetBlobOperationTest {
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-      for (ResponseInfo response : responses) {
-        op.handleResponse(response);
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
+            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
+            : null;
+        op.handleResponse(responseInfo, getResponse);
         if (op.isOperationComplete()) {
           break;
         }
@@ -513,8 +521,11 @@ public class GetBlobOperationTest {
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
-      for (ResponseInfo response : responses) {
-        op.handleResponse(response);
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
+            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
+            : null;
+        op.handleResponse(responseInfo, getResponse);
       }
     }
 

@@ -28,9 +28,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
@@ -139,7 +137,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       String hostname = replicaId.getDataNodeId().getHostname();
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
       GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), GetOptions.None);
-      RequestInfo request = new RequestInfo(hostname, port, getRequest);
+      RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
       requestRegistrationCallback.registerRequestToSend(this, request);
@@ -157,13 +155,14 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    * Based on the status of the response, this involves handling the body, notifying the operation tracker,
    * notifying the response handler and possibly setting the operationException.
    * @param responseInfo the {@link ResponseInfo} to be handled.
+   * @param getResponse The {@link GetResponse} associated with this response.
    */
   @Override
-  void handleResponse(ResponseInfo responseInfo) {
+  void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
     if (isOperationComplete()) {
       return;
     }
-    int correlationId = ((GetRequest) responseInfo.getRequest()).getCorrelationId();
+    int correlationId = ((GetRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
     // Get the GetOperation that generated the request.
     GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
     if (getRequestInfo == null) {
@@ -176,12 +175,13 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
         .update(requestLatencyMs);
     if (responseInfo.getError() != null) {
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
-      responseHandler.onRequestResponseException(getRequestInfo.replicaId, new IOException("NetworkClient error"));
       onErrorResponse(getRequestInfo.replicaId);
     } else {
-      try {
-        GetResponse getResponse = GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), clusterMap);
+      if (getResponse == null) {
+        setOperationException(new RouterException("Response deserialization received an unexpected error",
+            RouterErrorCode.UnexpectedInternalError));
+        onErrorResponse(getRequestInfo.replicaId);
+      } else {
         if (getResponse.getCorrelationId() != correlationId) {
           // The NetworkClient associates a response with a request based on the fact that only one request is sent
           // out over a connection id, and the response received on a connection id must be for the latest request
@@ -195,14 +195,16 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
           onErrorResponse(getRequestInfo.replicaId);
           // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
         } else {
-          processGetBlobInfoResponse(getRequestInfo, getResponse);
+          try {
+            processGetBlobInfoResponse(getRequestInfo, getResponse);
+          } catch (IOException | MessageFormatException e) {
+            // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
+            // detection.
+            setOperationException(new RouterException("Response deserialization received an unexpected error", e,
+                RouterErrorCode.UnexpectedInternalError));
+            onErrorResponse(getRequestInfo.replicaId);
+          }
         }
-      } catch (IOException | MessageFormatException e) {
-        // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
-        // detection.
-        setOperationException(new RouterException("Response deserialization received an unexpected error", e,
-            RouterErrorCode.UnexpectedInternalError));
-        onErrorResponse(getRequestInfo.replicaId);
       }
     }
     checkAndMaybeComplete();
@@ -228,7 +230,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
         // Again, no need to notify the responseHandler.
       } else {
         getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-        responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
         if (getError == ServerErrorCode.No_Error) {
           handleBody(getResponse.getInputStream());
           operationTracker.onResponse(getRequestInfo.replicaId, true);
@@ -250,7 +251,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
         }
       }
     } else {
-      responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
       onErrorResponse(getRequestInfo.replicaId);
     }
   }

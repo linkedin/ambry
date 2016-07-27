@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -201,8 +200,8 @@ public class DeleteManagerTest {
     map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
     map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
-      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted
-          && !map.containsKey(serverErrorCode)) {
+      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted && !map
+          .containsKey(serverErrorCode)) {
         map.put(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
       }
     }

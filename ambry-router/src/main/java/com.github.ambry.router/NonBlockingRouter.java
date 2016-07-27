@@ -85,7 +85,7 @@ class NonBlockingRouter implements Router {
     this.networkClientFactory = networkClientFactory;
     this.notificationSystem = notificationSystem;
     this.clusterMap = clusterMap;
-    this.responseHandler = new ResponseHandler(clusterMap);
+    responseHandler = new ResponseHandler(clusterMap);
     this.time = time;
     ocList = new ArrayList<OperationController>(routerConfig.routerScalingUnitCount);
     for (int i = 0; i < routerConfig.routerScalingUnitCount; i++) {
@@ -452,7 +452,8 @@ class NonBlockingRouter implements Router {
      */
     private void onResponse(List<ResponseInfo> responseInfoList) {
       for (ResponseInfo responseInfo : responseInfoList) {
-        RequestOrResponseType type = ((RequestOrResponse) responseInfo.getRequest()).getRequestType();
+        RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+        RequestOrResponseType type = ((RequestOrResponse) routerRequestInfo.getRequest()).getRequestType();
         switch (type) {
           case PutRequest:
             putManager.handleResponse(responseInfo);

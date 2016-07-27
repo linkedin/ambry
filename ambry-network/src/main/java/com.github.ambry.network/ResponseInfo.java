@@ -23,27 +23,27 @@ import java.nio.ByteBuffer;
  * request.
  */
 public class ResponseInfo {
-  private final Send request;
+  private final RequestInfo requestInfo;
   private final NetworkClientErrorCode error;
   private final ByteBuffer response;
 
   /**
    * Constructs a ResponseInfo with the given parameters.
-   * @param request the request associated with this response.
+   * @param requestInfo the {@link RequestInfo} associated with this response.
    * @param error the error encountered in sending this request, if there is any.
    * @param response the response received for this request.
    */
-  public ResponseInfo(Send request, NetworkClientErrorCode error, ByteBuffer response) {
-    this.request = request;
+  public ResponseInfo(RequestInfo requestInfo, NetworkClientErrorCode error, ByteBuffer response) {
+    this.requestInfo = requestInfo;
     this.error = error;
     this.response = response;
   }
 
   /**
-   * @return the request associated with this response.
+   * @return the {@link RequestInfo} associated with this response.
    */
-  public Send getRequest() {
-    return request;
+  public RequestInfo getRequestInfo() {
+    return requestInfo;
   }
 
   /**

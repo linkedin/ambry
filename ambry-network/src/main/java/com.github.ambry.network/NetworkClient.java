@@ -130,9 +130,10 @@ public class NetworkClient implements Closeable {
     while (iter.hasNext()) {
       RequestMetadata requestMetadata = iter.next();
       if (time.milliseconds() - requestMetadata.requestQueuedAtMs > checkoutTimeoutMs) {
-        responseInfoList.add(
-            new ResponseInfo(requestMetadata.requestInfo.getRequest(), NetworkClientErrorCode.ConnectionUnavailable,
-                null));
+        responseInfoList
+            .add(new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
+        logger.trace("Failing request to host {} port {} due to connection unavailability",
+            requestMetadata.requestInfo.getHost(), requestMetadata.requestInfo.getPort());
         iter.remove();
         networkMetrics.connectionTimeOutError.inc();
       } else {
@@ -186,12 +187,11 @@ public class NetworkClient implements Closeable {
     }
 
     for (String connId : selector.disconnected()) {
-      logger.trace("Connection disconnected for connectionId {} and hence removing it from connection tracker", connId);
+      logger.trace("ConnectionId {} disconnected, removing it from connection tracker", connId);
       connectionTracker.removeConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
       if (requestMetadata != null) {
-        responseInfoList
-            .add(new ResponseInfo(requestMetadata.requestInfo.getRequest(), NetworkClientErrorCode.NetworkError, null));
+        responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
       }
     }
 
@@ -201,8 +201,7 @@ public class NetworkClient implements Closeable {
           connId);
       connectionTracker.checkInConnection(connId);
       RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
-      responseInfoList
-          .add(new ResponseInfo(requestMetadata.requestInfo.getRequest(), null, recv.getReceivedBytes().getPayload()));
+      responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, null, recv.getReceivedBytes().getPayload()));
       requestMetadata.onResponseReceive();
     }
   }

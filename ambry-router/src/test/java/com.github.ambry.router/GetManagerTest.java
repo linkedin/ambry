@@ -222,7 +222,13 @@ public class GetManagerTest {
     compareContent(router.getBlob(blobId).get());
   }
 
-  private void compareContent(ReadableStreamChannel readableStreamChannel) throws Exception {
+  /**
+   * Compare and assert that the content in the given {@link ReadableStreamChannel} is exactly the same as
+   * the original put content.
+   * @param readableStreamChannel the {@link ReadableStreamChannel} that is the candidate for comparison.
+   */
+  private void compareContent(ReadableStreamChannel readableStreamChannel)
+      throws Exception {
     ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
     Future<Long> readIntoFuture = readableStreamChannel.readInto(getChannel, null);
     int readBytes = 0;

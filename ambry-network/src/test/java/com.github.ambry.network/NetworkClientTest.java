@@ -92,7 +92,7 @@ public class NetworkClientTest {
       responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
       requestInfoList.clear();
       for (ResponseInfo responseInfo : responseInfoList) {
-        MockSend send = (MockSend) responseInfo.getRequest();
+        MockSend send = (MockSend) responseInfo.getRequestInfo().getRequest();
         NetworkClientErrorCode error = responseInfo.getError();
         ByteBuffer response = responseInfo.getResponse();
         Assert.assertNull("Should not have encountered an error", error);

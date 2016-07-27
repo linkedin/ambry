@@ -34,9 +34,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -192,12 +190,13 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   /**
    * Handle the given {@link ResponseInfo} by handing it over to the appropriate chunk that issued the request.
    * @param responseInfo the {@link ResponseInfo} to be handled.
+   * @param getResponse the {@link GetResponse} associated with this response.
    */
   @Override
-  void handleResponse(ResponseInfo responseInfo) {
-    GetChunk getChunk =
-        correlationIdToGetChunk.remove(((RequestOrResponse) responseInfo.getRequest()).getCorrelationId());
-    getChunk.handleResponse(responseInfo);
+  void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
+    GetChunk getChunk = correlationIdToGetChunk
+        .remove(((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
+    getChunk.handleResponse(responseInfo, getResponse);
     if (getChunk.isComplete()) {
       onChunkOperationComplete(getChunk);
     }
@@ -471,7 +470,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     }
 
     /**
-     * This is one of two main entry points to this class, the other being {@link #handleResponse(ResponseInfo)}.
+     * This is one of two main entry points to this class, the other being
+     * {@link #handleResponse(ResponseInfo, GetResponse)}.
      * Apart from fetching requests to send out, this also checks for timeouts of issued requests,
      * status of the operation and anything else that needs to be done within this GetChunk. The callers guarantee
      * that this method is called on the GetChunks of an operation until either the operation, or the chunk operation
@@ -521,7 +521,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
         GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOptions());
-        RequestInfo request = new RequestInfo(hostname, port, getRequest);
+        RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
         correlationIdToGetChunk.put(correlationId, this);
@@ -577,9 +577,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      * Finally, a check is done to determine whether the operation on the chunk is eligible for completion,
      * if so the chunk operation is completed right away.
      * @param responseInfo the response received for a request sent out on behalf of this chunk.
+     * @param getResponse the {@link GetResponse} associated with this response.
      */
-    void handleResponse(ResponseInfo responseInfo) {
-      int correlationId = ((GetRequest) responseInfo.getRequest()).getCorrelationId();
+    void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
+      int correlationId = ((GetRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
       // Get the GetOperation that generated the request.
       GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
       if (getRequestInfo == null) {
@@ -592,12 +593,13 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
           .update(requestLatencyMs);
       if (responseInfo.getError() != null) {
         chunkException = new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut);
-        responseHandler.onRequestResponseException(getRequestInfo.replicaId, new IOException("NetworkClient error"));
         onErrorResponse(getRequestInfo.replicaId);
       } else {
-        try {
-          GetResponse getResponse = GetResponse
-              .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), clusterMap);
+        if (getResponse == null) {
+          chunkException = new RouterException("Response deserialization received an unexpected error",
+              RouterErrorCode.UnexpectedInternalError);
+          onErrorResponse(getRequestInfo.replicaId);
+        } else {
           if (getResponse.getCorrelationId() != correlationId) {
             // The NetworkClient associates a response with a request based on the fact that only one request is sent
             // out over a connection id, and the response received on a connection id must be for the latest request
@@ -611,14 +613,16 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
             onErrorResponse(getRequestInfo.replicaId);
             // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
           } else {
-            processGetBlobResponse(getRequestInfo, getResponse);
+            try {
+              processGetBlobResponse(getRequestInfo, getResponse);
+            } catch (IOException | MessageFormatException e) {
+              // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
+              // detection.
+              chunkException = new RouterException("Response deserialization received an unexpected error", e,
+                  RouterErrorCode.UnexpectedInternalError);
+              onErrorResponse(getRequestInfo.replicaId);
+            }
           }
-        } catch (IOException | MessageFormatException e) {
-          // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
-          // detection.
-          chunkException = new RouterException("Response deserialization received an unexpected error", e,
-              RouterErrorCode.UnexpectedInternalError);
-          onErrorResponse(getRequestInfo.replicaId);
         }
       }
       checkAndMaybeComplete();
@@ -642,7 +646,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
               "received: " + partitionsInResponse, RouterErrorCode.UnexpectedInternalError);
         } else {
           getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-          responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
           if (getError == ServerErrorCode.No_Error) {
             handleBody(getResponse.getInputStream());
             chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
@@ -664,7 +667,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
           }
         }
       } else {
-        responseHandler.onRequestResponseError(getRequestInfo.replicaId, getError);
         onErrorResponse(getRequestInfo.replicaId);
       }
     }
