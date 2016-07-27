@@ -55,7 +55,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
       if (count == failureCountThreshold) {
         logger.error("Resource " + resource + " has gone down");
       }
-      logger.trace("Adding downtime " + retryBackoffMs + " ms to " + resource);
+      logger.trace("Resource " + resource + " remains in down state at time " + SystemTime.getInstance().milliseconds() + "; Adding downtime of " + retryBackoffMs + " ms");
       downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
     }
   }
