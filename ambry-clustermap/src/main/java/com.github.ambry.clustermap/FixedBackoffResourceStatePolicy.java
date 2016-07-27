@@ -55,7 +55,8 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
       if (count == failureCountThreshold) {
         logger.error("Resource " + resource + " has gone down");
       }
-      logger.trace("Resource " + resource + " remains in down state at time " + SystemTime.getInstance().milliseconds() + "; Adding downtime of " + retryBackoffMs + " ms");
+      logger.trace("Resource {} remains in down state at time {}; adding downtime of {} ms", resource,
+          SystemTime.getInstance().milliseconds(), retryBackoffMs);
       downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
     }
   }
@@ -88,11 +89,9 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
         down = true;
       }
     }
-    logger.trace("Resource " + resource + " is " + (down ? "down" : "not down")
-        + "; failureCount: " + failureCount.get()
-        + "; failureCountThreshold: " + failureCountThreshold
-        + "; remaining time: " + (downUntil.get() - SystemTime.getInstance().milliseconds())
-        + "; hard down: " + hardDown);
+    logger.trace("Resource {} is {}; failureCount: {}; failureCountThreshold: {}; remaining time: {}; hard down: {}",
+        resource, (down ? "down" : "not down"), failureCount.get(), failureCountThreshold,
+        (downUntil.get() - SystemTime.getInstance().milliseconds()), hardDown);
     return down;
   }
 
