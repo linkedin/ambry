@@ -283,7 +283,7 @@ public class NonBlockingRouterTest {
 
   /**
    * Test that the failure handler is notified for put responses.
-   * @param opHelper the {@link OperationType}
+   * @param opHelper the {@link OperationHelper}
    * @param networkClient the {@link NetworkClient}
    * @param failedReplicaIds the list that will contain all the replicas for which failure was notified.
    * @param blobId the id of the blob to get/delete. For puts, this will be null.
