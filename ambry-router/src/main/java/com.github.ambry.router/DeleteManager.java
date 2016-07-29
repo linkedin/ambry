@@ -195,6 +195,7 @@ class DeleteManager {
       } catch (Exception e) {
         // Ignore. There is no value in notifying the response handler.
         logger.error("Response deserialization received unexpected error", e);
+        routerMetrics.responseDeserializationErrorCount.inc();
       }
     }
     return deleteResponse;

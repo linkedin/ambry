@@ -27,6 +27,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -55,8 +57,12 @@ public class NonBlockingRouterTest {
   private static final int GET_SUCCESS_TARGET = 1;
   private static final int DELETE_REQUEST_PARALLELISM = 3;
   private static final int DELETE_SUCCESS_TARGET = 2;
+  private static final int AWAIT_TIMEOUT_MS = 2000;
   private final Random random = new Random();
   private NonBlockingRouter router;
+  private PutManager putManager;
+  private GetManager getManager;
+  private DeleteManager deleteManager;
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
 
   // Request params;
@@ -232,41 +238,43 @@ public class NonBlockingRouterTest {
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
 
-    PutManager putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
+    putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new OperationCompleteCallback(new AtomicInteger(0)), new ReadyForPollCallback(networkClient), 0, mockTime);
-    testPutResponseNotification(putManager, networkClient, failedReplicaIds, successfulResponseCount, invalidResponse,
+    OperationHelper opHelper = new OperationHelper(OperationType.PUT);
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount, invalidResponse,
         -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
-    testPutResponseNotification(putManager, networkClient, failedReplicaIds, successfulResponseCount, invalidResponse,
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount, invalidResponse,
         0);
     // Test that if a failed response comes after the operation is completed, failure detector is notified.
-    testPutResponseNotification(putManager, networkClient, failedReplicaIds, successfulResponseCount, invalidResponse,
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount, invalidResponse,
         PUT_REQUEST_PARALLELISM - 1);
 
-    GetManager getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
+    opHelper = new OperationHelper(OperationType.GET);
+    getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
         new NonBlockingRouterMetrics(mockClusterMap), new OperationCompleteCallback(new AtomicInteger(0)),
         new ReadyForPollCallback(networkClient), mockTime);
-    testGetResponseNotification(getManager, networkClient, failedReplicaIds, blobId, successfulResponseCount,
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
-    testGetResponseNotification(getManager, networkClient, failedReplicaIds, blobId, successfulResponseCount,
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, 0);
     // Test that if a failed response comes after the operation is completed, failure detector is notified.
-    testGetResponseNotification(getManager, networkClient, failedReplicaIds, blobId, successfulResponseCount,
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, GET_REQUEST_PARALLELISM - 1);
 
-    DeleteManager deleteManager =
-        new DeleteManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
-            new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-            new OperationCompleteCallback(new AtomicInteger(0)), mockTime);
-    testDeleteResponseNotification(deleteManager, networkClient, failedReplicaIds, blobId, successfulResponseCount,
+    opHelper = new OperationHelper(OperationType.DELETE);
+    deleteManager = new DeleteManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
+        new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+        new OperationCompleteCallback(new AtomicInteger(0)), mockTime);
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
-    testDeleteResponseNotification(deleteManager, networkClient, failedReplicaIds, blobId, successfulResponseCount,
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, 0);
     // Test that if a failed response comes after the operation is completed, failure detector is notified.
-    testDeleteResponseNotification(deleteManager, networkClient, failedReplicaIds, blobId, successfulResponseCount,
+    testResponseNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, DELETE_REQUEST_PARALLELISM - 1);
     putManager.close();
     getManager.close();
@@ -275,9 +283,10 @@ public class NonBlockingRouterTest {
 
   /**
    * Test that the failure handler is notified for put responses.
-   * @param putManager the {@link PutManager}
+   * @param opHelper the {@link OperationType}
    * @param networkClient the {@link NetworkClient}
    * @param failedReplicaIds the list that will contain all the replicas for which failure was notified.
+   * @param blobId the id of the blob to get/delete. For puts, this will be null.
    * @param successfulResponseCount the AtomicInteger that will contain the count of replicas for which success was
    *                                notified.
    * @param invalidResponse the AtomicBoolean that will contain whether an unexpected failure was notified.
@@ -285,15 +294,18 @@ public class NonBlockingRouterTest {
    *                    if index is 0, then the first response will be failed. If the index is -1, no responses will be
    *                    failed.
    */
-  void testPutResponseNotification(PutManager putManager, NetworkClient networkClient, List<ReplicaId> failedReplicaIds,
-      AtomicInteger successfulResponseCount, AtomicBoolean invalidResponse, int indexToFail)
+  void testResponseNotification(OperationHelper opHelper, NetworkClient networkClient, List<ReplicaId> failedReplicaIds,
+      String blobId, AtomicInteger successfulResponseCount, AtomicBoolean invalidResponse, int indexToFail)
       throws Exception {
-    ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-    FutureResult<String> futureResult = new FutureResult<>();
-    putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel, futureResult, null);
+    FutureResult futureResult = opHelper.submitOperation(blobId);
+    int requestParallelism = opHelper.requestParallelism;
     List<RequestInfo> allRequests = new ArrayList<>();
-    while (allRequests.size() < PUT_REQUEST_PARALLELISM) {
-      putManager.poll(allRequests);
+    long loopStartTimeMs = SystemTime.getInstance().milliseconds();
+    while (allRequests.size() < requestParallelism) {
+      if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
+        Assert.fail("Waited too long for requests.");
+      }
+      opHelper.pollOpManager(allRequests);
     }
     ReplicaId replicaIdToFail =
         indexToFail == -1 ? null : ((RouterRequestInfo) allRequests.get(indexToFail)).getReplicaId();
@@ -306,16 +318,20 @@ public class NonBlockingRouterTest {
       List<RequestInfo> requestInfoListToSend = new ArrayList<>();
       requestInfoListToSend.add(requestInfo);
       List<ResponseInfo> responseInfoList;
+      loopStartTimeMs = SystemTime.getInstance().milliseconds();
       do {
+        if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
+          Assert.fail("Waited too long for the response.");
+        }
         responseInfoList = networkClient.sendAndPoll(requestInfoListToSend, 10);
         requestInfoListToSend.clear();
       } while (responseInfoList.size() == 0);
-      putManager.handleResponse(responseInfoList.get(0));
+      opHelper.handleResponse(responseInfoList.get(0));
     }
-    futureResult.await();
+    futureResult.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     if (indexToFail == -1) {
       Assert.assertEquals("Successful notification should have arrived for replicas that were up",
-          PUT_REQUEST_PARALLELISM, successfulResponseCount.get());
+          opHelper.requestParallelism, successfulResponseCount.get());
       Assert.assertEquals("Failure detector should not have been notified", 0, failedReplicaIds.size());
       Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
     } else {
@@ -323,127 +339,7 @@ public class NonBlockingRouterTest {
       Assert.assertEquals("Failed notification should have arrived for the failed replica", replicaIdToFail,
           failedReplicaIds.get(0));
       Assert.assertEquals("Successful notification should have arrived for replicas that were up",
-          PUT_REQUEST_PARALLELISM - 1, successfulResponseCount.get());
-      Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
-    }
-    failedReplicaIds.clear();
-    successfulResponseCount.set(0);
-    invalidResponse.set(false);
-    mockSelectorState.set(MockSelectorState.Good);
-  }
-
-  /**
-   * Test that the failure handler is notified for get responses.
-   * @param getManager the {@link GetManager}
-   * @param networkClient the {@link NetworkClient}
-   * @param failedReplicaIds the list that will contain all the replicas for which failure was notified.
-   * @param blobId the id of the blob to delete.
-   * @param successfulResponseCount the AtomicInteger that will contain the count of replicas for which success was
-   *                                notified.
-   * @param invalidResponse the AtomicBoolean that will contain whether an unexpected failure was notified.
-   * @param indexToFail the index representing which response for which failure is to be simulated. For example,
-   *                    if index is 0, then the first response will be failed. If the index is -1, no responses will be
-   *                    failed.
-   */
-  private void testGetResponseNotification(GetManager getManager, NetworkClient networkClient,
-      List<ReplicaId> failedReplicaIds, String blobId, AtomicInteger successfulResponseCount,
-      AtomicBoolean invalidResponse, int indexToFail)
-      throws Exception {
-    FutureResult<BlobInfo> futureResult = new FutureResult<>();
-    getManager.submitGetBlobInfoOperation(blobId, futureResult, null);
-    List<RequestInfo> allRequests = new ArrayList<>();
-    while (allRequests.size() < GET_REQUEST_PARALLELISM) {
-      getManager.poll(allRequests);
-    }
-    ReplicaId replicaIdToFail =
-        indexToFail == -1 ? null : ((RouterRequestInfo) allRequests.get(indexToFail)).getReplicaId();
-    for (RequestInfo requestInfo : allRequests) {
-      if (replicaIdToFail != null && replicaIdToFail.equals(((RouterRequestInfo) requestInfo).getReplicaId())) {
-        mockSelectorState.set(MockSelectorState.DisconnectOnSend);
-      } else {
-        mockSelectorState.set(MockSelectorState.Good);
-      }
-      List<RequestInfo> requestInfoListToSend = new ArrayList<>();
-      requestInfoListToSend.add(requestInfo);
-      List<ResponseInfo> responseInfoList;
-      do {
-        responseInfoList = networkClient.sendAndPoll(requestInfoListToSend, 10);
-        requestInfoListToSend.clear();
-      } while (responseInfoList.size() == 0);
-      getManager.handleResponse(responseInfoList.get(0));
-    }
-    futureResult.get();
-    if (indexToFail == -1) {
-      Assert.assertEquals("Successful notification should have arrived for replicas that were up",
-          GET_REQUEST_PARALLELISM, successfulResponseCount.get());
-      Assert.assertEquals("Failure detector should not have been notified", 0, failedReplicaIds.size());
-      Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
-    } else {
-      Assert.assertEquals("Failure detector should have been notified", 1, failedReplicaIds.size());
-      Assert.assertEquals("Failed notification should have arrived for the failed replica", replicaIdToFail,
-          failedReplicaIds.get(0));
-      Assert.assertEquals("Successful notification should have arrived for replicas that were up",
-          GET_REQUEST_PARALLELISM - 1, successfulResponseCount.get());
-      Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
-    }
-    failedReplicaIds.clear();
-    successfulResponseCount.set(0);
-    invalidResponse.set(false);
-    mockSelectorState.set(MockSelectorState.Good);
-  }
-
-  /**
-   * Test that the failure handler is notified for delete responses.
-   * @param deleteManager the {@link DeleteManager}
-   * @param networkClient the {@link NetworkClient}
-   * @param failedReplicaIds the list that will contain all the replicas for which failure was notified.
-   * @param blobId the id of the blob to delete.
-   * @param successfulResponseCount the AtomicInteger that will contain the count of replicas for which success was
-   *                                notified.
-   * @param invalidResponse the AtomicBoolean that will contain whether an unexpected failure was notified.
-   * @param indexToFail the index representing which response for which failure is to be simulated. For example,
-   *                    if index is 0, then the first response will be failed. If the index is -1, no responses will be
-   *                    failed.
-   */
-  private void testDeleteResponseNotification(DeleteManager deleteManager, NetworkClient networkClient,
-      List<ReplicaId> failedReplicaIds, String blobId, AtomicInteger successfulResponseCount,
-      AtomicBoolean invalidResponse, int indexToFail)
-      throws Exception {
-    FutureResult<Void> futureResult = new FutureResult<>();
-    deleteManager.submitDeleteBlobOperation(blobId, futureResult, null);
-    List<RequestInfo> allRequests = new ArrayList<>();
-    while (allRequests.size() < DELETE_REQUEST_PARALLELISM) {
-      deleteManager.poll(allRequests);
-    }
-    ReplicaId replicaIdToFail =
-        indexToFail == -1 ? null : ((RouterRequestInfo) allRequests.get(indexToFail)).getReplicaId();
-    for (RequestInfo requestInfo : allRequests) {
-      if (replicaIdToFail != null && replicaIdToFail.equals(((RouterRequestInfo) requestInfo).getReplicaId())) {
-        mockSelectorState.set(MockSelectorState.DisconnectOnSend);
-      } else {
-        mockSelectorState.set(MockSelectorState.Good);
-      }
-      List<RequestInfo> requestInfoListToSend = new ArrayList<>();
-      requestInfoListToSend.add(requestInfo);
-      List<ResponseInfo> responseInfoList;
-      do {
-        responseInfoList = networkClient.sendAndPoll(requestInfoListToSend, 10);
-        requestInfoListToSend.clear();
-      } while (responseInfoList.size() == 0);
-      deleteManager.handleResponse(responseInfoList.get(0));
-    }
-    futureResult.await();
-    if (indexToFail == -1) {
-      Assert.assertEquals("Successful notification should have arrived for replicas that were up",
-          DELETE_REQUEST_PARALLELISM, successfulResponseCount.get());
-      Assert.assertEquals("Failure detector should not have been notified", 0, failedReplicaIds.size());
-      Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
-    } else {
-      Assert.assertEquals("Failure detector should have been notified", 1, failedReplicaIds.size());
-      Assert.assertEquals("Failed notification should have arrived for the failed replica", replicaIdToFail,
-          failedReplicaIds.get(0));
-      Assert.assertEquals("Successful notification should have arrived for replicas that were up",
-          DELETE_REQUEST_PARALLELISM - 1, successfulResponseCount.get());
+          opHelper.requestParallelism - 1, successfulResponseCount.get());
       Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
     }
     failedReplicaIds.clear();
@@ -478,4 +374,102 @@ public class NonBlockingRouterTest {
     RouterException e = (RouterException) ((FutureResult<String>) future).error();
     Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
   }
+
+  /**
+   * Enum for the three operation types.
+   */
+  private enum OperationType {
+    PUT,
+    GET,
+    DELETE,
+  }
+
+  /**
+   * A helper class to abstract away the details about specific operation manager.
+   */
+  private class OperationHelper {
+    final OperationType opType;
+    int requestParallelism = 0;
+
+    /**
+     * Construct an OperationHelper object with the associated type.
+     * @param opType the type of operation.
+     */
+    OperationHelper(OperationType opType) {
+      this.opType = opType;
+      switch (opType) {
+        case PUT:
+          requestParallelism = PUT_REQUEST_PARALLELISM;
+          break;
+        case GET:
+          requestParallelism = GET_REQUEST_PARALLELISM;
+          break;
+        case DELETE:
+          requestParallelism = DELETE_REQUEST_PARALLELISM;
+          break;
+      }
+    }
+
+    /**
+     * Submit a put, get or delete operation based on the associated {@link OperationType} of this object.
+     * @param blobId the blobId to get or delete. For puts, this is ignored.
+     * @return the {@link FutureResult} associated with the submitted operation.
+     */
+    FutureResult submitOperation(String blobId) {
+      FutureResult futureResult = null;
+      switch (opType) {
+        case PUT:
+          futureResult = new FutureResult<String>();
+          ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+          putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel, futureResult, null);
+          break;
+        case GET:
+          futureResult = new FutureResult<BlobInfo>();
+          getManager.submitGetBlobInfoOperation(blobId, futureResult, null);
+          break;
+        case DELETE:
+          futureResult = new FutureResult<BlobInfo>();
+          deleteManager.submitDeleteBlobOperation(blobId, futureResult, null);
+          break;
+      }
+      return futureResult;
+    }
+
+    /**
+     * Poll the associated operation manager.
+     * @param requestInfos the list of {@link RequestInfo} to pass in the poll call.
+     */
+    void pollOpManager(List<RequestInfo> requestInfos) {
+      switch (opType) {
+        case PUT:
+          putManager.poll(requestInfos);
+          break;
+        case GET:
+          getManager.poll(requestInfos);
+          break;
+        case DELETE:
+          deleteManager.poll(requestInfos);
+          break;
+      }
+    }
+
+    /**
+     * Hand over a responseInfo to the operation manager.
+     * @param responseInfo the {@link ResponseInfo} to hand over.
+     */
+    void handleResponse(ResponseInfo responseInfo) {
+      switch (opType) {
+        case PUT:
+          putManager.handleResponse(responseInfo);
+          break;
+        case GET:
+          getManager.handleResponse(responseInfo);
+          break;
+        case DELETE:
+          deleteManager.handleResponse(responseInfo);
+          break;
+      }
+    }
+  }
+
 }

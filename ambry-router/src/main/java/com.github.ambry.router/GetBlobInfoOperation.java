@@ -200,6 +200,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
           } catch (IOException | MessageFormatException e) {
             // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
             // detection.
+            routerMetrics.responseDeserializationErrorCount.inc();
             setOperationException(new RouterException("Response deserialization received an unexpected error", e,
                 RouterErrorCode.UnexpectedInternalError));
             onErrorResponse(getRequestInfo.replicaId);
