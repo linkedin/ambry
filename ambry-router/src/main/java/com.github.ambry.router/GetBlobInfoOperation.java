@@ -85,7 +85,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    * Return the {@link MessageFormatFlags} to associate with a getBlobInfo operation.
    * @return {@link MessageFormatFlags#BlobInfo}
    */
-  @Override
   MessageFormatFlags getOperationFlag() {
     return MessageFormatFlags.BlobInfo;
   }

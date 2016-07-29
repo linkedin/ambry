@@ -28,14 +28,17 @@ import java.util.List;
 public class MetadataContentSerDe {
   /**
    * Serialize the input list of keys that form the metadata content.
+   * @param chunkSize the size of the intermediate data chunks for the object this metadata describes.
+   * @param totalSize the total size of the object this metadata describes.
    * @param keys the input list of keys that form the metadata content.
    * @return a ByteBuffer containing the serialized output.
    */
-  public static ByteBuffer serializeMetadataContent(List<StoreKey> keys) {
+  public static ByteBuffer serializeMetadataContent(int chunkSize, long totalSize, List<StoreKey> keys) {
     int bufSize =
-        MessageFormatRecord.Metadata_Content_Format_V1.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
+        MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     ByteBuffer outputBuf = ByteBuffer.allocate(bufSize);
-    MessageFormatRecord.Metadata_Content_Format_V1.serializeMetadataContentRecord(outputBuf, keys);
+    MessageFormatRecord.Metadata_Content_Format_V2
+        .serializeMetadataContentRecord(outputBuf, chunkSize, totalSize, keys);
     return outputBuf;
   }
 
@@ -48,12 +51,15 @@ public class MetadataContentSerDe {
    * @throws IOException if an IOException is encountered during deserialization.
    * @throws MessageFormatException if an unknown version is encountered in the header of the serialized input.
    */
-  public static List<StoreKey> deserializeMetadataContentRecord(ByteBuffer buf, StoreKeyFactory storeKeyFactory)
+  public static MultiPartMetadata deserializeMetadataContentRecord(ByteBuffer buf, StoreKeyFactory storeKeyFactory)
       throws IOException, MessageFormatException {
     int version = buf.getShort();
     switch (version) {
-      case MessageFormatRecord.Message_Header_Version_V1:
+      case MessageFormatRecord.Metadata_Content_Version_V1:
         return MessageFormatRecord.Metadata_Content_Format_V1
+            .deserializeMetadataContentRecord(new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
+      case MessageFormatRecord.Metadata_Content_Version_V2:
+        return MessageFormatRecord.Metadata_Content_Format_V2
             .deserializeMetadataContentRecord(new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
       default:
         throw new MessageFormatException("Unknown version encountered for MetadataContent: " + version,

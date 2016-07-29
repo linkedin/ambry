@@ -129,12 +129,6 @@ abstract class GetOperation<T> {
   }
 
   /**
-   * Return the {@link MessageFormatFlags} to associate with the requests for this operation.
-   * @return the {@link MessageFormatFlags} to associate with the requests for this operation.
-   */
-  abstract MessageFormatFlags getOperationFlag();
-
-  /**
    * For this operation, create and populate get requests to send out.
    * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to call for every request that gets
    *                                    created as part of this poll operation.

@@ -1053,7 +1053,8 @@ class PutOperation {
       chunkIds[chunkIndex] = chunkBlobId;
       chunksDone++;
       if (chunksDone == numDataChunks) {
-        buf = MetadataContentSerDe.serializeMetadataContent(Arrays.asList(chunkIds));
+        buf = MetadataContentSerDe
+            .serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, blobSize, Arrays.asList(chunkIds));
         onFillComplete();
       }
     }

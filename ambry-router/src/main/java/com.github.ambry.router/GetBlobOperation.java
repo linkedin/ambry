@@ -26,6 +26,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
+import com.github.ambry.messageformat.MultiPartMetadata;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -83,6 +84,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   private int numChunksTotal;
   // the total number of data chunks retrieved so far (and may or may not have been written out yet).
   private int numChunksRetrieved;
+  // the maximum size of a data chunk in bytes
+  private int chunkSize = MultiPartMetadata.UNDEFINED_CHUNK_SIZE;
+  // the total size of the object being fetched in this operation
+  private long totalSize = MultiPartMetadata.UNDEFINED_TOTAL_SIZE;
   // a list iterator to the chunk ids that need to be fetched for this operation, if this is a composite blob.
   private ListIterator<StoreKey> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
@@ -142,15 +147,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       }
     }
     operationCompleted = true;
-  }
-
-  /**
-   * Return the {@link MessageFormatFlags} to associate with a getBlob operation.
-   * @return {@link MessageFormatFlags#Blob}
-   */
-  @Override
-  MessageFormatFlags getOperationFlag() {
-    return MessageFormatFlags.Blob;
   }
 
   /**
@@ -423,6 +419,16 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       reset();
     }
 
+
+    /**
+     * Return the {@link MessageFormatFlags} to associate with the {@link GetRequest}s that will be issued by this
+     * GetChunk.
+     * @return {@link MessageFormatFlags#Blob}
+     */
+    MessageFormatFlags getOperationFlag() {
+      return MessageFormatFlags.Blob;
+    }
+
     /**
      * @return the {@link GetOptions} to associate with the {@link GetRequest}s that will be issued by this GetChunk.
      */
@@ -589,8 +595,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       }
       long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs
-          .update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
+          requestLatencyMs);
       if (responseInfo.getError() != null) {
         chunkException = new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut);
         onErrorResponse(getRequestInfo.replicaId);
@@ -780,8 +786,12 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         chunkIndexToBuffer = new TreeMap<>();
         if (blobType == BlobType.MetadataBlob) {
           ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
-          List<StoreKey> keys =
+          MultiPartMetadata metadata =
               MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
+          chunkSize = metadata.getChunkSize();
+          totalSize = metadata.getTotalSize();
+          List<StoreKey> keys = metadata.getKeys();
+          //TODO filter keys here to just include blobs in range
           chunkIdIterator = keys.listIterator();
           numChunksTotal = keys.size();
           dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
