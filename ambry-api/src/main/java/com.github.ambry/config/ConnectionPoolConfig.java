@@ -60,6 +60,14 @@ public class ConnectionPoolConfig {
   @Default("2")
   public final int connectionPoolMaxConnectionsPerPortSSL;
 
+  /**
+   * The maximum consecutive connect failures allowed before we clean up the available pool
+   */
+  @Config("connectionpool.max.connect.failures.to.clean.up.available.pool")
+  @Default("2")
+  public final int connectionPoolMaxConnectFailuresToCleanUpAvailablePool;
+
+
   public ConnectionPoolConfig(VerifiableProperties verifiableProperties) {
     connectionPoolReadBufferSizeBytes =
         verifiableProperties.getIntInRange("connectionpool.read.buffer.size.bytes", 1048576, 1, 1024 * 1024 * 1024);
@@ -72,5 +80,7 @@ public class ConnectionPoolConfig {
         verifiableProperties.getIntInRange("connectionpool.max.connections.per.port.plain.text", 5, 1, 20);
     connectionPoolMaxConnectionsPerPortSSL =
         verifiableProperties.getIntInRange("connectionpool.max.connections.per.port.ssl", 2, 1, 20);
+    connectionPoolMaxConnectFailuresToCleanUpAvailablePool =
+            verifiableProperties.getInt("connectionpool.max.connect.failures.to.clean.up.available.pool", 0);
   }
 }

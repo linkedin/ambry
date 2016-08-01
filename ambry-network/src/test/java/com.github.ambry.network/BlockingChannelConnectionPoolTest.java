@@ -19,6 +19,7 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -155,6 +156,77 @@ public class BlockingChannelConnectionPoolTest {
     testBlockingChannelInfo("127.0.0.1", new Port(7667, PortType.SSL), 5, 5);
   }
 
+  @Test
+  public void testConnectionFailureCases()
+      throws InterruptedException, ConnectionPoolTimeoutException, IOException {
+    int port = 6680;
+
+    Properties props = new Properties();
+    String maxConnectFailuresToCleanUp = "2";
+    props.put("connectionpool.max.connect.failures.to.clean.up.available.pool", maxConnectFailuresToCleanUp);
+    String host = "127.0.0.1";
+
+    SocketServer server = startServer(port);
+
+    BlockingChannelInfo channelInfo =
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host,
+            new Port(port, PortType.PLAINTEXT), new MetricRegistry(), sslSocketFactory, sslConfig);
+
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
+    BlockingChannel blockingChannel1 = channelInfo.getBlockingChannel(1000);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
+
+    BlockingChannel blockingChannel2 = channelInfo.getBlockingChannel(1000);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 2);
+
+    BlockingChannel blockingChannel3 = channelInfo.getBlockingChannel(1000);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 3);
+
+    BlockingChannel blockingChannel4 = channelInfo.getBlockingChannel(1000);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 4);
+
+    BlockingChannel blockingChannel5 = channelInfo.getBlockingChannel(1000);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
+
+    channelInfo.releaseBlockingChannel(blockingChannel3);
+    channelInfo.releaseBlockingChannel(blockingChannel4);
+    channelInfo.releaseBlockingChannel(blockingChannel5);
+
+    Assert.assertEquals("Available connections count mismatch ", 3,
+        channelInfo.availableConnections.getValue().intValue());
+
+    // shutdown server
+    server.shutdown();
+
+    // destroy one of the connections and verify that the available connections are not yet cleaned up as the config
+    // value of interest is set to 2
+    channelInfo.destroyBlockingChannel(blockingChannel1);
+
+    Assert.assertEquals("Available connections should have not been cleaned up", 3,
+        channelInfo.availableConnections.getValue().intValue());
+
+    // start the server and verify that destroy connection will not trigger clean up of available connections as connection
+    // recreation should have passed
+    server = startServer(port);
+
+    channelInfo.destroyBlockingChannel(blockingChannel2);
+    Assert.assertEquals("Available connections should not have been cleaned up", 4,
+        channelInfo.availableConnections.getValue().intValue());
+
+    server.shutdown();
+
+    // destroy two connections and verify that all other available connections are cleaned up as the config
+    // value of interest is set to 2 and we have reached 2 failures
+
+    BlockingChannel blockingChannel = channelInfo.getBlockingChannel(1000);
+    channelInfo.destroyBlockingChannel(blockingChannel);
+    blockingChannel = channelInfo.getBlockingChannel(1000);
+    channelInfo.destroyBlockingChannel(blockingChannel);
+
+    Assert.assertEquals("Available connections should have been cleaned up", 0,
+        channelInfo.availableConnections.getValue().intValue());
+  }
+
   private void testBlockingChannelInfo(String host, Port port, int maxConnectionsPerPortPlainText,
       int maxConnectionsPerPortSSL)
       throws Exception {
@@ -244,6 +316,28 @@ public class BlockingChannelConnectionPoolTest {
     Assert.assertEquals(channelInfo.getNumberOfConnections(), underSubscriptionCount);
     channelInfo.cleanup();
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
+  }
+
+  /**
+   * Starts up an ambry server given a port number in localhost
+   *
+   * @param port the port number over which ambry server needs to be started
+   * @return the {@link SocketServer} referring to ambry's instance
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  private SocketServer startServer(int port)
+      throws IOException, InterruptedException {
+    Properties props = new Properties();
+    props.setProperty("port", "" + port);
+    VerifiableProperties propverify = new VerifiableProperties(props);
+    NetworkConfig config = new NetworkConfig(propverify);
+    ArrayList<Port> ports = new ArrayList<Port>();
+    ports.add(new Port(port, PortType.PLAINTEXT));
+    ports.add(new Port(port + 1000, PortType.SSL));
+    SocketServer server = new SocketServer(config, serverSSLConfig1, new MetricRegistry(), ports);
+    server.start();
+    return server;
   }
 
   class ConnectionPoolThread implements Runnable {

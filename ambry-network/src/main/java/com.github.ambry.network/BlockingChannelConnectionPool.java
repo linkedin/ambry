@@ -44,16 +44,18 @@ class BlockingChannelInfo {
   private final String host;
   private final Port port;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private Gauge<Integer> availableConnections;
-  private Gauge<Integer> activeConnections;
-  private Gauge<Integer> totalNumberOfConnections;
+  protected Gauge<Integer> availableConnections;
+  protected Gauge<Integer> activeConnections;
+  protected Gauge<Integer> totalNumberOfConnections;
   private int maxConnectionsPerHostPerPort;
+  private final int maxConnectFailuresToCleanUp;
+  private AtomicInteger currentConnectFailuresToCleanUp;
   private final SSLSocketFactory sslSocketFactory;
   private final SSLConfig sslConfig;
   private final MetricRegistry registry;
 
-  public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port, MetricRegistry registry,
-      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+  public BlockingChannelInfo(ConnectionPoolConfig config, String host, Port port,  MetricRegistry registry, SSLSocketFactory sslSocketFactory,
+                             SSLConfig sslConfig) {
     this.config = config;
     this.port = port;
     this.registry = registry;
@@ -65,6 +67,8 @@ class BlockingChannelInfo {
     this.blockingChannelAvailableConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHostPerPort);
     this.blockingChannelActiveConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHostPerPort);
     this.numberOfConnections = new AtomicInteger(0);
+    this.maxConnectFailuresToCleanUp = config.connectionPoolMaxConnectFailuresToCleanUpAvailablePool;
+    currentConnectFailuresToCleanUp = new AtomicInteger(0);
     this.rwlock = new ReentrantReadWriteLock();
     this.lock = new Object();
     this.host = host;
@@ -109,6 +113,7 @@ class BlockingChannelInfo {
     try {
       if (blockingChannelActiveConnections.remove(blockingChannel)) {
         blockingChannelAvailableConnections.add(blockingChannel);
+        currentConnectFailuresToCleanUp.set(0);
         logger.trace(
             "Adding connection to {}:{} back to pool. Current available connections {} Current active connections {}",
             blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
@@ -151,6 +156,7 @@ class BlockingChannelInfo {
           BlockingChannel channel = getBlockingChannelBasedOnPortType(host, port.getPort());
           channel.connect();
           numberOfConnections.incrementAndGet();
+          currentConnectFailuresToCleanUp.set(0);
           logger.trace("Created a new connection for host {} and port {}. Number of connections {}", host, port,
               numberOfConnections.get());
           blockingChannelActiveConnections.add(channel);
@@ -216,6 +222,7 @@ class BlockingChannelInfo {
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port.getPort());
       blockingChannelAvailableConnections.add(channel);
+      currentConnectFailuresToCleanUp.set(0);
     } catch (Exception e) {
       logger
           .error("Connection failure to remote host {} and port {} when destroying and recreating the connection", host,
@@ -223,6 +230,14 @@ class BlockingChannelInfo {
       synchronized (lock) {
         // decrement the number of connections to the host and port. we were not able to maintain the count
         numberOfConnections.decrementAndGet();
+        currentConnectFailuresToCleanUp.incrementAndGet();
+        // if we have reached the max count for connection failures, clean up the available connections
+        if(currentConnectFailuresToCleanUp.get() >= maxConnectFailuresToCleanUp) {
+          while(!blockingChannelAvailableConnections.isEmpty()){
+            blockingChannelAvailableConnections.poll().disconnect();
+          }
+          currentConnectFailuresToCleanUp.set(0);
+        }
       }
     } finally {
       rwlock.readLock().unlock();

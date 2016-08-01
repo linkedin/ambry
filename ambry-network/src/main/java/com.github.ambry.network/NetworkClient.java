@@ -110,7 +110,6 @@ public class NetworkClient implements Closeable {
     } finally {
       numPendingRequests.set(pendingRequests.size());
       networkMetrics.networkClientSendAndPollTime.update(time.milliseconds() - startTime);
-      logger.trace("Completing a send and poll cycle ");
     }
   }
 
