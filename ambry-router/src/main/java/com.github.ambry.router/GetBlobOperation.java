@@ -154,22 +154,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   }
 
   /**
-   * Get the total number of chunks for this operation.
-   * @return The total number of chunks.
-   */
-  int getNumChunksTotal() {
-    return numChunksTotal;
-  }
-
-  /**
-   * Get how many chunks have been retrieved so far in this operation.
-   * @return The number of chunks retrieved from the server.
-   */
-  int getNumChunksRetrieved() {
-    return numChunksRetrieved;
-  }
-
-  /**
    * Do all that needs to be done (cleanup, notification, etc.) on chunk completion and mark the state of the chunk
    * appropriately.
    * @param chunk the chunk that has completed.

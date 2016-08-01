@@ -88,7 +88,6 @@ public class GetBlobOperationTest {
   private final ResponseHandler responseHandler;
   private final NonBlockingRouter router;
   private final MockNetworkClient mockNetworkClient;
-  private final NetworkClient networkClient;
   private final ReadyForPollCallback readyForPollCallback;
 
   // Certain tests recreate the routerConfig with different properties.
@@ -161,8 +160,7 @@ public class GetBlobOperationTest {
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
         new LoggingNotificationSystem(), mockClusterMap, time);
-    networkClient = networkClientFactory.getNetworkClient();
-    mockNetworkClient = new MockNetworkClient();
+    mockNetworkClient = (MockNetworkClient) networkClientFactory.getNetworkClient();
     readyForPollCallback = new ReadyForPollCallback(mockNetworkClient);
   }
 
@@ -562,7 +560,8 @@ public class GetBlobOperationTest {
     final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
     final AtomicLong readCompleteResult = new AtomicLong(0);
     final AtomicReference<Exception> operationException = new AtomicReference<>(null);
-    final AtomicReference<GetBlobOperation> opRef = new AtomicReference<>(null);
+    final int numChunks = ((blobSize + maxChunkSize - 1) / maxChunkSize) + (blobSize > maxChunkSize ? 1 : 0);
+    mockNetworkClient.resetProcessedResponseCount();
 
     Callback<ReadableStreamChannel> callback = new Callback<ReadableStreamChannel>() {
       @Override
@@ -576,8 +575,8 @@ public class GetBlobOperationTest {
             public void run() {
               if (getChunksBeforeRead) {
                 try {
-                  // wait for all 3 chunks to be received
-                  while (opRef.get() == null || opRef.get().getNumChunksRetrieved() < opRef.get().getNumChunksTotal()) {
+                  // wait for all chunks (data + metadata) to be received
+                  while (mockNetworkClient.getProcessedResponseCount() < numChunks * 2) {
                     Thread.sleep(10);
                   }
                 } catch (InterruptedException ignored) {
@@ -590,7 +589,7 @@ public class GetBlobOperationTest {
       }
     };
 
-    GetBlobOperation op = createOperationAndComplete(callback, opRef);
+    GetBlobOperation op = createOperationAndComplete(callback);
 
     readCompleteLatch.await();
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
@@ -611,28 +610,15 @@ public class GetBlobOperationTest {
    */
   private GetBlobOperation createOperationAndComplete(Callback<ReadableStreamChannel> callback)
       throws Exception {
-    return createOperationAndComplete(callback, null);
-  }
-
-  /**
-   * Create a getBlob operation with the specified callback and poll until completion.
-   * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
-   * @param opReference if non-null, this will point to the {@link GetBlobOperation} right after creation
-   * @return the operation
-   * @throws Exception
-   */
-  private GetBlobOperation createOperationAndComplete(Callback<ReadableStreamChannel> callback,
-      AtomicReference<GetBlobOperation> opReference)
-      throws Exception {
-    GetBlobOperation op = createOperation(callback, opReference);
+    GetBlobOperation op = createOperation(callback);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.requestListToFill);
-      for (ResponseInfo response : responses) {
+      for (ResponseInfo responseInfo : responses) {
         GetResponse getResponse = responseInfo.getError() == null ? GetResponse
             .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
             : null;
-        op.handleResponse(response, getResponse);
+        op.handleResponse(responseInfo, getResponse);
       }
     }
     return op;
@@ -646,27 +632,11 @@ public class GetBlobOperationTest {
    */
   private GetBlobOperation createOperation(Callback<ReadableStreamChannel> callback)
       throws Exception {
-    return createOperation(callback, null);
-  }
-
-  /**
-   * Create a getBlob operation with the specified callback
-   * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
-   * @param opReference if non-null, this will point to the {@link GetBlobOperation} right after creation
-   * @return the operation
-   * @throws Exception
-   */
-  private GetBlobOperation createOperation(Callback<ReadableStreamChannel> callback,
-      AtomicReference<GetBlobOperation> opReference)
-      throws Exception {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
             callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
-    if (opReference != null) {
-      opReference.set(op);
-    }
     return op;
   }
 
@@ -739,10 +709,10 @@ public class GetBlobOperationTest {
     // Shuffle the replicas to introduce randomness in the order in which responses arrive.
     Collections.shuffle(requestList);
     List<ResponseInfo> responseList = new ArrayList<>();
-    responseList.addAll(networkClient.sendAndPoll(requestList, 100));
+    responseList.addAll(mockNetworkClient.sendAndPoll(requestList, 100));
     requestList.clear();
     while (responseList.size() < sendCount) {
-      responseList.addAll(networkClient.sendAndPoll(requestList, 100));
+      responseList.addAll(mockNetworkClient.sendAndPoll(requestList, 100));
     }
     return responseList;
   }

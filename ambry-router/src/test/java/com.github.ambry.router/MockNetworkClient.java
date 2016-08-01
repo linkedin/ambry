@@ -15,18 +15,26 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkMetrics;
+import com.github.ambry.network.RequestInfo;
+import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.network.Selector;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Time;
 import java.io.IOException;
+import java.util.List;
 
 
 /**
- * A mock class used simply for verifying whether certain methods of the {@link NetworkClient} gets called in certain
- * tests.
+ * A mock class used for verifying whether certain methods of the {@link NetworkClient} gets called in certain
+ * tests and how many responses are received by the client.
  */
 class MockNetworkClient extends NetworkClient {
   boolean wokenUp = false;
+  int responseCount = 0;
+  int processedResponseCount = 0;
 
   /**
    * Construct a MockNetworkClient with mock components.
@@ -38,11 +46,34 @@ class MockNetworkClient extends NetworkClient {
   }
 
   /**
+   * {@inheritDoc}
+   */
+  MockNetworkClient(Selector selector, NetworkConfig networkConfig, NetworkMetrics networkMetrics,
+      int maxConnectionsPerPortPlainText, int maxConnectionsPerPortSsl, int checkoutTimeoutMs, Time time) {
+    super(selector, networkConfig, networkMetrics, maxConnectionsPerPortPlainText, maxConnectionsPerPortSsl,
+        checkoutTimeoutMs, time);
+  }
+
+  /**
    * Wake up the MockNetworkClient. This simply sets a flag that indicates that the method was invoked.
    */
   @Override
   public void wakeup() {
+    super.wakeup();
     wokenUp = true;
+  }
+
+  /**
+   * This updates the processed request count along with normal send and poll actions.
+   * {@inheritDoc}
+   */
+  @Override
+  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos, int pollTimeoutMs)
+      throws IOException {
+    processedResponseCount = responseCount;
+    List<ResponseInfo> responseInfoList = super.sendAndPoll(requestInfos, pollTimeoutMs);
+    responseCount += responseInfoList.size();
+    return responseInfoList;
   }
 
   /**
@@ -53,6 +84,23 @@ class MockNetworkClient extends NetworkClient {
     boolean ret = wokenUp;
     wokenUp = false;
     return ret;
+  }
+
+  /**
+   * Get the number of responses received by the client before the current
+   * {@link MockNetworkClient#sendAndPoll(List, int)} call.
+   * @return the number of processed responses.
+   */
+  int getProcessedResponseCount() {
+    return processedResponseCount;
+  }
+
+  /**
+   * Reset the processed response count to zero
+   */
+  void resetProcessedResponseCount() {
+    responseCount = 0;
+    processedResponseCount = 0;
   }
 }
 

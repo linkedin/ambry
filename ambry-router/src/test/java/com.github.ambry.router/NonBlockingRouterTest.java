@@ -231,7 +231,7 @@ public class NonBlockingRouterTest {
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.close();
     for (MockServer mockServer : mockServerLayout.getMockServers()) {
-      mockServer.setBlobIdToServerErrorCode(blobId, ServerErrorCode.No_Error);
+      mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
     }
 
     NetworkClient networkClient =
