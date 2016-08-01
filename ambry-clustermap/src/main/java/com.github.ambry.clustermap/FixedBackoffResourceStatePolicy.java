@@ -96,8 +96,8 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
               resource, failureCount.get(), failureCountThreshold,
               downUntil.get() - SystemTime.getInstance().milliseconds(), hardDown);
     } else {
-      logger.trace("Resource {} is not down; failureCount: {}; failureCountThreshold: {}; hard down: {}", resource,
-          failureCount.get(), failureCountThreshold, hardDown);
+      logger.trace("Resource {} is not down; failureCount: {}; failureCountThreshold: {}", resource,
+          failureCount.get(), failureCountThreshold);
     }
     return down;
   }
