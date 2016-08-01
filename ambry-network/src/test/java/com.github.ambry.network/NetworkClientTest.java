@@ -269,13 +269,13 @@ public class NetworkClientTest {
     Assert.assertEquals(4, selector.connectCallCount());
     Assert.assertEquals(1, responseInfoList.size());
     Assert.assertEquals(null, responseInfoList.get(0).getError());
-    Assert.assertEquals(2, ((MockSend)responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
+    Assert.assertEquals(2, ((MockSend) responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
     responseInfoList.clear();
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     Assert.assertEquals(4, selector.connectCallCount());
     Assert.assertEquals(1, responseInfoList.size());
     Assert.assertEquals(null, responseInfoList.get(0).getError());
-    Assert.assertEquals(3, ((MockSend)responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
+    Assert.assertEquals(3, ((MockSend) responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
     responseInfoList.clear();
     selector.setState(MockSelectorState.Good);
   }
