@@ -164,7 +164,6 @@ class RouterTestHelpers {
     }
   }
 
-
   /**
    * Set the blob format version that the server should respond to get requests with.
    * @param blobFormatVersion The blob format version to use.
@@ -201,6 +200,7 @@ class RouterTestHelpers {
       mockServer.setDataBlobGetLatch(dataBlobGetLatch);
     }
   }
+
   /**
    * Implement this interface to provide {@link #testWithErrorCodes} with custom verification logic.
    */

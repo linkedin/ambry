@@ -493,49 +493,50 @@ public class GetBlobOperationTest {
     final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
     final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
     RouterTestHelpers.setGetErrorOnDataBlobOnlyForAllServers(true, mockServerLayout);
-    RouterTestHelpers.testWithErrorCodes(Collections.singletonMap(serverErrorCode, 9), mockServerLayout,
-        expectedErrorCode, new ErrorCodeChecker() {
-          @Override
-          public void testAndAssert(RouterErrorCode expectedError)
-              throws Exception {
-            Callback<ReadableStreamChannel> callback = new Callback<ReadableStreamChannel>() {
+    RouterTestHelpers
+        .testWithErrorCodes(Collections.singletonMap(serverErrorCode, 9), mockServerLayout, expectedErrorCode,
+            new ErrorCodeChecker() {
               @Override
-              public void onCompletion(final ReadableStreamChannel result, final Exception exception) {
-                if (exception != null) {
-                  asyncWritableChannel.close();
-                  readCompleteLatch.countDown();
-                } else {
-                  Utils.newThread(new Runnable() {
-                    @Override
-                    public void run() {
-                      try {
-                        result.readInto(asyncWritableChannel, new Callback<Long>() {
-                          @Override
-                          public void onCompletion(Long result, Exception exception) {
-                            asyncWritableChannel.close();
+              public void testAndAssert(RouterErrorCode expectedError)
+                  throws Exception {
+                Callback<ReadableStreamChannel> callback = new Callback<ReadableStreamChannel>() {
+                  @Override
+                  public void onCompletion(final ReadableStreamChannel result, final Exception exception) {
+                    if (exception != null) {
+                      asyncWritableChannel.close();
+                      readCompleteLatch.countDown();
+                    } else {
+                      Utils.newThread(new Runnable() {
+                        @Override
+                        public void run() {
+                          try {
+                            result.readInto(asyncWritableChannel, new Callback<Long>() {
+                              @Override
+                              public void onCompletion(Long result, Exception exception) {
+                                asyncWritableChannel.close();
+                              }
+                            });
+                            asyncWritableChannel.getNextChunk();
+                          } catch (Exception e) {
+                            readCompleteException.set(e);
+                          } finally {
+                            readCompleteLatch.countDown();
                           }
-                        });
-                        asyncWritableChannel.getNextChunk();
-                      } catch (Exception e) {
-                        readCompleteException.set(e);
-                      } finally {
-                        readCompleteLatch.countDown();
-                      }
+                        }
+                      }, false).start();
                     }
-                  }, false).start();
+                  }
+                };
+                GetBlobOperation op = createOperationAndComplete(callback);
+                Assert.assertTrue(readCompleteLatch.await(2, TimeUnit.SECONDS));
+                Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+                if (readCompleteException.get() != null) {
+                  throw readCompleteException.get();
                 }
+                Assert.assertFalse("AsyncWriteableChannel should have been closed.", asyncWritableChannel.isOpen());
+                assertFailureAndCheckErrorCode(op, expectedError);
               }
-            };
-            GetBlobOperation op = createOperationAndComplete(callback);
-            Assert.assertTrue(readCompleteLatch.await(2, TimeUnit.SECONDS));
-            Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
-            if (readCompleteException.get() != null) {
-              throw readCompleteException.get();
-            }
-            Assert.assertFalse("AsyncWriteableChannel should have been closed.", asyncWritableChannel.isOpen());
-            assertFailureAndCheckErrorCode(op, expectedError);
-          }
-        });
+            });
   }
 
   /**

@@ -162,7 +162,8 @@ class MockServer {
     if (!getErrorOnDataBlobOnly || isDataBlob) {
       // getError could be at the server level or the partition level. For partition level errors,
       // set it in the partitionResponseInfo
-      if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found) {
+      if (getError == ServerErrorCode.No_Error || getError == ServerErrorCode.Blob_Expired
+          || getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Not_Found) {
         partitionError = getError;
         serverError = ServerErrorCode.No_Error;
       } else {
@@ -203,15 +204,16 @@ class MockServer {
                 byteBufferSize =
                     (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
                 byteBuffer = ByteBuffer.allocate(byteBufferSize);
-                MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
-                    (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
+                MessageFormatRecord.Blob_Format_V2
+                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize(),
+                        originalBlobPutReq.getBlobType());
                 break;
               case MessageFormatRecord.Blob_Version_V1:
                 byteBufferSize =
                     (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
                 byteBuffer = ByteBuffer.allocate(byteBufferSize);
-                MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer,
-                    (int) originalBlobPutReq.getBlobSize());
+                MessageFormatRecord.Blob_Format_V1
+                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize());
                 break;
               default:
                 throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
