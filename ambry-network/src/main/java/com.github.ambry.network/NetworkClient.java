@@ -164,6 +164,7 @@ public class NetworkClient implements Closeable {
           }
         } else {
           if (requestMetadata.pendingConnectionId != null) {
+            pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
             requestMetadata.pendingConnectionId = null;
           }
           logger.trace("Connection checkout succeeded for {}:{} with connectionId {} ", host, port, connId);

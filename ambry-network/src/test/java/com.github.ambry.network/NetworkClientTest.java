@@ -212,7 +212,7 @@ public class NetworkClientTest {
   public void testConnectionInitializationFailures()
       throws Exception {
     List<RequestInfo> requestInfoList = new ArrayList<>();
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(0)));
     selector.setState(MockSelectorState.IdlePoll);
     Assert.assertEquals(0, selector.connectCallCount());
     // this sendAndPoll() should initiate a connect().
@@ -228,7 +228,7 @@ public class NetworkClientTest {
     Assert.assertEquals(0, responseInfoList.size());
 
     // Another connection should get initialized if a new request comes in for the same destination.
-    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(1)));
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
@@ -247,6 +247,37 @@ public class NetworkClientTest {
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(0).getError());
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(1).getError());
     responseInfoList.clear();
+
+    // Test the following case:
+    // Connection C1 gets initiated in the context of Request R1
+    // Connection C2 gets initiated in the context of Request R2
+    // Connection C2 gets established first.
+    // Request R1 checks out connection C2 because it is earlier in the queue
+    // (although C2 was initiated on behalf of R2)
+    // Request R1 gets sent on C2
+    // Connection C1 gets disconnected, which was initiated in the context of Request R1
+    // Request R1 is completed.
+    // Request R2 reuses C1 and gets completed.
+    selector.setState(MockSelectorState.DelayFailAlternateConnect);
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(2)));
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    requestInfoList.clear();
+    Assert.assertEquals(4, selector.connectCallCount());
+    Assert.assertEquals(0, responseInfoList.size());
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    Assert.assertEquals(4, selector.connectCallCount());
+    Assert.assertEquals(1, responseInfoList.size());
+    Assert.assertEquals(null, responseInfoList.get(0).getError());
+    Assert.assertEquals(2, ((MockSend)responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
+    responseInfoList.clear();
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    Assert.assertEquals(4, selector.connectCallCount());
+    Assert.assertEquals(1, responseInfoList.size());
+    Assert.assertEquals(null, responseInfoList.get(0).getError());
+    Assert.assertEquals(3, ((MockSend)responseInfoList.get(0).getRequestInfo().getRequest()).getCorrelationId());
+    responseInfoList.clear();
+    selector.setState(MockSelectorState.Good);
   }
 
   /**
@@ -402,6 +433,10 @@ enum MockSelectorState {
    * will return empty lists.
    */
   IdlePoll,
+  /**
+   * Fail every other connect.
+   */
+  DelayFailAlternateConnect;
 }
 
 /**
@@ -413,7 +448,8 @@ class MockSelector extends Selector {
   private Set<String> connectionIds = new HashSet<String>();
   private List<String> connected = new ArrayList<String>();
   private List<String> disconnected = new ArrayList<String>();
-  private List<String> connectsToFail = new ArrayList<>();
+  private final List<String> delayedFailFreshList = new ArrayList<>();
+  private final List<String> delayedFailPassedList = new ArrayList<>();
   private List<NetworkSend> sends = new ArrayList<NetworkSend>();
   private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
   private MockSelectorState state = MockSelectorState.Good;
@@ -454,8 +490,14 @@ class MockSelector extends Selector {
       throw new IOException("Mock connect exception");
     }
     String hostPortString = address.getHostString() + address.getPort() + index++;
-    connected.add(hostPortString);
-    connectionIds.add(hostPortString);
+    if (state == MockSelectorState.DelayFailAlternateConnect && connectCallCount % 2 != 0) {
+      // add this connection to the delayed fail fresh list. These will not be returned as failed in the very
+      // next poll (when it is fresh), but the subsequent poll.
+      delayedFailFreshList.add(hostPortString);
+    } else {
+      connected.add(hostPortString);
+      connectionIds.add(hostPortString);
+    }
     return hostPortString;
   }
 
@@ -486,6 +528,14 @@ class MockSelector extends Selector {
       }
       connected.clear();
     }
+    for (String connId : delayedFailPassedList) {
+      disconnected.add(connId);
+    }
+    delayedFailPassedList.clear();
+    for (String connId : delayedFailFreshList) {
+      delayedFailPassedList.add(connId);
+    }
+    delayedFailFreshList.clear();
     this.sends = sends;
     if (sends != null) {
       for (NetworkSend send : sends) {
