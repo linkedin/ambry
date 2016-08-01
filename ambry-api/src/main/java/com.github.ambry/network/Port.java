@@ -37,4 +37,18 @@ public class Port {
   public String toString() {
     return "Port[" + getPort() + ":" + getPortType() + "]";
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    Port p = (Port) o;
+    return p.port == port && p.type.equals(type);
+  }
 }
