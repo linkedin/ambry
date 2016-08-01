@@ -201,6 +201,46 @@ public class NetworkClientTest {
   }
 
   /**
+   * Test to ensure two things:
+   * 1. If a request comes in and there are no available connections to the destination,
+   * only one connection is initiated, even if that connection is found to be pending when the
+   * same request is looked at during a subsequent sendAndPoll.
+   * 2. For the above situation, if the subsequent pending connection fails, then the request is
+   * immediately failed.
+   */
+  @Test
+  public void testConnectionInitiationFailures()
+      throws Exception {
+    List<RequestInfo> requestInfoList = new ArrayList<>();
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
+    selector.setState(MockSelectorState.IdlePoll);
+    Assert.assertEquals(0, selector.connectCallCount());
+    // this sendAndPoll() should initiate a connect().
+    List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    // At this time a single connection would have been initiated for the above request.
+    Assert.assertEquals(1, selector.connectCallCount());
+    Assert.assertEquals(0, responseInfoList.size());
+    requestInfoList.clear();
+
+    // Subsequent calls to sendAndPoll() should not have initiated any connections.
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    Assert.assertEquals(1, selector.connectCallCount());
+    Assert.assertEquals(0, responseInfoList.size());
+
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    Assert.assertEquals(1, selector.connectCallCount());
+    Assert.assertEquals(0, responseInfoList.size());
+
+    // Once connect failure kicks in, the pending request should be failed immediately.
+    selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    Assert.assertEquals(1, selector.connectCallCount());
+    Assert.assertEquals(1, responseInfoList.size());
+    Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(0).getError());
+    responseInfoList.clear();
+  }
+
+  /**
    * Test exception on poll
    */
   @Test
@@ -343,6 +383,16 @@ enum MockSelectorState {
    * A state that causes all poll calls to throw an IOException.
    */
   ThrowExceptionOnPoll,
+  /**
+   * A state that causes all connections initiated to fail during poll.
+   */
+  FailConnectionInitiationOnPoll,
+  /**
+   * A state that simulates inactivity during a poll. The poll itself may do work,
+   * but as long as this state is set, calls to connected(), disconnected(), completedReceives() etc.
+   * will return empty lists.
+   */
+  IdlePoll,
 }
 
 /**
@@ -354,10 +404,12 @@ class MockSelector extends Selector {
   private Set<String> connectionIds = new HashSet<String>();
   private List<String> connected = new ArrayList<String>();
   private List<String> disconnected = new ArrayList<String>();
+  private List<String> connectsToFail = new ArrayList<>();
   private List<NetworkSend> sends = new ArrayList<NetworkSend>();
   private List<NetworkReceive> receives = new ArrayList<NetworkReceive>();
   private MockSelectorState state = MockSelectorState.Good;
   private boolean wakeUpCalled = false;
+  private int connectCallCount = 0;
 
   /**
    * Create a MockSelector
@@ -388,6 +440,7 @@ class MockSelector extends Selector {
   @Override
   public String connect(InetSocketAddress address, int sendBufferSize, int receiveBufferSize, PortType portType)
       throws IOException {
+    connectCallCount++;
     if (state == MockSelectorState.ThrowExceptionOnConnect) {
       throw new IOException("Mock connect exception");
     }
@@ -395,6 +448,13 @@ class MockSelector extends Selector {
     connected.add(hostPortString);
     connectionIds.add(hostPortString);
     return hostPortString;
+  }
+
+  /**
+   * Return the number of times connect was called.
+   */
+  int connectCallCount() {
+    return connectCallCount;
   }
 
   /**
@@ -410,6 +470,12 @@ class MockSelector extends Selector {
       throws IOException {
     if (state == MockSelectorState.ThrowExceptionOnPoll) {
       throw new IOException("Mock exception on poll");
+    }
+    if (state == MockSelectorState.FailConnectionInitiationOnPoll) {
+      for (String connId : connected) {
+        disconnected.add(connId);
+      }
+      connected.clear();
     }
     this.sends = sends;
     if (sends != null) {
@@ -433,6 +499,9 @@ class MockSelector extends Selector {
    */
   @Override
   public List<String> connected() {
+    if (state == MockSelectorState.IdlePoll) {
+      return new ArrayList<>();
+    }
     List<String> toReturn = connected;
     connected = new ArrayList<String>();
     return toReturn;
@@ -444,6 +513,9 @@ class MockSelector extends Selector {
    */
   @Override
   public List<String> disconnected() {
+    if (state == MockSelectorState.IdlePoll) {
+      return new ArrayList<>();
+    }
     List<String> toReturn = disconnected;
     disconnected = new ArrayList<String>();
     return toReturn;
@@ -455,6 +527,9 @@ class MockSelector extends Selector {
    */
   @Override
   public List<NetworkSend> completedSends() {
+    if (state == MockSelectorState.IdlePoll) {
+      return new ArrayList<>();
+    }
     List<NetworkSend> toReturn = sends;
     sends = new ArrayList<NetworkSend>();
     return toReturn;
@@ -466,6 +541,9 @@ class MockSelector extends Selector {
    */
   @Override
   public List<NetworkReceive> completedReceives() {
+    if (state == MockSelectorState.IdlePoll) {
+      return new ArrayList<>();
+    }
     List<NetworkReceive> toReturn = receives;
     receives = new ArrayList<NetworkReceive>();
     return toReturn;
@@ -475,7 +553,7 @@ class MockSelector extends Selector {
    * Return whether wakeup() was called and clear the woken up status before returning.
    * @return true if wakeup() was called previously.
    */
-  public boolean getAndClearWokenUpStatus() {
+  boolean getAndClearWokenUpStatus() {
     boolean ret = wakeUpCalled;
     wakeUpCalled = false;
     return ret;

@@ -26,8 +26,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * Metrics for the network layer
  */
 public class NetworkMetrics {
-  private final MetricRegistry registry;
-
   // Selector metrics
   public final Counter sendInFlight;
   public final Counter selectorConnectionClosed;
@@ -88,7 +86,6 @@ public class NetworkMetrics {
   private List<AtomicLong> networkClientPendingRequestList;
 
   public NetworkMetrics(MetricRegistry registry) {
-    this.registry = registry;
     sendInFlight = registry.counter(MetricRegistry.name(Selector.class, "SendInFlight"));
     selectorConnectionClosed = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionClosed"));
     selectorConnectionCreated = registry.counter(MetricRegistry.name(Selector.class, "SelectorConnectionCreated"));

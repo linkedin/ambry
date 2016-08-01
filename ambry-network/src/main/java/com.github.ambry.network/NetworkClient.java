@@ -47,6 +47,7 @@ public class NetworkClient implements Closeable {
   private final Time time;
   private final LinkedList<RequestMetadata> pendingRequests;
   private final HashMap<String, RequestMetadata> connectionIdToRequestInFlight;
+  private final HashMap<String, RequestMetadata> pendingConnectionsToAssociatedRequests;
   private final AtomicLong numPendingRequests;
   private final int checkoutTimeoutMs;
   private boolean closed = false;
@@ -71,9 +72,10 @@ public class NetworkClient implements Closeable {
     this.networkMetrics = networkMetrics;
     this.checkoutTimeoutMs = checkoutTimeoutMs;
     this.time = time;
-    pendingRequests = new LinkedList<RequestMetadata>();
+    pendingRequests = new LinkedList<>();
     numPendingRequests = new AtomicLong(0);
-    connectionIdToRequestInFlight = new HashMap<String, RequestMetadata>();
+    connectionIdToRequestInFlight = new HashMap<>();
+    pendingConnectionsToAssociatedRequests = new HashMap<>();
     networkMetrics.registerNetworkClientPendingConnections(numPendingRequests);
   }
 
@@ -96,7 +98,7 @@ public class NetworkClient implements Closeable {
       if (closed) {
         throw new IllegalStateException("The NetworkClient is closed.");
       }
-      List<ResponseInfo> responseInfoList = new ArrayList<ResponseInfo>();
+      List<ResponseInfo> responseInfoList = new ArrayList<>();
       for (RequestInfo requestInfo : requestInfos) {
         ClientNetworkRequestMetrics clientNetworkRequestMetrics =
             new ClientNetworkRequestMetrics(networkMetrics.requestQueueTime, networkMetrics.requestSendTime,
@@ -123,7 +125,7 @@ public class NetworkClient implements Closeable {
    * @return the list of {@link NetworkSend} objects to hand over to the Selector.
    */
   private List<NetworkSend> prepareSends(List<ResponseInfo> responseInfoList) {
-    List<NetworkSend> sends = new ArrayList<NetworkSend>();
+    List<NetworkSend> sends = new ArrayList<>();
     ListIterator<RequestMetadata> iter = pendingRequests.listIterator();
 
     /* Drop requests that have waited too long */
@@ -152,13 +154,18 @@ public class NetworkClient implements Closeable {
         Port port = requestMetadata.requestInfo.getPort();
         String connId = connectionTracker.checkOutConnection(host, port);
         if (connId == null) {
-          if (connectionTracker.mayCreateNewConnection(host, port)) {
+          if (requestMetadata.pendingConnectionId == null && connectionTracker.mayCreateNewConnection(host, port)) {
             connId = selector.connect(new InetSocketAddress(host, port.getPort()), networkConfig.socketSendBufferBytes,
                 networkConfig.socketReceiveBufferBytes, port.getPortType());
             connectionTracker.startTrackingInitiatedConnection(host, port, connId);
-            logger.trace("Initiated a connection to {}:{} ", host, port);
+            requestMetadata.pendingConnectionId = connId;
+            pendingConnectionsToAssociatedRequests.put(connId, requestMetadata);
+            logger.trace("Initiated a connection to host {} port {} ", host, port);
           }
         } else {
+          if (requestMetadata.pendingConnectionId != null) {
+            requestMetadata.pendingConnectionId = null;
+          }
           logger.trace("Connection checkout succeeded for {}:{} with connectionId {} ", host, port, connId);
           sends.add(new NetworkSend(connId, requestMetadata.requestInfo.getRequest(),
               requestMetadata.clientNetworkRequestMetrics, time));
@@ -184,14 +191,29 @@ public class NetworkClient implements Closeable {
     for (String connId : selector.connected()) {
       logger.trace("Checking in connection back to connection tracker for connectionId {} ", connId);
       connectionTracker.checkInConnection(connId);
+      pendingConnectionsToAssociatedRequests.remove(connId);
     }
 
     for (String connId : selector.disconnected()) {
       logger.trace("ConnectionId {} disconnected, removing it from connection tracker", connId);
       connectionTracker.removeConnection(connId);
-      RequestMetadata requestMetadata = connectionIdToRequestInFlight.remove(connId);
+      // If this was a pending connection and if there is a request that initiated this connection,
+      // mark the corresponding request as failed.
+      RequestMetadata requestMetadata = pendingConnectionsToAssociatedRequests.remove(connId);
       if (requestMetadata != null) {
+        logger.trace("Pending connectionId {} disconnected", connId);
+        pendingRequests.remove(requestMetadata);
+        requestMetadata.pendingConnectionId = null;
         responseInfoList.add(new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
+      } else {
+        // If this was an established connection and if there is a request in flight on this connection,
+        // mark the corresponding request as failed.
+        requestMetadata = connectionIdToRequestInFlight.remove(connId);
+        if (requestMetadata != null) {
+          logger.trace("ConnectionId {} with request in flight disconnected", connId);
+          responseInfoList
+              .add(new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
+        }
       }
     }
 
@@ -238,12 +260,22 @@ public class NetworkClient implements Closeable {
     private long requestQueuedAtMs;
     // the time at which this request was sent(or moved from queue to in flight state)
     private long requestDequeuedAtMs;
+    // if non-null, this is the connection that was initiated (and not established) on behalf of this request. This
+    // information is kept so that the NetworkClient does not keep initiating new connections for the same request, and
+    // so that in case this connection establishment fails, the request is failed immediately.
+    // Note that this is not necessarily the connection on which this request is sent eventually. This is because
+    // if another connection to the same destination becomes available before this pending connection is established,
+    // then the request will be sent on it. Similarly, if this connection gets established before a previously
+    // initiated connection for an earlier request in the queue, then in the next iteration, the earlier request could
+    // check out this connection. This, however, does not affect correctness.
+    private String pendingConnectionId;
 
     RequestMetadata(long requestQueuedAtMs, RequestInfo requestInfo,
         ClientNetworkRequestMetrics clientNetworkRequestMetrics) {
       this.requestInfo = requestInfo;
       this.requestQueuedAtMs = requestQueuedAtMs;
       this.clientNetworkRequestMetrics = clientNetworkRequestMetrics;
+      this.pendingConnectionId = null;
     }
 
     /**

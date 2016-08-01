@@ -222,6 +222,7 @@ class PutManager {
     ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode != null) {
+      logger.trace("Network client returned an error, notifying response handler");
       responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
     } else {
       try {
