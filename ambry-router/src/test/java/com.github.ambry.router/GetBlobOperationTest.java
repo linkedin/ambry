@@ -24,6 +24,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
@@ -48,7 +49,6 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -126,7 +126,7 @@ public class GetBlobOperationTest {
         getAndAssertSuccess();
       } else {
         GetBlobOperation op = createOperationAndComplete(null);
-        checkErrorCode(op, expectedError);
+        assertFailureAndCheckErrorCode(op, expectedError);
       }
     }
   };
@@ -290,7 +290,7 @@ public class GetBlobOperationTest {
     // and cross-colo proxying is enabled by default.
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
-    checkErrorCode(op, RouterErrorCode.OperationTimedOut);
+    assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
   }
 
   /**
@@ -318,7 +318,7 @@ public class GetBlobOperationTest {
     // and cross-colo proxying is enabled by default.
     Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
         correlationIdToGetOperation.size());
-    checkErrorCode(op, RouterErrorCode.OperationTimedOut);
+    assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
   }
 
   /**
@@ -338,7 +338,7 @@ public class GetBlobOperationTest {
             GetBlobOperation op = createOperationAndComplete(null);
             Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
                 correlationIdToGetOperation.size());
-            checkErrorCode(op, expectedError);
+            assertFailureAndCheckErrorCode(op, expectedError);
           }
         });
   }
@@ -468,18 +468,23 @@ public class GetBlobOperationTest {
   @Test
   public void testLegacyBlobGetSuccess()
       throws Exception {
-    RouterTestHelpers.setBlobFormatForAllServers(false, mockServerLayout);
+    RouterTestHelpers.setBlobFormatVersionForAllServers(MessageFormatRecord.Blob_Version_V1, mockServerLayout);
     for (int i = 0; i < 10; i++) {
       // blobSize in the range [1, maxChunkSize]
       blobSize = random.nextInt(maxChunkSize) + 1;
       doPut();
       getAndAssertSuccess();
     }
-    RouterTestHelpers.setBlobFormatForAllServers(true, mockServerLayout);
+    RouterTestHelpers.setBlobFormatVersionForAllServers(MessageFormatRecord.Blob_Version_V2, mockServerLayout);
   }
 
-  // @todo: test operation completion behavior when stream is not read completely. This will require addin
-
+  /**
+   * Test that an operation is completed with a specified {@link RouterErrorCode} when all gets on data chunks
+   * in a multi-part blob return a specified {@link ServerErrorCode}
+   * @param serverErrorCode The error code to be returned when fetching data chunks.
+   * @param expectedErrorCode The operation's expected error code.
+   * @throws Exception
+   */
   private void testDataChunkError(ServerErrorCode serverErrorCode, final RouterErrorCode expectedErrorCode)
       throws Exception {
     blobSize = maxChunkSize * 2 + 1;
@@ -528,7 +533,7 @@ public class GetBlobOperationTest {
               throw readCompleteException.get();
             }
             Assert.assertFalse("AsyncWriteableChannel should have been closed.", asyncWritableChannel.isOpen());
-            checkErrorCode(op, expectedError);
+            assertFailureAndCheckErrorCode(op, expectedError);
           }
         });
   }
@@ -665,11 +670,11 @@ public class GetBlobOperationTest {
   }
 
   /**
-   * Check that an operation is complete and has the specified {@link RouterErrorCode} set.
+   * Check that an operation is complete and assert that it has failed with the specified {@link RouterErrorCode} set.
    * @param op The operation to check.
    * @param expectedError The error code expected.
    */
-  private void checkErrorCode(GetBlobOperation op, RouterErrorCode expectedError) {
+  private void assertFailureAndCheckErrorCode(GetBlobOperation op, RouterErrorCode expectedError) {
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     RouterException routerException = (RouterException) op.getOperationException();
     if (routerException == null) {

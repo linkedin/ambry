@@ -182,7 +182,7 @@ public class GetManagerTest {
    *                             callback should be inspected for correctness.
    * @throws Exception
    */
-  public void testBadCallback(Callback<ReadableStreamChannel> getBlobCallback, CountDownLatch getBlobCallbackCalled,
+  private void testBadCallback(Callback<ReadableStreamChannel> getBlobCallback, CountDownLatch getBlobCallbackCalled,
       Boolean checkBadCallbackBlob)
       throws Exception {
     router = getNonBlockingRouter();

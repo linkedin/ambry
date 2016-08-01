@@ -74,7 +74,7 @@ public class DeleteManagerTest {
       if (expectedError == null) {
         future.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       } else {
-        checkErrorCode(future, expectedError);
+        assertFailureAndCheckErrorCode(future, expectedError);
       }
     }
   };
@@ -173,7 +173,7 @@ public class DeleteManagerTest {
     String[] input = {"123", "abcd", "", "/", null};
     for (String s : input) {
       future = router.deleteBlob(s);
-      checkErrorCode(future, RouterErrorCode.InvalidBlobId);
+      assertFailureAndCheckErrorCode(future, RouterErrorCode.InvalidBlobId);
     }
   }
 
@@ -337,7 +337,7 @@ public class DeleteManagerTest {
               // increment mock time
               mockTime.sleep(1000);
             } while (!operationCompleteLatch.await(10, TimeUnit.MILLISECONDS));
-            checkErrorCode(future, expectedError);
+            assertFailureAndCheckErrorCode(future, expectedError);
           }
         });
   }
@@ -368,7 +368,7 @@ public class DeleteManagerTest {
         // increment mock time
         mockTime.sleep(1000);
       } while (!operationCompleteLatch.await(10, TimeUnit.MILLISECONDS));
-      checkErrorCode(future, errorCodeHashMap.get(state));
+      assertFailureAndCheckErrorCode(future, errorCodeHashMap.get(state));
     }
   }
 
@@ -386,7 +386,7 @@ public class DeleteManagerTest {
               throws Exception {
             future = router.deleteBlob(blobIdString);
             router.close();
-            checkErrorCode(future, expectedError);
+            assertFailureAndCheckErrorCode(future, expectedError);
           }
         });
   }
@@ -432,11 +432,11 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Check that a delete operation returns a router exception with the specified error code.
+   * Check that a delete operation has failed with a router exception with the specified error code.
    * @param future the {@link Future} for the delete operation
    * @param expectedError the expected {@link RouterErrorCode}
    */
-  private void checkErrorCode(Future<Void> future, RouterErrorCode expectedError) {
+  private void assertFailureAndCheckErrorCode(Future<Void> future, RouterErrorCode expectedError) {
     try {
       future.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       fail("Deletion should be unsuccessful. Exception is expected.");

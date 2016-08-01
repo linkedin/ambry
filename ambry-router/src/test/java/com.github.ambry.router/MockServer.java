@@ -57,10 +57,9 @@ import java.util.concurrent.CountDownLatch;
 class MockServer {
   private ServerErrorCode hardError = null;
   private LinkedList<ServerErrorCode> serverErrors = new LinkedList<ServerErrorCode>();
-  private final Map<String, ByteBuffer> blobs = new ConcurrentHashMap<String, ByteBuffer>();
-  private final Set<String> dataBlobs = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+  private final Map<String, StoredBlob> blobs = new ConcurrentHashMap<>();
   private boolean shouldRespond = true;
-  private boolean useBlobFormatV2 = true;
+  private short blobFormatVersion = MessageFormatRecord.Blob_Version_V2;
   private boolean getErrorOnDataBlobOnly = false;
   private CountDownLatch dataBlobGetLatch = null;
   private final ClusterMap clusterMap;
@@ -149,7 +148,7 @@ class MockServer {
     boolean isDataBlob = false;
     try {
       String id = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0).getID();
-      isDataBlob = dataBlobs.contains(id);
+      isDataBlob = blobs.get(id).type == BlobType.DataBlob;
     } catch (Exception ignored) {
     }
 
@@ -181,7 +180,7 @@ class MockServer {
       ByteBuffer byteBuffer;
       StoreKey key = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0);
       if (blobs.containsKey(key.getID())) {
-        ByteBuffer buf = blobs.get(key.getID()).duplicate();
+        ByteBuffer buf = blobs.get(key.getID()).data.duplicate();
         // read off the size
         buf.getLong();
         // read off the type.
@@ -199,18 +198,23 @@ class MockServer {
             MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             break;
           case Blob:
-            if (useBlobFormatV2) {
-              byteBufferSize =
-                  (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
-              byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
-                  (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
-            } else {
-              byteBufferSize =
-                  (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
-              byteBuffer = ByteBuffer.allocate(byteBufferSize);
-              MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer,
-                  (int) originalBlobPutReq.getBlobSize());
+            switch (blobFormatVersion) {
+              case MessageFormatRecord.Blob_Version_V2:
+                byteBufferSize =
+                    (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+                byteBuffer = ByteBuffer.allocate(byteBufferSize);
+                MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
+                break;
+              case MessageFormatRecord.Blob_Version_V1:
+                byteBufferSize =
+                    (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+                byteBuffer = ByteBuffer.allocate(byteBufferSize);
+                MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize());
+                break;
+              default:
+                throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
             }
             byteBuffer.put(
                 Utils.readBytesFromStream(originalBlobPutReq.getBlobStream(), (int) originalBlobPutReq.getBlobSize()));
@@ -269,21 +273,14 @@ class MockServer {
    */
   private void updateBlobMap(PutRequest putRequest)
       throws IOException {
-    String id = putRequest.getBlobId().getID();
-    ByteBuffer buf = ByteBuffer.allocate((int) putRequest.sizeInBytes());
-    ByteBufferChannel bufChannel = new ByteBufferChannel(buf);
-    putRequest.writeTo(bufChannel);
-    buf.flip();
-    blobs.put(id, buf);
-    if (putRequest.getBlobType() == BlobType.DataBlob) {
-      dataBlobs.add(id);
-    }
+    StoredBlob blob = new StoredBlob(putRequest);
+    blobs.put(blob.id, blob);
   }
 
   /**
    * @return the blobs that were put on this server.
    */
-  Map<String, ByteBuffer> getBlobs() {
+  Map<String, StoredBlob> getBlobs() {
     return blobs;
   }
 
@@ -346,11 +343,11 @@ class MockServer {
   }
 
   /**
-   * Set whether or not the server should respond to get requests with blob format v2.
-   * @param useBlobFormatV2 {@code true} if v2 should be used, otherwise use v1
+   * Set the blob format version that the server should respond to get requests with.
+   * @param blobFormatVersion The blob version to use.
    */
-  public void setBlobFormat(boolean useBlobFormatV2) {
-    this.useBlobFormatV2 = useBlobFormatV2;
+  public void setBlobFormatVersion(short blobFormatVersion) {
+    this.blobFormatVersion = blobFormatVersion;
   }
 
   /**
@@ -362,3 +359,22 @@ class MockServer {
   }
 }
 
+class StoredBlob {
+  final String id;
+  final BlobType type;
+  final BlobProperties properties;
+  final ByteBuffer userMetadata;
+  final ByteBuffer data;
+
+  StoredBlob(PutRequest putRequest)
+      throws IOException {
+    id = putRequest.getBlobId().getID();
+    type = putRequest.getBlobType();
+    properties = putRequest.getBlobProperties();
+    userMetadata = putRequest.getUsermetadata();
+    data = ByteBuffer.allocate((int) putRequest.sizeInBytes());
+    ByteBufferChannel bufChannel = new ByteBufferChannel(data);
+    putRequest.writeTo(bufChannel);
+    data.flip();
+  }
+}

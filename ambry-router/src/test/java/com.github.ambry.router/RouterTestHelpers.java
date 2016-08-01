@@ -166,14 +166,14 @@ class RouterTestHelpers {
 
 
   /**
-   * Set whether all servers should respond to get requests with blob format v2.
-   * @param useBlobFormatV2 {@code true} if v2 should be used, otherwise use v1
+   * Set the blob format version that the server should respond to get requests with.
+   * @param blobFormatVersion The blob format version to use.
    * @param serverLayout A {@link MockServerLayout} containing the {@link MockServer}s to change settings on.
    */
-  static void setBlobFormatForAllServers(boolean useBlobFormatV2, MockServerLayout serverLayout) {
+  static void setBlobFormatVersionForAllServers(short blobFormatVersion, MockServerLayout serverLayout) {
     ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
     for (MockServer mockServer : mockServers) {
-      mockServer.setBlobFormat(useBlobFormatV2);
+      mockServer.setBlobFormatVersion(blobFormatVersion);
     }
   }
 
