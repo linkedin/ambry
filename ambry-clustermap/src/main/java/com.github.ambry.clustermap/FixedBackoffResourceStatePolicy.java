@@ -14,8 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.SystemTime;
-import java.util.ArrayDeque;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;

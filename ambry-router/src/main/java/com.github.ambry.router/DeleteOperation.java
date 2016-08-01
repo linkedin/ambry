@@ -19,13 +19,10 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -121,7 +118,7 @@ class DeleteOperation {
       Port port = replica.getDataNodeId().getPortToConnectTo();
       DeleteRequest deleteRequest = createDeleteRequest();
       deleteRequestInfos.put(deleteRequest.getCorrelationId(), new DeleteRequestInfo(time.milliseconds(), replica));
-      RequestInfo requestInfo = new RequestInfo(hostname, port, deleteRequest);
+      RouterRequestInfo requestInfo = new RouterRequestInfo(hostname, port, deleteRequest, replica);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
@@ -147,10 +144,11 @@ class DeleteOperation {
    * can be different cases during handling a response. For the same delete operation, it is possible
    * that different {@link ServerErrorCode} are received from different replicas. These error codes
    * are eventually resolved to a single {@link RouterErrorCode}.
-   * @param responseInfo The response to be handled.
+   * @param responseInfo The {@link ResponseInfo} to be handled.
+   * @param deleteResponse The {@link DeleteResponse} associated with this response.
    */
-  void handleResponse(ResponseInfo responseInfo) {
-    DeleteRequest deleteRequest = (DeleteRequest) responseInfo.getRequest();
+  void handleResponse(ResponseInfo responseInfo, DeleteResponse deleteResponse) {
+    DeleteRequest deleteRequest = (DeleteRequest) responseInfo.getRequestInfo().getRequest();
     DeleteRequestInfo deleteRequestInfo = deleteRequestInfos.remove(deleteRequest.getCorrelationId());
     // deleteRequestInfo can be null if this request was timed out before this response is received. No
     // metric is updated here, as corresponding metrics have been updated when the request was timed out.
@@ -163,12 +161,11 @@ class DeleteOperation {
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
-      responseHandler.onRequestResponseException(replica, new IOException(("NetworkClient error.")));
       updateOperationState(replica, RouterErrorCode.OperationTimedOut);
     } else {
-      try {
-        DeleteResponse deleteResponse =
-            DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
+      if (deleteResponse == null) {
+        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
+      } else {
         // The true case below should not really happen. This means a response has been received
         // not for its original request. We will immediately fail this operation.
         if (deleteResponse.getCorrelationId() != deleteRequest.getCorrelationId()) {
@@ -181,13 +178,9 @@ class DeleteOperation {
                   RouterErrorCode.UnexpectedInternalError));
           updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
         } else {
-          responseHandler.onRequestResponseError(replica, deleteResponse.getError());
           // The status of operation tracker will be updated within the processServerError method.
           processServerError(replica, deleteResponse.getError());
         }
-      } catch (IOException e) {
-        logger.error("Unable to recover a deleteResponse from received stream.");
-        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
       }
     }
     checkAndMaybeComplete();

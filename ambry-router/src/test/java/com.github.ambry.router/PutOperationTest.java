@@ -23,11 +23,14 @@ import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -122,7 +125,10 @@ public class PutOperationTest {
     //    PutChunk.
 
     // 1.
-    op.handleResponse(getResponseInfo(requestInfos.get(0)));
+    ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
+    PutResponse putResponse = responseInfo.getError() == null ? PutResponse
+        .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+    op.handleResponse(responseInfo, putResponse);
     // 2.
     PutRequest putRequest = (PutRequest) requestInfos.get(1).getRequest();
     ByteBuffer buf = ByteBuffer.allocate((int) putRequest.sizeInBytes());
@@ -137,7 +143,10 @@ public class PutOperationTest {
 
     // succeed all the other requests.
     for (int i = 3; i < requestInfos.size(); i++) {
-      op.handleResponse(getResponseInfo(requestInfos.get(i)));
+      responseInfo = getResponseInfo(requestInfos.get(i));
+      putResponse = responseInfo.getError() == null ? PutResponse
+          .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+      op.handleResponse(responseInfo, putResponse);
     }
     // fill the first PutChunk with the last chunk.
     op.fillChunks();
@@ -162,7 +171,10 @@ public class PutOperationTest {
     // the next poll will free this buffer. We cannot actually verify it via the tests directly, as this is very
     // internal to the chunk (though this can be verified via coverage).
     for (int i = 0; i < requestInfos.size(); i++) {
-      op.handleResponse(getResponseInfo(requestInfos.get(i)));
+      responseInfo = getResponseInfo(requestInfos.get(i));
+      putResponse = responseInfo.getError() == null ? PutResponse
+          .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+      op.handleResponse(responseInfo, putResponse);
     }
     requestInfos.clear();
     // this should return requests for the metadata chunk
@@ -170,7 +182,10 @@ public class PutOperationTest {
     Assert.assertEquals(1 * requestParallelism, requestInfos.size());
     Assert.assertFalse("Operation should not be complete yet", op.isOperationComplete());
     // once the metadata request succeeds, it should complete the operation.
-    op.handleResponse(getResponseInfo(requestInfos.get(0)));
+    responseInfo = getResponseInfo(requestInfos.get(0));
+    putResponse = responseInfo.getError() == null ? PutResponse
+        .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+    op.handleResponse(responseInfo, putResponse);
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
   }
 
@@ -193,7 +208,7 @@ public class PutOperationTest {
   private ResponseInfo getResponseInfo(RequestInfo requestInfo)
       throws IOException {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
-    return new ResponseInfo(requestInfo.getRequest(), null, networkReceive.getReceivedBytes().getPayload());
+    return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().getPayload());
   }
 }
 

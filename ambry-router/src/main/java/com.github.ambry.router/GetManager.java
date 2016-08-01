@@ -14,15 +14,22 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -184,11 +191,13 @@ class GetManager {
    */
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
-    GetRequest getRequest = (GetRequest) responseInfo.getRequest();
+    GetResponse getResponse = extractPutResponseAndNotifyResponseHandler(responseInfo);
+    RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+    GetRequest getRequest = (GetRequest) routerRequestInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
     if (getOperations.contains(getOperation)) {
       try {
-        getOperation.handleResponse(responseInfo);
+        getOperation.handleResponse(responseInfo, getResponse);
         if (getOperation.isOperationComplete()) {
           remove(getOperation);
         }
@@ -200,6 +209,35 @@ class GetManager {
     } else {
       routerMetrics.ignoredResponseCount.inc();
     }
+  }
+
+  /**
+   * Extract the {@link GetResponse} from the given {@link ResponseInfo}
+   * @param responseInfo the {@link ResponseInfo} from which the {@link GetResponse} is to be extracted.
+   * @return the extracted {@link GetResponse} if there is one; null otherwise.
+   */
+  private GetResponse extractPutResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
+    GetResponse getResponse = null;
+    ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
+    NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
+    if (networkClientErrorCode != null) {
+      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
+    } else {
+      try {
+        getResponse = GetResponse
+            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), clusterMap);
+        ServerErrorCode serverError = getResponse.getError();
+        if (serverError == ServerErrorCode.No_Error) {
+          serverError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
+        }
+        responseHandler.onRequestResponseError(replicaId, serverError);
+      } catch (Exception e) {
+        // Ignore. There is no value in notifying the response handler.
+        logger.error("Response deserialization received unexpected error", e);
+        routerMetrics.responseDeserializationErrorCount.inc();
+      }
+    }
+    return getResponse;
   }
 
   /**
