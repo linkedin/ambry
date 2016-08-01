@@ -209,7 +209,7 @@ public class NetworkClientTest {
    * immediately failed.
    */
   @Test
-  public void testConnectionInitiationFailures()
+  public void testConnectionInitializationFailures()
       throws Exception {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
@@ -222,21 +222,30 @@ public class NetworkClientTest {
     Assert.assertEquals(0, responseInfoList.size());
     requestInfoList.clear();
 
-    // Subsequent calls to sendAndPoll() should not have initiated any connections.
+    // Subsequent calls to sendAndPoll() should not initiate any connections.
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     Assert.assertEquals(1, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
 
+    // Another connection should get initialized if a new request comes in for the same destination.
+    requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
-    Assert.assertEquals(1, selector.connectCallCount());
+    Assert.assertEquals(2, selector.connectCallCount());
+    Assert.assertEquals(0, responseInfoList.size());
+    requestInfoList.clear();
+
+    // Subsequent calls to sendAndPoll() should not initiate any more connections.
+    responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
+    Assert.assertEquals(2, selector.connectCallCount());
     Assert.assertEquals(0, responseInfoList.size());
 
-    // Once connect failure kicks in, the pending request should be failed immediately.
+    // Once connect failure kicks in, the pending requests should be failed immediately.
     selector.setState(MockSelectorState.FailConnectionInitiationOnPoll);
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
-    Assert.assertEquals(1, selector.connectCallCount());
-    Assert.assertEquals(1, responseInfoList.size());
+    Assert.assertEquals(2, selector.connectCallCount());
+    Assert.assertEquals(2, responseInfoList.size());
     Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(0).getError());
+    Assert.assertEquals(NetworkClientErrorCode.NetworkError, responseInfoList.get(1).getError());
     responseInfoList.clear();
   }
 
