@@ -156,11 +156,15 @@ public class BlockingChannelConnectionPoolTest {
     testBlockingChannelInfo("127.0.0.1", new Port(7667, PortType.SSL), 5, 5);
   }
 
+  /**
+   * Tests how connection failures are handled by BlockingChannelInfo.
+   * To be specific it checks if available connections are cleaned up once a threshold of failures
+   * have reacehed based on the config.
+   */
   @Test
   public void testConnectionFailureCases()
       throws InterruptedException, ConnectionPoolTimeoutException, IOException {
     int port = 6680;
-
     Properties props = new Properties();
     String maxConnectFailuresToCleanUp = "2";
     props.put("connectionpool.max.connect.failures.to.clean.up.available.pool", maxConnectFailuresToCleanUp);

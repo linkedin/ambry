@@ -64,7 +64,7 @@ public class ConnectionPoolConfig {
    * The maximum consecutive connect failures allowed before we clean up the available pool
    */
   @Config("connectionpool.max.connect.failures.to.clean.up.available.pool")
-  @Default("2")
+  @Default("1")
   public final int connectionPoolMaxConnectFailuresToCleanUpAvailablePool;
 
 
@@ -81,6 +81,6 @@ public class ConnectionPoolConfig {
     connectionPoolMaxConnectionsPerPortSSL =
         verifiableProperties.getIntInRange("connectionpool.max.connections.per.port.ssl", 2, 1, 20);
     connectionPoolMaxConnectFailuresToCleanUpAvailablePool =
-            verifiableProperties.getInt("connectionpool.max.connect.failures.to.clean.up.available.pool", 0);
+            verifiableProperties.getInt("connectionpool.max.connect.failures.to.clean.up.available.pool", 1);
   }
 }
