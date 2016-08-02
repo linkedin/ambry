@@ -45,8 +45,8 @@ class BlockingChannelInfo {
   private final Port port;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   protected Gauge<Integer> availableConnections;
-  protected Gauge<Integer> activeConnections;
-  protected Gauge<Integer> totalNumberOfConnections;
+  private Gauge<Integer> activeConnections;
+  private Gauge<Integer> totalNumberOfConnections;
   private int maxConnectionsPerHostPerPort;
   private final int maxConnectFailuresToCleanUp;
   private final AtomicInteger currentConnectFailures;
