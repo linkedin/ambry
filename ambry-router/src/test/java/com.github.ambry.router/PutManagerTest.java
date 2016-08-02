@@ -703,13 +703,13 @@ public class PutManagerTest {
     // identical. In the process also fill in the map of blobId to serializedPutRequests.
     HashMap<String, ByteBuffer> allChunks = new HashMap<String, ByteBuffer>();
     for (MockServer mockServer : mockServerLayout.getMockServers()) {
-      for (Map.Entry<String, ByteBuffer> blobEntry : mockServer.getBlobs().entrySet()) {
+      for (Map.Entry<String, StoredBlob> blobEntry : mockServer.getBlobs().entrySet()) {
         ByteBuffer chunk = allChunks.get(blobEntry.getKey());
         if (chunk == null) {
-          allChunks.put(blobEntry.getKey(), blobEntry.getValue());
+          allChunks.put(blobEntry.getKey(), blobEntry.getValue().data);
         } else {
           Assert.assertTrue("All requests for the same blob id must be identical except for correlation id",
-              areIdenticalPutRequests(chunk.array(), blobEntry.getValue().array()));
+              areIdenticalPutRequests(chunk.array(), blobEntry.getValue().data.array()));
         }
       }
     }

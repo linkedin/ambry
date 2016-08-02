@@ -70,5 +70,17 @@ class MockNetworkClientFactory extends NetworkClientFactory {
     return new NetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), maxPortsPlainText,
         maxPortsSsl, checkoutTimeoutMs, time);
   }
+
+  /**
+   * Return a {@link MockNetworkClient} instantiated with a {@link MockSelector}
+   * @return the constructed {@link MockNetworkClient}
+   * @throws IOException if the selector could not be constructed.
+   */
+  public MockNetworkClient getMockNetworkClient()
+      throws IOException {
+    MockSelector selector = new MockSelector(serverLayout, state, time);
+    return new MockNetworkClient(selector, networkConfig, new NetworkMetrics(new MetricRegistry()), maxPortsPlainText,
+        maxPortsSsl, checkoutTimeoutMs, time);
+  }
 }
 
