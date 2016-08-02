@@ -530,6 +530,9 @@ public class Utils {
       throws IOException {
     Runtime runtime = Runtime.getRuntime();
     if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
+      if (!file.isFile()) {
+         file.createNewFile();
+      }
       Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
       try {
         process.waitFor();
