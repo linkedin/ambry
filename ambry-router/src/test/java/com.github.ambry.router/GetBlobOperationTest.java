@@ -576,7 +576,8 @@ public class GetBlobOperationTest {
               if (getChunksBeforeRead) {
                 try {
                   // wait for all chunks (data + metadata) to be received
-                  while (mockNetworkClient.getProcessedResponseCount() < numChunks * routerConfig.routerGetRequestParallelism) {
+                  while (mockNetworkClient.getProcessedResponseCount()
+                      < numChunks * routerConfig.routerGetRequestParallelism) {
                     Thread.sleep(10);
                   }
                 } catch (InterruptedException ignored) {
