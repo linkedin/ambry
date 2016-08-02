@@ -59,7 +59,6 @@ class MockNetworkClient extends NetworkClient {
    */
   @Override
   public void wakeup() {
-    super.wakeup();
     wokenUp = true;
   }
 

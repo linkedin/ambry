@@ -160,7 +160,7 @@ public class GetBlobOperationTest {
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
         new LoggingNotificationSystem(), mockClusterMap, time);
-    mockNetworkClient = (MockNetworkClient) networkClientFactory.getNetworkClient();
+    mockNetworkClient = networkClientFactory.getMockNetworkClient();
     readyForPollCallback = new ReadyForPollCallback(mockNetworkClient);
   }
 
@@ -576,7 +576,7 @@ public class GetBlobOperationTest {
               if (getChunksBeforeRead) {
                 try {
                   // wait for all chunks (data + metadata) to be received
-                  while (mockNetworkClient.getProcessedResponseCount() < numChunks * 2) {
+                  while (mockNetworkClient.getProcessedResponseCount() < numChunks * routerConfig.routerGetRequestParallelism) {
                     Thread.sleep(10);
                   }
                 } catch (InterruptedException ignored) {
