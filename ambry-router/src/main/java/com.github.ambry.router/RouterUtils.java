@@ -60,7 +60,7 @@ class RouterUtils {
   }
 
   /**
-   * Determine if an error is a user error and not indicative of the health of the system.
+   * Determine if an error is indicative of the health of the system, and not a user error.
    * @param exception The {@link Exception} to check.
    * @return true if this is an internal error and not a user error; false otherwise.
    */

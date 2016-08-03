@@ -262,8 +262,7 @@ public class NonBlockingRouterMetrics {
   }
 
   /**
-   * Increment error metrics based on error type and return whether the error is indicative
-   * of the health of the system or is a user input error.
+   * Increment error metrics based on error type.
    * @param exception The exception associated with this error.
    */
   private void onError(Exception exception) {
@@ -359,6 +358,7 @@ public class NonBlockingRouterMetrics {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       deleteBlobErrorCount.inc();
+      operationErrorRate.mark();
     }
   }
 
