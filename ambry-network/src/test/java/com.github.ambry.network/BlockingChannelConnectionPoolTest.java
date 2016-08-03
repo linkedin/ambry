@@ -158,22 +158,17 @@ public class BlockingChannelConnectionPoolTest {
 
   /**
    * Tests how connection failures are handled by BlockingChannelInfo.
-   * To be specific it checks if available connections are cleaned up once a threshold of failures
-   * have reacehed based on the config.
    */
   @Test
   public void testConnectionFailureCases()
       throws InterruptedException, ConnectionPoolTimeoutException, IOException {
     int port = 6680;
-    Properties props = new Properties();
-    String maxConnectFailuresToCleanUp = "2";
-    props.put("connectionpool.max.connect.failures.to.clean.up.available.pool", maxConnectFailuresToCleanUp);
     String host = "127.0.0.1";
 
     SocketServer server = startServer(port);
 
     BlockingChannelInfo channelInfo =
-        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host,
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(new Properties())), host,
             new Port(port, PortType.PLAINTEXT), new MetricRegistry(), sslSocketFactory, sslConfig);
 
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
@@ -186,48 +181,36 @@ public class BlockingChannelConnectionPoolTest {
     BlockingChannel blockingChannel3 = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 3);
 
-    BlockingChannel blockingChannel4 = channelInfo.getBlockingChannel(1000);
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 4);
-
-    BlockingChannel blockingChannel5 = channelInfo.getBlockingChannel(1000);
-    Assert.assertEquals(channelInfo.getNumberOfConnections(), 5);
-
+    channelInfo.releaseBlockingChannel(blockingChannel2);
     channelInfo.releaseBlockingChannel(blockingChannel3);
-    channelInfo.releaseBlockingChannel(blockingChannel4);
-    channelInfo.releaseBlockingChannel(blockingChannel5);
 
-    Assert.assertEquals("Available connections count mismatch ", 3,
+    Assert.assertEquals("Available connections count mismatch ", 2,
         channelInfo.availableConnections.getValue().intValue());
 
     // shutdown server
     server.shutdown();
 
-    // destroy one of the connections and verify that the available connections are not yet cleaned up as the config
-    // value of interest is set to 2
+    // destroy one of the connections and verify that the available connections cleaned up
     channelInfo.destroyBlockingChannel(blockingChannel1);
 
-    Assert.assertEquals("Available connections should have not been cleaned up", 3,
+    Assert.assertEquals("Available connections should have not been cleaned up", 0,
         channelInfo.availableConnections.getValue().intValue());
 
-    // start the server and verify that destroy connection will not trigger clean up of available connections as connection
-    // recreation should have passed
-    server = startServer(port);
+    // bring up the server
+    startServer(port);
 
-    channelInfo.destroyBlockingChannel(blockingChannel2);
-    Assert.assertEquals("Available connections should not have been cleaned up", 4,
-        channelInfo.availableConnections.getValue().intValue());
+    BlockingChannel blockingChannel4 = channelInfo.getBlockingChannel(1000);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
 
-    server.shutdown();
+    BlockingChannel blockingChannel5 = channelInfo.getBlockingChannel(1000);
+    Assert.assertEquals(channelInfo.getNumberOfConnections(), 2);
 
-    // destroy two connections and verify that all other available connections are cleaned up as the config
-    // value of interest is set to 2 and we have reached 2 failures
+    channelInfo.releaseBlockingChannel(blockingChannel4);
 
-    BlockingChannel blockingChannel = channelInfo.getBlockingChannel(1000);
-    channelInfo.destroyBlockingChannel(blockingChannel);
-    blockingChannel = channelInfo.getBlockingChannel(1000);
-    channelInfo.destroyBlockingChannel(blockingChannel);
-
-    Assert.assertEquals("Available connections should have been cleaned up", 0,
+    // verify that destroy connection will not trigger clean up of available connections
+    // as connection recreation should have passed
+    channelInfo.destroyBlockingChannel(blockingChannel5);
+    Assert.assertEquals("Available connections should not have been cleaned up", 2,
         channelInfo.availableConnections.getValue().intValue());
   }
 

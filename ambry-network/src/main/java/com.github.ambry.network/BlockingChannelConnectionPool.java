@@ -48,8 +48,6 @@ class BlockingChannelInfo {
   private Gauge<Integer> activeConnections;
   private Gauge<Integer> totalNumberOfConnections;
   private int maxConnectionsPerHostPerPort;
-  private final int maxConnectFailuresToCleanUp;
-  private final AtomicInteger currentConnectFailures;
   private final SSLSocketFactory sslSocketFactory;
   private final SSLConfig sslConfig;
   private final MetricRegistry registry;
@@ -67,8 +65,6 @@ class BlockingChannelInfo {
     this.blockingChannelAvailableConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHostPerPort);
     this.blockingChannelActiveConnections = new ArrayBlockingQueue<BlockingChannel>(maxConnectionsPerHostPerPort);
     this.numberOfConnections = new AtomicInteger(0);
-    this.maxConnectFailuresToCleanUp = config.connectionPoolMaxConnectFailuresToCleanUpAvailablePool;
-    currentConnectFailures = new AtomicInteger(0);
     this.rwlock = new ReentrantReadWriteLock();
     this.lock = new Object();
     this.host = host;
@@ -113,7 +109,6 @@ class BlockingChannelInfo {
     try {
       if (blockingChannelActiveConnections.remove(blockingChannel)) {
         blockingChannelAvailableConnections.add(blockingChannel);
-        currentConnectFailures.set(0);
         logger.trace(
             "Adding connection to {}:{} back to pool. Current available connections {} Current active connections {}",
             blockingChannel.getRemoteHost(), blockingChannel.getRemotePort(),
@@ -156,7 +151,6 @@ class BlockingChannelInfo {
           BlockingChannel channel = getBlockingChannelBasedOnPortType(host, port.getPort());
           channel.connect();
           numberOfConnections.incrementAndGet();
-          currentConnectFailures.set(0);
           logger.trace("Created a new connection for host {} and port {}. Number of connections {}", host, port,
               numberOfConnections.get());
           blockingChannelActiveConnections.add(channel);
@@ -222,7 +216,6 @@ class BlockingChannelInfo {
       channel.connect();
       logger.trace("Destroying connection and adding new connection for host {} port {}", host, port.getPort());
       blockingChannelAvailableConnections.add(channel);
-      currentConnectFailures.set(0);
     } catch (Exception e) {
       logger
           .error("Connection failure to remote host {} and port {} when destroying and recreating the connection", host,
@@ -230,15 +223,11 @@ class BlockingChannelInfo {
       synchronized (lock) {
         // decrement the number of connections to the host and port. we were not able to maintain the count
         numberOfConnections.decrementAndGet();
-        currentConnectFailures.incrementAndGet();
-        // if we have reached the max count for connection failures, clean up the available connections
-        if(currentConnectFailures.get() >= maxConnectFailuresToCleanUp) {
+        // at this point we are good to clean up the available connections since re-creation failed
           while(!blockingChannelAvailableConnections.isEmpty()){
             blockingChannelAvailableConnections.poll().disconnect();
             numberOfConnections.decrementAndGet();
           }
-          currentConnectFailures.set(0);
-        }
       }
     } finally {
       rwlock.readLock().unlock();
