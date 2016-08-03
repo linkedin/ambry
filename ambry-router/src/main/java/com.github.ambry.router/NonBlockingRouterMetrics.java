@@ -268,26 +268,14 @@ public class NonBlockingRouterMetrics {
    * @param exception The exception to be counted.
    */
   void countError(Exception exception) {
-    operationErrorRate.mark();
     if (exception instanceof RouterException) {
       switch (((RouterException) exception).getErrorCode()) {
-        case AmbryUnavailable:
-          ambryUnavailableErrorCount.inc();
-          break;
+        // The following are user errors. Only increment the respective error metric.
         case InvalidBlobId:
           invalidBlobIdErrorCount.inc();
           break;
         case InvalidPutArgument:
           invalidPutArgumentErrorCount.inc();
-          break;
-        case OperationTimedOut:
-          operationTimedOutErrorCount.inc();
-          break;
-        case RouterClosed:
-          routerClosedErrorCount.inc();
-          break;
-        case UnexpectedInternalError:
-          unexpectedInternalErrorCount.inc();
           break;
         case BlobTooLarge:
           blobTooLargeErrorCount.inc();
@@ -295,24 +283,45 @@ public class NonBlockingRouterMetrics {
         case BadInputChannel:
           badInputChannelErrorCount.inc();
           break;
-        case InsufficientCapacity:
-          insufficientCapacityErrorCount.inc();
-          break;
         case BlobDeleted:
           blobDeletedErrorCount.inc();
-          break;
-        case BlobDoesNotExist:
-          blobDoesNotExistErrorCount.inc();
           break;
         case BlobExpired:
           blobExpiredErrorCount.inc();
           break;
+        // The following are possibly internal errors. Additionally increment operationErrorRate.
+        case AmbryUnavailable:
+          ambryUnavailableErrorCount.inc();
+          operationErrorRate.mark();
+          break;
+        case OperationTimedOut:
+          operationTimedOutErrorCount.inc();
+          operationErrorRate.mark();
+          break;
+        case RouterClosed:
+          routerClosedErrorCount.inc();
+          operationErrorRate.mark();
+          break;
+        case UnexpectedInternalError:
+          unexpectedInternalErrorCount.inc();
+          operationErrorRate.mark();
+          break;
+        case InsufficientCapacity:
+          insufficientCapacityErrorCount.inc();
+          operationErrorRate.mark();
+          break;
+        case BlobDoesNotExist:
+          blobDoesNotExistErrorCount.inc();
+          operationErrorRate.mark();
+          break;
         default:
           unknownErrorCountForOperation.inc();
+          operationErrorRate.mark();
           break;
       }
     } else {
       unknownErrorCountForOperation.inc();
+      operationErrorRate.mark();
     }
   }
 
