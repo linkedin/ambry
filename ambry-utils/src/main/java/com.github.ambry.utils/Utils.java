@@ -525,14 +525,20 @@ public class Utils {
       throws IOException, JSONException {
     return new JSONObject(readStringFromFile(path));
   }
-
+  
+  /**
+   * Ensures that a given File is present. The file is pre-allocated with a given capacity using fallocate on linux
+   * @param file file path to create and allocate
+   * @param capacityBytes the number of bytes to pre-allocate
+   * @throws IOException 
+   */
   public static void preAllocateFileIfNeeded(File file, long capacityBytes)
       throws IOException {
-    Runtime runtime = Runtime.getRuntime();
-    if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {
-      if (!file.isFile()) {
+    if (!file.exists()) {
          file.createNewFile();
-      }
+    }    
+    if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {      
+      Runtime runtime = Runtime.getRuntime();
       Process process = runtime.exec("fallocate --keep-size -l " + capacityBytes + " " + file.getAbsolutePath());
       try {
         process.waitFor();
@@ -543,15 +549,6 @@ public class Utils {
         throw new IOException("error while trying to preallocate file " + file.getAbsolutePath() +
             " exitvalue " + process.exitValue() +
             " error string " + process.getErrorStream());
-      }
-    } else {
-      RandomAccessFile rfile = null;
-      try {
-        rfile = new RandomAccessFile(file, "rw");
-      } finally {
-        if (rfile != null) {
-          rfile.close();
-        }
       }
     }
   }
