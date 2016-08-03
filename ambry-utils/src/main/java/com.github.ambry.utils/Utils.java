@@ -525,7 +525,7 @@ public class Utils {
       throws IOException, JSONException {
     return new JSONObject(readStringFromFile(path));
   }
-  
+
   /**
    * Ensures that a given File is present. The file is pre-allocated with a given capacity using fallocate on linux
    * @param file file path to create and allocate
@@ -535,7 +535,7 @@ public class Utils {
   public static void preAllocateFileIfNeeded(File file, long capacityBytes)
       throws IOException {
     if (!file.exists()) {
-         file.createNewFile();
+      file.createNewFile();
     }    
     if (System.getProperty("os.name").toLowerCase().startsWith("linux")) {      
       Runtime runtime = Runtime.getRuntime();
