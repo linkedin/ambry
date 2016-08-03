@@ -267,9 +267,6 @@ public class NonBlockingRouterMetrics {
    * @param exception The exception associated with this error.
    */
   private void onError(Exception exception) {
-    if (RouterUtils.isSystemHealthError(exception)) {
-      operationErrorRate.mark();
-    }
     if (exception instanceof RouterException) {
       RouterErrorCode errorCode = ((RouterException) exception).getErrorCode();
       switch (errorCode) {
@@ -326,6 +323,7 @@ public class NonBlockingRouterMetrics {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       putBlobErrorCount.inc();
+      operationErrorRate.mark();
     }
   }
 
@@ -337,6 +335,7 @@ public class NonBlockingRouterMetrics {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobErrorCount.inc();
+      operationErrorRate.mark();
     }
   }
 
@@ -348,6 +347,7 @@ public class NonBlockingRouterMetrics {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobInfoErrorCount.inc();
+      operationErrorRate.mark();
     }
   }
 
