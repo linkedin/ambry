@@ -262,15 +262,17 @@ public class NonBlockingRouterMetrics {
   }
 
   /**
-   * Count errors based on error type.
-   * <p/>
-   * This method should be called when an {@code Operation} is completed or aborted.
-   * @param exception The exception to be counted.
+   * Increment error metrics based on error type and return whether the error is indicative
+   * of the health of the system or is a user input error.
+   * @param exception The exception associated with this error.
    */
-  void countError(Exception exception) {
+  private void onError(Exception exception) {
+    if (RouterUtils.isSystemHealthError(exception)) {
+      operationErrorRate.mark();
+    }
     if (exception instanceof RouterException) {
-      switch (((RouterException) exception).getErrorCode()) {
-        // The following are user errors. Only increment the respective error metric.
+      RouterErrorCode errorCode = ((RouterException) exception).getErrorCode();
+      switch (errorCode) {
         case InvalidBlobId:
           invalidBlobIdErrorCount.inc();
           break;
@@ -289,39 +291,74 @@ public class NonBlockingRouterMetrics {
         case BlobExpired:
           blobExpiredErrorCount.inc();
           break;
-        // The following are possibly internal errors. Additionally increment operationErrorRate.
         case AmbryUnavailable:
           ambryUnavailableErrorCount.inc();
-          operationErrorRate.mark();
           break;
         case OperationTimedOut:
           operationTimedOutErrorCount.inc();
-          operationErrorRate.mark();
           break;
         case RouterClosed:
           routerClosedErrorCount.inc();
-          operationErrorRate.mark();
           break;
         case UnexpectedInternalError:
           unexpectedInternalErrorCount.inc();
-          operationErrorRate.mark();
           break;
         case InsufficientCapacity:
           insufficientCapacityErrorCount.inc();
-          operationErrorRate.mark();
           break;
         case BlobDoesNotExist:
           blobDoesNotExistErrorCount.inc();
-          operationErrorRate.mark();
           break;
         default:
           unknownErrorCountForOperation.inc();
-          operationErrorRate.mark();
           break;
       }
     } else {
       unknownErrorCountForOperation.inc();
-      operationErrorRate.mark();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a putBlob operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onPutBlobError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      putBlobErrorCount.inc();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a getBlob operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onGetBlobError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      getBlobErrorCount.inc();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a getBlobInfo operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onGetBlobInfoError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      getBlobInfoErrorCount.inc();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a deleteBlob operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onDeleteBlobError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      deleteBlobErrorCount.inc();
     }
   }
 

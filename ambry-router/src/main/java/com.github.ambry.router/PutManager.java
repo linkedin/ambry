@@ -150,8 +150,7 @@ class PutManager {
       putOperation.startReadingFromChannel();
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.putBlobErrorCount.inc();
-      routerMetrics.countError(e);
+      routerMetrics.onPutBlobError(e);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -254,8 +253,7 @@ class PutManager {
     Exception e = op.getOperationException();
     if (e != null) {
       // @todo add blobs in the metadata chunk to ids_to_delete
-      routerMetrics.putBlobErrorCount.inc();
-      routerMetrics.countError(e);
+      routerMetrics.onPutBlobError(e);
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
     }
@@ -309,8 +307,7 @@ class PutManager {
         Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
-        routerMetrics.putBlobErrorCount.inc();
-        routerMetrics.countError(e);
+        routerMetrics.onPutBlobError(e);
         operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, e);
       }
     }

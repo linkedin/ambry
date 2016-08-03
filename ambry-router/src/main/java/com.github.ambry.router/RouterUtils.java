@@ -40,9 +40,9 @@ class RouterUtils {
     BlobId blobId;
     try {
       blobId = new BlobId(blobIdString, clusterMap);
-      logger.trace("BlobId created " + blobId + " with partition " + blobId.getPartition());
+      logger.trace("BlobId {} created with partitionId {}", blobId, blobId.getPartition());
     } catch (Exception e) {
-      logger.trace("Caller passed in invalid BlobId " + blobIdString);
+      logger.trace("Caller passed in invalid BlobId {}", blobIdString);
       throw new RouterException("BlobId is invalid " + blobIdString, RouterErrorCode.InvalidBlobId);
     }
     return blobId;
@@ -57,5 +57,29 @@ class RouterUtils {
    */
   static boolean isRemoteReplica(RouterConfig routerConfig, ReplicaId replicaId) {
     return !routerConfig.routerDatacenterName.equals(replicaId.getDataNodeId().getDatacenterName());
+  }
+
+  /**
+   * Determine if an error is a user error and not indicative of the health of the system.
+   * @param exception The {@link Exception} to check.
+   * @return true if this is an internal error and not a user error; false otherwise.
+   */
+  static boolean isSystemHealthError(Exception exception) {
+    boolean isSystemHealthError = true;
+    if (exception instanceof RouterException) {
+      RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
+      switch (routerErrorCode) {
+        // The following are user errors. Only increment the respective error metric.
+        case InvalidBlobId:
+        case InvalidPutArgument:
+        case BlobTooLarge:
+        case BadInputChannel:
+        case BlobDeleted:
+        case BlobExpired:
+          isSystemHealthError = false;
+          break;
+      }
+    }
+    return isSystemHealthError;
   }
 }
