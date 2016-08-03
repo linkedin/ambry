@@ -110,8 +110,7 @@ class DeleteManager {
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.deleteBlobErrorCount.inc();
-      routerMetrics.countError(e);
+      routerMetrics.onDeleteBlobError(e);
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -211,8 +210,7 @@ class DeleteManager {
     if (e == null) {
       notificationSystem.onBlobDeleted(op.getBlobId().getID());
     } else {
-      routerMetrics.deleteBlobErrorCount.inc();
-      routerMetrics.countError(e);
+      routerMetrics.onDeleteBlobError(e);
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
@@ -233,8 +231,7 @@ class DeleteManager {
         Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
-        routerMetrics.deleteBlobErrorCount.inc();
-        routerMetrics.countError(e);
+        routerMetrics.onDeleteBlobError(e);
         operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
       }
     }

@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * GetManager manages GetBlob and GetBlobInfo operations. This is just a template for now.
+ * GetManager manages GetBlob and GetBlobInfo operations.
  * These methods have to be thread safe.
  */
 class GetManager {
@@ -117,8 +117,7 @@ class GetManager {
               callback, operationCompleteCallback, time);
       getOperations.add(getBlobInfoOperation);
     } catch (RouterException e) {
-      routerMetrics.getBlobInfoErrorCount.inc();
-      routerMetrics.countError(e);
+      routerMetrics.onGetBlobInfoError(e);
       routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
@@ -138,8 +137,7 @@ class GetManager {
               operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       getOperations.add(getBlobOperation);
     } catch (RouterException e) {
-      routerMetrics.getBlobErrorCount.inc();
-      routerMetrics.countError(e);
+      routerMetrics.onGetBlobError(e);
       routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
@@ -263,7 +261,11 @@ class GetManager {
     if (remove(op)) {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
-      routerMetrics.countError(abortCause);
+      if (op instanceof GetBlobOperation) {
+        routerMetrics.onGetBlobError(abortCause);
+      } else {
+        routerMetrics.onGetBlobInfoError(abortCause);
+      }
     }
   }
 }

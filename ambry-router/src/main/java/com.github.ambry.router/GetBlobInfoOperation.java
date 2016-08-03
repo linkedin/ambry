@@ -324,8 +324,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
     if (operationCompleted) {
       Exception e = operationException.get();
       if (e != null) {
-        routerMetrics.getBlobInfoErrorCount.inc();
-        routerMetrics.countError(e);
+        routerMetrics.onGetBlobInfoError(e);
       }
       routerMetrics.getBlobInfoOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
       operationCompleteCallback.completeOperation(operationFuture, operationCallback, operationResult, e);

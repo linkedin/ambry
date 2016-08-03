@@ -175,8 +175,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         Exception e = getOperationException();
         getBlobResult = e == null ? new GetBlobResult() : null;
         if (e != null) {
-          routerMetrics.getBlobErrorCount.inc();
-          routerMetrics.countError(e);
+          routerMetrics.onGetBlobError(e);
         }
         operationCompleteCallback.completeOperation(operationFuture, operationCallback, getBlobResult, e);
       }

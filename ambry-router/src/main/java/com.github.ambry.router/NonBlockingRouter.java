@@ -131,8 +131,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.getBlobInfoErrorCount.inc();
-      routerMetrics.countError(routerException);
+      routerMetrics.onGetBlobInfoError(routerException);
       operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -167,8 +166,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.getBlobErrorCount.inc();
-      routerMetrics.countError(routerException);
+      routerMetrics.onGetBlobError(routerException);
       operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -208,8 +206,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.putBlobErrorCount.inc();
-      routerMetrics.countError(routerException);
+      routerMetrics.onPutBlobError(routerException);
       operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -244,8 +241,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.deleteBlobErrorCount.inc();
-      routerMetrics.countError(routerException);
+      routerMetrics.onDeleteBlobError(routerException);
       operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -384,8 +380,7 @@ class NonBlockingRouter implements Router {
         RouterException routerException =
             new RouterException(" because Router is closed", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
-        routerMetrics.putBlobErrorCount.inc();
-        routerMetrics.countError(routerException);
+        routerMetrics.onPutBlobError(routerException);
         operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
         // Close so that any existing operations are also disposed off.
         close();

@@ -262,23 +262,33 @@ public class NonBlockingRouterMetrics {
   }
 
   /**
-   * Count errors based on error type.
-   * <p/>
-   * This method should be called when an {@code Operation} is completed or aborted.
-   * @param exception The exception to be counted.
+   * Increment error metrics based on error type.
+   * @param exception The exception associated with this error.
    */
-  void countError(Exception exception) {
-    operationErrorRate.mark();
+  private void onError(Exception exception) {
     if (exception instanceof RouterException) {
-      switch (((RouterException) exception).getErrorCode()) {
-        case AmbryUnavailable:
-          ambryUnavailableErrorCount.inc();
-          break;
+      RouterErrorCode errorCode = ((RouterException) exception).getErrorCode();
+      switch (errorCode) {
         case InvalidBlobId:
           invalidBlobIdErrorCount.inc();
           break;
         case InvalidPutArgument:
           invalidPutArgumentErrorCount.inc();
+          break;
+        case BlobTooLarge:
+          blobTooLargeErrorCount.inc();
+          break;
+        case BadInputChannel:
+          badInputChannelErrorCount.inc();
+          break;
+        case BlobDeleted:
+          blobDeletedErrorCount.inc();
+          break;
+        case BlobExpired:
+          blobExpiredErrorCount.inc();
+          break;
+        case AmbryUnavailable:
+          ambryUnavailableErrorCount.inc();
           break;
         case OperationTimedOut:
           operationTimedOutErrorCount.inc();
@@ -289,23 +299,11 @@ public class NonBlockingRouterMetrics {
         case UnexpectedInternalError:
           unexpectedInternalErrorCount.inc();
           break;
-        case BlobTooLarge:
-          blobTooLargeErrorCount.inc();
-          break;
-        case BadInputChannel:
-          badInputChannelErrorCount.inc();
-          break;
         case InsufficientCapacity:
           insufficientCapacityErrorCount.inc();
           break;
-        case BlobDeleted:
-          blobDeletedErrorCount.inc();
-          break;
         case BlobDoesNotExist:
           blobDoesNotExistErrorCount.inc();
-          break;
-        case BlobExpired:
-          blobExpiredErrorCount.inc();
           break;
         default:
           unknownErrorCountForOperation.inc();
@@ -313,6 +311,54 @@ public class NonBlockingRouterMetrics {
       }
     } else {
       unknownErrorCountForOperation.inc();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a putBlob operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onPutBlobError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      putBlobErrorCount.inc();
+      operationErrorRate.mark();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a getBlob operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onGetBlobError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      getBlobErrorCount.inc();
+      operationErrorRate.mark();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a getBlobInfo operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onGetBlobInfoError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      getBlobInfoErrorCount.inc();
+      operationErrorRate.mark();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a deleteBlob operation related error.
+   * @param e the {@link Exception} associated with the error.
+   */
+  void onDeleteBlobError(Exception e) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      deleteBlobErrorCount.inc();
+      operationErrorRate.mark();
     }
   }
 
