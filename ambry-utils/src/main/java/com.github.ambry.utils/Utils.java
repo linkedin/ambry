@@ -530,7 +530,7 @@ public class Utils {
    * Ensures that a given File is present. The file is pre-allocated with a given capacity using fallocate on linux
    * @param file file path to create and allocate
    * @param capacityBytes the number of bytes to pre-allocate
-   * @throws IOException 
+   * @throws IOException
    */
   public static void preAllocateFileIfNeeded(File file, long capacityBytes)
       throws IOException {
