@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 #
 # Copyright (C) 2014-2016 LinkedIn Corp. All rights reserved.
 #
@@ -9,8 +10,6 @@
 # under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 # CONDITIONS OF ANY KIND, either express or implied.
 #
-
-#!/usr/bin/env bash
 
 ##############################################################################
 ##
