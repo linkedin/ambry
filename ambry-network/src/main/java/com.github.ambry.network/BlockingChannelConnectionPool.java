@@ -224,10 +224,14 @@ class BlockingChannelInfo {
         // decrement the number of connections to the host and port. we were not able to maintain the count
         numberOfConnections.decrementAndGet();
         // at this point we are good to clean up the available connections since re-creation failed
-          while(!blockingChannelAvailableConnections.isEmpty()){
-            blockingChannelAvailableConnections.poll().disconnect();
-            numberOfConnections.decrementAndGet();
+        do {
+          BlockingChannel channel = blockingChannelAvailableConnections.poll();
+          if (channel == null) {
+            break;
           }
+          channel.disconnect();
+          numberOfConnections.decrementAndGet();
+        } while (true);
       }
     } finally {
       rwlock.readLock().unlock();
