@@ -124,7 +124,7 @@ public class PlainTextTransmission extends Transmission {
     long sendTimeMs = SystemTime.getInstance().milliseconds() - networkSend.getSendStartTimeInMs();
     networkSend.onSendComplete();
     double sendBytesRate = networkSend.getPayload().sizeInBytes() / ((double) sendTimeMs / SystemTime.MsPerSec);
-    metrics.plaintextSendBytesRate.update((long) sendBytesRate);
+    metrics.plaintextSendBytesRate.mark((long) sendBytesRate);
   }
 
   /**
@@ -135,6 +135,6 @@ public class PlainTextTransmission extends Transmission {
     long receiveTimeMs = SystemTime.getInstance().milliseconds() - networkReceive.getReceiveStartTimeInMs();
     double receiveBytesRate =
         networkReceive.getReceivedBytes().sizeRead() / ((double) receiveTimeMs / SystemTime.MsPerSec);
-    metrics.plaintextReceiveBytesRate.update((long) receiveBytesRate);
+    metrics.plaintextReceiveBytesRate.mark((long) receiveBytesRate);
   }
 }

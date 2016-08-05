@@ -16,6 +16,7 @@ package com.github.ambry.network;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,9 +45,9 @@ public class NetworkMetrics {
 
   // Plaintext metrics
   // the bytes rate to receive the entire request
-  public final Histogram plaintextReceiveBytesRate;
+  public final Meter plaintextReceiveBytesRate;
   // the bytes rate to send the entire response
-  public final Histogram plaintextSendBytesRate;
+  public final Meter plaintextSendBytesRate;
   // the time to receive 1KB data in one read call
   public final Histogram plaintextReceiveTimePerKB;
   // the time to send data in one write call
@@ -61,9 +62,9 @@ public class NetworkMetrics {
   public final Counter sslHandshakeCount;
   public final Counter sslHandshakeErrorCount;
   // the bytes rate to receive the entire request
-  public final Histogram sslReceiveBytesRate;
+  public final Meter sslReceiveBytesRate;
   // the bytes rate to send the entire response
-  public final Histogram sslSendBytesRate;
+  public final Meter sslSendBytesRate;
   // the time to receive 1KB data in one read call
   public final Histogram sslReceiveTimePerKB;
   // the time to send data in one write call
@@ -102,12 +103,12 @@ public class NetworkMetrics {
     selectorCloseKeyErrorCount = registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseKeyErrorCount"));
     selectorCloseSocketErrorCount =
         registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseSocketErrorCount"));
-    plaintextReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveBytesRate"));
-    plaintextSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendBytesRate"));
+    plaintextReceiveBytesRate = registry.meter(MetricRegistry.name(Selector.class, "PlaintextReceiveBytesRate"));
+    plaintextSendBytesRate = registry.meter(MetricRegistry.name(Selector.class, "PlaintextSendBytesRate"));
     plaintextReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveTimePerKB"));
     plaintextSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTimePerKB"));
-    sslReceiveBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveBytesRate"));
-    sslSendBytesRate = registry.histogram(MetricRegistry.name(Selector.class, "SslSendBytesRate"));
+    sslReceiveBytesRate = registry.meter(MetricRegistry.name(Selector.class, "SslReceiveBytesRate"));
+    sslSendBytesRate = registry.meter(MetricRegistry.name(Selector.class, "SslSendBytesRate"));
     sslEncryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionTimePerKB"));
     sslDecryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionTimePerKB"));
     sslReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveTimePerKB"));
