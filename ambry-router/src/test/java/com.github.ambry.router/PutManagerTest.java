@@ -24,7 +24,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MetadataContentSerDe;
-import com.github.ambry.messageformat.MultiPartMetadata;
+import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -738,11 +738,11 @@ public class PutManagerTest {
     PutRequest request = deserializePutRequest(serializedRequest);
     if (request.getBlobType() == BlobType.MetadataBlob) {
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
-      MultiPartMetadata metadata = MetadataContentSerDe
+      CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe
           .deserializeMetadataContentRecord(ByteBuffer.wrap(data), new BlobIdFactory(mockClusterMap));
-      Assert.assertEquals("Wrong max chunk size in metadata", chunkSize, metadata.getChunkSize());
-      Assert.assertEquals("Wrong total size in metadata", originalPutContent.length, metadata.getTotalSize());
-      List<StoreKey> dataBlobIds = metadata.getKeys();
+      Assert.assertEquals("Wrong max chunk size in metadata", chunkSize, compositeBlobInfo.getChunkSize());
+      Assert.assertEquals("Wrong total size in metadata", originalPutContent.length, compositeBlobInfo.getTotalSize());
+      List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
       byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
       int offset = 0;
       for (StoreKey key : dataBlobIds) {

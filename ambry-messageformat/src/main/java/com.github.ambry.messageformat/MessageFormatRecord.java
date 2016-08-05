@@ -649,7 +649,7 @@ public class MessageFormatRecord {
       }
     }
 
-    public static MultiPartMetadata deserializeMetadataContentRecord(DataInputStream stream,
+    public static CompositeBlobInfo deserializeMetadataContentRecord(DataInputStream stream,
         StoreKeyFactory storeKeyFactory)
         throws IOException, MessageFormatException {
       List<StoreKey> keys = new ArrayList<StoreKey>();
@@ -658,7 +658,7 @@ public class MessageFormatRecord {
         StoreKey storeKey = storeKeyFactory.getStoreKey(stream);
         keys.add(storeKey);
       }
-      return new MultiPartMetadata(keys);
+      return new CompositeBlobInfo(keys);
     }
   }
 
@@ -671,7 +671,7 @@ public class MessageFormatRecord {
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version         - The version of the metadata content record
    *
-   *  max chunk size  - maximum size of a data chunk in bytes
+   *  chunk size      - The size of each data chunk except the last, which could possibly be smaller.
    *
    *  total size      - total size of the object this metadata describes.
    *
@@ -681,8 +681,8 @@ public class MessageFormatRecord {
    *
    */
   public static class Metadata_Content_Format_V2 {
-    public static final int Max_Chunk_Size_Field_Size_In_Bytes = 4;
-    public static final int Total_Size_Field_Size_In_Bytes = 8;
+    private static final int Chunk_Size_Field_Size_In_Bytes = 4;
+    private static final int Total_Size_Field_Size_In_Bytes = 8;
 
     /**
      * Get the total size of the metadata content record.
@@ -692,7 +692,7 @@ public class MessageFormatRecord {
      */
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
       return Version_Field_Size_In_Bytes +
-          Max_Chunk_Size_Field_Size_In_Bytes +
+          Chunk_Size_Field_Size_In_Bytes +
           Total_Size_Field_Size_In_Bytes +
           (numberOfKeys * keySize);
     }
@@ -700,7 +700,7 @@ public class MessageFormatRecord {
     /**
      * Serialize a metadata content record.
      * @param outputBuffer The buffer to serialize into.
-     * @param chunkSize The maximum data chunk size to store in the record.
+     * @param chunkSize The size of each data chunk except the last, which could possibly be smaller.
      * @param totalSize The total size of the object this metadata describes.
      */
     public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, int chunkSize, long totalSize,
@@ -724,11 +724,11 @@ public class MessageFormatRecord {
      * Deserialize a metadata content record from a stream.
      * @param stream The stream to read the serialized record from.
      * @param storeKeyFactory The factory to use for parsing keys in the serialized metadata content record.
-     * @return A {@link MultiPartMetadata} object with the max chunk size and list of keys from the record.
+     * @return A {@link CompositeBlobInfo} object with the chunk size and list of keys from the record.
      * @throws IOException
      * @throws MessageFormatException
      */
-    public static MultiPartMetadata deserializeMetadataContentRecord(DataInputStream stream,
+    public static CompositeBlobInfo deserializeMetadataContentRecord(DataInputStream stream,
         StoreKeyFactory storeKeyFactory)
         throws IOException, MessageFormatException {
       List<StoreKey> keys = new ArrayList<StoreKey>();
@@ -739,7 +739,7 @@ public class MessageFormatRecord {
         StoreKey storeKey = storeKeyFactory.getStoreKey(stream);
         keys.add(storeKey);
       }
-      return new MultiPartMetadata(chunkSize, totalSize, keys);
+      return new CompositeBlobInfo(chunkSize, totalSize, keys);
     }
   }
 }

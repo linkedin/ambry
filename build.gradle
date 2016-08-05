@@ -45,7 +45,7 @@ subprojects {
             resources.srcDir file('src/test/resources')
         }
     }
-    
+
     dependencies {
         compile "log4j:log4j:$log4jVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"
@@ -70,7 +70,7 @@ subprojects {
         testClassesDir = sourceSets.unitTest.output.classesDir
         classpath += sourceSets.unitTest.runtimeClasspath
     }
-    
+
     // only run unit tests when doing a standard build,
     // but run integration tests too when running the test target
     check.dependsOn -= test

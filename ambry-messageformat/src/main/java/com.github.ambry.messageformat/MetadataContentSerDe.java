@@ -51,7 +51,7 @@ public class MetadataContentSerDe {
    * @throws IOException if an IOException is encountered during deserialization.
    * @throws MessageFormatException if an unknown version is encountered in the header of the serialized input.
    */
-  public static MultiPartMetadata deserializeMetadataContentRecord(ByteBuffer buf, StoreKeyFactory storeKeyFactory)
+  public static CompositeBlobInfo deserializeMetadataContentRecord(ByteBuffer buf, StoreKeyFactory storeKeyFactory)
       throws IOException, MessageFormatException {
     int version = buf.getShort();
     switch (version) {

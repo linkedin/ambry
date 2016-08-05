@@ -153,24 +153,26 @@ public class MessageFormatRecordTest {
     // Test Metadata Blob V1
     List<StoreKey> keys = getKeys(60, 5);
     ByteBuffer metadataContent = getSerializedMetadataContentV1(keys);
-    MultiPartMetadata metadata = deserializeMetadataContentV1(metadataContent, new MockIdFactory());
-    Assert.assertEquals("Chunk size doesn't match", MultiPartMetadata.UNDEFINED_CHUNK_SIZE, metadata.getChunkSize());
-    Assert.assertEquals("Total size doesn't match", MultiPartMetadata.UNDEFINED_TOTAL_SIZE, metadata.getTotalSize());
-    Assert.assertEquals("List of keys dont match", keys, metadata.getKeys());
+    CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV1(metadataContent, new MockIdFactory());
+    Assert.assertEquals("Chunk size doesn't match", CompositeBlobInfo.UNDEFINED_CHUNK_SIZE,
+        compositeBlobInfo.getChunkSize());
+    Assert.assertEquals("Total size doesn't match", CompositeBlobInfo.UNDEFINED_TOTAL_SIZE,
+        compositeBlobInfo.getTotalSize());
+    Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
     // no testing of corruption as we metadata content record doesn't have crc
   }
 
   @Test
   public void testMetadataContentRecordV2()
       throws IOException, MessageFormatException {
-    // Test Metadata Blob V1
+    // Test Metadata Blob V2
     List<StoreKey> keys = getKeys(60, 5);
     int chunkSize = ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE);
     long totalSize = (long) keys.size() * chunkSize;
     ByteBuffer metadataContent = getSerializedMetadataContentV2(chunkSize, totalSize, keys);
-    MultiPartMetadata metadata = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
-    Assert.assertEquals("Chunk size doesn't match", chunkSize, metadata.getChunkSize());
-    Assert.assertEquals("List of keys dont match", keys, metadata.getKeys());
+    CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
+    Assert.assertEquals("Chunk size doesn't match", chunkSize, compositeBlobInfo.getChunkSize());
+    Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
     // no testing of corruption as we metadata content record doesn't have crc
   }
 
@@ -207,7 +209,7 @@ public class MessageFormatRecordTest {
     return metadataContent;
   }
 
-  private MultiPartMetadata deserializeMetadataContentV1(ByteBuffer metadataContent, StoreKeyFactory storeKeyFactory)
+  private CompositeBlobInfo deserializeMetadataContentV1(ByteBuffer metadataContent, StoreKeyFactory storeKeyFactory)
       throws MessageFormatException, IOException {
     ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(metadataContent);
     DataInputStream inputStream = new DataInputStream(byteBufferInputStream);
@@ -218,7 +220,7 @@ public class MessageFormatRecordTest {
         .deserializeMetadataContentRecord(inputStream, storeKeyFactory);
   }
 
-  private MultiPartMetadata deserializeMetadataContentV2(ByteBuffer metadataContent, StoreKeyFactory storeKeyFactory)
+  private CompositeBlobInfo deserializeMetadataContentV2(ByteBuffer metadataContent, StoreKeyFactory storeKeyFactory)
       throws MessageFormatException, IOException {
     ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(metadataContent);
     DataInputStream inputStream = new DataInputStream(byteBufferInputStream);
@@ -325,10 +327,12 @@ public class MessageFormatRecordTest {
 
     // deserialize and check for metadata contents
     metadataContent.rewind();
-    MultiPartMetadata metadata = deserializeMetadataContentV1(metadataContent, new MockIdFactory());
-    Assert.assertEquals("Chunk size doesn't match", MultiPartMetadata.UNDEFINED_CHUNK_SIZE, metadata.getChunkSize());
-    Assert.assertEquals("Total size doesn't match", MultiPartMetadata.UNDEFINED_TOTAL_SIZE, metadata.getTotalSize());
-    Assert.assertEquals("List of keys dont match", keys, metadata.getKeys());
+    CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV1(metadataContent, new MockIdFactory());
+    Assert.assertEquals("Chunk size doesn't match", CompositeBlobInfo.UNDEFINED_CHUNK_SIZE,
+        compositeBlobInfo.getChunkSize());
+    Assert.assertEquals("Total size doesn't match", CompositeBlobInfo.UNDEFINED_TOTAL_SIZE,
+        compositeBlobInfo.getTotalSize());
+    Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
 
     testBlobCorruption(blob, blobSize, metadataContentSize);
   }
@@ -355,10 +359,10 @@ public class MessageFormatRecordTest {
 
     // deserialize and check for metadata contents
     metadataContent.rewind();
-    MultiPartMetadata metadata = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
-    Assert.assertEquals("Chunk size doesn't match", chunkSize, metadata.getChunkSize());
-    Assert.assertEquals("Total size doesn't match", totalSize, metadata.getTotalSize());
-    Assert.assertEquals("List of keys dont match", keys, metadata.getKeys());
+    CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
+    Assert.assertEquals("Chunk size doesn't match", chunkSize, compositeBlobInfo.getChunkSize());
+    Assert.assertEquals("Total size doesn't match", totalSize, compositeBlobInfo.getTotalSize());
+    Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
 
     testBlobCorruption(blob, blobSize, metadataContentSize);
   }
