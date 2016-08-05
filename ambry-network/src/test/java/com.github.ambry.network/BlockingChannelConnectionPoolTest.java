@@ -164,49 +164,39 @@ public class BlockingChannelConnectionPoolTest {
       throws InterruptedException, ConnectionPoolTimeoutException, IOException {
     int port = 6680;
     String host = "127.0.0.1";
-
     SocketServer server = startServer(port);
-
     BlockingChannelInfo channelInfo =
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(new Properties())), host,
             new Port(port, PortType.PLAINTEXT), new MetricRegistry(), sslSocketFactory, sslConfig);
-
+    // ask for N no of connections
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
     BlockingChannel blockingChannel1 = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
-
     BlockingChannel blockingChannel2 = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 2);
-
     BlockingChannel blockingChannel3 = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 3);
-
+    // realease 2 of them back to pool
     channelInfo.releaseBlockingChannel(blockingChannel2);
     channelInfo.releaseBlockingChannel(blockingChannel3);
-
     Assert.assertEquals("Available connections count mismatch ", 2,
         channelInfo.availableConnections.getValue().intValue());
-
     // shutdown server
     server.shutdown();
-
     // destroy one of the connections and verify that the available connections cleaned up
     channelInfo.destroyBlockingChannel(blockingChannel1);
-
     Assert.assertEquals("Available connections should have not been cleaned up", 0,
         channelInfo.availableConnections.getValue().intValue());
 
     // bring up the server
     startServer(port);
-
+    // ask for 2 more connections
     BlockingChannel blockingChannel4 = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 1);
-
     BlockingChannel blockingChannel5 = channelInfo.getBlockingChannel(1000);
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 2);
-
+    // release one of them back to pool
     channelInfo.releaseBlockingChannel(blockingChannel4);
-
     // verify that destroy connection will not trigger clean up of available connections
     // as connection recreation should have passed
     channelInfo.destroyBlockingChannel(blockingChannel5);
