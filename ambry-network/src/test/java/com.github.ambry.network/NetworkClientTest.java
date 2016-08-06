@@ -310,6 +310,8 @@ public class NetworkClientTest {
     time.sleep(2000);
     responseInfoList = networkClient.sendAndPoll(requestInfoList, 100);
     Assert.assertEquals(1, responseInfoList.size());
+    Assert.assertEquals("Error received should be ConnectionUnavailable", NetworkClientErrorCode.ConnectionUnavailable,
+        responseInfoList.get(0).getError());
     responseInfoList.clear();
     selector.setState(MockSelectorState.Good);
   }
