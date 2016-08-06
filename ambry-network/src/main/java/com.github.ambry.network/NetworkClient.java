@@ -137,6 +137,10 @@ public class NetworkClient implements Closeable {
         logger.trace("Failing request to host {} port {} due to connection unavailability",
             requestMetadata.requestInfo.getHost(), requestMetadata.requestInfo.getPort());
         iter.remove();
+        if (requestMetadata.pendingConnectionId != null) {
+          pendingConnectionsToAssociatedRequests.remove(requestMetadata.pendingConnectionId);
+          requestMetadata.pendingConnectionId = null;
+        }
         networkMetrics.connectionTimeOutError.inc();
       } else {
         // Since requests are ordered by time, once the first request that cannot be dropped is found,
