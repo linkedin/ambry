@@ -157,6 +157,67 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test RequestResponseHandler thread exit flow. If the RequestResponseHandlerThread exits on its own (due to a
+   * Throwable), then the router gets closed immediately along with the completion of all the operations.
+   */
+  @Test
+  public void testRequestResponseHandlerThreadExitFlow()
+      throws Exception {
+    Properties props = getNonBlockingRouterProperties("DC1");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    MockTime mockTime = new MockTime();
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+        new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
+        mockClusterMap, mockTime);
+
+    assertExpectedThreadCounts(1);
+
+    setOperationParams();
+    mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
+    FutureResult<String> futureResult =
+        (FutureResult<String>) router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    try {
+      while (!futureResult.isDone()) {
+        mockTime.sleep(1000);
+        Thread.yield();
+      }
+      String blobId = futureResult.get();
+      Assert.fail("The operation should have failed");
+    } catch (ExecutionException e) {
+      Assert.assertEquals("Should have received Operation timeout exception", RouterErrorCode.OperationTimedOut,
+          ((RouterException) e.getCause()).getErrorCode());
+    }
+
+    setOperationParams();
+    mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
+    futureResult = (FutureResult<String>) router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+
+    // Now wait till the thread dies
+    while (TestUtils.numThreadsByThisName("RequestResponseHandlerThread") > 0) {
+      Thread.yield();
+    }
+
+    try {
+      futureResult.get();
+      Assert.fail("The operation should have failed");
+    } catch (ExecutionException e) {
+      Assert.assertEquals("Should have received Operation timeout exception", RouterErrorCode.RouterClosed,
+          ((RouterException) e.getCause()).getErrorCode());
+    }
+
+    assertClosed();
+
+    // Ensure that both operations failed and with the right exceptions.
+    Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
+        TestUtils.numThreadsByThisName("ChunkFillerThread"));
+    Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
+        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  /**
    * Test that multiple scaling units can be instantiated, exercised and closed.
    */
   @Test

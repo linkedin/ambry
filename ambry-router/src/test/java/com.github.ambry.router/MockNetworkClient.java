@@ -67,8 +67,7 @@ class MockNetworkClient extends NetworkClient {
    * {@inheritDoc}
    */
   @Override
-  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos, int pollTimeoutMs)
-      throws IOException {
+  public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos, int pollTimeoutMs) {
     processedResponseCount = responseCount;
     List<ResponseInfo> responseInfoList = super.sendAndPoll(requestInfos, pollTimeoutMs);
     responseCount += responseInfoList.size();

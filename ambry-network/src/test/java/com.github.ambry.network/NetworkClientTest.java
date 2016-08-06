@@ -196,7 +196,7 @@ public class NetworkClientTest {
     selector.setState(MockSelectorState.ThrowExceptionOnConnect);
     try {
       networkClient.sendAndPoll(requestInfoList, 100);
-    } catch (IOException e) {
+    } catch (Exception e) {
       Assert.fail("If selector throws on connect, sendAndPoll() should not throw");
     }
   }
@@ -327,8 +327,8 @@ public class NetworkClientTest {
     selector.setState(MockSelectorState.ThrowExceptionOnPoll);
     try {
       networkClient.sendAndPoll(requestInfoList, 100);
-      Assert.fail("If selector throws on poll, sendAndPoll() should throw as well");
-    } catch (IOException e) {
+    } catch (Exception e) {
+      Assert.fail("If selector throws on poll, sendAndPoll() should not throw.");
     }
     selector.setState(MockSelectorState.Good);
   }

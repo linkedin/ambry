@@ -425,19 +425,24 @@ class NonBlockingRouter implements Router {
      * @return a list of {@link RequestInfo} that contains the requests to be sent out.
      */
     private List<RequestInfo> pollForRequests() {
-      // these are ids that were successfully put for an operation that eventually failed
-      idsToDelete.clear();
-      putManager.getIdsToDelete(idsToDelete);
-      // this is a best effort to delete ids for cleanup purposes (these may fail and we will
-      // not do anything about it at this time).
-      for (String blobId : idsToDelete) {
-        // possibly add a batch api going forward.
-        deleteManager.submitDeleteBlobOperation(blobId, new FutureResult<Void>(), null);
-      }
       List<RequestInfo> requests = new ArrayList<RequestInfo>();
-      putManager.poll(requests);
-      getManager.poll(requests);
-      deleteManager.poll(requests);
+      try {
+        // these are ids that were successfully put for an operation that eventually failed
+        idsToDelete.clear();
+        putManager.getIdsToDelete(idsToDelete);
+        // this is a best effort to delete ids for cleanup purposes (these may fail and we will
+        // not do anything about it at this time).
+        for (String blobId : idsToDelete) {
+          // possibly add a batch api going forward.
+          deleteManager.submitDeleteBlobOperation(blobId, new FutureResult<Void>(), null);
+        }
+        putManager.poll(requests);
+        getManager.poll(requests);
+        deleteManager.poll(requests);
+      } catch (Exception e) {
+        logger.error("Operation Manager poll received an unexpected error: ", e);
+        routerMetrics.operationManagerPollErrorCount.inc();
+      }
       return requests;
     }
 
@@ -447,20 +452,25 @@ class NonBlockingRouter implements Router {
      */
     private void onResponse(List<ResponseInfo> responseInfoList) {
       for (ResponseInfo responseInfo : responseInfoList) {
-        RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
-        RequestOrResponseType type = ((RequestOrResponse) routerRequestInfo.getRequest()).getRequestType();
-        switch (type) {
-          case PutRequest:
-            putManager.handleResponse(responseInfo);
-            break;
-          case GetRequest:
-            getManager.handleResponse(responseInfo);
-            break;
-          case DeleteRequest:
-            deleteManager.handleResponse(responseInfo);
-            break;
-          default:
-            logger.error("Unexpected response type: " + type + " received, discarding");
+        try {
+          RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
+          RequestOrResponseType type = ((RequestOrResponse) routerRequestInfo.getRequest()).getRequestType();
+          switch (type) {
+            case PutRequest:
+              putManager.handleResponse(responseInfo);
+              break;
+            case GetRequest:
+              getManager.handleResponse(responseInfo);
+              break;
+            case DeleteRequest:
+              deleteManager.handleResponse(responseInfo);
+              break;
+            default:
+              logger.error("Unexpected response type: " + type + " received, discarding");
+          }
+        } catch (Exception e) {
+          logger.error("Unexpected error received while handling a response: ", e);
+          routerMetrics.operationManagerHandleResponseErrorCount.inc();
         }
       }
     }
@@ -484,6 +494,7 @@ class NonBlockingRouter implements Router {
         }
       } catch (Throwable e) {
         logger.error("Aborting, as requestResponseHandlerThread received an unexpected error: ", e);
+        routerMetrics.requestResponseHandlerUnexpectedErrorCount.inc();
       } finally {
         networkClient.close();
         shutDownLatch.countDown();

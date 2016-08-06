@@ -84,6 +84,7 @@ public class NetworkMetrics {
 
   public final Counter connectionTimeOutError;
   public final Counter networkClientIOError;
+  public final Counter networkClientException;
   private List<AtomicLong> networkClientPendingRequestList;
 
   public NetworkMetrics(MetricRegistry registry) {
@@ -136,6 +137,7 @@ public class NetworkMetrics {
     requestResponseTotalTime = registry.histogram(MetricRegistry.name(NetworkClient.class, "RequestResponseTotalTime"));
     connectionTimeOutError = registry.counter(MetricRegistry.name(NetworkClient.class, "ConnectionTimeOutError"));
     networkClientIOError = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientIOError"));
+    networkClientException = registry.counter(MetricRegistry.name(NetworkClient.class, "NetworkClientException"));
 
     selectorActiveConnectionsList = new ArrayList<>();
     networkClientPendingRequestList = new ArrayList<>();

@@ -104,6 +104,9 @@ class MockSelector extends Selector {
         if (state.get() == MockSelectorState.ThrowExceptionOnSend) {
           throw new IOException("Mock exception on send");
         }
+        if (state.get() == MockSelectorState.ThrowThrowableOnSend) {
+          throw new Error("Mock throwable on send");
+        }
         if (state.get() == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
         } else {
@@ -207,5 +210,9 @@ enum MockSelectorState {
    * not.
    */
   ThrowExceptionOnAllPoll,
+  /**
+   * Throw a throwable during poll that sends.
+   */
+  ThrowThrowableOnSend,
 }
 

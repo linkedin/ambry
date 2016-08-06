@@ -352,6 +352,7 @@ class PutOperation {
         }
       }
     } catch (Exception e) {
+      routerMetrics.chunkFillerUnexpectedErrorCount.inc();
       readyForPollCallback.onPollReady();
       setOperationExceptionAndComplete(new RouterException("PutOperation fillChunks encountered unexpected error", e,
           RouterErrorCode.UnexpectedInternalError));

@@ -51,6 +51,7 @@ import static org.junit.Assert.fail;
 /**
  * Unit test for {@link DeleteManager} and {@link DeleteOperation}.
  */
+
 public class DeleteManagerTest {
   private static final int AWAIT_TIMEOUT_SECONDS = 2;
   private Time mockTime;
@@ -328,18 +329,18 @@ public class DeleteManagerTest {
     setServerResponse(false);
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.OperationTimedOut, new ErrorCodeChecker() {
-          @Override
-          public void testAndAssert(RouterErrorCode expectedError)
-              throws Exception {
-            CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-            future = router.deleteBlob(blobIdString, new ClientCallback(operationCompleteLatch));
-            do {
-              // increment mock time
-              mockTime.sleep(1000);
-            } while (!operationCompleteLatch.await(10, TimeUnit.MILLISECONDS));
-            assertFailureAndCheckErrorCode(future, expectedError);
-          }
-        });
+      @Override
+      public void testAndAssert(RouterErrorCode expectedError)
+          throws Exception {
+        CountDownLatch operationCompleteLatch = new CountDownLatch(1);
+        future = router.deleteBlob(blobIdString, new ClientCallback(operationCompleteLatch));
+        do {
+          // increment mock time
+          mockTime.sleep(1000);
+        } while (!operationCompleteLatch.await(10, TimeUnit.MILLISECONDS));
+        assertFailureAndCheckErrorCode(future, expectedError);
+      }
+    });
   }
 
   /**
@@ -353,9 +354,10 @@ public class DeleteManagerTest {
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
     HashMap<MockSelectorState, RouterErrorCode> errorCodeHashMap = new HashMap<>();
     errorCodeHashMap.put(MockSelectorState.DisconnectOnSend, RouterErrorCode.OperationTimedOut);
-    errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnAllPoll, RouterErrorCode.RouterClosed);
+    errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnAllPoll, RouterErrorCode.OperationTimedOut);
     errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnConnect, RouterErrorCode.OperationTimedOut);
-    errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnSend, RouterErrorCode.RouterClosed);
+    errorCodeHashMap.put(MockSelectorState.ThrowExceptionOnSend, RouterErrorCode.OperationTimedOut);
+    errorCodeHashMap.put(MockSelectorState.ThrowThrowableOnSend, RouterErrorCode.RouterClosed);
     for (MockSelectorState state : MockSelectorState.values()) {
       if (state == MockSelectorState.Good) {
         continue;
@@ -381,14 +383,14 @@ public class DeleteManagerTest {
       throws Exception {
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
-          @Override
-          public void testAndAssert(RouterErrorCode expectedError)
-              throws Exception {
-            future = router.deleteBlob(blobIdString);
-            router.close();
-            assertFailureAndCheckErrorCode(future, expectedError);
-          }
-        });
+      @Override
+      public void testAndAssert(RouterErrorCode expectedError)
+          throws Exception {
+        future = router.deleteBlob(blobIdString);
+        router.close();
+        assertFailureAndCheckErrorCode(future, expectedError);
+      }
+    });
   }
 
   /**
