@@ -330,15 +330,15 @@ public class GetBlobOperationTest {
     doPut();
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.Blob_Not_Found, replicasCount), mockServerLayout,
         RouterErrorCode.BlobDoesNotExist, new ErrorCodeChecker() {
-          @Override
-          public void testAndAssert(RouterErrorCode expectedError)
-              throws Exception {
-            GetBlobOperation op = createOperationAndComplete(null);
-            Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
-                correlationIdToGetOperation.size());
-            assertFailureAndCheckErrorCode(op, expectedError);
-          }
-        });
+      @Override
+      public void testAndAssert(RouterErrorCode expectedError)
+          throws Exception {
+        GetBlobOperation op = createOperationAndComplete(null);
+        Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+            correlationIdToGetOperation.size());
+        assertFailureAndCheckErrorCode(op, expectedError);
+      }
+    });
   }
 
   /**
@@ -428,7 +428,7 @@ public class GetBlobOperationTest {
     // 3 chunks so blob can be cached completely before reading
     blobSize = maxChunkSize * 2 + 1;
     doPut();
-    getAndAssertSuccess(true, null);
+    getAndAssertSuccess(true, false);
   }
 
   /**
@@ -439,10 +439,7 @@ public class GetBlobOperationTest {
   public void testDelayedChunks()
       throws Exception {
     doPut();
-    final CountDownLatch readIntoLatch = new CountDownLatch(1);
-    RouterTestHelpers.setDataBlobGetLatchForAllServers(readIntoLatch, mockServerLayout);
-    getAndAssertSuccess(false, readIntoLatch);
-    RouterTestHelpers.setDataBlobGetLatchForAllServers(null, mockServerLayout);
+    getAndAssertSuccess(false, true);
   }
 
   /**
@@ -543,7 +540,7 @@ public class GetBlobOperationTest {
    */
   private void getAndAssertSuccess()
       throws Exception {
-    getAndAssertSuccess(false, null);
+    getAndAssertSuccess(false, false);
   }
 
   /**
@@ -551,10 +548,10 @@ public class GetBlobOperationTest {
    * and ensure that the whole blob data is read out and the contents match.
    * @param getChunksBeforeRead {@code true} if all chunks should be cached by the router before reading from the
    *                            stream.
-   * @param readIntoLatch if non-null, this latch will be flipped right after
-   *                      {@link ReadableStreamChannel#readInto(AsyncWritableChannel, Callback)} is called
+   * @param initiateReadBeforeChunkGet whether readInto() should be initiated immediately before data chunks are
+   *                                   fetched by the router to simulate chunk arrival delay.
    */
-  private void getAndAssertSuccess(final boolean getChunksBeforeRead, final CountDownLatch readIntoLatch)
+  private void getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet)
       throws Exception {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
@@ -570,20 +567,23 @@ public class GetBlobOperationTest {
           operationException.set(exception);
           readCompleteLatch.countDown();
         } else {
+          final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
+          final Future<Long> preSetReadIntoFuture =
+              initiateReadBeforeChunkGet ? result.readInto(asyncWritableChannel, null) : null;
           Utils.newThread(new Runnable() {
             @Override
             public void run() {
               if (getChunksBeforeRead) {
-                try {
-                  // wait for all chunks (data + metadata) to be received
-                  while (mockNetworkClient.getProcessedResponseCount()
-                      < numChunks * routerConfig.routerGetRequestParallelism) {
-                    Thread.sleep(10);
-                  }
-                } catch (InterruptedException ignored) {
+                // wait for all chunks (data + metadata) to be received
+                while (mockNetworkClient.getProcessedResponseCount()
+                    < numChunks * routerConfig.routerGetRequestParallelism) {
+                  Thread.yield();
                 }
               }
-              assertSuccess(result, readCompleteLatch, readCompleteResult, readCompleteException, readIntoLatch);
+              Future<Long> readIntoFuture =
+                  initiateReadBeforeChunkGet ? preSetReadIntoFuture : result.readInto(asyncWritableChannel, null);
+              assertSuccess(readIntoFuture, asyncWritableChannel, readCompleteLatch, readCompleteResult,
+                  readCompleteException);
             }
           }, false).start();
         }
@@ -659,16 +659,20 @@ public class GetBlobOperationTest {
    * Assert that the operation is complete and successful. Note that the future completion and callback invocation
    * happens outside of the GetOperation, so those are not checked here. But at this point, the operation result should
    * be ready.
+   *
+   * @param readIntoFuture The future associated with the read on the {@link ReadableStreamChannel} result of the
+   *                       operation.
+   * @param asyncWritableChannel The {@link ByteBufferAsyncWritableChannel} to which bytes will be written by the
+   *                             operation.
+   * @param readCompleteLatch The latch to count down once the read is completed.
+   * @param readCompleteResult This will contain the bytes written on return.
+   * @param readCompleteException This will contain any exceptions encountered during the read.
    */
-  private void assertSuccess(ReadableStreamChannel readableStreamChannel, CountDownLatch readCompleteLatch,
-      AtomicLong readCompleteResult, AtomicReference<Exception> readCompleteException, CountDownLatch readIntoLatch) {
+  private void assertSuccess(Future<Long> readIntoFuture, ByteBufferAsyncWritableChannel asyncWritableChannel,
+      CountDownLatch readCompleteLatch, AtomicLong readCompleteResult,
+      AtomicReference<Exception> readCompleteException) {
     try {
-      ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
       long written;
-      Future<Long> readIntoFuture = readableStreamChannel.readInto(asyncWritableChannel, null);
-      if (readIntoLatch != null) {
-        readIntoLatch.countDown();
-      }
       Assert.assertTrue("ReadyForPollCallback should have been invoked as readInto() was called",
           mockNetworkClient.getAndClearWokenUpStatus());
       // Compare byte by byte.

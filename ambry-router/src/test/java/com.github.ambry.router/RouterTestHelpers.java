@@ -23,7 +23,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -186,18 +185,6 @@ class RouterTestHelpers {
     ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
     for (MockServer mockServer : mockServers) {
       mockServer.setGetErrorOnDataBlobOnly(getErrorOnDataBlobOnly);
-    }
-  }
-
-  /**
-   * Introduce a latch that all mock servers will wait for before performing data blob get operations.
-   * @param dataBlobGetLatch The {@link CountDownLatch} to wait for.
-   * @param serverLayout A {@link MockServerLayout} containing the {@link MockServer}s to change settings on.
-   */
-  static void setDataBlobGetLatchForAllServers(CountDownLatch dataBlobGetLatch, MockServerLayout serverLayout) {
-    ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
-    for (MockServer mockServer : mockServers) {
-      mockServer.setDataBlobGetLatch(dataBlobGetLatch);
     }
   }
 

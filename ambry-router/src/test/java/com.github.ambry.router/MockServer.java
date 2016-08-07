@@ -61,7 +61,6 @@ class MockServer {
   private boolean shouldRespond = true;
   private short blobFormatVersion = MessageFormatRecord.Blob_Version_V2;
   private boolean getErrorOnDataBlobOnly = false;
-  private CountDownLatch dataBlobGetLatch = null;
   private final ClusterMap clusterMap;
   private final String dataCenter;
 
@@ -150,13 +149,6 @@ class MockServer {
       String id = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0).getID();
       isDataBlob = blobs.get(id).type == BlobType.DataBlob;
     } catch (Exception ignored) {
-    }
-
-    if (dataBlobGetLatch != null && isDataBlob) {
-      try {
-        dataBlobGetLatch.await();
-      } catch (InterruptedException ignored) {
-      }
     }
 
     if (!getErrorOnDataBlobOnly || isDataBlob) {
@@ -350,14 +342,6 @@ class MockServer {
    */
   public void setBlobFormatVersion(short blobFormatVersion) {
     this.blobFormatVersion = blobFormatVersion;
-  }
-
-  /**
-   * Introduce a latch that the server will wait for before responding to a data blob get request.
-   * @param dataBlobGetLatch The {@link CountDownLatch} to wait for.
-   */
-  public void setDataBlobGetLatch(CountDownLatch dataBlobGetLatch) {
-    this.dataBlobGetLatch = dataBlobGetLatch;
   }
 }
 
