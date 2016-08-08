@@ -173,6 +173,7 @@ public class MessageFormatRecordTest {
       ByteBuffer metadataContent = getSerializedMetadataContentV2(chunkSizes[i], totalSizes[i], keys);
       CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
       Assert.assertEquals("Chunk size doesn't match", chunkSizes[i], compositeBlobInfo.getChunkSize());
+      Assert.assertEquals("Total size doesn't match", totalSizes[i], compositeBlobInfo.getTotalSize());
       Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
       // no testing of corruption as the metadata content record doesn't have crc
     }
