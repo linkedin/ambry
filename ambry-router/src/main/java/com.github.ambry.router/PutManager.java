@@ -251,16 +251,20 @@ class PutManager {
    */
   void onComplete(PutOperation op) {
     Exception e = op.getOperationException();
+    String blobId = op.getBlobIdString();
+    if (blobId == null && e == null) {
+      e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
+    }
     if (e != null) {
-      // @todo add blobs in the metadata chunk to ids_to_delete
+      blobId = null;
       routerMetrics.onPutBlobError(e);
+      // @todo add blobs in the metadata chunk to ids_to_delete
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback
-        .completeOperation(op.getFuture(), op.getCallback(), op.getBlobIdString(), op.getOperationException());
+    operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
   /**

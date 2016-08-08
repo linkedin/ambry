@@ -274,6 +274,9 @@ class PutOperation {
   void onChunkOperationComplete(PutChunk chunk) {
     if (chunk.getChunkBlobId() == null) {
       // the overall operation has failed if any of the chunk fails.
+      if (chunk.getChunkException() == null) {
+        logger.error("Operation on chunk failed, but no exception was set");
+      }
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
       operationCompleted = true;
     } else if (numDataChunks == 1 || chunk == metadataPutChunk) {
@@ -660,6 +663,13 @@ class PutOperation {
     }
 
     /**
+     * @return the {@link RouterException}, if any, encountered for the current chunk.
+     */
+    RouterException getChunkException() {
+      return chunkException;
+    }
+
+    /**
      * @return true if this PutChunk is free so a chunk of the overall blob can be filled in.
      */
     boolean isFree() {
@@ -720,6 +730,9 @@ class PutOperation {
         state = ChunkState.Ready;
       } catch (RouterException e) {
         setOperationExceptionAndComplete(e);
+      } catch (Exception e) {
+        setOperationExceptionAndComplete(new RouterException("Operation tracker could not be initialized", e,
+            RouterErrorCode.UnexpectedInternalError));
       }
     }
 

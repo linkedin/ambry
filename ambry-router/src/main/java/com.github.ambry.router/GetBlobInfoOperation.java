@@ -323,7 +323,11 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
 
     if (operationCompleted) {
       Exception e = operationException.get();
+      if (operationResult == null && e == null) {
+        e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
+      }
       if (e != null) {
+        operationResult = null;
         routerMetrics.onGetBlobInfoError(e);
       }
       routerMetrics.getBlobInfoOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);

@@ -83,10 +83,6 @@ class SimpleOperationTracker implements OperationTracker {
     this.successTarget = successTarget;
     this.parallelism = parallelism;
     List<ReplicaId> replicas = partitionId.getReplicaIds();
-    if (replicas.size() < successTarget) {
-      throw new IllegalArgumentException(
-          "Total Replica count " + replicas.size() + " is less than success target " + successTarget);
-    }
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
     }
@@ -101,6 +97,10 @@ class SimpleOperationTracker implements OperationTracker {
       }
     }
     totalReplicaCount = replicaPool.size();
+    if (totalReplicaCount < successTarget) {
+      throw new IllegalArgumentException(
+          "Total Replica count " + totalReplicaCount + " is less than success target " + successTarget);
+    }
     this.otIterator = new OpTrackerIterator();
   }
 

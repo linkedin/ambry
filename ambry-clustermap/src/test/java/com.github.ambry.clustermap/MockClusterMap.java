@@ -35,6 +35,7 @@ public class MockClusterMap implements ClusterMap {
   private final List<MockDataNodeId> dataNodes;
   private final int numMountPointsPerNode;
   private final HashSet<String> dataCentersInClusterMap = new HashSet<>();
+  private boolean partitionsUnhealthy = false;
 
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 partitions/replicas per
@@ -161,8 +162,10 @@ public class MockClusterMap implements ClusterMap {
   @Override
   public List<PartitionId> getWritablePartitionIds() {
     List<PartitionId> partitionIdList = new ArrayList<PartitionId>();
-    for (PartitionId partitionId : partitions.values()) {
-      partitionIdList.add(partitionId);
+    if (!partitionsUnhealthy) {
+      for (PartitionId partitionId : partitions.values()) {
+        partitionIdList.add(partitionId);
+      }
     }
     return partitionIdList;
   }
@@ -249,6 +252,11 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
+  public void markAllPartitionsUnavailable() {
+    partitionsUnhealthy = true;
+  }
+
+  @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
     switch (event) {
       case Disk_Error:

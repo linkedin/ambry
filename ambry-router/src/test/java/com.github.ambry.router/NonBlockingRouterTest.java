@@ -30,6 +30,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -65,12 +66,24 @@ public class NonBlockingRouterTest {
   private GetManager getManager;
   private DeleteManager deleteManager;
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
+  private final MockTime mockTime;
+  private final MockClusterMap mockClusterMap;
 
   // Request params;
   BlobProperties putBlobProperties;
   byte[] putUserMetadata;
   byte[] putContent;
   ReadableStreamChannel putChannel;
+
+  /**
+   * Initialize parameters common to all tests.
+   * @throws Exception
+   */
+  public NonBlockingRouterTest()
+      throws Exception {
+    mockTime = new MockTime();
+    mockClusterMap = new MockClusterMap();
+  }
 
   /**
    * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
@@ -90,6 +103,20 @@ public class NonBlockingRouterTest {
     return properties;
   }
 
+  private void setRouter()
+      throws IOException {
+    setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap));
+  }
+
+  private void setRouter(Properties props, MockServerLayout mockServerLayout)
+      throws IOException {
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+        new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
+        mockTime);
+  }
+
   private void setOperationParams() {
     putBlobProperties = new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     putUserMetadata = new byte[10];
@@ -105,7 +132,6 @@ public class NonBlockingRouterTest {
   @Test
   public void testNonBlockingRouterFactory()
       throws Exception {
-    MockClusterMap mockClusterMap = new MockClusterMap();
     Properties props = getNonBlockingRouterProperties("NotInClusterMap");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     try {
@@ -130,29 +156,58 @@ public class NonBlockingRouterTest {
   @Test
   public void testRouterBasic()
       throws Exception {
-    Properties props = getNonBlockingRouterProperties("DC1");
-    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    MockClusterMap mockClusterMap = new MockClusterMap();
-    MockTime mockTime = new MockTime();
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
-        mockClusterMap, mockTime);
-
+    setRouter();
     assertExpectedThreadCounts(1);
-
     setOperationParams();
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
-    router.getBlob(blobId);
-    router.getBlobInfo(blobId);
-    router.deleteBlob(blobId);
+    router.getBlob(blobId).get();
+    router.getBlobInfo(blobId).get();
+    router.deleteBlob(blobId).get();
     router.close();
     assertExpectedThreadCounts(0);
 
     //submission after closing should return a future that is already done.
+    assertClosed();
+  }
+
+  @Test
+  public void testRouterPartitionsUnavailable()
+      throws Exception {
+    setRouter();
+    setOperationParams();
+    mockClusterMap.markAllPartitionsUnavailable();
+    try {
+      router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+      Assert.fail("Put should have failed if there are no partitions");
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("Should have received AmbryUnavailable error", RouterErrorCode.AmbryUnavailable,
+          r.getErrorCode());
+    }
+    router.close();
+    assertExpectedThreadCounts(0);
+    assertClosed();
+  }
+
+  @Test
+  public void testRouterNoPartitionInLocalDC()
+      throws Exception {
+    // set the local DC to invalid, so that for puts, no partitions are available locally.
+    Properties props = getNonBlockingRouterProperties("invalidDC");
+    setRouter(props, new MockServerLayout(mockClusterMap));
+    setOperationParams();
+    try {
+      router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+      Assert.fail("Put should have failed if there are no partitions");
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals(RouterErrorCode.UnexpectedInternalError, r.getErrorCode());
+    }
+    router.close();
+    assertExpectedThreadCounts(0);
     assertClosed();
   }
 
@@ -221,14 +276,7 @@ public class NonBlockingRouterTest {
     final int SCALING_UNITS = 3;
     Properties props = getNonBlockingRouterProperties("DC1");
     props.setProperty("router.scaling.unit.count", Integer.toString(SCALING_UNITS));
-    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    MockClusterMap mockClusterMap = new MockClusterMap();
-    MockTime mockTime = new MockTime();
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
-        mockClusterMap, mockTime);
-
+    setRouter(props, new MockServerLayout(mockClusterMap));
     assertExpectedThreadCounts(SCALING_UNITS);
 
     // Submit a few jobs so that all the scaling units get exercised.
@@ -252,8 +300,6 @@ public class NonBlockingRouterTest {
       throws Exception {
     Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    MockClusterMap mockClusterMap = new MockClusterMap();
-    MockTime mockTime = new MockTime();
     setOperationParams();
     final List<ReplicaId> failedReplicaIds = new ArrayList<>();
     final AtomicInteger successfulResponseCount = new AtomicInteger(0);
@@ -276,10 +322,7 @@ public class NonBlockingRouterTest {
 
     // Instantiate a router just to put a blob successfully.
     MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-        mockTime);
+    setRouter(props, mockServerLayout);
     setOperationParams();
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
