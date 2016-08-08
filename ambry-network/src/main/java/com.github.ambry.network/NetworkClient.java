@@ -91,7 +91,7 @@ public class NetworkClient implements Closeable {
    * @throws IllegalStateException if the NetworkClient is closed.
    */
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestInfos, int pollTimeoutMs) {
-    if (closed) {
+    if (closed || !selector.isOpen()) {
       throw new IllegalStateException("The NetworkClient is closed.");
     }
     long startTime = time.milliseconds();

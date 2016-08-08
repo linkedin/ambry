@@ -57,6 +57,11 @@ public interface Selectable {
   public void close();
 
   /**
+   * Check whether the selector is open.
+   */
+  public boolean isOpen();
+
+  /**
    * Firstly initiate any sends provided, and then make progress on any other I/O operations in-flight (connections,
    * disconnections, existing sends, and receives)
    * @param timeoutMs The amount of time to block if there is nothing to do in ms

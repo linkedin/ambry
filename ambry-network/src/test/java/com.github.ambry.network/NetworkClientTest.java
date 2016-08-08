@@ -491,6 +491,7 @@ class MockSelector extends Selector {
   private MockSelectorState state = MockSelectorState.Good;
   private boolean wakeUpCalled = false;
   private int connectCallCount = 0;
+  private boolean isOpen = true;
 
   /**
    * Create a MockSelector
@@ -499,6 +500,7 @@ class MockSelector extends Selector {
   MockSelector()
       throws IOException {
     super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null);
+    super.close();
   }
 
   /**
@@ -671,5 +673,22 @@ class MockSelector extends Selector {
     if (connectionIds.contains(conn)) {
       disconnected.add(conn);
     }
+  }
+
+  /**
+   * Close the MockSelector.
+   */
+  @Override
+  public void close() {
+    isOpen = false;
+  }
+
+  /**
+   * Check whether the MockSelector is open.
+   * @return true, if the MockSelector is open.
+   */
+  @Override
+  public boolean isOpen() {
+    return isOpen;
   }
 }

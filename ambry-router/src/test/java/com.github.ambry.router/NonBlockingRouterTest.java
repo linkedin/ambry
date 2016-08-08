@@ -176,35 +176,30 @@ public class NonBlockingRouterTest {
 
     setOperationParams();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
-    FutureResult<String> futureResult =
-        (FutureResult<String>) router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    Future future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
     try {
-      while (!futureResult.isDone()) {
+      while (!future.isDone()) {
         mockTime.sleep(1000);
         Thread.yield();
       }
-      String blobId = futureResult.get();
+      future.get();
       Assert.fail("The operation should have failed");
     } catch (ExecutionException e) {
-      Assert.assertEquals("Should have received Operation timeout exception", RouterErrorCode.OperationTimedOut,
-          ((RouterException) e.getCause()).getErrorCode());
+      Assert.assertEquals(RouterErrorCode.OperationTimedOut, ((RouterException) e.getCause()).getErrorCode());
     }
 
     setOperationParams();
     mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
-    futureResult = (FutureResult<String>) router.putBlob(putBlobProperties, putUserMetadata, putChannel);
+    future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
 
     // Now wait till the thread dies
-    while (TestUtils.numThreadsByThisName("RequestResponseHandlerThread") > 0) {
-      Thread.yield();
-    }
+    TestUtils.getThreadByThisName("RequestResponseHandlerThread").join();
 
     try {
-      futureResult.get();
+      future.get();
       Assert.fail("The operation should have failed");
     } catch (ExecutionException e) {
-      Assert.assertEquals("Should have received Operation timeout exception", RouterErrorCode.RouterClosed,
-          ((RouterException) e.getCause()).getErrorCode());
+      Assert.assertEquals(RouterErrorCode.RouterClosed, ((RouterException) e.getCause()).getErrorCode());
     }
 
     assertClosed();

@@ -236,6 +236,16 @@ public class Selector implements Selectable {
   }
 
   /**
+   * Tells whether or not this selector is open.  </p>
+   *
+   * @return <tt>true</tt> if, and only if, this selector is open
+   */
+  @Override
+  public boolean isOpen() {
+    return nioSelector.isOpen();
+  }
+
+  /**
    * Queue the given request for sending in the subsequent {@poll(long)} calls
    * @param networkSend The NetworkSend that is ready to be sent
    */

@@ -246,33 +246,31 @@ public class GetManagerTest {
     setOperationParams(chunkSize);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
-    FutureResult futureResult;
+    Future future;
     try {
-      futureResult = (FutureResult) router.getBlobInfo(blobId);
-      while (!futureResult.isDone()) {
+      future = router.getBlobInfo(blobId);
+      while (!future.isDone()) {
         mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
         Thread.yield();
       }
-      futureResult.get();
+      future.get();
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
       RouterException routerException = (RouterException) e.getCause();
-      Assert.assertEquals("Exception received should be router closed error", RouterErrorCode.OperationTimedOut,
-          routerException.getErrorCode());
+      Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
     }
 
     try {
-      futureResult = (FutureResult) router.getBlob(blobId);
-      while (!futureResult.isDone()) {
+      future = router.getBlob(blobId);
+      while (!future.isDone()) {
         mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
         Thread.yield();
       }
-      futureResult.get();
+      future.get();
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
       RouterException routerException = (RouterException) e.getCause();
-      Assert.assertEquals("Exception received should be router closed error", RouterErrorCode.OperationTimedOut,
-          routerException.getErrorCode());
+      Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
     }
     router.close();
   }

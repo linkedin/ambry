@@ -43,6 +43,7 @@ class MockSelector extends Selector {
   private final Time time;
   private final AtomicReference<MockSelectorState> state;
   private final MockServerLayout serverLayout;
+  private boolean isOpen = true;
 
   /**
    *
@@ -179,9 +180,21 @@ class MockSelector extends Selector {
     }
   }
 
+  /**
+   * Close the MockSelector
+   */
   @Override
   public void close() {
-    // no op.
+    isOpen = false;
+  }
+
+  /**
+   * Check whether the MockSelector is open.
+   * @return true if the MockSelector is open.
+   */
+  @Override
+  public boolean isOpen() {
+    return isOpen;
   }
 }
 
