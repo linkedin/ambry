@@ -107,6 +107,7 @@ public class NetworkClient implements Closeable {
       selector.poll(pollTimeoutMs, sends);
       handleSelectorEvents(responseInfoList);
     } catch (Exception e) {
+      logger.error("Received an unexpected error during sendAndPoll(): ", e);
       networkMetrics.networkClientException.inc();
     } finally {
       numPendingRequests.set(pendingRequests.size());
