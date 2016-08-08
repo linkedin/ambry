@@ -254,6 +254,7 @@ class PutManager {
     String blobId = op.getBlobIdString();
     if (blobId == null && e == null) {
       e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
+      routerMetrics.operationFailureWithUnsetExceptionCount.inc();
     }
     if (e != null) {
       blobId = null;

@@ -325,6 +325,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       Exception e = operationException.get();
       if (operationResult == null && e == null) {
         e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
+        routerMetrics.operationFailureWithUnsetExceptionCount.inc();
       }
       if (e != null) {
         operationResult = null;
