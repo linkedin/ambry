@@ -252,6 +252,9 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
+  /**
+   * Mark all partitions as unavailable.
+   */
   public void markAllPartitionsUnavailable() {
     partitionsUnavailable = true;
   }

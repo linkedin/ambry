@@ -103,11 +103,20 @@ public class NonBlockingRouterTest {
     return properties;
   }
 
+  /**
+   * Construct {@link Properties} and {@link MockServerLayout} and initialize and set the
+   * router with them.
+   */
   private void setRouter()
       throws IOException {
     setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap));
   }
 
+  /**
+   * Initialize and set the router with the given {@link Properties} and {@link MockServerLayout}
+   * @param props the {@link Properties}
+   * @param mockServerLayout the {@link MockServerLayout}
+   */
   private void setRouter(Properties props, MockServerLayout mockServerLayout)
       throws IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
@@ -173,6 +182,9 @@ public class NonBlockingRouterTest {
     assertClosed();
   }
 
+  /**
+   * Test router put operation in a scenario where there are no partitions available.
+   */
   @Test
   public void testRouterPartitionsUnavailable()
       throws Exception {
@@ -192,6 +204,11 @@ public class NonBlockingRouterTest {
     assertClosed();
   }
 
+  /**
+   * Test router put operation in a scenario where there are partitions, but none in the local DC.
+   * This should not ideally happen unless there is a bad config, but the router should be resilient and
+   * just error out these operations.
+   */
   @Test
   public void testRouterNoPartitionInLocalDC()
       throws Exception {
