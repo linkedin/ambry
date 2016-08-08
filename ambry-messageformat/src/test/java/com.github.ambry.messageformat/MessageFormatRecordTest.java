@@ -159,7 +159,7 @@ public class MessageFormatRecordTest {
     Assert.assertEquals("Total size doesn't match", CompositeBlobInfo.UNDEFINED_TOTAL_SIZE,
         compositeBlobInfo.getTotalSize());
     Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
-    // no testing of corruption as we metadata content record doesn't have crc
+    // no testing of corruption as the metadata content record doesn't have crc
   }
 
   @Test
@@ -167,13 +167,15 @@ public class MessageFormatRecordTest {
       throws IOException, MessageFormatException {
     // Test Metadata Blob V2
     List<StoreKey> keys = getKeys(60, 5);
-    int chunkSize = ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE);
-    long totalSize = (long) keys.size() * chunkSize;
-    ByteBuffer metadataContent = getSerializedMetadataContentV2(chunkSize, totalSize, keys);
-    CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
-    Assert.assertEquals("Chunk size doesn't match", chunkSize, compositeBlobInfo.getChunkSize());
-    Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
-    // no testing of corruption as we metadata content record doesn't have crc
+    int[] chunkSizes = {ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), 15};
+    long[] totalSizes = {(long) keys.size() * chunkSizes[0], ((long) keys.size() * chunkSizes[1]) - 11};
+    for (int i = 0; i < chunkSizes.length; i++) {
+      ByteBuffer metadataContent = getSerializedMetadataContentV2(chunkSizes[i], totalSizes[i], keys);
+      CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
+      Assert.assertEquals("Chunk size doesn't match", chunkSizes[i], compositeBlobInfo.getChunkSize());
+      Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
+      // no testing of corruption as the metadata content record doesn't have crc
+    }
   }
 
   @Test
@@ -343,28 +345,30 @@ public class MessageFormatRecordTest {
     // Test Blob V2 with actual metadata blob V2
     // construct metadata blob
     List<StoreKey> keys = getKeys(60, 5);
-    int chunkSize = ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE);
-    long totalSize = (long) keys.size() * chunkSize;
-    ByteBuffer metadataContent = getSerializedMetadataContentV2(chunkSize, totalSize, keys);
-    int metadataContentSize =
-        MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
-    long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
-    ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
-    BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
+    int[] chunkSizes = {ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), 15};
+    long[] totalSizes = {(long) keys.size() * chunkSizes[0], ((long) keys.size() * chunkSizes[1]) - 11};
+    for (int i = 0; i < chunkSizes.length; i++) {
+      ByteBuffer metadataContent = getSerializedMetadataContentV2(chunkSizes[i], totalSizes[i], keys);
+      int metadataContentSize =
+          MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
+      long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(metadataContentSize);
+      ByteBuffer blob = ByteBuffer.allocate((int) blobSize);
+      BlobData blobData = getBlobRecordV2(metadataContentSize, BlobType.MetadataBlob, metadataContent, blob);
 
-    Assert.assertEquals(metadataContentSize, blobData.getSize());
-    byte[] verify = new byte[metadataContentSize];
-    blobData.getStream().read(verify);
-    Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
+      Assert.assertEquals(metadataContentSize, blobData.getSize());
+      byte[] verify = new byte[metadataContentSize];
+      blobData.getStream().read(verify);
+      Assert.assertArrayEquals("Metadata content mismatch", metadataContent.array(), verify);
 
-    // deserialize and check for metadata contents
-    metadataContent.rewind();
-    CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
-    Assert.assertEquals("Chunk size doesn't match", chunkSize, compositeBlobInfo.getChunkSize());
-    Assert.assertEquals("Total size doesn't match", totalSize, compositeBlobInfo.getTotalSize());
-    Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
+      // deserialize and check for metadata contents
+      metadataContent.rewind();
+      CompositeBlobInfo compositeBlobInfo = deserializeMetadataContentV2(metadataContent, new MockIdFactory());
+      Assert.assertEquals("Chunk size doesn't match", chunkSizes[i], compositeBlobInfo.getChunkSize());
+      Assert.assertEquals("Total size doesn't match", totalSizes[i], compositeBlobInfo.getTotalSize());
+      Assert.assertEquals("List of keys dont match", keys, compositeBlobInfo.getKeys());
 
-    testBlobCorruption(blob, blobSize, metadataContentSize);
+      testBlobCorruption(blob, blobSize, metadataContentSize);
+    }
   }
 
   private void testBlobCorruption(ByteBuffer blob, long blobSize, int metadataContentSize)
