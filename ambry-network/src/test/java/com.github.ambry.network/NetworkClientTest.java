@@ -196,7 +196,7 @@ public class NetworkClientTest {
     selector.setState(MockSelectorState.ThrowExceptionOnConnect);
     try {
       networkClient.sendAndPoll(requestInfoList, 100);
-    } catch (IOException e) {
+    } catch (Exception e) {
       Assert.fail("If selector throws on connect, sendAndPoll() should not throw");
     }
   }
@@ -327,8 +327,8 @@ public class NetworkClientTest {
     selector.setState(MockSelectorState.ThrowExceptionOnPoll);
     try {
       networkClient.sendAndPoll(requestInfoList, 100);
-      Assert.fail("If selector throws on poll, sendAndPoll() should throw as well");
-    } catch (IOException e) {
+    } catch (Exception e) {
+      Assert.fail("If selector throws on poll, sendAndPoll() should not throw.");
     }
     selector.setState(MockSelectorState.Good);
   }
@@ -491,6 +491,7 @@ class MockSelector extends Selector {
   private MockSelectorState state = MockSelectorState.Good;
   private boolean wakeUpCalled = false;
   private int connectCallCount = 0;
+  private boolean isOpen = true;
 
   /**
    * Create a MockSelector
@@ -499,6 +500,7 @@ class MockSelector extends Selector {
   MockSelector()
       throws IOException {
     super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null);
+    super.close();
   }
 
   /**
@@ -671,5 +673,22 @@ class MockSelector extends Selector {
     if (connectionIds.contains(conn)) {
       disconnected.add(conn);
     }
+  }
+
+  /**
+   * Close the MockSelector.
+   */
+  @Override
+  public void close() {
+    isOpen = false;
+  }
+
+  /**
+   * Check whether the MockSelector is open.
+   * @return true, if the MockSelector is open.
+   */
+  @Override
+  public boolean isOpen() {
+    return isOpen;
   }
 }

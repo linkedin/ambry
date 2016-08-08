@@ -47,6 +47,7 @@ public class GetManagerTest {
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private NonBlockingRouter router;
+  private RouterConfig routerConfig;
   private int chunkSize;
   private int requestParallelism;
   private int successTarget;
@@ -245,23 +246,33 @@ public class GetManagerTest {
     setOperationParams(chunkSize);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
+    Future future;
     try {
-      router.getBlobInfo(blobId).get();
+      future = router.getBlobInfo(blobId);
+      while (!future.isDone()) {
+        mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
+        Thread.yield();
+      }
+      future.get();
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
       RouterException routerException = (RouterException) e.getCause();
-      Assert.assertEquals("Exception received should be router closed error", RouterErrorCode.RouterClosed,
-          routerException.getErrorCode());
+      Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
     }
 
     try {
-      router.getBlob(blobId).get();
+      future = router.getBlob(blobId);
+      while (!future.isDone()) {
+        mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
+        Thread.yield();
+      }
+      future.get();
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
       RouterException routerException = (RouterException) e.getCause();
-      Assert.assertEquals("Exception received should be router closed error", RouterErrorCode.RouterClosed,
-          routerException.getErrorCode());
+      Assert.assertEquals(RouterErrorCode.OperationTimedOut, routerException.getErrorCode());
     }
+    router.close();
   }
 
   /**
@@ -311,7 +322,8 @@ public class GetManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
-    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
+    routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
         mockTime);

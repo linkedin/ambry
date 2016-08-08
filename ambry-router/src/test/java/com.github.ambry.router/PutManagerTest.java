@@ -233,8 +233,8 @@ public class PutManagerTest {
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     // In the case of an error in poll, the router gets closed, and all the ongoing operations are finished off with
     // RouterClosed error.
-    Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
-    submitPutsAndAssertFailure(expectedException, false, false);
+    Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
+    submitPutsAndAssertFailure(expectedException, true, true);
     // router should get closed automatically
     Assert.assertFalse("Router should be closed", router.isOpen());
     Assert.assertEquals("No ChunkFiller threads should be running after the router is closed", 0,
@@ -493,45 +493,6 @@ public class PutManagerTest {
     Exception expectedException = new RouterException("", RouterErrorCode.BlobTooLarge);
     assertFailure(expectedException);
     assertCloseCleanup();
-  }
-
-  /**
-   * Test RequestResponseHandler thread exit flow. If the RequestResponseHandlerThread exits on its own (due to an
-   * exception), then the router gets closed immediately along with the completion of all the operations.
-   */
-  @Test
-  public void testRouterClosingOnRequestResponseHandlerThreadException()
-      throws Exception {
-    router = getNonBlockingRouter();
-    int blobSize = chunkSize * random.nextInt(10) + 1;
-    for (int i = 0; i < 2; i++) {
-      RequestAndResult requestAndResult = new RequestAndResult(blobSize);
-      requestAndResultsList.add(requestAndResult);
-      MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-      requestAndResult.result = (FutureResult<String>) router
-          .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
-    }
-
-    mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
-
-    // Now wait till the thread dies
-    while (TestUtils.numThreadsByThisName("RequestResponseHandlerThread") > 0) {
-      Thread.yield();
-    }
-
-    // Now wait until both operations complete.
-    for (RequestAndResult requestAndResult : requestAndResultsList) {
-      requestAndResult.result.await();
-    }
-
-    // Ensure that both operations failed and with the right exceptions.
-    Exception expectedException = new RouterException("", RouterErrorCode.RouterClosed);
-    assertFailure(expectedException);
-    Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
-        TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
-        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**

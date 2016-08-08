@@ -74,6 +74,10 @@ public class NonBlockingRouterMetrics {
   public final Counter unknownReplicaResponseError;
   public final Counter unknownErrorCountForOperation;
   public final Counter responseDeserializationErrorCount;
+  public final Counter operationManagerPollErrorCount;
+  public final Counter operationManagerHandleResponseErrorCount;
+  public final Counter requestResponseHandlerUnexpectedErrorCount;
+  public final Counter chunkFillerUnexpectedErrorCount;
 
   // Performance metrics for operation managers.
   public final Histogram putManagerPollTimeMs;
@@ -174,6 +178,14 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownErrorCountForOperation"));
     responseDeserializationErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ResponseDeserializationErrorCount"));
+    operationManagerPollErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationManagerPollErrorCount"));
+    operationManagerHandleResponseErrorCount = metricRegistry
+        .counter(MetricRegistry.name(NonBlockingRouter.class, "OperationManagerHandleResponseErrorCount"));
+    requestResponseHandlerUnexpectedErrorCount = metricRegistry
+        .counter(MetricRegistry.name(NonBlockingRouter.class, "RequestResponseHandlerUnexpectedErrorCount"));
+    chunkFillerUnexpectedErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ChunkFillerUnexpectedErrorCount"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));

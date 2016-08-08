@@ -43,6 +43,7 @@ class MockSelector extends Selector {
   private final Time time;
   private final AtomicReference<MockSelectorState> state;
   private final MockServerLayout serverLayout;
+  private boolean isOpen = true;
 
   /**
    *
@@ -103,6 +104,9 @@ class MockSelector extends Selector {
       for (NetworkSend send : sends) {
         if (state.get() == MockSelectorState.ThrowExceptionOnSend) {
           throw new IOException("Mock exception on send");
+        }
+        if (state.get() == MockSelectorState.ThrowThrowableOnSend) {
+          throw new Error("Mock throwable on send");
         }
         if (state.get() == MockSelectorState.DisconnectOnSend) {
           disconnected.add(send.getConnectionId());
@@ -176,9 +180,21 @@ class MockSelector extends Selector {
     }
   }
 
+  /**
+   * Close the MockSelector
+   */
   @Override
   public void close() {
-    // no op.
+    isOpen = false;
+  }
+
+  /**
+   * Check whether the MockSelector is open.
+   * @return true if the MockSelector is open.
+   */
+  @Override
+  public boolean isOpen() {
+    return isOpen;
   }
 }
 
@@ -207,5 +223,9 @@ enum MockSelectorState {
    * not.
    */
   ThrowExceptionOnAllPoll,
+  /**
+   * Throw a throwable during poll that sends.
+   */
+  ThrowThrowableOnSend,
 }
 

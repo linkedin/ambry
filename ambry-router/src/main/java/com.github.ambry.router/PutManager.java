@@ -339,8 +339,9 @@ class PutManager {
             }
           }
         }
-      } catch (InterruptedException e) {
-        logger.error("ChunkFillerThread was interrupted", e);
+      } catch (Throwable e) {
+        logger.error("Aborting, chunkFillerThread received an unexpected error:", e);
+        routerMetrics.chunkFillerUnexpectedErrorCount.inc();
         if (isOpen.compareAndSet(true, false)) {
           completePendingOperations();
         }
