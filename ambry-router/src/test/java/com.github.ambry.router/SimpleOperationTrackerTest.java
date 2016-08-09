@@ -390,11 +390,11 @@ public class SimpleOperationTrackerTest {
   }
 
   /**
-   * Test to ensure that replicas that are down are also returned by the operation tracker, but they are only
-   * attempted after the healthy replicas.
+   * Test to ensure that replicas that are down are also returned by the operation tracker, but they are
+   * ordered after the healthy replicas.
    */
   @Test
-  public void downReplicasAttemptedTest() {
+  public void downReplicasOrderingTest() {
     ArrayList<Port> portList = new ArrayList<>();
     portList.add(new Port(6666, PortType.PLAINTEXT));
     List<String> mountPaths = Arrays.asList("mockMountPath");

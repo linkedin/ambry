@@ -82,9 +82,8 @@ class SimpleOperationTracker implements OperationTracker {
       int parallelism, boolean shuffleReplicas) {
     this.successTarget = successTarget;
     this.parallelism = parallelism;
-    // Order the replicas so that local healthy partitions are ordered and returned first,
-    // then the remote healthy ones, and finally the possibly down replicas.
-    // The operation tracker ensures that "possibly" down replicas are attempted only as a last resort.
+    // Order the replicas so that local healthy replicas are ordered and returned first,
+    // then the remote healthy ones, and finally the possibly down ones.
     List<ReplicaId> replicas = partitionId.getReplicaIds();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
@@ -106,7 +105,6 @@ class SimpleOperationTracker implements OperationTracker {
         }
       }
     }
-    // Add down replicas to the end of the list so that they are attempted in the worst case.
     replicaPool.addAll(downReplicas);
     totalReplicaCount = replicaPool.size();
     if (totalReplicaCount < successTarget) {
