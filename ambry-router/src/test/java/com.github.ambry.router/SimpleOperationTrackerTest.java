@@ -21,9 +21,11 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -385,6 +387,64 @@ public class SimpleOperationTrackerTest {
     ot.onResponse(inflightReplicas.poll(), true);
     assertTrue(ot.hasSucceeded());
     assertTrue(ot.isDone());
+  }
+
+  /**
+   * Test to ensure that replicas that are down are also returned by the operation tracker, but they are
+   * ordered after the healthy replicas.
+   */
+  @Test
+  public void downReplicasOrderingTest() {
+    ArrayList<Port> portList = new ArrayList<>();
+    portList.add(new Port(6666, PortType.PLAINTEXT));
+    List<String> mountPaths = Arrays.asList("mockMountPath");
+    datanodes = new ArrayList<>();
+    datanodes.add(new MockDataNodeId(portList, mountPaths, "local-0"));
+    datanodes.add(new MockDataNodeId(portList, mountPaths, "remote-0"));
+    mockPartition = new MockPartitionId();
+    int replicaCount = 6;
+    populateReplicaList(mockPartition, replicaCount, datanodes);
+    // Test scenarios with various number of replicas down
+    for (int i = 0; i < replicaCount; i++) {
+      testReplicaDown(replicaCount, i);
+    }
+  }
+
+  /**
+   * Test replica down scenario
+   * @param totalReplicaCount total replicas for the partition.
+   * @param downReplicaCount partitions to be marked down.
+   */
+  private void testReplicaDown(int totalReplicaCount, int downReplicaCount) {
+    ArrayList<Boolean> downStatus = new ArrayList<>(totalReplicaCount);
+    for (int i = 0; i < downReplicaCount; i++) {
+      downStatus.add(true);
+    }
+    for (int i = downReplicaCount; i < totalReplicaCount; i++) {
+      downStatus.add(false);
+    }
+    Collections.shuffle(downStatus);
+    List<ReplicaId> mockReplicaIds = mockPartition.getReplicaIds();
+    for (int i = 0; i < totalReplicaCount; i++) {
+      ((MockReplicaId) mockReplicaIds.get(i)).markReplicaDownStatus(downStatus.get(i));
+    }
+    localDcName = datanodes.get(0).getDatacenterName();
+    ot = new SimpleOperationTracker(localDcName, mockPartition, true, 2, 3);
+    // The iterator should return all replicas, with the first half being the up replicas
+    // and the last half being the down replicas.
+    Iterator<ReplicaId> itr = ot.getReplicaIterator();
+    ReplicaId nextReplica;
+    int count = 0;
+    while (itr.hasNext()) {
+      nextReplica = itr.next();
+      if (count < totalReplicaCount - downReplicaCount) {
+        Assert.assertEquals(false, nextReplica.isDown());
+      } else {
+        Assert.assertEquals(true, nextReplica.isDown());
+      }
+      count++;
+    }
+    Assert.assertEquals(totalReplicaCount, count);
   }
 
   /**
