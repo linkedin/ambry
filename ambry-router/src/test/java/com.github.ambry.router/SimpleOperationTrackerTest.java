@@ -400,6 +400,7 @@ public class SimpleOperationTrackerTest {
     List<String> mountPaths = Arrays.asList("mockMountPath");
     datanodes = new ArrayList<>();
     datanodes.add(new MockDataNodeId(portList, mountPaths, "local-0"));
+    datanodes.add(new MockDataNodeId(portList, mountPaths, "remote-0"));
     mockPartition = new MockPartitionId();
     int replicaCount = 6;
     populateReplicaList(mockPartition, replicaCount, datanodes);
