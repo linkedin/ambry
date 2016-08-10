@@ -104,7 +104,6 @@ public class NonBlockingRouterMetrics {
   public Gauge<Long> chunkFillerThreadRunning;
   public Gauge<Long> requestResponseHandlerThreadRunning;
   public Gauge<Integer> activeOperations;
-  public Gauge<Integer> maxPutChunkSizeGauge;
 
   // metrics for tracking blob sizes and chunking.
   public final Histogram putBlobSizeBytes;
@@ -231,8 +230,8 @@ public class NonBlockingRouterMetrics {
     // metrics to track blob sizes and chunking.
     putBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobSizeBytes"));
     putBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobChunkCount"));
-    getBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "GetBlobSizeBytes"));
-    getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "GetBlobChunkCount"));
+    getBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobSizeBytes"));
+    getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobChunkCount"));
     simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
     simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
@@ -303,13 +302,12 @@ public class NonBlockingRouterMetrics {
    * @param maxPutChunkSize the value to initialize this metric with.
    */
   public void initializeMaxPutChunkSizeMetric(final int maxPutChunkSize) {
-    maxPutChunkSizeGauge = new Gauge<Integer>() {
+    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "MaxPutChunkSizeBytes"), new Gauge<Integer>() {
       @Override
       public Integer getValue() {
         return maxPutChunkSize;
       }
-    };
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "MaxPutChunkSizeBytes"), maxPutChunkSizeGauge);
+    });
   }
 
   /**
