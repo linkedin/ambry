@@ -297,20 +297,6 @@ public class NonBlockingRouterMetrics {
   }
 
   /**
-   * Initializes a {@link Gauge} metric for the maxPutChunkSize. This value is a constant for a running router
-   * instance, but can change between invocations. This metric helps maintain historical information.
-   * @param maxPutChunkSize the value to initialize this metric with.
-   */
-  public void initializeMaxPutChunkSizeMetric(final int maxPutChunkSize) {
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "MaxPutChunkSizeBytes"), new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return maxPutChunkSize;
-      }
-    });
-  }
-
-  /**
    * Increment error metrics based on error type.
    * @param exception The exception associated with this error.
    */
