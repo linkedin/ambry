@@ -26,6 +26,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
+import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -83,6 +84,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   private int numChunksTotal;
   // the total number of data chunks retrieved so far (and may or may not have been written out yet).
   private int numChunksRetrieved;
+  // the maximum size of a data chunk in bytes
+  private int chunkSize = CompositeBlobInfo.UNDEFINED_CHUNK_SIZE;
+  // the total size of the object being fetched in this operation
+  private long totalSize = CompositeBlobInfo.UNDEFINED_TOTAL_SIZE;
   // a list iterator to the chunk ids that need to be fetched for this operation, if this is a composite blob.
   private ListIterator<StoreKey> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
@@ -779,8 +784,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         chunkIndexToBuffer = new TreeMap<>();
         if (blobType == BlobType.MetadataBlob) {
           ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
-          List<StoreKey> keys =
+          CompositeBlobInfo compositeBlobInfo =
               MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
+          chunkSize = compositeBlobInfo.getChunkSize();
+          totalSize = compositeBlobInfo.getTotalSize();
+          List<StoreKey> keys = compositeBlobInfo.getKeys();
           chunkIdIterator = keys.listIterator();
           numChunksTotal = keys.size();
           dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
