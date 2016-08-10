@@ -22,11 +22,11 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
-import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -379,9 +379,25 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten, operationException.get());
         }
+        if (operationException.get() == null) {
+          updateChunkingAndSizeMetricsOnSuccessfulGet();
+        }
         routerMetrics.getBlobOperationTotalTimeMs.update(time.milliseconds() - submissionTimeMs);
       }
       operationCompleted = true;
+    }
+
+    /**
+     * Update chunking and size related metrics - blob size, chunk count, and whether the blob is simple or composite.
+     */
+    private void updateChunkingAndSizeMetricsOnSuccessfulGet() {
+      routerMetrics.getBlobSizeBytes.update(bytesWritten);
+      routerMetrics.getBlobChunkCount.update(numChunksTotal);
+      if (numChunksTotal == 1) {
+        routerMetrics.simpleBlobGetCount.inc();
+      } else {
+        routerMetrics.compositeBlobGetCount.inc();
+      }
     }
   }
 

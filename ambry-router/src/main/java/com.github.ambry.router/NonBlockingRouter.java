@@ -92,6 +92,7 @@ class NonBlockingRouter implements Router {
       ocList.add(new OperationController(i));
     }
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount);
+    routerMetrics.initializeMaxPutChunkSizeMetric(routerConfig.routerMaxPutChunkSizeBytes);
   }
 
   /**

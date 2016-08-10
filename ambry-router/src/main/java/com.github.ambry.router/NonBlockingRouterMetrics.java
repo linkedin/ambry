@@ -104,6 +104,17 @@ public class NonBlockingRouterMetrics {
   public Gauge<Long> chunkFillerThreadRunning;
   public Gauge<Long> requestResponseHandlerThreadRunning;
   public Gauge<Integer> activeOperations;
+  public Gauge<Integer> maxPutChunkSizeGauge;
+
+  // metrics for tracking blob sizes and chunking.
+  public final Histogram putBlobSizeBytes;
+  public final Histogram putBlobChunkCount;
+  public final Histogram getBlobSizeBytes;
+  public final Histogram getBlobChunkCount;
+  public final Counter simpleBlobPutCount;
+  public final Counter simpleBlobGetCount;
+  public final Counter compositeBlobPutCount;
+  public final Counter compositeBlobGetCount;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -217,6 +228,16 @@ public class NonBlockingRouterMetrics {
     crossColoSuccessCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoSuccessCount"));
 
+    // metrics to track blob sizes and chunking.
+    putBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobSizeBytes"));
+    putBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobChunkCount"));
+    getBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "GetBlobSizeBytes"));
+    getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "GetBlobChunkCount"));
+    simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
+    simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
+    compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
+    compositeBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "CompositeBlobGetCount"));
+
     // Track metrics at the DataNode level.
     dataNodeToMetrics = new HashMap<>();
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
@@ -274,6 +295,21 @@ public class NonBlockingRouterMetrics {
       }
     };
     metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"), activeOperations);
+  }
+
+  /**
+   * Initializes a {@link Gauge} metric for the maxPutChunkSize. This value is a constant for a running router
+   * instance, but can change between invocations. This metric helps maintain historical information.
+   * @param maxPutChunkSize the value to initialize this metric with.
+   */
+  public void initializeMaxPutChunkSizeMetric(final int maxPutChunkSize) {
+    maxPutChunkSizeGauge = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return maxPutChunkSize;
+      }
+    };
+    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "MaxPutChunkSizeBytes"), maxPutChunkSizeGauge);
   }
 
   /**

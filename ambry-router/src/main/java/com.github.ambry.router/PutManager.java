@@ -262,10 +262,25 @@ class PutManager {
       // @todo add blobs in the metadata chunk to ids_to_delete
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
+      updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
     operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
+  }
+
+  /**
+   * Update chunking and size related metrics - blob size, chunk count, and whether the blob is simple or composite.
+   * @param op the {@link PutOperation} that completed successfully.
+   */
+  private void updateChunkingAndSizeMetricsOnSuccessfulPut(PutOperation op) {
+    routerMetrics.putBlobSizeBytes.update(op.getBlobProperties().getBlobSize());
+    routerMetrics.putBlobChunkCount.update(op.getNumDataChunks());
+    if (op.getNumDataChunks() == 1) {
+      routerMetrics.simpleBlobPutCount.inc();
+    } else {
+      routerMetrics.compositeBlobPutCount.inc();
+    }
   }
 
   /**
