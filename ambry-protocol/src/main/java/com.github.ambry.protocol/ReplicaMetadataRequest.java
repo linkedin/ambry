@@ -16,7 +16,6 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -113,6 +112,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
       sb.append(replicaMetadataRequestInfo.toString());
     }
     sb.append(", ").append("maxTotalSizeOfEntriesInBytes=").append(maxTotalSizeOfEntriesInBytes);
+    sb.append(", ").append("ClientId=").append(clientId);
+    sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append("]");
     return sb.toString();
   }
