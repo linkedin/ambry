@@ -105,6 +105,16 @@ public class NonBlockingRouterMetrics {
   public Gauge<Long> requestResponseHandlerThreadRunning;
   public Gauge<Integer> activeOperations;
 
+  // metrics for tracking blob sizes and chunking.
+  public final Histogram putBlobSizeBytes;
+  public final Histogram putBlobChunkCount;
+  public final Histogram getBlobSizeBytes;
+  public final Histogram getBlobChunkCount;
+  public final Counter simpleBlobPutCount;
+  public final Counter simpleBlobGetCount;
+  public final Counter compositeBlobPutCount;
+  public final Counter compositeBlobGetCount;
+
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
 
@@ -216,6 +226,16 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoRequestCount"));
     crossColoSuccessCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoSuccessCount"));
+
+    // metrics to track blob sizes and chunking.
+    putBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobSizeBytes"));
+    putBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobChunkCount"));
+    getBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobSizeBytes"));
+    getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobChunkCount"));
+    simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
+    simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
+    compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
+    compositeBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "CompositeBlobGetCount"));
 
     // Track metrics at the DataNode level.
     dataNodeToMetrics = new HashMap<>();
