@@ -161,6 +161,8 @@ public class PutRequest extends RequestOrResponse {
     StringBuilder sb = new StringBuilder();
     sb.append("PutRequest[");
     sb.append("BlobID=").append(blobId.getID());
+    sb.append(", ").append("ClientId=").append(clientId);
+    sb.append(", ").append("CorrelationId=").append(correlationId);
     if (properties != null) {
       sb.append(", ").append(getBlobProperties());
     } else {

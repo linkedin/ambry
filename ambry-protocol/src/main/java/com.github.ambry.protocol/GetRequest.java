@@ -16,7 +16,6 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -132,6 +131,8 @@ public class GetRequest extends RequestOrResponse {
     for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
       sb.append(partitionRequestInfo.toString());
     }
+    sb.append(", ").append("ClientId=").append(clientId);
+    sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append(", ").append("MessageFormatFlags=").append(flags);
     sb.append(", ").append("GetOptions=").append(getOptions);
     sb.append("]");

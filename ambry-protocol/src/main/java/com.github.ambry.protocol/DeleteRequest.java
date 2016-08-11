@@ -16,7 +16,6 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -85,6 +84,8 @@ public class DeleteRequest extends RequestOrResponse {
     StringBuilder sb = new StringBuilder();
     sb.append("DeleteRequest[");
     sb.append("BlobID=").append(blobId);
+    sb.append(", ").append("ClientId=").append(clientId);
+    sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append("]");
     return sb.toString();
   }
