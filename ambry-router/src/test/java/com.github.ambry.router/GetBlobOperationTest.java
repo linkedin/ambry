@@ -98,6 +98,9 @@ public class GetBlobOperationTest {
   private String blobIdStr;
   private byte[] putContent;
 
+  // Options which are passed into GetBlobOperations
+  private GetBlobOptions options = null;
+
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
 
@@ -198,8 +201,8 @@ public class GetBlobOperationTest {
 
     // test a bad case
     try {
-      new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", operationFuture,
-          operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+      new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", null,
+          operationFuture, operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert.assertEquals("Unexpected exception received on creating GetBlobOperation", RouterErrorCode.InvalidBlobId,
@@ -210,8 +213,8 @@ public class GetBlobOperationTest {
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, null,
+            operationFuture, operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
 
     Assert.assertEquals("Callbacks must match", operationCallback, op.getCallback());
     Assert.assertEquals("Futures must match", operationFuture, op.getFuture());
@@ -330,15 +333,15 @@ public class GetBlobOperationTest {
     doPut();
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.Blob_Not_Found, replicasCount), mockServerLayout,
         RouterErrorCode.BlobDoesNotExist, new ErrorCodeChecker() {
-      @Override
-      public void testAndAssert(RouterErrorCode expectedError)
-          throws Exception {
-        GetBlobOperation op = createOperationAndComplete(null);
-        Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
-            correlationIdToGetOperation.size());
-        assertFailureAndCheckErrorCode(op, expectedError);
-      }
-    });
+          @Override
+          public void testAndAssert(RouterErrorCode expectedError)
+              throws Exception {
+            GetBlobOperation op = createOperationAndComplete(null);
+            Assert.assertEquals("Must have attempted sending requests to all replicas", replicasCount,
+                correlationIdToGetOperation.size());
+            assertFailureAndCheckErrorCode(op, expectedError);
+          }
+        });
   }
 
   /**
@@ -474,6 +477,79 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test range requests on a single chunk blob.
+   * @throws Exception
+   */
+  @Test
+  public void testRangeRequestSingleChunk()
+      throws Exception {
+    // Random valid ranges
+    for (int i = 0; i < 5; i++) {
+      blobSize = random.nextInt(maxChunkSize) + 1;
+      int randomOne = random.nextInt(blobSize);
+      int randomTwo = random.nextInt(blobSize);
+      testRangeRequest(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
+    }
+
+    blobSize = random.nextInt(maxChunkSize) + 1;
+    // Entire blob
+    testRangeRequest(0, blobSize - 1, true);
+    // Range that extends to end of blob
+    testRangeRequest(random.nextInt(blobSize), GetBlobRange.UNDEFINED_OFFSET, true);
+    // Last n bytes of the blob
+    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
+
+    // Last blobSize + 1 bytes (should not succeed)
+    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, blobSize + 1, false);
+    // Range over the end of the blob (should not succeed)
+    testRangeRequest(random.nextInt(blobSize), blobSize + 5, false);
+  }
+
+  /**
+   * Test range requests on a composite blob.
+   * @throws Exception
+   */
+  @Test
+  public void testRangeRequestCompositeBlob()
+      throws Exception {
+    // Random valid ranges
+    for (int i = 0; i < 5; i++) {
+      blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
+      int randomOne = random.nextInt(blobSize);
+      int randomTwo = random.nextInt(blobSize);
+      testRangeRequest(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
+    }
+
+    blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
+    // Entire blob
+    testRangeRequest(0, blobSize - 1, true);
+    // Range that extends to end of blob
+    testRangeRequest(random.nextInt(blobSize), GetBlobRange.UNDEFINED_OFFSET, true);
+    // Last n bytes of the blob
+    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
+
+    // Last blobSize + 1 bytes (should not succeed)
+    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, blobSize + 1, false);
+    // Range over the end of the blob (should not succeed)
+    testRangeRequest(random.nextInt(blobSize), blobSize + 5, false);
+
+    blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize);
+    // Single intermediate chunk
+    testRangeRequest(maxChunkSize, maxChunkSize * 2 - 1, true);
+    // Single start chunk
+    testRangeRequest(0, maxChunkSize - 1, true);
+    // Single end chunk
+    testRangeRequest(maxChunkSize * 2, blobSize - 1, true);
+  }
+
+  private void testRangeRequest(long startOffset, long endOffset, boolean rangeSatisfiable)
+      throws Exception {
+    doPut();
+    options = new GetBlobOptions().withRange(new GetBlobRange(startOffset, endOffset));
+    getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
+  }
+
+  /**
    * Test that an operation is completed with a specified {@link RouterErrorCode} when all gets on data chunks
    * in a multi-part blob return a specified {@link ServerErrorCode}
    * @param serverErrorCode The error code to be returned when fetching data chunks.
@@ -548,8 +624,7 @@ public class GetBlobOperationTest {
    * and ensure that the whole blob data is read out and the contents match.
    * @param getChunksBeforeRead {@code true} if all chunks should be cached by the router before reading from the
    *                            stream.
-   * @param initiateReadBeforeChunkGet whether readInto() should be initiated immediately before data chunks are
-   *                                   fetched by the router to simulate chunk arrival delay.
+   * @param initiateReadBeforeChunkGet Whether readInto() should be initiated immediately before data chunks are
    */
   private void getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet)
       throws Exception {
@@ -582,7 +657,7 @@ public class GetBlobOperationTest {
               }
               Future<Long> readIntoFuture =
                   initiateReadBeforeChunkGet ? preSetReadIntoFuture : result.readInto(asyncWritableChannel, null);
-              assertSuccess(readIntoFuture, asyncWritableChannel, readCompleteLatch, readCompleteResult,
+              assertSuccess(options, readIntoFuture, asyncWritableChannel, readCompleteLatch, readCompleteResult,
                   readCompleteException);
             }
           }, false).start();
@@ -600,11 +675,17 @@ public class GetBlobOperationTest {
     if (readCompleteException.get() != null) {
       throw readCompleteException.get();
     }
-    Assert.assertEquals("Size read must equal size written", blobSize, readCompleteResult.get());
+    int sizeWritten = blobSize;
+    if (options != null && options.getRange() != null) {
+      GetBlobRange range = options.getRange();
+      sizeWritten = (int) (range.getEndOffset(blobSize) - range.getStartOffset(blobSize) + 1);
+    }
+    Assert.assertEquals("Size read must equal size written", sizeWritten, readCompleteResult.get());
   }
 
   /**
    * Create a getBlob operation with the specified callback and poll until completion.
+   *
    * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
    * @return the operation
    * @throws Exception
@@ -627,6 +708,7 @@ public class GetBlobOperationTest {
 
   /**
    * Create a getBlob operation with the specified callback
+   *
    * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
    * @return the operation
    * @throws Exception
@@ -635,8 +717,8 @@ public class GetBlobOperationTest {
       throws Exception {
     operationsCount.incrementAndGet();
     GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, operationFuture,
-            callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
+            operationFuture, callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     return op;
   }
@@ -660,6 +742,7 @@ public class GetBlobOperationTest {
    * happens outside of the GetOperation, so those are not checked here. But at this point, the operation result should
    * be ready.
    *
+   * @param options The {@link GetBlobOptions} for the operation to check.
    * @param readIntoFuture The future associated with the read on the {@link ReadableStreamChannel} result of the
    *                       operation.
    * @param asyncWritableChannel The {@link ByteBufferAsyncWritableChannel} to which bytes will be written by the
@@ -668,27 +751,37 @@ public class GetBlobOperationTest {
    * @param readCompleteResult This will contain the bytes written on return.
    * @param readCompleteException This will contain any exceptions encountered during the read.
    */
-  private void assertSuccess(Future<Long> readIntoFuture, ByteBufferAsyncWritableChannel asyncWritableChannel,
-      CountDownLatch readCompleteLatch, AtomicLong readCompleteResult,
-      AtomicReference<Exception> readCompleteException) {
+  private void assertSuccess(GetBlobOptions options, Future<Long> readIntoFuture,
+      ByteBufferAsyncWritableChannel asyncWritableChannel, CountDownLatch readCompleteLatch,
+      AtomicLong readCompleteResult, AtomicReference<Exception> readCompleteException) {
     try {
+      ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
+      // If a range is set, compare the result against the specified byte range.
+      if (options != null && options.getRange() != null) {
+        GetBlobRange range = options.getRange();
+        int startOffset = (int) range.getStartOffset(putContent.length);
+        int endOffset = (int) range.getEndOffset(putContent.length);
+        putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);
+      }
       long written;
       Assert.assertTrue("ReadyForPollCallback should have been invoked as readInto() was called",
           mockNetworkClient.getAndClearWokenUpStatus());
       // Compare byte by byte.
+      final int bytesToRead = putContentBuf.remaining();
       int readBytes = 0;
       do {
         ByteBuffer buf = asyncWritableChannel.getNextChunk();
         int bufLength = buf.remaining();
         Assert.assertTrue("total content read should not be greater than length of put content",
-            readBytes + bufLength <= putContent.length);
+            readBytes + bufLength <= bytesToRead);
         while (buf.hasRemaining()) {
-          Assert.assertEquals("Get and Put blob content should match", putContent[readBytes++], buf.get());
+          Assert.assertEquals("Get and Put blob content should match", putContentBuf.get(), buf.get());
+          readBytes++;
         }
         asyncWritableChannel.resolveOldestChunk(null);
         Assert.assertTrue("ReadyForPollCallback should have been invoked as writable channel callback was called",
             mockNetworkClient.getAndClearWokenUpStatus());
-      } while (readBytes < putContent.length);
+      } while (readBytes < bytesToRead);
       written = readIntoFuture.get();
       Assert.assertEquals("the returned length in the future should be the length of data written", (long) readBytes,
           written);

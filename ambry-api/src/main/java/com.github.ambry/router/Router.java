@@ -49,12 +49,31 @@ public interface Router extends Closeable {
   public Future<ReadableStreamChannel> getBlob(String blobId);
 
   /**
+   * Requests for blob data asynchronously and returns a future that will eventually contain a
+   * {@link ReadableStreamChannel} that represents blob data on a successful response.
+   * @param blobId The ID of the blob for which blob data is requested.
+   * @param options The options associated with the request.
+   * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.
+   */
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options);
+
+  /**
    * Requests for the blob data asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobId The ID of the blob for which blob data is requested.
    * @param callback The callback which will be invoked on the completion of the request.
    * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.
    */
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback);
+
+  /**
+   * Requests for the blob data asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob for which blob data is requested.
+   * @param options The options associated with the request.
+   * @param callback The callback which will be invoked on the completion of the request.
+   * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.
+   */
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
+      Callback<ReadableStreamChannel> callback);
 
   /**
    * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of

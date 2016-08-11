@@ -56,6 +56,7 @@ public class GetManagerTest {
   private byte[] putUserMetadata;
   private byte[] putContent;
   private ReadableStreamChannel putChannel;
+  private GetBlobOptions options;
 
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -94,7 +95,7 @@ public class GetManagerTest {
   public void testSimpleBlobGetSuccess()
       throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize);
+    setOperationParams(chunkSize, null);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
     Assert.assertTrue("Blob properties should match",
@@ -112,7 +113,27 @@ public class GetManagerTest {
   public void testCompositeBlobGetSuccess()
       throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11);
+    setOperationParams(chunkSize * 6 + 11, null);
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    BlobInfo blobInfo = router.getBlobInfo(blobId).get();
+    Assert.assertTrue("Blob properties should match",
+        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
+    Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
+    getBlobAndCompareContent(blobId);
+    router.close();
+  }
+
+  /**
+   * Tests the router range request interface.
+   * @throws Exception
+   */
+  @Test
+  public void testRangeRequest()
+      throws Exception {
+    // Random valid ranges
+    router = getNonBlockingRouter();
+    setOperationParams(chunkSize * 6 + 11,
+        new GetBlobOptions().withRange(new GetBlobRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
     Assert.assertTrue("Blob properties should match",
@@ -187,7 +208,7 @@ public class GetManagerTest {
       Boolean checkBadCallbackBlob)
       throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11);
+    setOperationParams(chunkSize * 6 + 11, null);
     final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     List<Future<BlobInfo>> getBlobInfoFutures = new ArrayList<>();
@@ -224,7 +245,7 @@ public class GetManagerTest {
     Assert.assertTrue("Router should not be closed", router.isOpen());
 
     // Test that GetManager is still operational
-    setOperationParams(chunkSize);
+    setOperationParams(chunkSize, null);
     blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
     Assert.assertTrue("Blob properties should match",
@@ -243,7 +264,7 @@ public class GetManagerTest {
   public void testFailureOnAllPollThatSends()
       throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize);
+    setOperationParams(chunkSize, null);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     Future future;
@@ -282,7 +303,7 @@ public class GetManagerTest {
    */
   private void getBlobAndCompareContent(String blobId)
       throws Exception {
-    compareContent(router.getBlob(blobId).get());
+    compareContent(router.getBlob(blobId, options).get());
   }
 
   /**
@@ -292,19 +313,29 @@ public class GetManagerTest {
    */
   private void compareContent(ReadableStreamChannel readableStreamChannel)
       throws Exception {
+    ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
+    // If a range is set, compare the result against the specified byte range.
+    if (options != null && options.getRange() != null) {
+      GetBlobRange range = options.getRange();
+      int startOffset = (int) range.getStartOffset(putContent.length);
+      int endOffset = (int) range.getEndOffset(putContent.length);
+      putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);
+    }
     ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
     Future<Long> readIntoFuture = readableStreamChannel.readInto(getChannel, null);
+    final int bytesToRead = putContentBuf.remaining();
     int readBytes = 0;
     do {
       ByteBuffer buf = getChannel.getNextChunk();
       int bufLength = buf.remaining();
       Assert.assertTrue("total content read should not be greater than length of put content",
-          readBytes + bufLength <= putContent.length);
+          readBytes + bufLength <= bytesToRead);
       while (buf.hasRemaining()) {
-        Assert.assertEquals("Get and Put blob content should match", putContent[readBytes++], buf.get());
+        Assert.assertEquals("Get and Put blob content should match", putContentBuf.get(), buf.get());
+        readBytes++;
       }
       getChannel.resolveOldestChunk(null);
-    } while (readBytes < putContent.length);
+    } while (readBytes < bytesToRead);
     Assert.assertEquals("the returned length in the future should be the length of data written", (long) readBytes,
         (long) readIntoFuture.get());
     Assert.assertNull("There should be no more data in the channel", getChannel.getNextChunk(0));
@@ -333,8 +364,9 @@ public class GetManagerTest {
   /**
    * Set operation parameters for the blob that will be put and got.
    * @param blobSize the blob size for the blob that will be put and got.
+   * @param options the options for the get request
    */
-  private void setOperationParams(int blobSize) {
+  private void setOperationParams(int blobSize, GetBlobOptions options) {
     putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     putUserMetadata = new byte[10];
@@ -342,6 +374,7 @@ public class GetManagerTest {
     putContent = new byte[blobSize];
     random.nextBytes(putContent);
     putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+    this.options = options;
   }
 }
 

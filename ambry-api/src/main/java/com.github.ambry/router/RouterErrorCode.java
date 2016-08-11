@@ -82,7 +82,11 @@ public enum RouterErrorCode {
   /**
    * TTL of Blob has expired and so Blob cannot be retrieved.
    */
-  BlobExpired;
+  BlobExpired,
+  /**
+   * The range offsets provided for a getBlob operation go past the total size of a blob.
+   */
+  RangeNotSatisfiable;
 
   /**
    * Converts a given {@link CoordinatorError} into a RouterErrorCode.

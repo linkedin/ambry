@@ -145,7 +145,19 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId) {
-    return getBlob(blobId, null);
+    return getBlob(blobId, null, null);
+  }
+
+  /**
+   * Requests for blob data asynchronously and returns a future that will eventually contain a
+   * {@link ReadableStreamChannel} that represents blob data on a successful response.
+   * @param blobId The ID of the blob for which blob data is requested.
+   * @param options The options associated with the request.
+   * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.
+   */
+  @Override
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null);
   }
 
   /**
@@ -156,12 +168,25 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
+    return getBlob(blobId, null, callback);
+  }
+
+  /**
+   * Requests for the blob data asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob for which blob data is requested.
+   * @param options The options associated with the request.
+   * @param callback The callback which will be invoked on the completion of the request.
+   * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.
+   */
+  @Override
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
+      Callback<ReadableStreamChannel> callback) {
     currentOperationsCount.incrementAndGet();
     routerMetrics.getBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
     if (isOpen.get()) {
-      getOperationController().getBlob(blobId, futureResult, callback);
+      getOperationController().getBlob(blobId, options, futureResult, callback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -356,13 +381,14 @@ class NonBlockingRouter implements Router {
     /**
      * Requests for the blob data asynchronously and invokes the {@link Callback} when the request completes.
      * @param blobId The ID of the blob for which blob data is requested.
+     * @param options The {@link GetBlobOptions} associated with the request.
      * @param futureResult A future that would contain a {@link ReadableStreamChannel} that represents the blob data
      *                     eventually.
      * @param callback The callback which will be invoked on the completion of the request.
      */
-    private void getBlob(String blobId, FutureResult<ReadableStreamChannel> futureResult,
+    private void getBlob(String blobId, GetBlobOptions options, FutureResult<ReadableStreamChannel> futureResult,
         Callback<ReadableStreamChannel> callback) {
-      getManager.submitGetBlobOperation(blobId, futureResult, callback);
+      getManager.submitGetBlobOperation(blobId, options, futureResult, callback);
       readyForPollCallback.onPollReady();
     }
 

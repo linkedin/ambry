@@ -17,6 +17,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -102,7 +103,12 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId) {
-    return getBlob(blobId, null);
+    return getBlob(blobId, null, null);
+  }
+
+  @Override
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null);
   }
 
   /**
@@ -114,6 +120,12 @@ class PerfRouter implements Router {
    */
   @Override
   public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
+    return getBlob(blobId, null, callback);
+  }
+
+  @Override
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
+      Callback<ReadableStreamChannel> callback) {
     logger.trace("Received getBlob call");
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
     if (!routerOpen) {

@@ -129,12 +129,12 @@ class GetManager {
    * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
    * @param callback the {@link Callback} object to be called on completion of the operation.
    */
-  void submitGetBlobOperation(String blobId, FutureResult<ReadableStreamChannel> futureResult,
+  void submitGetBlobOperation(String blobId, GetBlobOptions options, FutureResult<ReadableStreamChannel> futureResult,
       Callback<ReadableStreamChannel> callback) {
     try {
       GetBlobOperation getBlobOperation =
-          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, futureResult, callback,
-              operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, futureResult,
+              callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       getOperations.add(getBlobOperation);
     } catch (RouterException e) {
       routerMetrics.onGetBlobError(e);

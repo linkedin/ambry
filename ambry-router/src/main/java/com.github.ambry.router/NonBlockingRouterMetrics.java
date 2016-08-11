@@ -71,6 +71,7 @@ public class NonBlockingRouterMetrics {
   public final Counter blobDeletedErrorCount;
   public final Counter blobDoesNotExistErrorCount;
   public final Counter blobExpiredErrorCount;
+  public final Counter rangeNotSatisfiableErrorCount;
   public final Counter unknownReplicaResponseError;
   public final Counter unknownErrorCountForOperation;
   public final Counter responseDeserializationErrorCount;
@@ -110,6 +111,7 @@ public class NonBlockingRouterMetrics {
   public final Histogram putBlobChunkCount;
   public final Histogram getBlobSizeBytes;
   public final Histogram getBlobChunkCount;
+  public final Histogram rangeRequestSizeBytes;
   public final Counter simpleBlobPutCount;
   public final Counter simpleBlobGetCount;
   public final Counter compositeBlobPutCount;
@@ -183,6 +185,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BlobDoesNotExistErrorCount"));
     blobExpiredErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BlobExpiredErrorCount"));
+    rangeNotSatisfiableErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RangeNotSatisfiableErrorCount"));
     unknownReplicaResponseError =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownReplicaResponseError"));
     unknownErrorCountForOperation =
@@ -232,6 +236,8 @@ public class NonBlockingRouterMetrics {
     putBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobChunkCount"));
     getBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobSizeBytes"));
     getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobChunkCount"));
+    rangeRequestSizeBytes =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "RangeRequestSizeBytes"));
     simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
     simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
@@ -322,6 +328,9 @@ public class NonBlockingRouterMetrics {
         case BlobExpired:
           blobExpiredErrorCount.inc();
           break;
+        case RangeNotSatisfiable:
+          rangeNotSatisfiableErrorCount.inc();
+          break;
         case AmbryUnavailable:
           ambryUnavailableErrorCount.inc();
           break;
@@ -395,6 +404,15 @@ public class NonBlockingRouterMetrics {
       deleteBlobErrorCount.inc();
       operationErrorRate.mark();
     }
+  }
+
+  /**
+   * Update appropriate metrics on a {@link GetBlobOperation} with a valid {@link GetBlobRange}.
+   * @param range The {@link GetBlobRange} for the operation.
+   * @param totalSize The total size of the blob in the operation.
+   */
+  void onValidRangeRequest(GetBlobRange range, long totalSize) {
+    rangeRequestSizeBytes.update(range.getEndOffset(totalSize) - range.getStartOffset(totalSize) + 1);
   }
 
   /**
