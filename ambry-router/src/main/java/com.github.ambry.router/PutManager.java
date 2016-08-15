@@ -220,10 +220,7 @@ class PutManager {
     PutResponse putResponse = null;
     ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
-    if (networkClientErrorCode != null) {
-      logger.trace("Network client returned an error, notifying response handler");
-      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
-    } else {
+    if (networkClientErrorCode == null) {
       try {
         putResponse = PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
         responseHandler.onRequestResponseError(replicaId, putResponse.getError());
@@ -232,6 +229,9 @@ class PutManager {
         logger.error("Response deserialization received unexpected error", e);
         routerMetrics.responseDeserializationErrorCount.inc();
       }
+    } else if (networkClientErrorCode == NetworkClientErrorCode.NetworkError) {
+      logger.trace("Network client returned a network error, notifying response handler");
+      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
     }
     return putResponse;
   }

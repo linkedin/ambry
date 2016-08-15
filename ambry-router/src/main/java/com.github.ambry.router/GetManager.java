@@ -189,7 +189,7 @@ class GetManager {
    */
   void handleResponse(ResponseInfo responseInfo) {
     long startTime = time.milliseconds();
-    GetResponse getResponse = extractPutResponseAndNotifyResponseHandler(responseInfo);
+    GetResponse getResponse = extractGetResponseAndNotifyResponseHandler(responseInfo);
     RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
     GetRequest getRequest = (GetRequest) routerRequestInfo.getRequest();
     GetOperation getOperation = correlationIdToGetOperation.remove(getRequest.getCorrelationId());
@@ -214,13 +214,11 @@ class GetManager {
    * @param responseInfo the {@link ResponseInfo} from which the {@link GetResponse} is to be extracted.
    * @return the extracted {@link GetResponse} if there is one; null otherwise.
    */
-  private GetResponse extractPutResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
+  private GetResponse extractGetResponseAndNotifyResponseHandler(ResponseInfo responseInfo) {
     GetResponse getResponse = null;
     ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
-    if (networkClientErrorCode != null) {
-      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
-    } else {
+    if (networkClientErrorCode == null) {
       try {
         getResponse = GetResponse
             .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), clusterMap);
@@ -234,6 +232,9 @@ class GetManager {
         logger.error("Response deserialization received unexpected error", e);
         routerMetrics.responseDeserializationErrorCount.inc();
       }
+    } else if (networkClientErrorCode == NetworkClientErrorCode.NetworkError) {
+      logger.trace("Network client returned a network error, notifying response handler");
+      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
     }
     return getResponse;
   }
