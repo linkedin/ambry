@@ -184,9 +184,7 @@ class DeleteManager {
     DeleteResponse deleteResponse = null;
     ReplicaId replicaId = ((RouterRequestInfo) responseInfo.getRequestInfo()).getReplicaId();
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
-    if (networkClientErrorCode != null) {
-      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
-    } else {
+    if (networkClientErrorCode == null) {
       try {
         deleteResponse =
             DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
@@ -196,6 +194,9 @@ class DeleteManager {
         logger.error("Response deserialization received unexpected error", e);
         routerMetrics.responseDeserializationErrorCount.inc();
       }
+    } else if (networkClientErrorCode == NetworkClientErrorCode.NetworkError) {
+      logger.trace("Network client returned a network error, notifying response handler");
+      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
     }
     return deleteResponse;
   }
