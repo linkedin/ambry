@@ -76,6 +76,7 @@ class RouterUtils {
         case BadInputChannel:
         case BlobDeleted:
         case BlobExpired:
+        case BlobDoesNotExist:
           isSystemHealthError = false;
           break;
       }

@@ -23,7 +23,6 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.utils.Time;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -209,8 +208,9 @@ class DeleteOperation {
       DeleteRequestInfo deleteRequestInfo = itr.next().getValue();
       if (time.milliseconds() - deleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
-        responseHandler
-            .onRequestResponseException(deleteRequestInfo.replica, new IOException("Timed out waiting for a response"));
+        // Do not notify this as a failure to the response handler, as this timeout could simply be due to
+        // connection unavailability. If there is indeed a network error, it will get reported eventually and the
+        // response handler will be notified accordingly.
         updateOperationState(deleteRequestInfo.replica, RouterErrorCode.OperationTimedOut);
       }
     }
