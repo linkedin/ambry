@@ -116,8 +116,8 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
         onErrorResponse(entry.getValue().replicaId);
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
-        // connection unavailability. If there is indeed a network error, it will get reported eventually and the
-        // response handler will be notified accordingly.
+        // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
+        // response and the response handler will be notified accordingly.
         setOperationException(
             new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut));
         inFlightRequestsIterator.remove();

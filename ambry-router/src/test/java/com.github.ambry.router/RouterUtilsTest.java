@@ -77,20 +77,22 @@ public class RouterUtilsTest {
    */
   @Test
   public void testSystemHealthErrorInterpretation() {
-    Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.InvalidBlobId)));
-    Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.InvalidPutArgument)));
-    Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.BlobTooLarge)));
-    Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.BadInputChannel)));
-    Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.BlobDeleted)));
-    Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.BlobDoesNotExist)));
-    Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.BlobExpired)));
-
-    Assert.assertTrue(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.AmbryUnavailable)));
-    Assert.assertTrue(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.OperationTimedOut)));
-    Assert.assertTrue(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.RouterClosed)));
-    Assert
-        .assertTrue(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.UnexpectedInternalError)));
-    Assert.assertTrue(RouterUtils.isSystemHealthError(new RouterException("", RouterErrorCode.InsufficientCapacity)));
+    for (RouterErrorCode errorCode : RouterErrorCode.values()) {
+      switch (errorCode) {
+        case InvalidBlobId:
+        case InvalidPutArgument:
+        case BlobTooLarge:
+        case BadInputChannel:
+        case BlobDeleted:
+        case BlobDoesNotExist:
+        case BlobExpired:
+          Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", errorCode)));
+          break;
+        default:
+          Assert.assertTrue(RouterUtils.isSystemHealthError(new RouterException("", errorCode)));
+          break;
+      }
+    }
     Assert.assertTrue(RouterUtils.isSystemHealthError(new Exception()));
   }
 }

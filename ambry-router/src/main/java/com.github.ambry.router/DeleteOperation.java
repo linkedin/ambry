@@ -209,8 +209,8 @@ class DeleteOperation {
       if (time.milliseconds() - deleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
-        // connection unavailability. If there is indeed a network error, it will get reported eventually and the
-        // response handler will be notified accordingly.
+        // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
+        // response and the response handler will be notified accordingly.
         updateOperationState(deleteRequestInfo.replica, RouterErrorCode.OperationTimedOut);
       }
     }

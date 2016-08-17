@@ -54,6 +54,7 @@ public class NonBlockingRouterTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  private static final int REQUEST_TIMEOUT_MS = 1000;
   private static final int PUT_REQUEST_PARALLELISM = 3;
   private static final int PUT_SUCCESS_TARGET = 2;
   private static final int GET_REQUEST_PARALLELISM = 2;
@@ -101,6 +102,8 @@ public class NonBlockingRouterTest {
     properties.setProperty("router.get.success.target", Integer.toString(GET_SUCCESS_TARGET));
     properties.setProperty("router.delete.request.parallelism", Integer.toString(DELETE_REQUEST_PARALLELISM));
     properties.setProperty("router.delete.success.target", Integer.toString(DELETE_SUCCESS_TARGET));
+    properties.setProperty("router.connection.checkout.timeout.ms", Integer.toString(CHECKOUT_TIMEOUT_MS));
+    properties.setProperty("router.request.timeout.ms", Integer.toString(REQUEST_TIMEOUT_MS));
     return properties;
   }
 
@@ -369,6 +372,7 @@ public class NonBlockingRouterTest {
         invalidResponse, PUT_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.NetworkError);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, PUT_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.ConnectionUnavailable);
+    testNoResponseNoNotification(opHelper, failedReplicaIds, null, successfulResponseCount, invalidResponse);
     testResponseDeserializationError(opHelper, networkClient, null);
 
     opHelper = new OperationHelper(OperationType.GET);
@@ -385,6 +389,7 @@ public class NonBlockingRouterTest {
         invalidResponse, GET_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.NetworkError);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, GET_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.ConnectionUnavailable);
+    testNoResponseNoNotification(opHelper, failedReplicaIds, blobId, successfulResponseCount, invalidResponse);
     testResponseDeserializationError(opHelper, networkClient, blobId);
 
     opHelper = new OperationHelper(OperationType.DELETE);
@@ -401,6 +406,7 @@ public class NonBlockingRouterTest {
         invalidResponse, DELETE_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.NetworkError);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, DELETE_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.ConnectionUnavailable);
+    testNoResponseNoNotification(opHelper, failedReplicaIds, blobId, successfulResponseCount, invalidResponse);
     testResponseDeserializationError(opHelper, networkClient, blobId);
     putManager.close();
     getManager.close();
@@ -417,9 +423,10 @@ public class NonBlockingRouterTest {
    * @param successfulResponseCount the AtomicInteger that will contain the count of replicas for which success was
    *                                notified.
    * @param invalidResponse the AtomicBoolean that will contain whether an unexpected failure was notified.
-   * @param indexToFail the index representing which response for which failure is to be simulated. For example,
-   *                    if index is 0, then the first response will be failed. If the index is -1, no responses will be
-   *                    failed.
+   * @param indexToFail if greater than 0, the index representing which response for which failure is to be simulated.
+   *                    For example, if index is 0, then the first response will be failed.
+   *                    If the index is -1, no responses will be failed, and successful responses will be returned to
+   *                    the operation managers.
    * @param error the NetworkClient error code with which request at indexToFail should be failed, honored only if
    *              indexToFail is not -1.
    */
@@ -482,6 +489,37 @@ public class NonBlockingRouterTest {
           opHelper.requestParallelism - 1, successfulResponseCount.get());
       Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
     }
+  }
+
+  /**
+   * Test that failure detector is not notified when the router times out requests.
+   * @param opHelper the {@link OperationHelper}
+   * @param failedReplicaIds the list that will contain all the replicas for which failure was notified.
+   * @param blobId the id of the blob to get/delete. For puts, this will be null.
+   * @param successfulResponseCount the AtomicInteger that will contain the count of replicas for which success was
+   *                                notified.
+   * @param invalidResponse the AtomicBoolean that will contain whether an unexpected failure was notified.
+   */
+  private void testNoResponseNoNotification(OperationHelper opHelper, List<ReplicaId> failedReplicaIds, String blobId,
+      AtomicInteger successfulResponseCount, AtomicBoolean invalidResponse)
+      throws Exception {
+    failedReplicaIds.clear();
+    successfulResponseCount.set(0);
+    invalidResponse.set(false);
+    FutureResult futureResult = opHelper.submitOperation(blobId);
+    List<RequestInfo> allRequests = new ArrayList<>();
+    long loopStartTimeMs = SystemTime.getInstance().milliseconds();
+    while (!futureResult.isDone()) {
+      if (loopStartTimeMs + AWAIT_TIMEOUT_MS < SystemTime.getInstance().milliseconds()) {
+        Assert.fail("Waited too long for requests.");
+      }
+      opHelper.pollOpManager(allRequests);
+      mockTime.sleep(CHECKOUT_TIMEOUT_MS * 3);
+    }
+    Assert.assertEquals("Successful notification should not have arrived for replicas that were up", 0,
+        successfulResponseCount.get());
+    Assert.assertEquals("Failure detector should not have been notified", 0, failedReplicaIds.size());
+    Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
   }
 
   /**
