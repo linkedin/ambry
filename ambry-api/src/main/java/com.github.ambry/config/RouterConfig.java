@@ -100,7 +100,7 @@ public class RouterConfig {
    * The maximum number of parallel requests allowed for a delete operation.
    */
   @Config("router.delete.request.parallelism")
-  @Default("12")
+  @Default("3")
   public final int routerDeleteRequestParallelism;
 
   /**
@@ -150,7 +150,7 @@ public class RouterConfig {
     routerPutRequestParallelism = verifiableProperties.getInt("router.put.request.parallelism", 3);
     routerPutSuccessTarget = verifiableProperties.getInt("router.put.success.target", 2);
     routerMaxSlippedPutAttempts = verifiableProperties.getInt("router.max.slipped.put.attempts", 1);
-    routerDeleteRequestParallelism = verifiableProperties.getInt("router.delete.request.parallelism", 12);
+    routerDeleteRequestParallelism = verifiableProperties.getInt("router.delete.request.parallelism", 3);
     routerDeleteSuccessTarget = verifiableProperties.getInt("router.delete.success.target", 2);
     routerGetRequestParallelism = verifiableProperties.getInt("router.get.request.parallelism", 2);
     routerGetSuccessTarget = verifiableProperties.getInt("router.get.success.target", 1);

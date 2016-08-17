@@ -33,7 +33,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -826,8 +825,9 @@ class PutOperation {
         Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(entry.getValue().replicaId);
-          responseHandler.onRequestResponseException(entry.getValue().replicaId,
-              new IOException("Timed out waiting for a response"));
+          // Do not notify this as a failure to the response handler, as this timeout could simply be due to
+          // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
+          // response and the response handler will be notified accordingly.
           chunkException = new RouterException("Timed out waiting for a response", RouterErrorCode.OperationTimedOut);
           inFlightRequestsIterator.remove();
         } else {

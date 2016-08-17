@@ -17,10 +17,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 
@@ -70,5 +70,29 @@ public class RouterUtilsTest {
     initialize();
     BlobId convertedBlobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     assertEquals("The converted BlobId should be the same as the original.", originalBlobId, convertedBlobId);
+  }
+
+  /**
+   * Test to ensure system health errors are interpreted correctly.
+   */
+  @Test
+  public void testSystemHealthErrorInterpretation() {
+    for (RouterErrorCode errorCode : RouterErrorCode.values()) {
+      switch (errorCode) {
+        case InvalidBlobId:
+        case InvalidPutArgument:
+        case BlobTooLarge:
+        case BadInputChannel:
+        case BlobDeleted:
+        case BlobDoesNotExist:
+        case BlobExpired:
+          Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", errorCode)));
+          break;
+        default:
+          Assert.assertTrue(RouterUtils.isSystemHealthError(new RouterException("", errorCode)));
+          break;
+      }
+    }
+    Assert.assertTrue(RouterUtils.isSystemHealthError(new Exception()));
   }
 }

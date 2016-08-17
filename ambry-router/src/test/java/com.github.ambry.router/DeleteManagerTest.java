@@ -53,7 +53,7 @@ import static org.junit.Assert.fail;
  */
 
 public class DeleteManagerTest {
-  private static final int AWAIT_TIMEOUT_SECONDS = 2;
+  private static final int AWAIT_TIMEOUT_SECONDS = 200;
   private Time mockTime;
   private AtomicReference<MockSelectorState> mockSelectorState;
   private MockClusterMap clusterMap;
@@ -85,7 +85,7 @@ public class DeleteManagerTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
 
   // The maximum number of inflight requests for a single delete operation.
-  private static final String DELETE_PARALLELISM = "9";
+  private static final String DELETE_PARALLELISM = "3";
 
   /**
    * Initializes ClusterMap, Router, mock servers, and an {@code BlobId} to be deleted.
