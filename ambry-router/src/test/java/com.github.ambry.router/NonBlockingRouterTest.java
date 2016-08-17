@@ -514,7 +514,7 @@ public class NonBlockingRouterTest {
         Assert.fail("Waited too long for requests.");
       }
       opHelper.pollOpManager(allRequests);
-      mockTime.sleep(CHECKOUT_TIMEOUT_MS * 3);
+      mockTime.sleep(REQUEST_TIMEOUT_MS + 1);
     }
     Assert.assertEquals("Successful notification should not have arrived for replicas that were up", 0,
         successfulResponseCount.get());
