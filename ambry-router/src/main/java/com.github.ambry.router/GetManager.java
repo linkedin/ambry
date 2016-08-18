@@ -125,9 +125,10 @@ class GetManager {
 
   /**
    * Submit an operation to get a blob asynchronously.
-   * @param blobId the blobId for which the BlobInfo is being requested, in string form.
-   * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
-   * @param callback the {@link Callback} object to be called on completion of the operation.
+   * @param blobId The blobId for which the BlobInfo is being requested, in string form.
+   * @param options The {@link GetBlobOptions} associated witht the operation.
+   * @param futureResult The {@link FutureResult} that contains the pending result of the operation.
+   * @param callback The {@link Callback} object to be called on completion of the operation.
    */
   void submitGetBlobOperation(String blobId, GetBlobOptions options, FutureResult<ReadableStreamChannel> futureResult,
       Callback<ReadableStreamChannel> callback) {
@@ -137,7 +138,7 @@ class GetManager {
               callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       getOperations.add(getBlobOperation);
     } catch (RouterException e) {
-      routerMetrics.onGetBlobError(e);
+      routerMetrics.onGetBlobError(e, options);
       routerMetrics.operationDequeuingRate.mark();
       operationCompleteCallback.completeOperation(futureResult, callback, null, e);
     }
@@ -263,7 +264,7 @@ class GetManager {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
       if (op instanceof GetBlobOperation) {
-        routerMetrics.onGetBlobError(abortCause);
+        routerMetrics.onGetBlobError(abortCause, ((GetBlobOperation) op).getOptions());
       } else {
         routerMetrics.onGetBlobInfoError(abortCause);
       }

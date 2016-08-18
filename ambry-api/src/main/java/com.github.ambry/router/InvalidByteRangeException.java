@@ -14,19 +14,12 @@
 
 package com.github.ambry.router;
 
-public class GetBlobOptions {
-  private final ByteRange range;
-
-  public GetBlobOptions(ByteRange range) {
-    this.range = range;
+public class InvalidByteRangeException extends Exception {
+  public InvalidByteRangeException(ByteRange range, long totalSize) {
+    super("The provided byte offset range: " + range + " exceeds the total size: " + totalSize + " of the blob");
   }
 
-  public ByteRange getRange() {
-    return range;
-  }
-
-  @Override
-  public String toString() {
-    return "GetBlobOptions{range=" + range + '}';
+  public InvalidByteRangeException(long startOffset, long endOffset) {
+    super("Invalid range offsets provided; startOffset: " + startOffset + ", endOffset: " + endOffset);
   }
 }

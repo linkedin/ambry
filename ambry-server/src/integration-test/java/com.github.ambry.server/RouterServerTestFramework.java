@@ -287,7 +287,7 @@ class RouterServerTestFramework {
    */
   private void startGetBlob(final boolean afterDelete, final OperationChain opChain) {
     Callback<ReadableStreamChannel> callback = new TestCallback<>(opChain, afterDelete);
-    Future<ReadableStreamChannel> future = router.getBlob(opChain.blobId, callback);
+    Future<ReadableStreamChannel> future = router.getBlob(opChain.blobId, null, callback);
     TestFuture<ReadableStreamChannel> testFuture =
         new TestFuture<ReadableStreamChannel>(future, genLabel("getBlob", afterDelete), opChain) {
           @Override

@@ -90,11 +90,13 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   private int numChunksRetrieved;
   // the offset of the first chunk index in the requested byte range
   // (i.e. 0 if requesting the entire blob or 2 if requesting from the 3rd data chunk on)
-  private int firstChunkOffset = 0;
+  private int firstChunkIndexInRange = 0;
   // the maximum size of a data chunk in bytes
-  private int chunkSize = CompositeBlobInfo.UNDEFINED_CHUNK_SIZE;
+  private int chunkSize;
   // the total size of the object being fetched in this operation
-  private long totalSize = CompositeBlobInfo.UNDEFINED_TOTAL_SIZE;
+  private long totalSize;
+  // a concrete byte range that has been verified to be within the total blob size
+  private ValidatedByteRange validatedByteRange;
   // a list iterator to the chunk ids that need to be fetched for this operation, if this is a composite blob.
   private ListIterator<StoreKey> chunkIdIterator;
   // chunk index to retrieved chunk buffer mapping.
@@ -170,6 +172,13 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   }
 
   /**
+   * @return The {@link GetBlobOptions} associated with this operation.
+   */
+  GetBlobOptions getOptions() {
+    return options;
+  }
+
+  /**
    * Do all that needs to be done (cleanup, notification, etc.) on chunk completion and mark the state of the chunk
    * appropriately.
    * @param chunk the chunk that has completed.
@@ -187,11 +196,15 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         // chunk retrievals and channel writes will need to happen and for that, this operation needs the GetManager to
         // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
         // notified during the channel read.
-        routerMetrics.getBlobOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
+        long timeElapsed = time.milliseconds() - submissionTimeMs;
+        routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
+        if (hasRange) {
+          routerMetrics.getBlobWithRangeOperationLatencyMs.update(timeElapsed);
+        }
         Exception e = getOperationException();
         getBlobResult = e == null ? new GetBlobResult() : null;
         if (e != null) {
-          routerMetrics.onGetBlobError(e);
+          routerMetrics.onGetBlobError(e, options);
         }
         operationCompleteCallback.completeOperation(operationFuture, operationCallback, getBlobResult, e);
       }
@@ -393,7 +406,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         if (operationException.get() == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         }
-        routerMetrics.getBlobOperationTotalTimeMs.update(time.milliseconds() - submissionTimeMs);
+        long totalTime = time.milliseconds() - submissionTimeMs;
+        routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
+        if (hasRange) {
+          routerMetrics.getBlobWithRangeOperationTotalTimeMs.update(totalTime);
+        }
       }
       operationCompleted = true;
     }
@@ -404,6 +421,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     private void updateChunkingAndSizeMetricsOnSuccessfulGet() {
       routerMetrics.getBlobSizeBytes.update(bytesWritten);
       routerMetrics.getBlobChunkCount.update(numChunksTotal);
+      if (hasRange) {
+        routerMetrics.getBlobWithRangeSizeBytes.update(bytesWritten);
+        routerMetrics.getBlobWithRangeChunkCount.update(numChunksTotal);
+      }
       if (numChunksTotal == 1) {
         routerMetrics.simpleBlobGetCount.inc();
       } else {
@@ -420,10 +441,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   private class GetChunk {
     // the operation tracker used to track the operation on the current chunk.
     private OperationTracker chunkOperationTracker;
-    // whether the operation on the current chunk has completed.
-    private boolean chunkCompleted;
     // the blob id of the current chunk.
     private BlobId chunkBlobId;
+    // whether the operation on the current chunk has completed.
+    protected boolean chunkCompleted;
     // the index of the current chunk in the overall blob.
     protected int chunkIndex;
     // the most relevant exception encountered for the current chunk.
@@ -571,11 +592,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      * Check if the operation on the chunk is eligible for completion, if so complete it.
      */
     void checkAndMaybeComplete() {
-      if (chunkOperationTracker.isDone()) {
+      if (!chunkCompleted && chunkOperationTracker.isDone()) {
         if (chunkOperationTracker.hasSucceeded()) {
-          // override any previously set exceptions as long as it's not a range out of bounds error,
-          // which is set after successfully reading a chunk.
-          if (chunkException != null && chunkException.getErrorCode() != RouterErrorCode.RangeNotSatisfiable) {
+          // override any previously set exceptions
+          if (chunkException != null) {
             chunkException = null;
           }
         }
@@ -678,8 +698,9 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
         // Each get request issued by the router is for a single blob.
         if (partitionsInResponse != 1) {
-          chunkException = new RouterException("Unexpected number of partition responses, expected: 1, " +
-              "received: " + partitionsInResponse, RouterErrorCode.UnexpectedInternalError);
+          chunkException = new RouterException(
+              "Unexpected number of partition responses, expected: 1, " + "received: " + partitionsInResponse,
+              RouterErrorCode.UnexpectedInternalError);
         } else {
           getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
           if (getError == ServerErrorCode.No_Error) {
@@ -751,17 +772,15 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       if (!hasRange) {
         return buf;
       }
-      GetBlobRange range = options.getRange();
-      long startOffset = range.getStartOffset(totalSize);
-      long endOffset = range.getEndOffset(totalSize);
-      long blobDataSize = blobData.getSize();
-      long chunkStart = (long) chunkSize * (chunkIndex + firstChunkOffset);
-      long chunkEnd = chunkStart + blobDataSize;
-      if (chunkStart < startOffset) {
-        buf.position((int) (startOffset - chunkStart));
+      // the (inclusive) byte offset of the beginning of the chunk.
+      long chunkStartOffset = (long) chunkSize * (chunkIndex + firstChunkIndexInRange);
+      // the (inclusive) byte offset of the end of the chunk.
+      long chunkEndOffset = chunkStartOffset + blobData.getSize() - 1;
+      if (chunkStartOffset < validatedByteRange.getStartOffset()) {
+        buf.position((int) (validatedByteRange.getStartOffset() - chunkStartOffset));
       }
-      if (endOffset + 1 < chunkEnd) {
-        buf.limit((int) (endOffset + 1 - chunkStart));
+      if (validatedByteRange.getEndOffset() < chunkEndOffset) {
+        buf.limit((int) (validatedByteRange.getEndOffset() - chunkStartOffset + 1));
       }
       return buf.slice();
     }
@@ -844,19 +863,14 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
               MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
           chunkSize = compositeBlobInfo.getChunkSize();
           totalSize = compositeBlobInfo.getTotalSize();
-          if (hasRange && (chunkSize == CompositeBlobInfo.UNDEFINED_CHUNK_SIZE
-              || totalSize == CompositeBlobInfo.UNDEFINED_TOTAL_SIZE)) {
-            onInvalidRange("Range requests not supported by this metadata content version");
-          } else if (hasRange && !options.getRange().withinTotalSize(totalSize)) {
-            onInvalidRange("Provided getBlob range exceeds the total blob size");
-          } else {
+          try {
             List<StoreKey> keys = compositeBlobInfo.getKeys();
             if (hasRange) {
-              GetBlobRange range = options.getRange();
+              validatedByteRange = new ValidatedByteRange(options.getRange(), totalSize);
               // Get only the chunks within the range.
-              firstChunkOffset = (int) (range.getStartOffset(totalSize) / chunkSize);
-              keys = keys.subList(firstChunkOffset, (int) ((range.getEndOffset(totalSize) / chunkSize) + 1));
-              routerMetrics.onValidRangeRequest(range, totalSize);
+              firstChunkIndexInRange = (int) (validatedByteRange.getStartOffset() / chunkSize);
+              int lastChunkIndexInByteRange = (int) (validatedByteRange.getEndOffset() / chunkSize);
+              keys = keys.subList(firstChunkIndexInRange, lastChunkIndexInByteRange + 1);
             }
             chunkIdIterator = keys.listIterator();
             numChunksTotal = keys.size();
@@ -864,14 +878,14 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
             for (int i = 0; i < dataChunks.length; i++) {
               dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
             }
+          } catch (InvalidByteRangeException e) {
+            onInvalidRange(e.getMessage());
           }
         } else {
           totalSize = blobData.getSize();
-          if (hasRange && !options.getRange().withinTotalSize(totalSize)) {
-            onInvalidRange("Provided getBlob range exceeds the total blob size");
-          } else {
+          try {
             if (hasRange) {
-              routerMetrics.onValidRangeRequest(options.getRange(), totalSize);
+              validatedByteRange = new ValidatedByteRange(options.getRange(), totalSize);
             }
             chunkIdIterator = null;
             dataChunks = null;
@@ -879,6 +893,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
             numChunksTotal = 1;
             chunkIndexToBuffer.put(0, filterChunkToRange(blobData));
             numChunksRetrieved = 1;
+          } catch (InvalidByteRangeException e) {
+            onInvalidRange(e.getMessage());
           }
         }
         successfullyDeserialized = true;
@@ -917,8 +933,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     }
 
     /**
-     * On an invalid range, set a {@link RouterErrorCode#RangeNotSatisfiable} exception for this chunk and
-     * set the chunk counters such that the operation will be completed.
+     * On an invalid range, set a {@link RouterErrorCode#RangeNotSatisfiable} exception for this chunk, mark the chunk
+     * as unconditionally completed, and set the chunk counters such that the operation will be completed.
      * @param errorMessage The message for the {@link RouterException} to set
      */
     private void onInvalidRange(String errorMessage) {
@@ -927,6 +943,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       dataChunks = null;
       numChunksTotal = 0;
       numChunksRetrieved = 0;
+      chunkCompleted = true;
     }
   }
 
@@ -938,14 +955,17 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      * The GetChunk is free and can be assigned to hold a chunk of the overall blob.
      */
     Free,
+
     /**
      * The GetChunk has been assigned to get and hold a chunk of the overall blob.
      */
     Ready,
+
     /**
      * The GetChunk has issued requests and the operation on the chunk it holds is in progress.
      */
     InProgress,
+
     /**
      * The GetChunk is complete.
      */

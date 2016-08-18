@@ -33,6 +33,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
@@ -627,7 +628,7 @@ class AmbryBlobStorageService implements BlobStorageService {
                     }
                   } else if (!blobNotModified) {
                     logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
-                    router.getBlob(blobId, new GetCallback(restRequest, restResponseChannel));
+                    router.getBlob(blobId, null, new GetCallback(restRequest, restResponseChannel));
                   }
                 }
               } catch (Exception e) {
@@ -654,8 +655,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     }
 
     /**
-     * Sets the blob ID that should be used for {@link Router#getBlob(String, Callback)}.
-     * @param blobId the blob ID that should be used for {@link Router#getBlob(String, Callback)}.
+     * Sets the blob ID that should be used for {@link Router#getBlob(String, GetBlobOptions, Callback)}
+     * @param blobId the blob ID that should be used for {@link Router#getBlob(String, GetBlobOptions, Callback)}.
      */
     void setBlobId(String blobId) {
       this.blobId = blobId;

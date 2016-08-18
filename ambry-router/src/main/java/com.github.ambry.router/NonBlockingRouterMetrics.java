@@ -37,6 +37,7 @@ public class NonBlockingRouterMetrics {
   public final Meter putBlobOperationRate;
   public final Meter getBlobInfoOperationRate;
   public final Meter getBlobOperationRate;
+  public final Meter getBlobWithRangeOperationRate;
   public final Meter deleteBlobOperationRate;
   public final Meter operationQueuingRate;
   public final Meter operationDequeuingRate;
@@ -47,6 +48,8 @@ public class NonBlockingRouterMetrics {
   public final Histogram getBlobInfoOperationLatencyMs;
   public final Histogram getBlobOperationLatencyMs;
   public final Histogram getBlobOperationTotalTimeMs;
+  public final Histogram getBlobWithRangeOperationLatencyMs;
+  public final Histogram getBlobWithRangeOperationTotalTimeMs;
   public final Histogram deleteBlobOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
 
@@ -54,6 +57,7 @@ public class NonBlockingRouterMetrics {
   public final Counter putBlobErrorCount;
   public final Counter getBlobInfoErrorCount;
   public final Counter getBlobErrorCount;
+  public final Counter getBlobWithRangeErrorCount;
   public final Counter deleteBlobErrorCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
@@ -111,7 +115,8 @@ public class NonBlockingRouterMetrics {
   public final Histogram putBlobChunkCount;
   public final Histogram getBlobSizeBytes;
   public final Histogram getBlobChunkCount;
-  public final Histogram rangeRequestSizeBytes;
+  public final Histogram getBlobWithRangeSizeBytes;
+  public final Histogram getBlobWithRangeChunkCount;
   public final Counter simpleBlobPutCount;
   public final Counter simpleBlobGetCount;
   public final Counter compositeBlobPutCount;
@@ -128,6 +133,8 @@ public class NonBlockingRouterMetrics {
     getBlobInfoOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoOperationRate"));
     getBlobOperationRate = metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationRate"));
+    getBlobWithRangeOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationRate"));
     deleteBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
@@ -145,6 +152,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationLatencyMs"));
     getBlobOperationTotalTimeMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationTotalTimeMs"));
+    getBlobWithRangeOperationLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationLatencyMs"));
+    getBlobWithRangeOperationTotalTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationTotalTimeMs"));
     deleteBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationLatencyMs"));
     routerRequestLatencyMs =
@@ -155,6 +166,8 @@ public class NonBlockingRouterMetrics {
     getBlobInfoErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoErrorCount"));
     getBlobErrorCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobErrorCount"));
+    getBlobWithRangeErrorCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
     routerRequestErrorCount =
@@ -236,8 +249,10 @@ public class NonBlockingRouterMetrics {
     putBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobChunkCount"));
     getBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobSizeBytes"));
     getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobChunkCount"));
-    rangeRequestSizeBytes =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "RangeRequestSizeBytes"));
+    getBlobWithRangeSizeBytes =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeSizeBytes"));
+    getBlobWithRangeChunkCount =
+        metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobWithRangeChunkCount"));
     simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
     simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
@@ -373,11 +388,15 @@ public class NonBlockingRouterMetrics {
   /**
    * Update appropriate metrics on a getBlob operation related error.
    * @param e the {@link Exception} associated with the error.
+   * @param options the {@link GetBlobOptions} associated with the request.
    */
-  void onGetBlobError(Exception e) {
+  void onGetBlobError(Exception e, GetBlobOptions options) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobErrorCount.inc();
+      if (options != null && options.getRange() != null) {
+        getBlobWithRangeErrorCount.inc();
+      }
       operationErrorRate.mark();
     }
   }
@@ -404,15 +423,6 @@ public class NonBlockingRouterMetrics {
       deleteBlobErrorCount.inc();
       operationErrorRate.mark();
     }
-  }
-
-  /**
-   * Update appropriate metrics on a {@link GetBlobOperation} with a valid {@link GetBlobRange}.
-   * @param range The {@link GetBlobRange} for the operation.
-   * @param totalSize The total size of the blob in the operation.
-   */
-  void onValidRangeRequest(GetBlobRange range, long totalSize) {
-    rangeRequestSizeBytes.update(range.getEndOffset(totalSize) - range.getStartOffset(totalSize) + 1);
   }
 
   /**

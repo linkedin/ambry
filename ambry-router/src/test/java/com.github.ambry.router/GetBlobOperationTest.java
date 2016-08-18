@@ -56,6 +56,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.router.ByteRange.UNDEFINED_OFFSET;
 import static com.github.ambry.router.RouterTestHelpers.testWithErrorCodes;
 
 
@@ -137,6 +138,7 @@ public class GetBlobOperationTest {
   public void after() {
     router.close();
     Assert.assertEquals("All operations should have completed", 0, operationsCount.get());
+    options = null;
   }
 
   /**
@@ -481,7 +483,7 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   @Test
-  public void testRangeRequestSingleChunk()
+  public void testRangeRequestSimpleBlob()
       throws Exception {
     // Random valid ranges
     for (int i = 0; i < 5; i++) {
@@ -495,14 +497,19 @@ public class GetBlobOperationTest {
     // Entire blob
     testRangeRequest(0, blobSize - 1, true);
     // Range that extends to end of blob
-    testRangeRequest(random.nextInt(blobSize), GetBlobRange.UNDEFINED_OFFSET, true);
+    testRangeRequest(random.nextInt(blobSize), UNDEFINED_OFFSET, true);
     // Last n bytes of the blob
-    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
+    testRangeRequest(UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
 
     // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, blobSize + 1, false);
+    testRangeRequest(UNDEFINED_OFFSET, blobSize + 1, false);
     // Range over the end of the blob (should not succeed)
     testRangeRequest(random.nextInt(blobSize), blobSize + 5, false);
+    // Ranges that start past the end of the blob (should not succeed)
+    testRangeRequest(blobSize, UNDEFINED_OFFSET, false);
+    testRangeRequest(blobSize, blobSize + 20, false);
+    // 0 byte range
+    testRangeRequest(UNDEFINED_OFFSET, 0, true);
   }
 
   /**
@@ -524,28 +531,40 @@ public class GetBlobOperationTest {
     // Entire blob
     testRangeRequest(0, blobSize - 1, true);
     // Range that extends to end of blob
-    testRangeRequest(random.nextInt(blobSize), GetBlobRange.UNDEFINED_OFFSET, true);
+    testRangeRequest(random.nextInt(blobSize), UNDEFINED_OFFSET, true);
     // Last n bytes of the blob
-    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
-
+    testRangeRequest(UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
     // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequest(GetBlobRange.UNDEFINED_OFFSET, blobSize + 1, false);
+    testRangeRequest(UNDEFINED_OFFSET, blobSize + 1, false);
     // Range over the end of the blob (should not succeed)
     testRangeRequest(random.nextInt(blobSize), blobSize + 5, false);
+    // Ranges that start past the end of the blob (should not succeed)
+    testRangeRequest(blobSize, UNDEFINED_OFFSET, false);
+    testRangeRequest(blobSize, blobSize + 20, false);
 
     blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize);
-    // Single intermediate chunk
-    testRangeRequest(maxChunkSize, maxChunkSize * 2 - 1, true);
     // Single start chunk
     testRangeRequest(0, maxChunkSize - 1, true);
+    // Single intermediate chunk
+    testRangeRequest(maxChunkSize, maxChunkSize * 2 - 1, true);
     // Single end chunk
     testRangeRequest(maxChunkSize * 2, blobSize - 1, true);
+    // 0 byte range
+    testRangeRequest(UNDEFINED_OFFSET, 0, true);
   }
 
+  /**
+   * Send a range request and test that it either completes successfully or fails with a
+   * {@link RouterErrorCode#RangeNotSatisfiable} error.
+   * @param startOffset The start byte offset for the range request.
+   * @param endOffset The end byte offset for the range request
+   * @param rangeSatisfiable {@code true} if
+   * @throws Exception
+   */
   private void testRangeRequest(long startOffset, long endOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions().withRange(new GetBlobRange(startOffset, endOffset));
+    options = new GetBlobOptions(new ByteRange(startOffset, endOffset));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -625,6 +644,7 @@ public class GetBlobOperationTest {
    * @param getChunksBeforeRead {@code true} if all chunks should be cached by the router before reading from the
    *                            stream.
    * @param initiateReadBeforeChunkGet Whether readInto() should be initiated immediately before data chunks are
+   *                                   fetched by the router to simulate chunk arrival delay.
    */
   private void getAndAssertSuccess(final boolean getChunksBeforeRead, final boolean initiateReadBeforeChunkGet)
       throws Exception {
@@ -677,15 +697,14 @@ public class GetBlobOperationTest {
     }
     int sizeWritten = blobSize;
     if (options != null && options.getRange() != null) {
-      GetBlobRange range = options.getRange();
-      sizeWritten = (int) (range.getEndOffset(blobSize) - range.getStartOffset(blobSize) + 1);
+      ValidatedByteRange range = new ValidatedByteRange(options.getRange(), blobSize);
+      sizeWritten = (int) (range.getEndOffset() - range.getStartOffset() + 1);
     }
     Assert.assertEquals("Size read must equal size written", sizeWritten, readCompleteResult.get());
   }
 
   /**
    * Create a getBlob operation with the specified callback and poll until completion.
-   *
    * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
    * @return the operation
    * @throws Exception
@@ -708,7 +727,6 @@ public class GetBlobOperationTest {
 
   /**
    * Create a getBlob operation with the specified callback
-   *
    * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
    * @return the operation
    * @throws Exception
@@ -741,7 +759,6 @@ public class GetBlobOperationTest {
    * Assert that the operation is complete and successful. Note that the future completion and callback invocation
    * happens outside of the GetOperation, so those are not checked here. But at this point, the operation result should
    * be ready.
-   *
    * @param options The {@link GetBlobOptions} for the operation to check.
    * @param readIntoFuture The future associated with the read on the {@link ReadableStreamChannel} result of the
    *                       operation.
@@ -758,9 +775,9 @@ public class GetBlobOperationTest {
       ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
       // If a range is set, compare the result against the specified byte range.
       if (options != null && options.getRange() != null) {
-        GetBlobRange range = options.getRange();
-        int startOffset = (int) range.getStartOffset(putContent.length);
-        int endOffset = (int) range.getEndOffset(putContent.length);
+        ValidatedByteRange range = new ValidatedByteRange(options.getRange(), blobSize);
+        int startOffset = (int) range.getStartOffset();
+        int endOffset = (int) range.getEndOffset();
         putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);
       }
       long written;

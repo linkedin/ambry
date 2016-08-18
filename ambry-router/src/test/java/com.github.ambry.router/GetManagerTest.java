@@ -56,7 +56,7 @@ public class GetManagerTest {
   private byte[] putUserMetadata;
   private byte[] putContent;
   private ReadableStreamChannel putChannel;
-  private GetBlobOptions options;
+  private GetBlobOptions options = null;
 
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -85,6 +85,7 @@ public class GetManagerTest {
   public void postCheck() {
     Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     Assert.assertEquals("Router operations count must be zero", 0, router.getOperationsCount());
+    options = null;
   }
 
   /**
@@ -132,8 +133,7 @@ public class GetManagerTest {
       throws Exception {
     // Random valid ranges
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11,
-        new GetBlobOptions().withRange(new GetBlobRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
+    setOperationParams(chunkSize * 6 + 11, new GetBlobOptions(new ByteRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
     Assert.assertTrue("Blob properties should match",
@@ -316,9 +316,9 @@ public class GetManagerTest {
     ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
     // If a range is set, compare the result against the specified byte range.
     if (options != null && options.getRange() != null) {
-      GetBlobRange range = options.getRange();
-      int startOffset = (int) range.getStartOffset(putContent.length);
-      int endOffset = (int) range.getEndOffset(putContent.length);
+      ValidatedByteRange range = new ValidatedByteRange(options.getRange(), putContent.length);
+      int startOffset = (int) range.getStartOffset();
+      int endOffset = (int) range.getEndOffset();
       putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);
     }
     ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();

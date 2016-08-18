@@ -45,7 +45,7 @@ public class MessageFormatRecord {
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Blob_Version_V1 = 1;
   public static final short Blob_Version_V2 = 2;
-  public static final short Metadata_Content_Version_V1 = 1;
+  // Metadata_Content_Version_V1 was unused and was removed to simplify the range request handling code.
   public static final short Metadata_Content_Version_V2 = 2;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
@@ -612,55 +612,20 @@ public class MessageFormatRecord {
     }
   }
 
-  /**
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   * |         |               |            |            |          |
-   * | version |   no of keys  |    key1    |     key2   |  ......  |
-   * |(2 bytes)|    (4 bytes)  |            |            |  ......  |
-   * |         |               |            |            |          |
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   *  version         - The version of the metadata content record
-   *
-   *  no of keys      - total number of keys
-   *
-   *  key1            - first key to be part of metadata blob
-   *
-   *  key2            - second key to be part of metadata blob
-   *
-   */
-  public static class Metadata_Content_Format_V1 {
-    public static final int Key_Count_Field_Size_In_Bytes = 4;
-
-    public static int getMetadataContentSize(int keySize, int numberOfKeys) {
-      return Version_Field_Size_In_Bytes +
-          Key_Count_Field_Size_In_Bytes +
-          (numberOfKeys * keySize);
-    }
-
-    public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, List<StoreKey> keys) {
-      int keySize = keys.get(0).sizeInBytes();
-      outputBuffer.putShort(Metadata_Content_Version_V1);
-      outputBuffer.putInt(keys.size());
-      for (StoreKey storeKey : keys) {
-        if (storeKey.sizeInBytes() != keySize) {
-          throw new IllegalArgumentException("Keys are not of same size");
-        }
-        outputBuffer.put(storeKey.toBytes());
-      }
-    }
-
-    public static CompositeBlobInfo deserializeMetadataContentRecord(DataInputStream stream,
-        StoreKeyFactory storeKeyFactory)
-        throws IOException, MessageFormatException {
-      List<StoreKey> keys = new ArrayList<StoreKey>();
-      int numberOfKeys = stream.readInt();
-      for (int i = 0; i < numberOfKeys; i++) {
-        StoreKey storeKey = storeKeyFactory.getStoreKey(stream);
-        keys.add(storeKey);
-      }
-      return new CompositeBlobInfo(keys);
-    }
-  }
+   // Metadata_Content_Format_V1 (layout below) was unused and was removed to clean up the range request handling code.
+   //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   // |         |               |            |            |          |
+   // | version |   no of keys  |    key1    |     key2   |  ......  |
+   // |(2 bytes)|    (4 bytes)  |            |            |  ......  |
+   // |         |               |            |            |          |
+   //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   //  version         - The version of the metadata content record
+   //
+   //  no of keys      - total number of keys
+   //
+   //  key1            - first key to be part of metadata blob
+   //
+   //  key2            - second key to be part of metadata blob
 
   /**
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

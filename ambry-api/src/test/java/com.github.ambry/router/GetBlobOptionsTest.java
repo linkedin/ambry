@@ -14,7 +14,6 @@
 
 package com.github.ambry.router;
 
-import junit.framework.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -22,9 +21,10 @@ import static org.junit.Assert.*;
 
 public class GetBlobOptionsTest {
   @Test
-  public void testRangeOption() {
-    GetBlobRange range = new GetBlobRange(1, 2);
-    GetBlobOptions options = new GetBlobOptions().withRange(range);
+  public void testRangeOption()
+      throws Exception {
+    ByteRange range = new ByteRange(1, 2);
+    GetBlobOptions options = new GetBlobOptions(range);
     assertEquals(range, options.getRange());
   }
 }
