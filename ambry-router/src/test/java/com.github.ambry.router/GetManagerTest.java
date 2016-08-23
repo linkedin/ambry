@@ -133,7 +133,8 @@ public class GetManagerTest {
       throws Exception {
     // Random valid ranges
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11, new GetBlobOptions(new ByteRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
+    setOperationParams(chunkSize * 6 + 11,
+        new GetBlobOptions(ByteRange.fromClosedRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
     Assert.assertTrue("Blob properties should match",

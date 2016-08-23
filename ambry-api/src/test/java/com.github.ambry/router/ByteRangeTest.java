@@ -23,40 +23,71 @@ import static org.junit.Assert.*;
 public class ByteRangeTest {
   @Test
   public void testValidRange()
-      throws InvalidByteRangeException {
-    assertByteRangeCreationSuccess(0, 0);
-    assertByteRangeCreationSuccess(0, UNDEFINED_OFFSET);
-    assertByteRangeCreationSuccess(15, UNDEFINED_OFFSET);
-    assertByteRangeCreationSuccess(UNDEFINED_OFFSET, 20);
-    assertByteRangeCreationSuccess(UNDEFINED_OFFSET, 0);
-    assertByteRangeCreationSuccess(22, 44);
-    assertByteRangeCreationSuccess(Long.MAX_VALUE - 50, UNDEFINED_OFFSET);
+      throws Exception {
+    testByteRangeCreationClosedRange(0, 0, true);
+    testByteRangeCreationOpenRange(0, true);
+    testByteRangeCreationOpenRange(15, true);
+    testByteRangeCreationLastNBytes(20, true);
+    testByteRangeCreationLastNBytes(0, true);
+    testByteRangeCreationClosedRange(22, 44, true);
+    testByteRangeCreationOpenRange(Long.MAX_VALUE - 50, true);
   }
 
   @Test
-  public void testInvalidRanges() {
-    // negative indices (that aren't UNDEFINED_OFFSET)
-    assertByteRangeCreationFailure(-2, 1);
-    assertByteRangeCreationFailure(5, -2);
-    assertByteRangeCreationFailure(-3, -2);
-    // both offsets undefined
-    assertByteRangeCreationFailure(UNDEFINED_OFFSET, UNDEFINED_OFFSET);
+  public void testInvalidRanges()
+      throws Exception {
+    // negative indices
+    testByteRangeCreationClosedRange(-2, 1, false);
+    testByteRangeCreationClosedRange(5, -1, false);
+    testByteRangeCreationClosedRange(-3, -2, false);
+    testByteRangeCreationOpenRange(-1, false);
+    testByteRangeCreationLastNBytes(-2, false);
     // start greater than end offset
-    assertByteRangeCreationFailure(32, 4);
+    testByteRangeCreationClosedRange(32, 4, false);
   }
 
-  private void assertByteRangeCreationFailure(long startOffset, long endOffset) {
-    try {
-      new ByteRange(startOffset, endOffset);
-      fail(String.format("Range creation should not have succeeded with range [%d, %d]", startOffset, endOffset));
-    } catch (InvalidByteRangeException expected) {
+  private void testByteRangeCreationClosedRange(long startOffset, long endOffset, boolean expectSuccess)
+      throws Exception {
+    if (expectSuccess) {
+      ByteRange byteRange = ByteRange.fromClosedRange(startOffset, endOffset);
+      assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
+      assertEquals("Wrong endOffset", endOffset, byteRange.getEndOffset());
+    } else {
+      try {
+        ByteRange.fromClosedRange(startOffset, endOffset);
+        fail(String.format("Range creation should not have succeeded with range [%d, %d]", startOffset, endOffset));
+      } catch (InvalidByteRangeException expected) {
+      }
     }
   }
 
-  private void assertByteRangeCreationSuccess(long startOffset, long endOffset)
-      throws InvalidByteRangeException {
-    ByteRange byteRange = new ByteRange(startOffset, endOffset);
-    assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
-    assertEquals("Wrong endOffset", endOffset, byteRange.getEndOffset());
+  private void testByteRangeCreationOpenRange(long startOffset, boolean expectSuccess)
+      throws Exception {
+    if (expectSuccess) {
+      ByteRange byteRange = ByteRange.fromOpenRange(startOffset);
+      assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
+      assertEquals("Wrong endOffset", UNDEFINED_OFFSET, byteRange.getEndOffset());
+    } else {
+      try {
+        ByteRange.fromOpenRange(startOffset);
+        fail("Range creation should not have succeeded with range from " + startOffset);
+      } catch (InvalidByteRangeException expected) {
+      }
+    }
+  }
+
+  private void testByteRangeCreationLastNBytes(long lastNBytes, boolean expectSuccess)
+      throws Exception {
+    if (expectSuccess) {
+      ByteRange byteRange = ByteRange.fromLastNBytes(lastNBytes);
+      assertEquals("Wrong startOffset", UNDEFINED_OFFSET, byteRange.getStartOffset());
+      assertEquals("Wrong endOffset", lastNBytes, byteRange.getEndOffset());
+    } else {
+      try {
+        ByteRange.fromLastNBytes(lastNBytes);
+        fail("Range creation should not have succeeded with range of last " + lastNBytes + " bytes");
+      } catch (InvalidByteRangeException expected) {
+      }
+    }
   }
 }

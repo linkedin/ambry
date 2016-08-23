@@ -23,7 +23,7 @@ public class GetBlobOptionsTest {
   @Test
   public void testRangeOption()
       throws Exception {
-    ByteRange range = new ByteRange(1, 2);
+    ByteRange range = ByteRange.fromClosedRange(1, 2);
     GetBlobOptions options = new GetBlobOptions(range);
     assertEquals(range, options.getRange());
   }

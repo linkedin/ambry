@@ -18,23 +18,59 @@ package com.github.ambry.router;
  * Represents a byte range for performing ranged get requests.
  */
 public class ByteRange {
-  public static final long UNDEFINED_OFFSET = -1;
+  static final long UNDEFINED_OFFSET = -1;
   private final long startOffset;
   private final long endOffset;
 
   /**
-   * Construct a range from the offsets parsed from the range header.
-   * @param startOffset the (inclusive) start byte offset, or {@link ByteRange#UNDEFINED_OFFSET}.
-   * @param endOffset the (inclusive) end byte offset, or {@link ByteRange#UNDEFINED_OFFSET}.
+   * Construct a range from a start offset to the end of an object.
+   * @param startOffset The (inclusive) start byte offset.
+   * @return A {@link ByteRange} with the specified start offset.
    * @throws InvalidByteRangeException
    */
-  public ByteRange(long startOffset, long endOffset)
+  public static ByteRange fromOpenRange(long startOffset)
       throws InvalidByteRangeException {
-    if (startOffset < 0 && startOffset != UNDEFINED_OFFSET || endOffset < 0 && endOffset != UNDEFINED_OFFSET
-        || startOffset == UNDEFINED_OFFSET && endOffset == UNDEFINED_OFFSET
-        || endOffset != UNDEFINED_OFFSET && endOffset < startOffset) {
+    if (startOffset < 0) {
+      throw new InvalidByteRangeException(startOffset, UNDEFINED_OFFSET);
+    }
+    return new ByteRange(startOffset, UNDEFINED_OFFSET);
+  }
+
+  /**
+   * Construct a range that represents the last N bytes of an object.
+   * @param lastNBytes the number of bytes to read from the end of an object.
+   * @return A {@link ByteRange} representing the last N bytes of an objects.
+   * @throws InvalidByteRangeException
+   */
+  public static ByteRange fromLastNBytes(long lastNBytes)
+      throws InvalidByteRangeException {
+    if (lastNBytes < 0) {
+      throw new InvalidByteRangeException(UNDEFINED_OFFSET, lastNBytes);
+    }
+    return new ByteRange(UNDEFINED_OFFSET, lastNBytes);
+  }
+
+  /**
+   * Construct a range from a start offset to an end offset.
+   * @param startOffset the (inclusive) start byte offset.
+   * @param endOffset the (inclusive) end byte offset.
+   * @return A {@link ByteRange} with the specified offsets.
+   * @throws InvalidByteRangeException
+   */
+  public static ByteRange fromClosedRange(long startOffset, long endOffset)
+      throws InvalidByteRangeException {
+    if (startOffset < 0 || endOffset < 0 || endOffset < startOffset) {
       throw new InvalidByteRangeException(startOffset, endOffset);
     }
+    return new ByteRange(startOffset, endOffset);
+  }
+
+  /**
+   * Construct a range from byte offsets.
+   * @param startOffset the (inclusive) start byte offset, or {@link ByteRange#UNDEFINED_OFFSET}.
+   * @param endOffset the (inclusive) end byte offset, or {@link ByteRange#UNDEFINED_OFFSET}.
+   */
+  private ByteRange(long startOffset, long endOffset) {
     this.startOffset = startOffset;
     this.endOffset = endOffset;
   }

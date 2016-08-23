@@ -16,7 +16,6 @@ package com.github.ambry.router;
 
 import org.junit.Test;
 
-import static com.github.ambry.router.ByteRange.UNDEFINED_OFFSET;
 import static org.junit.Assert.*;
 
 
@@ -25,46 +24,47 @@ public class ValidatedByteRangeTest {
   public void testValidatedByteRange()
       throws InvalidByteRangeException {
     // 0-0 (0th byte)
-    ByteRange range = new ByteRange(0, 0);
+    ByteRange range = ByteRange.fromClosedRange(0, 0);
     assertRangeValidationFailure(range, 0);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationSuccess(range, 2, 0, 0);
 
     // 0- (bytes after/including 0)
-    range = new ByteRange(0, UNDEFINED_OFFSET);
+    range = ByteRange.fromOpenRange(0);
     assertRangeValidationFailure(range, 0);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationSuccess(range, 20, 0, 19);
 
     // 15- (bytes after/including 15)
-    range = new ByteRange(15, UNDEFINED_OFFSET);
+    range = ByteRange.fromOpenRange(15);
     assertRangeValidationFailure(range, 15);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationSuccess(range, 20, 15, 19);
     assertRangeValidationSuccess(range, 16, 15, 15);
 
     // -20 (last 20 bytes)
-    range = new ByteRange(UNDEFINED_OFFSET, 20);
+    range = ByteRange.fromLastNBytes(20);
     assertRangeValidationFailure(range, 0);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationSuccess(range, 20, 0, 19);
     assertRangeValidationSuccess(range, 30, 10, 29);
 
     // 22-44 (bytes 22 through 44, inclusive)
-    range = new ByteRange(22, 44);
+    range = ByteRange.fromClosedRange(22, 44);
     assertRangeValidationFailure(range, 44);
     assertRangeValidationSuccess(range, 45, 22, 44);
 
     // {MAX_LONG-50}- (bytes after/including MAX_LONG-50)
-    range = new ByteRange(Long.MAX_VALUE - 50, UNDEFINED_OFFSET);
+    range = ByteRange.fromOpenRange(Long.MAX_VALUE - 50);
     assertRangeValidationFailure(range, 0);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationFailure(range, 20);
     assertRangeValidationSuccess(range, Long.MAX_VALUE, Long.MAX_VALUE - 50, Long.MAX_VALUE - 1);
 
-    range = new ByteRange(UNDEFINED_OFFSET, 0);
+    // Last 0 bytes
+    range = ByteRange.fromLastNBytes(0);
     assertRangeValidationSuccess(range, 0, 0, -1);
-
+    assertRangeValidationSuccess(range, 20, 20, 19);
   }
 
   private void assertRangeValidationFailure(ByteRange byteRange, long totalSize) {

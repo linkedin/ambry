@@ -56,7 +56,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static com.github.ambry.router.ByteRange.UNDEFINED_OFFSET;
 import static com.github.ambry.router.RouterTestHelpers.testWithErrorCodes;
 
 
@@ -490,26 +489,25 @@ public class GetBlobOperationTest {
       blobSize = random.nextInt(maxChunkSize) + 1;
       int randomOne = random.nextInt(blobSize);
       int randomTwo = random.nextInt(blobSize);
-      testRangeRequest(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
+      testRangeRequestClosedRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
     }
 
     blobSize = random.nextInt(maxChunkSize) + 1;
     // Entire blob
-    testRangeRequest(0, blobSize - 1, true);
+    testRangeRequestClosedRange(0, blobSize - 1, true);
     // Range that extends to end of blob
-    testRangeRequest(random.nextInt(blobSize), UNDEFINED_OFFSET, true);
+    testRangeRequestOpenRange(random.nextInt(blobSize), true);
     // Last n bytes of the blob
-    testRangeRequest(UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
-
+    testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
     // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequest(UNDEFINED_OFFSET, blobSize + 1, false);
+    testRangeRequestLastNBytes(blobSize + 1, false);
     // Range over the end of the blob (should not succeed)
-    testRangeRequest(random.nextInt(blobSize), blobSize + 5, false);
+    testRangeRequestClosedRange(random.nextInt(blobSize), blobSize + 5, false);
     // Ranges that start past the end of the blob (should not succeed)
-    testRangeRequest(blobSize, UNDEFINED_OFFSET, false);
-    testRangeRequest(blobSize, blobSize + 20, false);
+    testRangeRequestOpenRange(blobSize, false);
+    testRangeRequestClosedRange(blobSize, blobSize + 20, false);
     // 0 byte range
-    testRangeRequest(UNDEFINED_OFFSET, 0, true);
+    testRangeRequestLastNBytes(0, true);
   }
 
   /**
@@ -524,33 +522,33 @@ public class GetBlobOperationTest {
       blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
       int randomOne = random.nextInt(blobSize);
       int randomTwo = random.nextInt(blobSize);
-      testRangeRequest(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
+      testRangeRequestClosedRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
     }
 
     blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
     // Entire blob
-    testRangeRequest(0, blobSize - 1, true);
+    testRangeRequestClosedRange(0, blobSize - 1, true);
     // Range that extends to end of blob
-    testRangeRequest(random.nextInt(blobSize), UNDEFINED_OFFSET, true);
+    testRangeRequestOpenRange(random.nextInt(blobSize), true);
     // Last n bytes of the blob
-    testRangeRequest(UNDEFINED_OFFSET, random.nextInt(blobSize) + 1, true);
+    testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
     // Last blobSize + 1 bytes (should not succeed)
-    testRangeRequest(UNDEFINED_OFFSET, blobSize + 1, false);
+    testRangeRequestLastNBytes(blobSize + 1, false);
     // Range over the end of the blob (should not succeed)
-    testRangeRequest(random.nextInt(blobSize), blobSize + 5, false);
+    testRangeRequestClosedRange(random.nextInt(blobSize), blobSize + 5, false);
     // Ranges that start past the end of the blob (should not succeed)
-    testRangeRequest(blobSize, UNDEFINED_OFFSET, false);
-    testRangeRequest(blobSize, blobSize + 20, false);
+    testRangeRequestOpenRange(blobSize, false);
+    testRangeRequestClosedRange(blobSize, blobSize + 20, false);
+    // 0 byte range
+    testRangeRequestLastNBytes(0, true);
 
     blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize);
     // Single start chunk
-    testRangeRequest(0, maxChunkSize - 1, true);
+    testRangeRequestClosedRange(0, maxChunkSize - 1, true);
     // Single intermediate chunk
-    testRangeRequest(maxChunkSize, maxChunkSize * 2 - 1, true);
+    testRangeRequestClosedRange(maxChunkSize, maxChunkSize * 2 - 1, true);
     // Single end chunk
-    testRangeRequest(maxChunkSize * 2, blobSize - 1, true);
-    // 0 byte range
-    testRangeRequest(UNDEFINED_OFFSET, 0, true);
+    testRangeRequestClosedRange(maxChunkSize * 2, blobSize - 1, true);
   }
 
   /**
@@ -558,13 +556,41 @@ public class GetBlobOperationTest {
    * {@link RouterErrorCode#RangeNotSatisfiable} error.
    * @param startOffset The start byte offset for the range request.
    * @param endOffset The end byte offset for the range request
-   * @param rangeSatisfiable {@code true} if
+   * @param rangeSatisfiable {@code true} if the range request should succeed.
    * @throws Exception
    */
-  private void testRangeRequest(long startOffset, long endOffset, boolean rangeSatisfiable)
+  private void testRangeRequestClosedRange(long startOffset, long endOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(new ByteRange(startOffset, endOffset));
+    options = new GetBlobOptions(ByteRange.fromClosedRange(startOffset, endOffset));
+    getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
+  }
+
+  /**
+   * Send a range request from a {@code startOffset} on and test that it either completes successfully or fails with a
+   * {@link RouterErrorCode#RangeNotSatisfiable} error.
+   * @param startOffset The start byte offset for the range request.
+   * @param rangeSatisfiable {@code true} if the range request should succeed.
+   * @throws Exception
+   */
+  private void testRangeRequestOpenRange(long startOffset, boolean rangeSatisfiable)
+      throws Exception {
+    doPut();
+    options = new GetBlobOptions(ByteRange.fromOpenRange(startOffset));
+    getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
+  }
+
+  /**
+   * Send a range request for the {@code lastNBytes} of an object and test that it either completes successfully or
+   * fails with a {@link RouterErrorCode#RangeNotSatisfiable} error.
+   * @param lastNBytes The start byte offset for the range request.
+   * @param rangeSatisfiable {@code true} if the range request should succeed.
+   * @throws Exception
+   */
+  private void testRangeRequestLastNBytes(long lastNBytes, boolean rangeSatisfiable)
+      throws Exception {
+    doPut();
+    options = new GetBlobOptions(ByteRange.fromLastNBytes(lastNBytes));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
