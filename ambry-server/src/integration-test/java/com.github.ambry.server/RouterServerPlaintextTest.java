@@ -69,32 +69,32 @@ public class RouterServerPlaintextTest {
       Queue<OperationType> operations = new LinkedList<>();
       switch (i % 3) {
         case 0:
-          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.PUT);
           operations.add(OperationType.AWAIT_CREATION);
-          operations.add(OperationType.GET_NB);
-          operations.add(OperationType.GET_INFO_NB);
-          operations.add(OperationType.DELETE_NB);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
+          operations.add(OperationType.DELETE);
           operations.add(OperationType.AWAIT_DELETION);
-          operations.add(OperationType.GET_DELETED_NB);
-          operations.add(OperationType.GET_INFO_DELETED_NB);
+          operations.add(OperationType.GET_DELETED);
+          operations.add(OperationType.GET_INFO_DELETED);
           break;
         case 1:
-          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.PUT);
           operations.add(OperationType.AWAIT_CREATION);
-          operations.add(OperationType.DELETE_NB);
+          operations.add(OperationType.DELETE);
           operations.add(OperationType.AWAIT_DELETION);
-          operations.add(OperationType.GET_DELETED_NB);
-          operations.add(OperationType.GET_INFO_DELETED_NB);
-          operations.add(OperationType.GET_DELETED_NB);
-          operations.add(OperationType.GET_INFO_DELETED_NB);
+          operations.add(OperationType.GET_DELETED);
+          operations.add(OperationType.GET_INFO_DELETED);
+          operations.add(OperationType.GET_DELETED);
+          operations.add(OperationType.GET_INFO_DELETED);
           break;
         case 2:
-          operations.add(OperationType.PUT_NB);
+          operations.add(OperationType.PUT);
           operations.add(OperationType.AWAIT_CREATION);
-          operations.add(OperationType.GET_NB);
-          operations.add(OperationType.GET_NB);
-          operations.add(OperationType.GET_NB);
-          operations.add(OperationType.GET_INFO_NB);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET);
+          operations.add(OperationType.GET_INFO);
           break;
       }
       int blobSize = random.nextInt(100 * 1024);
@@ -114,17 +114,17 @@ public class RouterServerPlaintextTest {
     Random random = new Random();
     for (int i = 0; i < 10; i++) {
       Queue<OperationType> operations = new LinkedList<>();
-      operations.add(OperationType.PUT_NB);
+      operations.add(OperationType.PUT);
       operations.add(OperationType.AWAIT_CREATION);
-      operations.add(OperationType.GET_INFO_NB);
-      operations.add(OperationType.GET_NB);
-      operations.add(OperationType.DELETE_NB);
+      operations.add(OperationType.GET_INFO);
+      operations.add(OperationType.GET);
+      operations.add(OperationType.DELETE);
       operations.add(OperationType.AWAIT_DELETION);
-      operations.add(OperationType.GET_INFO_DELETED_NB);
-      operations.add(OperationType.GET_DELETED_NB);
+      operations.add(OperationType.GET_INFO_DELETED);
+      operations.add(OperationType.GET_DELETED);
       int blobSize = random.nextInt(100 * 1024);
-      testFramework.checkOperationChains(
-          Collections.singletonList(testFramework.startOperationChain(blobSize, i, operations)));
+      testFramework
+          .checkOperationChains(Collections.singletonList(testFramework.startOperationChain(blobSize, i, operations)));
     }
   }
 
@@ -139,45 +139,14 @@ public class RouterServerPlaintextTest {
     List<OperationChain> opChains = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
       Queue<OperationType> operations = new LinkedList<>();
-      operations.add(OperationType.PUT_NB);
+      operations.add(OperationType.PUT);
       operations.add(OperationType.AWAIT_CREATION);
-      operations.add(OperationType.GET_INFO_NB);
-      operations.add(OperationType.GET_NB);
-      operations.add(OperationType.DELETE_NB);
+      operations.add(OperationType.GET_INFO);
+      operations.add(OperationType.GET);
+      operations.add(OperationType.DELETE);
       operations.add(OperationType.AWAIT_DELETION);
-      operations.add(OperationType.GET_INFO_DELETED_NB);
-      operations.add(OperationType.GET_DELETED_NB);
-      opChains.add(testFramework.startOperationChain(blobSize, i, operations));
-    }
-    testFramework.checkOperationChains(opChains);
-  }
-
-  /**
-   * Test that the coordinator-backed and non-blocking router are compatible with each other for operations on
-   * single-chunk blobs.  This performs puts and deletes with either the non-blocking or coordinator backed
-   * router and tests get operations with both types of routers.
-   * @throws Exception
-   */
-  @Test
-  public void coordinatorNonBlockingCompatibilityTest()
-      throws Exception {
-    List<OperationChain> opChains = new ArrayList<>();
-    Random random = new Random();
-    for (int i = 0; i < 10; i++) {
-      Queue<OperationType> operations = new LinkedList<>();
-      operations.add(i % 2 == 0 ? OperationType.PUT_NB : OperationType.PUT_COORD);
-      operations.add(OperationType.AWAIT_CREATION);
-      operations.add(OperationType.GET_INFO_COORD);
-      operations.add(OperationType.GET_INFO_NB);
-      operations.add(OperationType.GET_COORD);
-      operations.add(OperationType.GET_NB);
-      operations.add(i % 2 == 0 ? OperationType.DELETE_COORD : OperationType.DELETE_NB);
-      operations.add(OperationType.AWAIT_DELETION);
-      operations.add(OperationType.GET_INFO_DELETED_NB);
-      operations.add(OperationType.GET_INFO_DELETED_COORD);
-      operations.add(OperationType.GET_DELETED_NB);
-      operations.add(OperationType.GET_DELETED_COORD);
-      int blobSize = random.nextInt(100 * 1024);
+      operations.add(OperationType.GET_INFO_DELETED);
+      operations.add(OperationType.GET_DELETED);
       opChains.add(testFramework.startOperationChain(blobSize, i, operations));
     }
     testFramework.checkOperationChains(opChains);
