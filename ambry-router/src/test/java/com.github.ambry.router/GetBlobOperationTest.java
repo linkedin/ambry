@@ -562,7 +562,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestClosedRange(long startOffset, long endOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(ByteRange.fromClosedRange(startOffset, endOffset));
+    options = new GetBlobOptions(ByteRange.fromOffsetRange(startOffset, endOffset));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -576,7 +576,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestOpenRange(long startOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(ByteRange.fromOpenRange(startOffset));
+    options = new GetBlobOptions(ByteRange.fromStartOffset(startOffset));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 

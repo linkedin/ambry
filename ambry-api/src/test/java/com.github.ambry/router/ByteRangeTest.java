@@ -16,7 +16,6 @@ package com.github.ambry.router;
 
 import org.junit.Test;
 
-import static com.github.ambry.router.ByteRange.UNDEFINED_OFFSET;
 import static org.junit.Assert.*;
 
 
@@ -24,52 +23,62 @@ public class ByteRangeTest {
   @Test
   public void testValidRange()
       throws Exception {
-    testByteRangeCreationClosedRange(0, 0, true);
-    testByteRangeCreationOpenRange(0, true);
-    testByteRangeCreationOpenRange(15, true);
+    testByteRangeCreationOffsetRange(0, 0, true);
+    testByteRangeCreationFromStartOffset(0, true);
+    testByteRangeCreationFromStartOffset(15, true);
     testByteRangeCreationLastNBytes(20, true);
     testByteRangeCreationLastNBytes(0, true);
-    testByteRangeCreationClosedRange(22, 44, true);
-    testByteRangeCreationOpenRange(Long.MAX_VALUE - 50, true);
+    testByteRangeCreationOffsetRange(22, 44, true);
+    testByteRangeCreationFromStartOffset(Long.MAX_VALUE - 50, true);
   }
 
   @Test
   public void testInvalidRanges()
       throws Exception {
     // negative indices
-    testByteRangeCreationClosedRange(-2, 1, false);
-    testByteRangeCreationClosedRange(5, -1, false);
-    testByteRangeCreationClosedRange(-3, -2, false);
-    testByteRangeCreationOpenRange(-1, false);
+    testByteRangeCreationOffsetRange(-2, 1, false);
+    testByteRangeCreationOffsetRange(5, -1, false);
+    testByteRangeCreationOffsetRange(-3, -2, false);
+    testByteRangeCreationFromStartOffset(-1, false);
     testByteRangeCreationLastNBytes(-2, false);
     // start greater than end offset
-    testByteRangeCreationClosedRange(32, 4, false);
+    testByteRangeCreationOffsetRange(32, 4, false);
   }
 
-  private void testByteRangeCreationClosedRange(long startOffset, long endOffset, boolean expectSuccess)
+  private void testByteRangeCreationOffsetRange(long startOffset, long endOffset, boolean expectSuccess)
       throws Exception {
     if (expectSuccess) {
-      ByteRange byteRange = ByteRange.fromClosedRange(startOffset, endOffset);
+      ByteRange byteRange = ByteRange.fromOffsetRange(startOffset, endOffset);
       assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
       assertEquals("Wrong endOffset", endOffset, byteRange.getEndOffset());
+      try {
+        byteRange.getLastNBytes();
+        fail("Should not be able to call getLastNBytes for the range: " + byteRange);
+      } catch (IllegalStateException expected) {
+      }
     } else {
       try {
-        ByteRange.fromClosedRange(startOffset, endOffset);
+        ByteRange.fromOffsetRange(startOffset, endOffset);
         fail(String.format("Range creation should not have succeeded with range [%d, %d]", startOffset, endOffset));
       } catch (InvalidByteRangeException expected) {
       }
     }
   }
 
-  private void testByteRangeCreationOpenRange(long startOffset, boolean expectSuccess)
+  private void testByteRangeCreationFromStartOffset(long startOffset, boolean expectSuccess)
       throws Exception {
     if (expectSuccess) {
-      ByteRange byteRange = ByteRange.fromOpenRange(startOffset);
+      ByteRange byteRange = ByteRange.fromStartOffset(startOffset);
       assertEquals("Wrong startOffset", startOffset, byteRange.getStartOffset());
-      assertEquals("Wrong endOffset", UNDEFINED_OFFSET, byteRange.getEndOffset());
+      try {
+        byteRange.getEndOffset();
+        byteRange.getLastNBytes();
+        fail("Should not be able to call getEndOffset or getLastNBytes for the range: " + byteRange);
+      } catch (IllegalStateException expected) {
+      }
     } else {
       try {
-        ByteRange.fromOpenRange(startOffset);
+        ByteRange.fromStartOffset(startOffset);
         fail("Range creation should not have succeeded with range from " + startOffset);
       } catch (InvalidByteRangeException expected) {
       }
@@ -80,8 +89,13 @@ public class ByteRangeTest {
       throws Exception {
     if (expectSuccess) {
       ByteRange byteRange = ByteRange.fromLastNBytes(lastNBytes);
-      assertEquals("Wrong startOffset", UNDEFINED_OFFSET, byteRange.getStartOffset());
-      assertEquals("Wrong endOffset", lastNBytes, byteRange.getEndOffset());
+      assertEquals("Wrong lastNBytes", lastNBytes, byteRange.getLastNBytes());
+      try {
+        byteRange.getStartOffset();
+        byteRange.getLastNBytes();
+        fail("Should not be able to call getStartOffset or getEndOffset for the range: " + byteRange);
+      } catch (IllegalStateException expected) {
+      }
     } else {
       try {
         ByteRange.fromLastNBytes(lastNBytes);

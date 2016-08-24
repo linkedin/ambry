@@ -24,19 +24,19 @@ public class ValidatedByteRangeTest {
   public void testValidatedByteRange()
       throws InvalidByteRangeException {
     // 0-0 (0th byte)
-    ByteRange range = ByteRange.fromClosedRange(0, 0);
+    ByteRange range = ByteRange.fromOffsetRange(0, 0);
     assertRangeValidationFailure(range, 0);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationSuccess(range, 2, 0, 0);
 
     // 0- (bytes after/including 0)
-    range = ByteRange.fromOpenRange(0);
+    range = ByteRange.fromStartOffset(0);
     assertRangeValidationFailure(range, 0);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationSuccess(range, 20, 0, 19);
 
     // 15- (bytes after/including 15)
-    range = ByteRange.fromOpenRange(15);
+    range = ByteRange.fromStartOffset(15);
     assertRangeValidationFailure(range, 15);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationSuccess(range, 20, 15, 19);
@@ -50,12 +50,12 @@ public class ValidatedByteRangeTest {
     assertRangeValidationSuccess(range, 30, 10, 29);
 
     // 22-44 (bytes 22 through 44, inclusive)
-    range = ByteRange.fromClosedRange(22, 44);
+    range = ByteRange.fromOffsetRange(22, 44);
     assertRangeValidationFailure(range, 44);
     assertRangeValidationSuccess(range, 45, 22, 44);
 
     // {MAX_LONG-50}- (bytes after/including MAX_LONG-50)
-    range = ByteRange.fromOpenRange(Long.MAX_VALUE - 50);
+    range = ByteRange.fromStartOffset(Long.MAX_VALUE - 50);
     assertRangeValidationFailure(range, 0);
     assertRangeValidationFailure(range, -1);
     assertRangeValidationFailure(range, 20);

@@ -14,24 +14,12 @@
 
 package com.github.ambry.router;
 
-import static com.github.ambry.router.ByteRange.UNDEFINED_OFFSET;
-
-
 /**
  * a byte range with defined start and end offsets that are verified to be within the supplied total blob size.
  */
 class ValidatedByteRange {
   private final long startOffset;
   private final long endOffset;
-
-  @Override
-  public String toString() {
-    final StringBuilder sb = new StringBuilder("ValidatedByteRange{");
-    sb.append("startOffset=").append(startOffset);
-    sb.append(", endOffset=").append(endOffset);
-    sb.append('}');
-    return sb.toString();
-  }
 
   /**
    * Construct a byte range with defined start and end offsets that are verified to be within
@@ -45,10 +33,20 @@ class ValidatedByteRange {
     if (!validateRange(range, totalSize)) {
       throw new InvalidByteRangeException(range, totalSize);
     }
-    long rawStartOffset = range.getStartOffset();
-    long rawEndOffset = range.getEndOffset();
-    startOffset = (rawStartOffset == UNDEFINED_OFFSET) ? totalSize - rawEndOffset : rawStartOffset;
-    endOffset = (rawStartOffset == UNDEFINED_OFFSET || rawEndOffset == UNDEFINED_OFFSET) ? totalSize - 1 : rawEndOffset;
+    switch (range.getType()) {
+      case LAST_N_BYTES:
+        startOffset = totalSize - range.getLastNBytes();
+        endOffset = totalSize - 1;
+        break;
+      case FROM_START_OFFSET:
+        startOffset = range.getStartOffset();
+        endOffset = totalSize - 1;
+        break;
+      default:
+        startOffset = range.getStartOffset();
+        endOffset = range.getEndOffset();
+        break;
+    }
   }
 
   /**
@@ -67,6 +65,15 @@ class ValidatedByteRange {
     return endOffset;
   }
 
+  @Override
+  public String toString() {
+    final StringBuilder sb = new StringBuilder("ValidatedByteRange{");
+    sb.append("startOffset=").append(startOffset);
+    sb.append(", endOffset=").append(endOffset);
+    sb.append('}');
+    return sb.toString();
+  }
+
   /**
    * Test if a {@link ByteRange} is within the total size of a blob.
    * @param range The raw {@link ByteRange} to test.
@@ -74,14 +81,13 @@ class ValidatedByteRange {
    * @return {@code true} if this range is within the total size of the blob.
    */
   private boolean validateRange(ByteRange range, long totalSize) {
-    long rawStartOffset = range.getStartOffset();
-    long rawEndOffset = range.getEndOffset();
-    if (rawEndOffset == UNDEFINED_OFFSET) {
-      return rawStartOffset < totalSize;
-    } else if (rawStartOffset == UNDEFINED_OFFSET){
-      return rawEndOffset <= totalSize;
-    } else {
-      return rawEndOffset < totalSize;
+    switch (range.getType()) {
+      case LAST_N_BYTES:
+        return range.getLastNBytes() <= totalSize;
+      case FROM_START_OFFSET:
+        return range.getStartOffset() < totalSize;
+      default:
+        return range.getEndOffset() < totalSize;
     }
   }
 }
