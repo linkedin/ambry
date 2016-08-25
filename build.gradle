@@ -257,7 +257,10 @@ project(':ambry-router') {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
-                project(':ambry-coordinator')
+                project(':ambry-clustermap'),
+                project(':ambry-messageformat'),
+                project(':ambry-protocol'),
+                project(':ambry-network')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output

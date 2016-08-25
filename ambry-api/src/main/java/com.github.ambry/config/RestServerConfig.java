@@ -13,7 +13,6 @@
  */
 package com.github.ambry.config;
 
-
 /**
  * Configuration parameters required by RestServer and Rest infrastructure
  */
@@ -68,7 +67,7 @@ public class RestServerConfig {
    * for bootstrapping the Router.
    */
   @Config("rest.server.router.factory")
-  @Default("com.github.ambry.router.CoordinatorBackedRouterFactory")
+  @Default("com.github.ambry.router.NonBlockingRouterFactory")
   public final String restServerRouterFactory;
 
   /**
@@ -106,7 +105,7 @@ public class RestServerConfig {
     restServerResponseHandlerFactory = verifiableProperties
         .getString("rest.server.response.handler.factory", "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
     restServerRouterFactory = verifiableProperties
-        .getString("rest.server.router.factory", "com.github.ambry.router.CoordinatorBackedRouterFactory");
+        .getString("rest.server.router.factory", "com.github.ambry.router.NonBlockingRouterFactory");
     restServerPublicAccessLogRequestHeaders = verifiableProperties
         .getString("rest.server.public.access.log.request.headers",
             "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");

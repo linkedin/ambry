@@ -18,16 +18,10 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.coordinator.AmbryCoordinator;
-import com.github.ambry.coordinator.CoordinatorError;
-import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.CoordinatorBackedRouter;
-import com.github.ambry.router.CoordinatorBackedRouterMetrics;
 import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -65,8 +59,7 @@ class RouterServerTestFramework {
 
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
-  private final Router nonBlockingRouter;
-  private final Router coordinatorBackedRouter;
+  private final Router router;
 
   /**
    * Instantiate a framework for testing router-server interaction. Creates a non-blocking and coordinator-backed router
@@ -78,19 +71,11 @@ class RouterServerTestFramework {
    */
   RouterServerTestFramework(Properties routerProps, MockCluster cluster, MockNotificationSystem notificationSystem)
       throws Exception {
-    this.clusterMap = cluster.getClusterMap();
+    clusterMap = cluster.getClusterMap();
     this.notificationSystem = notificationSystem;
 
     VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProps);
-    this.nonBlockingRouter =
-        new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, notificationSystem).getRouter();
-
-    RouterConfig routerConfig = new RouterConfig(routerVerifiableProps);
-    CoordinatorBackedRouterMetrics coordinatorBackedRouterMetrics =
-        new CoordinatorBackedRouterMetrics(clusterMap.getMetricRegistry());
-    AmbryCoordinator coordinator = new HelperCoordinator(routerVerifiableProps, clusterMap);
-    this.coordinatorBackedRouter =
-        new CoordinatorBackedRouter(routerConfig, coordinatorBackedRouterMetrics, coordinator);
+    router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, notificationSystem).getRouter();
   }
 
   /**
@@ -99,11 +84,8 @@ class RouterServerTestFramework {
    */
   void cleanup()
       throws IOException {
-    if (nonBlockingRouter != null) {
-      nonBlockingRouter.close();
-    }
-    if (coordinatorBackedRouter != null) {
-      coordinatorBackedRouter.close();
+    if (router != null) {
+      router.close();
     }
   }
 
@@ -242,25 +224,22 @@ class RouterServerTestFramework {
   }
 
   /**
-   * Generate a readable label for a router operation.  For example, for a "getBlob" operation after a delete on
-   * the coordinator backed-router, this function will generate the label "getBlob-deleted-coord". This is used
-   * by {@link TestFuture} to provide tracking info to the user if a test assertion fails.
+   * Generate a readable label for a router operation.  For example, for a "getBlob" operation after a delete, this
+   * function will generate the label "getBlob-deleted". This is used by {@link TestFuture} to provide tracking info to
+   * the user if a test assertion fails.
    * @param name the type of operation (i.e. putBlob, getBlob, etc.)
-   * @param nonBlocking {@code true} if the operation uses the non-blocking router, {@code false} if it uses the
-   *                    coordinator-backed router.
    * @param afterDelete {@code true} if the operation comes after a blob was deleted.
-   * @return
+   * @return the label of the operation
    */
-  private static String genLabel(String name, boolean nonBlocking, boolean afterDelete) {
-    return name + (afterDelete ? "-deleted" : "") + (nonBlocking ? "-nb" : "-coord");
+  private static String genLabel(String name, boolean afterDelete) {
+    return name + (afterDelete ? "-deleted" : "");
   }
 
   /**
    * Submit a putBlob operation.
-   * @param nonBlocking if {@code true}, use the non-blocking router.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startPutBlob(boolean nonBlocking, OperationChain opChain) {
+  private void startPutBlob(OperationChain opChain) {
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(opChain.data));
     Callback<String> callback = new TestCallback<String>(opChain, false) {
       @Override
@@ -268,9 +247,8 @@ class RouterServerTestFramework {
         opChain.blobId = result;
       }
     };
-    Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
     Future<String> future = router.putBlob(opChain.properties, opChain.userMetadata, putChannel, callback);
-    TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", nonBlocking, false), opChain) {
+    TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", false), opChain) {
       @Override
       void check()
           throws Exception {
@@ -282,46 +260,41 @@ class RouterServerTestFramework {
 
   /**
    * Submit a getBlobInfo operation.
-   * @param nonBlocking if {@code true}, use the non-blocking router.
    * @param afterDelete if {@code true}, verify that the blob info was not retrievable.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startGetBlobInfo(final boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
+  private void startGetBlobInfo(final boolean afterDelete, final OperationChain opChain) {
     Callback<BlobInfo> callback = new TestCallback<>(opChain, afterDelete);
-    Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
     Future<BlobInfo> future = router.getBlobInfo(opChain.blobId, callback);
-    TestFuture<BlobInfo> testFuture =
-        new TestFuture<BlobInfo>(future, genLabel("getBlobInfo", nonBlocking, afterDelete), opChain) {
-          @Override
-          void check()
-              throws Exception {
-            if (afterDelete) {
-              checkDeleted(nonBlocking);
-            } else {
-              checkBlobInfo(get(), opChain, getOperationName());
-            }
-          }
-        };
+    TestFuture<BlobInfo> testFuture = new TestFuture<BlobInfo>(future, genLabel("getBlobInfo", afterDelete), opChain) {
+      @Override
+      void check()
+          throws Exception {
+        if (afterDelete) {
+          checkDeleted();
+        } else {
+          checkBlobInfo(get(), opChain, getOperationName());
+        }
+      }
+    };
     opChain.testFutures.add(testFuture);
   }
 
   /**
    * Submit a getBlob operation.
-   * @param nonBlocking if {@code true}, use the non-blocking router.
    * @param afterDelete if {@code true}, verify that the blob was not retrievable.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startGetBlob(final boolean nonBlocking, final boolean afterDelete, final OperationChain opChain) {
+  private void startGetBlob(final boolean afterDelete, final OperationChain opChain) {
     Callback<ReadableStreamChannel> callback = new TestCallback<>(opChain, afterDelete);
-    Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
     Future<ReadableStreamChannel> future = router.getBlob(opChain.blobId, callback);
     TestFuture<ReadableStreamChannel> testFuture =
-        new TestFuture<ReadableStreamChannel>(future, genLabel("getBlob", nonBlocking, afterDelete), opChain) {
+        new TestFuture<ReadableStreamChannel>(future, genLabel("getBlob", afterDelete), opChain) {
           @Override
           void check()
               throws Exception {
             if (afterDelete) {
-              checkDeleted(nonBlocking);
+              checkDeleted();
             } else {
               checkBlob(get(), opChain, getOperationName());
             }
@@ -332,14 +305,12 @@ class RouterServerTestFramework {
 
   /**
    * Submit a deleteBlob operation.
-   * @param nonBlocking if {@code true}, use the non-blocking router.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startDeleteBlob(boolean nonBlocking, final OperationChain opChain) {
+  private void startDeleteBlob(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    Router router = nonBlocking ? nonBlockingRouter : coordinatorBackedRouter;
     Future<Void> future = router.deleteBlob(opChain.blobId, callback);
-    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", nonBlocking, false), opChain) {
+    TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", false), opChain) {
       @Override
       void check()
           throws Exception {
@@ -382,25 +353,19 @@ class RouterServerTestFramework {
         return;
       }
       switch (nextOp) {
-        case PUT_NB:
-        case PUT_COORD:
-          startPutBlob(nextOp.nonBlockingRouter, opChain);
+        case PUT:
+          startPutBlob(opChain);
           break;
-        case GET_INFO_NB:
-        case GET_INFO_DELETED_NB:
-        case GET_INFO_COORD:
-        case GET_INFO_DELETED_COORD:
-          startGetBlobInfo(nextOp.nonBlockingRouter, nextOp.afterDelete, opChain);
+        case GET_INFO:
+        case GET_INFO_DELETED:
+          startGetBlobInfo(nextOp.afterDelete, opChain);
           break;
-        case GET_NB:
-        case GET_DELETED_NB:
-        case GET_COORD:
-        case GET_DELETED_COORD:
-          startGetBlob(nextOp.nonBlockingRouter, nextOp.afterDelete, opChain);
+        case GET:
+        case GET_DELETED:
+          startGetBlob(nextOp.afterDelete, opChain);
           break;
-        case DELETE_NB:
-        case DELETE_COORD:
-          startDeleteBlob(nextOp.nonBlockingRouter, opChain);
+        case DELETE:
+          startDeleteBlob(opChain);
           break;
         case AWAIT_CREATION:
           startAwaitCreation(opChain);
@@ -419,78 +384,46 @@ class RouterServerTestFramework {
     /**
      * PutBlob with the nonblocking router
      */
-    PUT_NB(true, false),
+    PUT(false),
     /**
      * GetBlobInfo with the nonblocking router and check the blob info against what was put in.
      */
-    GET_INFO_NB(true, false),
+    GET_INFO(false),
     /**
      * GetBlob with the nonblocking router and check the blob contents against what was put in.
      */
-    GET_NB(true, false),
+    GET(false),
     /**
      * DeleteBlob with the nonblocking router
      */
-    DELETE_NB(true, false),
+    DELETE(false),
     /**
      * GetBlobInfo with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
-    GET_INFO_DELETED_NB(true, true),
+    GET_INFO_DELETED(true),
     /**
      * GetBlob with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
-    GET_DELETED_NB(true, true),
-    /**
-     * PutBlob with the coordinator-backed router
-     */
-    PUT_COORD(false, false),
-    /**
-     * GetBlobInfo with the coordinator-backed router and check the blob info against what was put in.
-     */
-    GET_INFO_COORD(false, false),
-    /**
-     * GetBlob with the coordinator-backed router and check the blob contents against what was put in.
-     */
-    GET_COORD(false, false),
-    /**
-     * DeleteBlob with the coordinator-backed router.
-     */
-    DELETE_COORD(false, false),
-    /**
-     * GetBlobInfo with the coordinator-backed router. Expect an exception to occur because the blob should have
-     * already been deleted.
-     */
-    GET_INFO_DELETED_COORD(false, true),
-    /**
-     * GetBlob with the coordinator-backed router. Expect an exception to occur because the blob should have already
-     * been deleted.
-     */
-    GET_DELETED_COORD(false, true),
+    GET_DELETED(true),
     /**
      * Wait for the operation chain's blob ID to be reported as created on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
      */
-    AWAIT_CREATION(false, false),
+    AWAIT_CREATION(false),
     /**
      * Wait for the operation chain's blob ID to be reported as deleted on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
      */
-    AWAIT_DELETION(false, false);
+    AWAIT_DELETION(false);
 
-    /**
-     * {@code true} if the non-blocking router should be used, {@code false} if the coordinator-backed router should
-     * be used.
-     */
-    final boolean nonBlockingRouter;
     /**
      * {@code true} if this operation follows a delete operation.
      */
     final boolean afterDelete;
 
-    OperationType(boolean nonBlockingRouter, boolean afterDelete) {
-      this.nonBlockingRouter = nonBlockingRouter;
+    OperationType(boolean afterDelete) {
       this.afterDelete = afterDelete;
     }
   }
@@ -559,27 +492,19 @@ class RouterServerTestFramework {
 
     /**
      * Check that a requested blob is deleted.
-     * @param nonBlocking {@code true} if the non-blocking router was used.
      * @throws Exception
      */
-    void checkDeleted(boolean nonBlocking)
+    void checkDeleted()
         throws Exception {
       try {
         future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
         Assert.fail("Blob should have been deleted in operation: " + getOperationName());
       } catch (ExecutionException e) {
         Throwable rootCause = Utils.getRootCause(e);
-        if (nonBlocking) {
-          Assert.assertTrue("Exception cause is not RouterException in operation: " + getOperationName(),
-              rootCause instanceof RouterException);
-          Assert.assertEquals("Error code is not BlobDeleted in operation: " + getOperationName(),
-              RouterErrorCode.BlobDeleted, ((RouterException) rootCause).getErrorCode());
-        } else {
-          Assert.assertTrue("Exception cause is not CoordinatorException in operation: " + getOperationName(),
-              rootCause instanceof CoordinatorException);
-          Assert.assertEquals("Error code is not BlobDeleted in operation: " + getOperationName(),
-              CoordinatorError.BlobDeleted, ((CoordinatorException) rootCause).getErrorCode());
-        }
+        Assert.assertTrue("Exception cause is not RouterException in operation: " + getOperationName(),
+            rootCause instanceof RouterException);
+        Assert.assertEquals("Error code is not BlobDeleted in operation: " + getOperationName(),
+            RouterErrorCode.BlobDeleted, ((RouterException) rootCause).getErrorCode());
       } catch (Exception e) {
         throw new Exception("Unexpected exception occured in operation: " + getOperationName(), e);
       }
