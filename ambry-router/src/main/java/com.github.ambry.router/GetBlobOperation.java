@@ -595,9 +595,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       if (!chunkCompleted && chunkOperationTracker.isDone()) {
         if (chunkOperationTracker.hasSucceeded()) {
           // override any previously set exceptions
-          if (chunkException != null) {
-            chunkException = null;
-          }
+          chunkException = null;
         }
         chunkCompleted = true;
       }

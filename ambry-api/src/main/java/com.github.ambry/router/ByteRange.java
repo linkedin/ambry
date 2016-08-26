@@ -18,7 +18,7 @@ package com.github.ambry.router;
  * Represents a byte range for performing ranged get requests.
  */
 public class ByteRange {
-  static final long UNDEFINED_OFFSET = -1;
+  private static final long UNDEFINED_OFFSET = -1;
 
   private final ByteRangeType type;
   private final long startOffset;
@@ -33,8 +33,8 @@ public class ByteRange {
    */
   public static ByteRange fromOffsetRange(long startOffset, long endOffset)
       throws InvalidByteRangeException {
-    if (startOffset < 0 || endOffset < 0 || endOffset < startOffset) {
-      throw new InvalidByteRangeException(startOffset, endOffset);
+    if (startOffset < 0 || endOffset < startOffset) {
+      throw new InvalidByteRangeException(startOffset, endOffset, ByteRangeType.OFFSET_RANGE);
     }
     return new ByteRange(startOffset, endOffset, ByteRangeType.OFFSET_RANGE);
   }
@@ -48,7 +48,7 @@ public class ByteRange {
   public static ByteRange fromStartOffset(long startOffset)
       throws InvalidByteRangeException {
     if (startOffset < 0) {
-      throw new InvalidByteRangeException(startOffset, UNDEFINED_OFFSET);
+      throw new InvalidByteRangeException(startOffset, UNDEFINED_OFFSET, ByteRangeType.FROM_START_OFFSET);
     }
     return new ByteRange(startOffset, UNDEFINED_OFFSET, ByteRangeType.FROM_START_OFFSET);
   }
@@ -62,7 +62,7 @@ public class ByteRange {
   public static ByteRange fromLastNBytes(long lastNBytes)
       throws InvalidByteRangeException {
     if (lastNBytes < 0) {
-      throw new InvalidByteRangeException(UNDEFINED_OFFSET, lastNBytes);
+      throw new InvalidByteRangeException(lastNBytes, UNDEFINED_OFFSET, ByteRangeType.LAST_N_BYTES);
     }
     return new ByteRange(lastNBytes, UNDEFINED_OFFSET, ByteRangeType.LAST_N_BYTES);
   }

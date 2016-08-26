@@ -84,7 +84,7 @@ public enum RouterErrorCode {
    */
   BlobExpired,
   /**
-   * The range offsets provided for a getBlob operation go past the total size of a blob.
+   * The range offsets provided for a getBlob operation are invalid for the specified blob.
    */
   RangeNotSatisfiable;
 

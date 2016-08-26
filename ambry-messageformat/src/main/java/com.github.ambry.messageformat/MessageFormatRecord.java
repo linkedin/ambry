@@ -45,7 +45,6 @@ public class MessageFormatRecord {
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Blob_Version_V1 = 1;
   public static final short Blob_Version_V2 = 2;
-  // Metadata_Content_Version_V1 was unused and was removed to simplify the range request handling code.
   public static final short Metadata_Content_Version_V2 = 2;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 

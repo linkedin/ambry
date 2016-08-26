@@ -19,7 +19,20 @@ public class InvalidByteRangeException extends Exception {
     super("The provided byte offset range: " + range + " exceeds the total size: " + totalSize + " of the blob");
   }
 
-  public InvalidByteRangeException(long startOffset, long endOffset) {
-    super("Invalid range offsets provided; startOffset: " + startOffset + ", endOffset: " + endOffset);
+  public InvalidByteRangeException(long startOffset, long endOffset, ByteRange.ByteRangeType type) {
+    super(buildMessage(startOffset, endOffset, type));
+  }
+
+  private static String buildMessage(long startOffset, long endOffset, ByteRange.ByteRangeType type) {
+    StringBuilder sb = new StringBuilder("Invalid range offsets provided for ByteRange type=").append(type);
+    switch (type) {
+      case LAST_N_BYTES:
+        sb.append("; lastNBytes=").append(startOffset);
+      case FROM_START_OFFSET:
+        sb.append("; startOffset=").append(startOffset);
+      case OFFSET_RANGE:
+        sb.append("; startOffset=").append(startOffset).append(", endOffset=").append(endOffset);
+    }
+    return sb.toString();
   }
 }

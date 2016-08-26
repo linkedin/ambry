@@ -19,7 +19,14 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 
+/**
+ * Test that {@link ValidatedByteRange} works correctly.
+ */
 public class ValidatedByteRangeTest {
+  /**
+   * Test that validating {@link ByteRange}s with a blob size using {@link ValidatedByteRange} works as expected.
+   * @throws InvalidByteRangeException
+   */
   @Test
   public void testValidatedByteRange()
       throws InvalidByteRangeException {
@@ -67,6 +74,11 @@ public class ValidatedByteRangeTest {
     assertRangeValidationSuccess(range, 20, 20, 19);
   }
 
+  /**
+   * Test and assert that a {@link ByteRange} fails validation with a specified total blob size.
+   * @param byteRange the {@link ByteRange} to validate.
+   * @param totalSize the total size of a blob.
+   */
   private void assertRangeValidationFailure(ByteRange byteRange, long totalSize) {
     try {
       new ValidatedByteRange(byteRange, totalSize);
@@ -75,6 +87,14 @@ public class ValidatedByteRangeTest {
     }
   }
 
+  /**
+   * Test and assert that a {@link ByteRange} passes validation with a specified total blob size. Ensure that
+   * the defined (wrt the total blob size) start and end offsets are set correctly in {@link ValidatedByteRange}.
+   * @param byteRange the {@link ByteRange} to validate.
+   * @param totalSize the total size of a blob.
+   * @param startOffset the expected start offset for the {@link ValidatedByteRange}
+   * @param endOffset the expected end offset for the {@link ValidatedByteRange}
+   */
   private void assertRangeValidationSuccess(ByteRange byteRange, long totalSize, long startOffset, long endOffset)
       throws InvalidByteRangeException {
     ValidatedByteRange validatedByteRange = new ValidatedByteRange(byteRange, totalSize);
