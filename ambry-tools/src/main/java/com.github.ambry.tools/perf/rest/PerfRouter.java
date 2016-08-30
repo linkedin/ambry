@@ -98,12 +98,13 @@ class PerfRouter implements Router {
   /**
    * Returns a stream of repeating data up to a pre-set size. {@code blobId} is ignored.
    * @param blobId The ID of the blob for which blob data is requested.
+   * @param options The options associated with the request.
    * @return a {@link Future} that will eventually contain the blob data in the form of a
    * {@link ReadableStreamChannel}.
    */
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId) {
-    return getBlob(blobId, null, null);
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null);
   }
 
   @Override

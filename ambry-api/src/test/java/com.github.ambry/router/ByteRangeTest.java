@@ -60,6 +60,58 @@ public class ByteRangeTest {
   }
 
   /**
+   * Test that resolving {@link ByteRange}s with a blob size to generate ranges with defined start/end offsets works as
+   * expected.
+   * @throws Exception
+   */
+  @Test
+  public void testResolvedByteRange()
+      throws Exception {
+    // 0-0 (0th byte)
+    ByteRange range = ByteRange.fromOffsetRange(0, 0);
+    assertRangeResolutionFailure(range, 0);
+    assertRangeResolutionFailure(range, -1);
+    assertRangeResolutionSuccess(range, 2, 0, 0);
+
+    // 0- (bytes after/including 0)
+    range = ByteRange.fromStartOffset(0);
+    assertRangeResolutionFailure(range, 0);
+    assertRangeResolutionFailure(range, -1);
+    assertRangeResolutionSuccess(range, 20, 0, 19);
+
+    // 15- (bytes after/including 15)
+    range = ByteRange.fromStartOffset(15);
+    assertRangeResolutionFailure(range, 15);
+    assertRangeResolutionFailure(range, -1);
+    assertRangeResolutionSuccess(range, 20, 15, 19);
+    assertRangeResolutionSuccess(range, 16, 15, 15);
+
+    // -20 (last 20 bytes)
+    range = ByteRange.fromLastNBytes(20);
+    assertRangeResolutionFailure(range, 0);
+    assertRangeResolutionFailure(range, -1);
+    assertRangeResolutionSuccess(range, 20, 0, 19);
+    assertRangeResolutionSuccess(range, 30, 10, 29);
+
+    // 22-44 (bytes 22 through 44, inclusive)
+    range = ByteRange.fromOffsetRange(22, 44);
+    assertRangeResolutionFailure(range, 44);
+    assertRangeResolutionSuccess(range, 45, 22, 44);
+
+    // {MAX_LONG-50}- (bytes after/including MAX_LONG-50)
+    range = ByteRange.fromStartOffset(Long.MAX_VALUE - 50);
+    assertRangeResolutionFailure(range, 0);
+    assertRangeResolutionFailure(range, -1);
+    assertRangeResolutionFailure(range, 20);
+    assertRangeResolutionSuccess(range, Long.MAX_VALUE, Long.MAX_VALUE - 50, Long.MAX_VALUE - 1);
+
+    // Last 0 bytes
+    range = ByteRange.fromLastNBytes(0);
+    assertRangeResolutionSuccess(range, 0, 0, -1);
+    assertRangeResolutionSuccess(range, 20, 20, 19);
+  }
+
+  /**
    * Test that {@link ByteRange} works as expected for byte ranges with a defined start and end offset.
    * @param startOffset the (inclusive) start byte offset to test.
    * @param endOffset the (inclusive) end byte offset to test.
@@ -76,13 +128,13 @@ public class ByteRangeTest {
       try {
         byteRange.getLastNBytes();
         fail("Should not be able to call getLastNBytes for the range: " + byteRange);
-      } catch (IllegalStateException expected) {
+      } catch (UnsupportedOperationException expected) {
       }
     } else {
       try {
         ByteRange.fromOffsetRange(startOffset, endOffset);
         fail(String.format("Range creation should not have succeeded with range [%d, %d]", startOffset, endOffset));
-      } catch (InvalidByteRangeException expected) {
+      } catch (IllegalArgumentException expected) {
       }
     }
   }
@@ -103,13 +155,13 @@ public class ByteRangeTest {
         byteRange.getEndOffset();
         byteRange.getLastNBytes();
         fail("Should not be able to call getEndOffset or getLastNBytes for the range: " + byteRange);
-      } catch (IllegalStateException expected) {
+      } catch (UnsupportedOperationException expected) {
       }
     } else {
       try {
         ByteRange.fromStartOffset(startOffset);
         fail("Range creation should not have succeeded with range from " + startOffset);
-      } catch (InvalidByteRangeException expected) {
+      } catch (IllegalArgumentException expected) {
       }
     }
   }
@@ -131,14 +183,44 @@ public class ByteRangeTest {
         byteRange.getStartOffset();
         byteRange.getLastNBytes();
         fail("Should not be able to call getStartOffset or getEndOffset for the range: " + byteRange);
-      } catch (IllegalStateException expected) {
+      } catch (UnsupportedOperationException expected) {
       }
     } else {
       try {
         ByteRange.fromLastNBytes(lastNBytes);
         fail("Range creation should not have succeeded with range of last " + lastNBytes + " bytes");
-      } catch (InvalidByteRangeException expected) {
+      } catch (IllegalArgumentException expected) {
       }
     }
+  }
+
+  /**
+   * Test and assert that a {@link ByteRange} fails validation with a specified total blob size.
+   * @param byteRange the {@link ByteRange} to resolve with a total blob size.
+   * @param totalSize the total size of a blob.
+   */
+  private void assertRangeResolutionFailure(ByteRange byteRange, long totalSize) {
+    assertNull("Should have failed to resolve range: " + byteRange + " with total size: " + totalSize,
+        byteRange.toResolvedByteRange(totalSize));
+  }
+
+  /**
+   * Test and assert that a {@link ByteRange} passes validation with a specified total blob size. Ensure that
+   * the defined (wrt the total blob size) start and end offsets are set correctly in the resolved {@link ByteRange}.
+   * @param byteRange the {@link ByteRange} to resolve with a total blob size.
+   * @param totalSize the total size of a blob.
+   * @param startOffset the expected start offset for the resolved {@link ByteRange}
+   * @param endOffset the expected end offset for the resolved {@link ByteRange}
+   * @throws Exception
+   */
+  private void assertRangeResolutionSuccess(ByteRange byteRange, long totalSize, long startOffset, long endOffset)
+      throws Exception {
+    ByteRange resolvedByteRange = byteRange.toResolvedByteRange(totalSize);
+    assertNotNull("Should have been able to resolve range: " + byteRange + " with total size: " + totalSize,
+        resolvedByteRange);
+    assertEquals("Wrong startOffset with raw range: " + byteRange + " and total size: " + totalSize, startOffset,
+        resolvedByteRange.getStartOffset());
+    assertEquals("Wrong endOffset with raw range: " + byteRange + " and total size: " + totalSize, endOffset,
+        resolvedByteRange.getEndOffset());
   }
 }

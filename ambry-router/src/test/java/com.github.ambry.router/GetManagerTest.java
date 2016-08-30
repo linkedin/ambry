@@ -57,7 +57,6 @@ public class GetManagerTest {
   private byte[] putContent;
   private ReadableStreamChannel putChannel;
   private GetBlobOptions options = null;
-
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
@@ -85,7 +84,6 @@ public class GetManagerTest {
   public void postCheck() {
     Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     Assert.assertEquals("Router operations count must be zero", 0, router.getOperationsCount());
-    options = null;
   }
 
   /**
@@ -95,15 +93,7 @@ public class GetManagerTest {
   @Test
   public void testSimpleBlobGetSuccess()
       throws Exception {
-    router = getNonBlockingRouter();
-    setOperationParams(chunkSize, null);
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
-    BlobInfo blobInfo = router.getBlobInfo(blobId).get();
-    Assert.assertTrue("Blob properties should match",
-        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
-    Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
-    getBlobAndCompareContent(blobId);
-    router.close();
+    testGetSuccess(chunkSize, null);
   }
 
   /**
@@ -113,15 +103,7 @@ public class GetManagerTest {
   @Test
   public void testCompositeBlobGetSuccess()
       throws Exception {
-    router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11, null);
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
-    BlobInfo blobInfo = router.getBlobInfo(blobId).get();
-    Assert.assertTrue("Blob properties should match",
-        RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
-    Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
-    getBlobAndCompareContent(blobId);
-    router.close();
+    testGetSuccess(chunkSize * 6 + 11, null);
   }
 
   /**
@@ -131,10 +113,19 @@ public class GetManagerTest {
   @Test
   public void testRangeRequest()
       throws Exception {
-    // Random valid ranges
-    router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11,
+    testGetSuccess(chunkSize * 6 + 11,
         new GetBlobOptions(ByteRange.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
+  }
+
+  /**
+   * Test a get request.
+   * @param blobSize the size of the blob to put/get.
+   * @param options the {@link GetBlobOptions} for the get request.
+   */
+  private void testGetSuccess(int blobSize, GetBlobOptions options)
+      throws Exception {
+    router = getNonBlockingRouter();
+    setOperationParams(blobSize, options);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     BlobInfo blobInfo = router.getBlobInfo(blobId).get();
     Assert.assertTrue("Blob properties should match",
@@ -223,10 +214,10 @@ public class GetManagerTest {
             throw new RuntimeException("Throwing an exception in the user callback");
           }
         }));
-        getBlobFutures.add(router.getBlob(blobId, getBlobCallback));
+        getBlobFutures.add(router.getBlob(blobId, options, getBlobCallback));
       } else {
         getBlobInfoFutures.add(router.getBlobInfo(blobId));
-        getBlobFutures.add(router.getBlob(blobId));
+        getBlobFutures.add(router.getBlob(blobId, options));
       }
     }
     for (int i = 0; i < getBlobFutures.size(); i++) {
@@ -283,7 +274,7 @@ public class GetManagerTest {
     }
 
     try {
-      future = router.getBlob(blobId);
+      future = router.getBlob(blobId, options);
       while (!future.isDone()) {
         mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
         Thread.yield();
@@ -317,7 +308,7 @@ public class GetManagerTest {
     ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
     // If a range is set, compare the result against the specified byte range.
     if (options != null && options.getRange() != null) {
-      ValidatedByteRange range = new ValidatedByteRange(options.getRange(), putContent.length);
+      ByteRange range = options.getRange().toResolvedByteRange(putContent.length);
       int startOffset = (int) range.getStartOffset();
       int endOffset = (int) range.getEndOffset();
       putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);

@@ -1347,8 +1347,8 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId) {
-    return getBlob(blobId, null, null);
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null);
   }
 
   @Override

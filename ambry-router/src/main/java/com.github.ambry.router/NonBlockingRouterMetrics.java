@@ -48,8 +48,6 @@ public class NonBlockingRouterMetrics {
   public final Histogram getBlobInfoOperationLatencyMs;
   public final Histogram getBlobOperationLatencyMs;
   public final Histogram getBlobOperationTotalTimeMs;
-  public final Histogram getBlobWithRangeOperationLatencyMs;
-  public final Histogram getBlobWithRangeOperationTotalTimeMs;
   public final Histogram deleteBlobOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
 
@@ -116,7 +114,7 @@ public class NonBlockingRouterMetrics {
   public final Histogram getBlobSizeBytes;
   public final Histogram getBlobChunkCount;
   public final Histogram getBlobWithRangeSizeBytes;
-  public final Histogram getBlobWithRangeChunkCount;
+  public final Histogram getBlobWithRangeTotalBlobSizeBytes;
   public final Counter simpleBlobPutCount;
   public final Counter simpleBlobGetCount;
   public final Counter compositeBlobPutCount;
@@ -152,10 +150,6 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationLatencyMs"));
     getBlobOperationTotalTimeMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationTotalTimeMs"));
-    getBlobWithRangeOperationLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationLatencyMs"));
-    getBlobWithRangeOperationTotalTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationTotalTimeMs"));
     deleteBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationLatencyMs"));
     routerRequestLatencyMs =
@@ -251,8 +245,8 @@ public class NonBlockingRouterMetrics {
     getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobChunkCount"));
     getBlobWithRangeSizeBytes =
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeSizeBytes"));
-    getBlobWithRangeChunkCount =
-        metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobWithRangeChunkCount"));
+    getBlobWithRangeTotalBlobSizeBytes =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeTotalBlobSizeBytes"));
     simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
     simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));

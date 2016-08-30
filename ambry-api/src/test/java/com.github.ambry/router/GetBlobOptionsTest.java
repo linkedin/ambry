@@ -19,12 +19,21 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 
+/**
+ * Test the {@link GetBlobOptions} class for correctness.
+ */
 public class GetBlobOptionsTest {
+  /**
+   * Test that the range option can be assigned and retrieved correctly.
+   * @throws Exception
+   */
   @Test
   public void testRangeOption()
       throws Exception {
-    ByteRange range = ByteRange.fromOffsetRange(1, 2);
-    GetBlobOptions options = new GetBlobOptions(range);
-    assertEquals(range, options.getRange());
+    long startOffset = 1;
+    long endOffset = 2;
+    ByteRange range = ByteRange.fromOffsetRange(startOffset, endOffset);
+    GetBlobOptions options = new GetBlobOptions(ByteRange.fromOffsetRange(startOffset, endOffset));
+    assertEquals("Range from options not as expected.", range, options.getRange());
   }
 }

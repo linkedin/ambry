@@ -13,8 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.coordinator.CoordinatorError;
-
 
 /**
  * All the error codes that accompany a {@link RouterException}.
@@ -29,8 +27,8 @@ public enum RouterErrorCode {
   AmbryUnavailable,
   /**
    * Caller passed in an invalid blob id and so operation could not be attempted. May occur for
-   * {@link Router#getBlobInfo(String)}, {@link Router#getBlob(String)}, {@link Router#deleteBlob(String)} (and their
-   * variants) operations.
+   * {@link Router#getBlobInfo(String)}, {@link Router#getBlob(String, GetBlobOptions)},
+   * {@link Router#deleteBlob(String)} (and their variants) operations.
    */
   InvalidBlobId,
   /**
@@ -86,18 +84,5 @@ public enum RouterErrorCode {
   /**
    * The range offsets provided for a getBlob operation are invalid for the specified blob.
    */
-  RangeNotSatisfiable;
-
-  /**
-   * Converts a given {@link CoordinatorError} into a RouterErrorCode.
-   * @param error the {@link CoordinatorError} that needs to be converted.
-   * @return the equivalent RouterErrorCode.
-   */
-  public static RouterErrorCode convertCoordinatorErrorToRouterErrorCode(CoordinatorError error) {
-    try {
-      return RouterErrorCode.valueOf(error.toString());
-    } catch (IllegalArgumentException e) {
-      return RouterErrorCode.UnexpectedInternalError;
-    }
-  }
+  RangeNotSatisfiable
 }

@@ -489,25 +489,30 @@ public class GetBlobOperationTest {
       blobSize = random.nextInt(maxChunkSize) + 1;
       int randomOne = random.nextInt(blobSize);
       int randomTwo = random.nextInt(blobSize);
-      testRangeRequestClosedRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
+      testRangeRequestOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
     }
 
     blobSize = random.nextInt(maxChunkSize) + 1;
     // Entire blob
-    testRangeRequestClosedRange(0, blobSize - 1, true);
+    testRangeRequestOffsetRange(0, blobSize - 1, true);
     // Range that extends to end of blob
-    testRangeRequestOpenRange(random.nextInt(blobSize), true);
+    testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
     // Last n bytes of the blob
     testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
     // Last blobSize + 1 bytes (should not succeed)
     testRangeRequestLastNBytes(blobSize + 1, false);
     // Range over the end of the blob (should not succeed)
-    testRangeRequestClosedRange(random.nextInt(blobSize), blobSize + 5, false);
+    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, false);
     // Ranges that start past the end of the blob (should not succeed)
-    testRangeRequestOpenRange(blobSize, false);
-    testRangeRequestClosedRange(blobSize, blobSize + 20, false);
+    testRangeRequestFromStartOffset(blobSize, false);
+    testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
     // 0 byte range
     testRangeRequestLastNBytes(0, true);
+    // 1 byte ranges
+    testRangeRequestOffsetRange(0, 0, true);
+    testRangeRequestOffsetRange(blobSize - 1, blobSize - 1, true);
+    testRangeRequestFromStartOffset(blobSize - 1, true);
+    testRangeRequestLastNBytes(1, true);
   }
 
   /**
@@ -522,33 +527,41 @@ public class GetBlobOperationTest {
       blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
       int randomOne = random.nextInt(blobSize);
       int randomTwo = random.nextInt(blobSize);
-      testRangeRequestClosedRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
+      testRangeRequestOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
     }
 
     blobSize = random.nextInt(maxChunkSize) + maxChunkSize * random.nextInt(10);
     // Entire blob
-    testRangeRequestClosedRange(0, blobSize - 1, true);
+    testRangeRequestOffsetRange(0, blobSize - 1, true);
     // Range that extends to end of blob
-    testRangeRequestOpenRange(random.nextInt(blobSize), true);
+    testRangeRequestFromStartOffset(random.nextInt(blobSize), true);
     // Last n bytes of the blob
     testRangeRequestLastNBytes(random.nextInt(blobSize) + 1, true);
     // Last blobSize + 1 bytes (should not succeed)
     testRangeRequestLastNBytes(blobSize + 1, false);
     // Range over the end of the blob (should not succeed)
-    testRangeRequestClosedRange(random.nextInt(blobSize), blobSize + 5, false);
+    testRangeRequestOffsetRange(random.nextInt(blobSize), blobSize + 5, false);
     // Ranges that start past the end of the blob (should not succeed)
-    testRangeRequestOpenRange(blobSize, false);
-    testRangeRequestClosedRange(blobSize, blobSize + 20, false);
+    testRangeRequestFromStartOffset(blobSize, false);
+    testRangeRequestOffsetRange(blobSize, blobSize + 20, false);
     // 0 byte range
     testRangeRequestLastNBytes(0, true);
+    // 1 byte ranges
+    testRangeRequestOffsetRange(0, 0, true);
+    testRangeRequestOffsetRange(blobSize - 1, blobSize - 1, true);
+    testRangeRequestFromStartOffset(blobSize - 1, true);
+    testRangeRequestLastNBytes(1, true);
 
     blobSize = maxChunkSize * 2 + random.nextInt(maxChunkSize);
     // Single start chunk
-    testRangeRequestClosedRange(0, maxChunkSize - 1, true);
+    testRangeRequestOffsetRange(0, maxChunkSize - 1, true);
     // Single intermediate chunk
-    testRangeRequestClosedRange(maxChunkSize, maxChunkSize * 2 - 1, true);
+    testRangeRequestOffsetRange(maxChunkSize, maxChunkSize * 2 - 1, true);
     // Single end chunk
-    testRangeRequestClosedRange(maxChunkSize * 2, blobSize - 1, true);
+    testRangeRequestOffsetRange(maxChunkSize * 2, blobSize - 1, true);
+    // Over chunk boundaries
+    testRangeRequestOffsetRange(maxChunkSize / 2, maxChunkSize + maxChunkSize / 2, true);
+    testRangeRequestFromStartOffset(maxChunkSize + maxChunkSize / 2, true);
   }
 
   /**
@@ -559,7 +572,7 @@ public class GetBlobOperationTest {
    * @param rangeSatisfiable {@code true} if the range request should succeed.
    * @throws Exception
    */
-  private void testRangeRequestClosedRange(long startOffset, long endOffset, boolean rangeSatisfiable)
+  private void testRangeRequestOffsetRange(long startOffset, long endOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
     options = new GetBlobOptions(ByteRange.fromOffsetRange(startOffset, endOffset));
@@ -573,7 +586,7 @@ public class GetBlobOperationTest {
    * @param rangeSatisfiable {@code true} if the range request should succeed.
    * @throws Exception
    */
-  private void testRangeRequestOpenRange(long startOffset, boolean rangeSatisfiable)
+  private void testRangeRequestFromStartOffset(long startOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
     options = new GetBlobOptions(ByteRange.fromStartOffset(startOffset));
@@ -723,7 +736,7 @@ public class GetBlobOperationTest {
     }
     int sizeWritten = blobSize;
     if (options != null && options.getRange() != null) {
-      ValidatedByteRange range = new ValidatedByteRange(options.getRange(), blobSize);
+      ByteRange range = options.getRange().toResolvedByteRange(blobSize);
       sizeWritten = (int) (range.getEndOffset() - range.getStartOffset() + 1);
     }
     Assert.assertEquals("Size read must equal size written", sizeWritten, readCompleteResult.get());
@@ -801,7 +814,7 @@ public class GetBlobOperationTest {
       ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
       // If a range is set, compare the result against the specified byte range.
       if (options != null && options.getRange() != null) {
-        ValidatedByteRange range = new ValidatedByteRange(options.getRange(), blobSize);
+        ByteRange range = options.getRange().toResolvedByteRange(blobSize);
         int startOffset = (int) range.getStartOffset();
         int endOffset = (int) range.getEndOffset();
         putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);
