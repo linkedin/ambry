@@ -433,6 +433,7 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     private BlobId chunkBlobId;
     // whether the operation on the current chunk has completed.
     private boolean chunkCompleted;
+    // In general, when the operation tracker returns success, any previously saved exceptions are cleared. This flag
     // indicates that the set chunk exception should not be overwritten even when the operation tracker reports success.
     protected boolean retainExceptionOnSuccess;
     // the index of the current chunk in the overall blob.
@@ -847,52 +848,13 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         BlobType blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();
-        try {
-          if (blobType == BlobType.MetadataBlob) {
-            ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
-            CompositeBlobInfo compositeBlobInfo =
-                MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
-            chunkSize = compositeBlobInfo.getChunkSize();
-            totalSize = compositeBlobInfo.getTotalSize();
-            List<StoreKey> keys = compositeBlobInfo.getKeys();
-            if (options != null && options.getRange() != null) {
-              resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
-              if (resolvedByteRange == null) {
-                onInvalidRange("ByteRange " + options.getRange() + " is not within total blob size " + totalSize);
-                return;
-              }
-              // Get only the chunks within the range.
-              int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
-              int lastChunkIndexInRange = (int) (resolvedByteRange.getEndOffset() / chunkSize);
-              keys = keys.subList(firstChunkIndexInRange, lastChunkIndexInRange + 1);
-            }
-            chunkIdIterator = keys.listIterator();
-            numChunksTotal = keys.size();
-            dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
-            for (int i = 0; i < dataChunks.length; i++) {
-              dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
-            }
-          } else {
-            totalSize = blobData.getSize();
-            chunkSize = totalSize;
-            if (options != null && options.getRange() != null) {
-              resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
-              if (resolvedByteRange == null) {
-                onInvalidRange("ByteRange " + options.getRange() + " is not within total blob size " + totalSize);
-                return;
-              }
-            }
-            chunkIdIterator = null;
-            dataChunks = null;
-            chunkIndex = 0;
-            numChunksTotal = 1;
-            chunkIndexToBuffer.put(0, filterChunkToRange(blobData));
-            numChunksRetrieved = 1;
-          }
-        } finally {
-          successfullyDeserialized = true;
-          state = ChunkState.Complete;
+        if (blobType == BlobType.MetadataBlob) {
+          handleMetadataBlob(blobData);
+        } else {
+          handleSimpleBlob(blobData);
         }
+        successfullyDeserialized = true;
+        state = ChunkState.Complete;
       } else {
         // Currently, regardless of the successTarget, only the first successful response is honored. Subsequent ones
         // are ignored. If ever in the future, we need some kind of reconciliation, this is the place
@@ -924,6 +886,62 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
               new RouterException("Server returned: " + errorCode, RouterErrorCode.UnexpectedInternalError));
           break;
       }
+    }
+
+    /**
+     * Process a metadata blob to find the data chunks that need to be fetched.
+     * @param blobData the metadata blob's data.
+     * @throws IOException
+     * @throws MessageFormatException
+     */
+    private void handleMetadataBlob(BlobData blobData) throws IOException, MessageFormatException {
+      ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
+      CompositeBlobInfo compositeBlobInfo =
+          MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
+      chunkSize = compositeBlobInfo.getChunkSize();
+      totalSize = compositeBlobInfo.getTotalSize();
+      List<StoreKey> keys = compositeBlobInfo.getKeys();
+      if (options != null && options.getRange() != null) {
+        try {
+          resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
+        } catch (IllegalArgumentException e) {
+          onInvalidRange("ByteRange " + options.getRange() + " is not within total blob size " + totalSize);
+          return;
+        }
+        // Get only the chunks within the range.
+        int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
+        int lastChunkIndexInRange = (int) (resolvedByteRange.getEndOffset() / chunkSize);
+        keys = keys.subList(firstChunkIndexInRange, lastChunkIndexInRange + 1);
+      }
+      chunkIdIterator = keys.listIterator();
+      numChunksTotal = keys.size();
+      dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+      for (int i = 0; i < dataChunks.length; i++) {
+        dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+      }
+    }
+
+    /**
+     * Process a simple blob and extract the requested data from the blob.
+     * @param blobData the simple blob's data
+     */
+    private void handleSimpleBlob(BlobData blobData) {
+      totalSize = blobData.getSize();
+      chunkSize = totalSize;
+      if (options != null && options.getRange() != null) {
+        try {
+          resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
+        } catch (IllegalArgumentException e) {
+          onInvalidRange("ByteRange " + options.getRange() + " is not within total blob size " + totalSize);
+          return;
+        }
+      }
+      chunkIdIterator = null;
+      dataChunks = null;
+      chunkIndex = 0;
+      numChunksTotal = 1;
+      chunkIndexToBuffer.put(0, filterChunkToRange(blobData));
+      numChunksRetrieved = 1;
     }
 
     /**

@@ -112,6 +112,33 @@ public class ByteRangeTest {
   }
 
   /**
+   * Test toString, equals, and hashCode methods.
+   */
+  @Test
+  public void testToStringEqualsAndHashcode() {
+    ByteRange a = ByteRange.fromLastNBytes(4);
+    ByteRange b = ByteRange.fromLastNBytes(4);
+    assertEquals("ByteRanges should be equal", a, b);
+    assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
+    assertEquals("toString output not as expected", "ByteRange{type=LAST_N_BYTES, lastNBytes=4}", a.toString());
+
+    a = ByteRange.fromOffsetRange(2, 5);
+    assertFalse("ByteRanges should not be equal", a.equals(b));
+    b = ByteRange.fromOffsetRange(2, 5);
+    assertEquals("ByteRanges should be equal", a, b);
+    assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
+    assertEquals("toString output not as expected", "ByteRange{type=OFFSET_RANGE, startOffset=2, endOffset=5}",
+        a.toString());
+
+    a = ByteRange.fromStartOffset(7);
+    assertFalse("ByteRanges should not be equal", a.equals(b));
+    b = ByteRange.fromStartOffset(7);
+    assertEquals("ByteRanges should be equal", a, b);
+    assertEquals("ByteRange hashcodes should be equal", a.hashCode(), b.hashCode());
+    assertEquals("toString output not as expected", "ByteRange{type=FROM_START_OFFSET, startOffset=7}", a.toString());
+  }
+
+  /**
    * Test that {@link ByteRange} works as expected for byte ranges with a defined start and end offset.
    * @param startOffset the (inclusive) start byte offset to test.
    * @param endOffset the (inclusive) end byte offset to test.
@@ -200,8 +227,11 @@ public class ByteRangeTest {
    * @param totalSize the total size of a blob.
    */
   private void assertRangeResolutionFailure(ByteRange byteRange, long totalSize) {
-    assertNull("Should have failed to resolve range: " + byteRange + " with total size: " + totalSize,
-        byteRange.toResolvedByteRange(totalSize));
+    try {
+      byteRange.toResolvedByteRange(totalSize);
+      fail("Should have failed to resolve range: " + byteRange + " with total size: " + totalSize);
+    } catch (IllegalArgumentException expected) {
+    }
   }
 
   /**
@@ -216,8 +246,6 @@ public class ByteRangeTest {
   private void assertRangeResolutionSuccess(ByteRange byteRange, long totalSize, long startOffset, long endOffset)
       throws Exception {
     ByteRange resolvedByteRange = byteRange.toResolvedByteRange(totalSize);
-    assertNotNull("Should have been able to resolve range: " + byteRange + " with total size: " + totalSize,
-        resolvedByteRange);
     assertEquals("Wrong startOffset with raw range: " + byteRange + " and total size: " + totalSize, startOffset,
         resolvedByteRange.getStartOffset());
     assertEquals("Wrong endOffset with raw range: " + byteRange + " and total size: " + totalSize, endOffset,

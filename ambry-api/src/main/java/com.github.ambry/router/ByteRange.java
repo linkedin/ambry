@@ -151,8 +151,8 @@ public class ByteRange {
    * Given the total size of a blob, generate a new {@link ByteRange} of type {@link ByteRangeType#OFFSET_RANGE} with
    * defined start and end offsets that are verified to be within the supplied total blob size.
    * @param totalSize the total size of the blob that this range corresponds to.
-   * @return the {@link ByteRange} with start and end offsets, or {@code null} if {@code this} is not within
-   *         the provided total blob size.
+   * @return the {@link ByteRange} with start and end offsets
+   * @throws IllegalArgumentException if the byte range exceeds the total size of the blob.
    */
   public ByteRange toResolvedByteRange(long totalSize) {
     switch (getType()) {
@@ -172,7 +172,7 @@ public class ByteRange {
         }
         break;
     }
-    return null;
+    throw new IllegalArgumentException("ByteRange exceeds the total blob size");
   }
 
   @Override

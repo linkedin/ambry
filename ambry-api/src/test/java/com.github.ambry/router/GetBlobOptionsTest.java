@@ -36,4 +36,20 @@ public class GetBlobOptionsTest {
     GetBlobOptions options = new GetBlobOptions(ByteRange.fromOffsetRange(startOffset, endOffset));
     assertEquals("Range from options not as expected.", range, options.getRange());
   }
+
+  /**
+   * Test toString, equals, and hashCode methods.
+   */
+  @Test
+  public void testToStringEqualsAndHashcode() {
+    ByteRange byteRange = ByteRange.fromLastNBytes(4);
+    GetBlobOptions a = new GetBlobOptions(byteRange);
+    GetBlobOptions b = new GetBlobOptions(byteRange);
+    assertEquals("GetBlobOptions should be equal", a, b);
+    assertEquals("GetBlobOptions hashcodes should be equal", a.hashCode(), b.hashCode());
+    assertEquals("toString output not as expected", "GetBlobOptions{range=" + byteRange.toString() + "}", a.toString());
+
+    b = new GetBlobOptions(ByteRange.fromOffsetRange(2, 7));
+    assertFalse("GetBlobOptions should not be equal.", a.equals(b));
+  }
 }
