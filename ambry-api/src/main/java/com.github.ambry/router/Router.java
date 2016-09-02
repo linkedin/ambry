@@ -41,8 +41,8 @@ public interface Router extends Closeable {
   public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback);
 
   /**
-   * Requests for blob data asynchronously and returns a future that will eventually contain a
-   * {@link ReadableStreamChannel} that represents blob data on a successful response.
+   * Requests for blob data asynchronously with user-set {@link GetBlobOptions} and returns a future that will
+   * eventually contain a {@link ReadableStreamChannel} that represents blob data on a successful response.
    * @param blobId The ID of the blob for which blob data is requested.
    * @param options The options associated with the request.
    * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.

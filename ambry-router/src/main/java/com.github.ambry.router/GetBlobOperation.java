@@ -708,7 +708,6 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
               // this is a successful response and one that completes the operation regardless of whether the
               // success target has been reached or not.
               chunkCompleted = true;
-              retainExceptionOnSuccess = true;
             } else {
               onErrorResponse(getRequestInfo.replicaId);
             }
@@ -894,30 +893,34 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
      * @throws IOException
      * @throws MessageFormatException
      */
-    private void handleMetadataBlob(BlobData blobData) throws IOException, MessageFormatException {
+    private void handleMetadataBlob(BlobData blobData)
+        throws IOException, MessageFormatException {
       ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
       CompositeBlobInfo compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);
       chunkSize = compositeBlobInfo.getChunkSize();
       totalSize = compositeBlobInfo.getTotalSize();
       List<StoreKey> keys = compositeBlobInfo.getKeys();
-      if (options != null && options.getRange() != null) {
-        try {
+      boolean rangeResolutionFailure = false;
+      try {
+        if (options != null && options.getRange() != null) {
           resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
-        } catch (IllegalArgumentException e) {
-          onInvalidRange("ByteRange " + options.getRange() + " is not within total blob size " + totalSize);
-          return;
+          // Get only the chunks within the range.
+          int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
+          int lastChunkIndexInRange = (int) (resolvedByteRange.getEndOffset() / chunkSize);
+          keys = keys.subList(firstChunkIndexInRange, lastChunkIndexInRange + 1);
         }
-        // Get only the chunks within the range.
-        int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
-        int lastChunkIndexInRange = (int) (resolvedByteRange.getEndOffset() / chunkSize);
-        keys = keys.subList(firstChunkIndexInRange, lastChunkIndexInRange + 1);
+      } catch (IllegalArgumentException e) {
+        onInvalidRange(e);
+        rangeResolutionFailure = true;
       }
-      chunkIdIterator = keys.listIterator();
-      numChunksTotal = keys.size();
-      dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
-      for (int i = 0; i < dataChunks.length; i++) {
-        dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+      if (!rangeResolutionFailure) {
+        chunkIdIterator = keys.listIterator();
+        numChunksTotal = keys.size();
+        dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+        for (int i = 0; i < dataChunks.length; i++) {
+          dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
+        }
       }
     }
 
@@ -928,29 +931,33 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     private void handleSimpleBlob(BlobData blobData) {
       totalSize = blobData.getSize();
       chunkSize = totalSize;
-      if (options != null && options.getRange() != null) {
-        try {
+      boolean rangeResolutionFailure = false;
+      try {
+        if (options != null && options.getRange() != null) {
           resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
-        } catch (IllegalArgumentException e) {
-          onInvalidRange("ByteRange " + options.getRange() + " is not within total blob size " + totalSize);
-          return;
         }
+      } catch (IllegalArgumentException e) {
+        onInvalidRange(e);
+        rangeResolutionFailure = true;
       }
-      chunkIdIterator = null;
-      dataChunks = null;
-      chunkIndex = 0;
-      numChunksTotal = 1;
-      chunkIndexToBuffer.put(0, filterChunkToRange(blobData));
-      numChunksRetrieved = 1;
+      if (!rangeResolutionFailure) {
+        chunkIdIterator = null;
+        dataChunks = null;
+        chunkIndex = 0;
+        numChunksTotal = 1;
+        chunkIndexToBuffer.put(0, filterChunkToRange(blobData));
+        numChunksRetrieved = 1;
+      }
     }
 
     /**
      * On an invalid range, set a {@link RouterErrorCode#RangeNotSatisfiable} exception for this chunk, mark the chunk
      * as unconditionally completed, and set the chunk counters such that the operation will be completed.
-     * @param errorMessage The message for the {@link RouterException} to set
+     * @param exception the reason that the range was invalid.
      */
-    private void onInvalidRange(String errorMessage) {
-      setChunkException(new RouterException(errorMessage, RouterErrorCode.RangeNotSatisfiable));
+    private void onInvalidRange(Exception exception) {
+      setChunkException(
+          new RouterException("Range provided was not satisfiable.", exception, RouterErrorCode.RangeNotSatisfiable));
       retainExceptionOnSuccess = true;
       chunkIdIterator = null;
       dataChunks = null;

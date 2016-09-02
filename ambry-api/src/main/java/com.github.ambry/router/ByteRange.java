@@ -172,7 +172,7 @@ public class ByteRange {
         }
         break;
     }
-    throw new IllegalArgumentException("ByteRange exceeds the total blob size");
+    throw new IllegalArgumentException("ByteRange " + this + " exceeds the total blob size " + totalSize);
   }
 
   @Override
