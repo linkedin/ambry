@@ -303,7 +303,7 @@ class MockHeadForGetCallback implements Callback<BlobInfo> {
       if (exception == null && result != null) {
         setResponseHeaders(result);
         String blobId = MockBlobStorageService.getBlobId(restRequest);
-        router.getBlob(blobId, new MockGetCallback(mockBlobStorageService, restRequest, restResponseChannel));
+        router.getBlob(blobId, null, new MockGetCallback(mockBlobStorageService, restRequest, restResponseChannel));
       } else {
         if (exception != null && exception instanceof RouterException) {
           exception = new RestServiceException(exception,

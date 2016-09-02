@@ -41,6 +41,7 @@ import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -1353,12 +1354,13 @@ class AdminTestRouter implements Router {
   }
 
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId) {
-    return getBlob(blobId, null);
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null);
   }
 
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
+      Callback<ReadableStreamChannel> callback) {
     return completeOperation(new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), callback, OpType.GetBlob);
   }
 

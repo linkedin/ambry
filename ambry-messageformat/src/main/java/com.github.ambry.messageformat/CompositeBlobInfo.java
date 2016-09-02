@@ -23,20 +23,9 @@ import java.util.List;
  * total composite blob size, and a list of keys for the blob's data chunks.
  */
 public class CompositeBlobInfo {
-  public static final int UNDEFINED_CHUNK_SIZE = -1;
-  public static final int UNDEFINED_TOTAL_SIZE = -1;
   private final int chunkSize;
   private final long totalSize;
   private final List<StoreKey> keys;
-
-  /**
-   * Construct a {@link CompositeBlobInfo} object with undefined chunk size and total size. This constructor can be used
-   * when chunk size and total size are not defined in the metadata format, such as with metadata content format V1.
-   * @param keys The list of keys for this object's data chunks.
-   */
-  public CompositeBlobInfo(List<StoreKey> keys) {
-    this(UNDEFINED_CHUNK_SIZE, UNDEFINED_TOTAL_SIZE, keys);
-  }
 
   /**
    * Construct a {@link CompositeBlobInfo} object.

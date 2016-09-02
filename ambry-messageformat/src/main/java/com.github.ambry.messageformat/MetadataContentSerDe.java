@@ -55,9 +55,6 @@ public class MetadataContentSerDe {
       throws IOException, MessageFormatException {
     int version = buf.getShort();
     switch (version) {
-      case MessageFormatRecord.Metadata_Content_Version_V1:
-        return MessageFormatRecord.Metadata_Content_Format_V1
-            .deserializeMetadataContentRecord(new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
       case MessageFormatRecord.Metadata_Content_Version_V2:
         return MessageFormatRecord.Metadata_Content_Format_V2
             .deserializeMetadataContentRecord(new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);

@@ -86,6 +86,7 @@ public class RouterUtilsTest {
         case BlobDeleted:
         case BlobDoesNotExist:
         case BlobExpired:
+        case RangeNotSatisfiable:
           Assert.assertFalse(RouterUtils.isSystemHealthError(new RouterException("", errorCode)));
           break;
         default:

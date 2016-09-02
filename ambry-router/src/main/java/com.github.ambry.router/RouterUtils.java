@@ -77,6 +77,7 @@ class RouterUtils {
         case BlobDeleted:
         case BlobExpired:
         case BlobDoesNotExist:
+        case RangeNotSatisfiable:
           isSystemHealthError = false;
           break;
       }

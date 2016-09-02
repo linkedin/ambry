@@ -37,6 +37,7 @@ public class NonBlockingRouterMetrics {
   public final Meter putBlobOperationRate;
   public final Meter getBlobInfoOperationRate;
   public final Meter getBlobOperationRate;
+  public final Meter getBlobWithRangeOperationRate;
   public final Meter deleteBlobOperationRate;
   public final Meter operationQueuingRate;
   public final Meter operationDequeuingRate;
@@ -54,6 +55,7 @@ public class NonBlockingRouterMetrics {
   public final Counter putBlobErrorCount;
   public final Counter getBlobInfoErrorCount;
   public final Counter getBlobErrorCount;
+  public final Counter getBlobWithRangeErrorCount;
   public final Counter deleteBlobErrorCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
@@ -71,6 +73,7 @@ public class NonBlockingRouterMetrics {
   public final Counter blobDeletedErrorCount;
   public final Counter blobDoesNotExistErrorCount;
   public final Counter blobExpiredErrorCount;
+  public final Counter rangeNotSatisfiableErrorCount;
   public final Counter unknownReplicaResponseError;
   public final Counter unknownErrorCountForOperation;
   public final Counter responseDeserializationErrorCount;
@@ -110,6 +113,8 @@ public class NonBlockingRouterMetrics {
   public final Histogram putBlobChunkCount;
   public final Histogram getBlobSizeBytes;
   public final Histogram getBlobChunkCount;
+  public final Histogram getBlobWithRangeSizeBytes;
+  public final Histogram getBlobWithRangeTotalBlobSizeBytes;
   public final Counter simpleBlobPutCount;
   public final Counter simpleBlobGetCount;
   public final Counter compositeBlobPutCount;
@@ -126,6 +131,8 @@ public class NonBlockingRouterMetrics {
     getBlobInfoOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoOperationRate"));
     getBlobOperationRate = metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationRate"));
+    getBlobWithRangeOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationRate"));
     deleteBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
@@ -153,6 +160,8 @@ public class NonBlockingRouterMetrics {
     getBlobInfoErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "GetBlobInfoErrorCount"));
     getBlobErrorCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobErrorCount"));
+    getBlobWithRangeErrorCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
     routerRequestErrorCount =
@@ -183,6 +192,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BlobDoesNotExistErrorCount"));
     blobExpiredErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BlobExpiredErrorCount"));
+    rangeNotSatisfiableErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RangeNotSatisfiableErrorCount"));
     unknownReplicaResponseError =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownReplicaResponseError"));
     unknownErrorCountForOperation =
@@ -232,6 +243,10 @@ public class NonBlockingRouterMetrics {
     putBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobChunkCount"));
     getBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobSizeBytes"));
     getBlobChunkCount = metricRegistry.histogram(MetricRegistry.name(GetManager.class, "GetBlobChunkCount"));
+    getBlobWithRangeSizeBytes =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeSizeBytes"));
+    getBlobWithRangeTotalBlobSizeBytes =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeTotalBlobSizeBytes"));
     simpleBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "SimpleBlobPutCount"));
     simpleBlobGetCount = metricRegistry.counter(MetricRegistry.name(GetManager.class, "SimpleBlobGetCount"));
     compositeBlobPutCount = metricRegistry.counter(MetricRegistry.name(PutManager.class, "CompositeBlobPutCount"));
@@ -322,6 +337,9 @@ public class NonBlockingRouterMetrics {
         case BlobExpired:
           blobExpiredErrorCount.inc();
           break;
+        case RangeNotSatisfiable:
+          rangeNotSatisfiableErrorCount.inc();
+          break;
         case AmbryUnavailable:
           ambryUnavailableErrorCount.inc();
           break;
@@ -364,11 +382,15 @@ public class NonBlockingRouterMetrics {
   /**
    * Update appropriate metrics on a getBlob operation related error.
    * @param e the {@link Exception} associated with the error.
+   * @param options the {@link GetBlobOptions} associated with the request.
    */
-  void onGetBlobError(Exception e) {
+  void onGetBlobError(Exception e, GetBlobOptions options) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobErrorCount.inc();
+      if (options != null && options.getRange() != null) {
+        getBlobWithRangeErrorCount.inc();
+      }
       operationErrorRate.mark();
     }
   }

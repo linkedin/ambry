@@ -138,12 +138,13 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId) {
-    return getBlob(blobId, null);
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null);
   }
 
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId, Callback<ReadableStreamChannel> callback) {
+  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
+      Callback<ReadableStreamChannel> callback) {
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
     handlePrechecks(futureResult, callback);
     ReadableStreamChannel operationResult = null;
