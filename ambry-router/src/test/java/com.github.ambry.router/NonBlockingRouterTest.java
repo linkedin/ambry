@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -62,6 +63,8 @@ public class NonBlockingRouterTest {
   private static final int DELETE_REQUEST_PARALLELISM = 3;
   private static final int DELETE_SUCCESS_TARGET = 2;
   private static final int AWAIT_TIMEOUT_MS = 2000;
+  private static final int PUT_CONTENT_SIZE = 1000;
+  private int maxPutChunkSize = PUT_CONTENT_SIZE;
   private final Random random = new Random();
   private NonBlockingRouter router;
   private PutManager putManager;
@@ -98,6 +101,7 @@ public class NonBlockingRouterTest {
     properties.setProperty("router.datacenter.name", routerDataCenter);
     properties.setProperty("router.put.request.parallelism", Integer.toString(PUT_REQUEST_PARALLELISM));
     properties.setProperty("router.put.success.target", Integer.toString(PUT_SUCCESS_TARGET));
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxPutChunkSize));
     properties.setProperty("router.get.request.parallelism", Integer.toString(GET_REQUEST_PARALLELISM));
     properties.setProperty("router.get.success.target", Integer.toString(GET_SUCCESS_TARGET));
     properties.setProperty("router.delete.request.parallelism", Integer.toString(DELETE_REQUEST_PARALLELISM));
@@ -131,10 +135,11 @@ public class NonBlockingRouterTest {
   }
 
   private void setOperationParams() {
-    putBlobProperties = new BlobProperties(100, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    putBlobProperties =
+        new BlobProperties(PUT_CONTENT_SIZE, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
-    putContent = new byte[100];
+    putContent = new byte[PUT_CONTENT_SIZE];
     random.nextBytes(putContent);
     putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
   }
@@ -289,6 +294,71 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test that if a composite blob put fails, the successfully put data chunks are deleted.
+   */
+  @Test
+  public void testUnsuccessfulPutDataChunkDelete()
+      throws Exception {
+    // Ensure there are 4 chunks.
+    maxPutChunkSize = PUT_CONTENT_SIZE / 4;
+    Properties props = getNonBlockingRouterProperties("DC1");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    MockTime mockTime = new MockTime();
+    MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+    // Since this test wants to ensure that successfully put data chunks are deleted when the overall put operation
+    // fails, it uses a notification system to track the deletions.
+    final AtomicInteger completedDeletesCount = new AtomicInteger(0);
+    LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobDeleted(String blobId) {
+        completedDeletesCount.incrementAndGet();
+      }
+    };
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+        new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap,
+        mockTime);
+
+    setOperationParams();
+
+    List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
+    List<ServerErrorCode> serverErrorList = new ArrayList<>();
+    // There are 4 chunks for this blob.
+    // All put operations make one request to each local server as there are 3 servers overall in the local DC.
+    // Set the state of the mock servers so that they return success for the first 2 requests in order to succeed
+    // the first two chunks.
+    serverErrorList.add(ServerErrorCode.No_Error);
+    serverErrorList.add(ServerErrorCode.No_Error);
+    // fail requests for third and fourth data chunks including the slipped put attempts:
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    serverErrorList.add(ServerErrorCode.Unknown_Error);
+    // all subsequent requests (no more puts, but there will be deletes) will succeed.
+    for (DataNodeId dataNodeId : dataNodeIds) {
+      MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
+      server.setServerErrors(serverErrorList);
+    }
+
+    // Submit the put operation and wait for it to fail.
+    try {
+      router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    } catch (ExecutionException e) {
+      Assert.assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
+    }
+
+    // Now, wait until the deletes of the successfully put blobs are complete.
+    while (completedDeletesCount.get() < 2) {
+      Thread.yield();
+    }
+
+    router.close();
+    assertClosed();
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  /**
    * Test that multiple scaling units can be instantiated, exercised and closed.
    */
   @Test
@@ -360,7 +430,8 @@ public class NonBlockingRouterTest {
 
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new OperationCompleteCallback(new AtomicInteger(0)), new ReadyForPollCallback(networkClient), 0, mockTime);
+        new OperationCompleteCallback(new AtomicInteger(0)), new ReadyForPollCallback(networkClient),
+        new ArrayList<String>(), 0, mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1, null);

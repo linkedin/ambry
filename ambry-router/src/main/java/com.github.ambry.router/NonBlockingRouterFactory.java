@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
@@ -74,7 +75,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
       networkConfig = new NetworkConfig(verifiableProperties);
       networkMetrics = new NetworkMetrics(registry);
       SSLConfig sslConfig = new SSLConfig(verifiableProperties);
-      sslFactory = sslConfig.sslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+      sslFactory = clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
       this.time = SystemTime.getInstance();
       networkClientFactory = new NetworkClientFactory(networkMetrics, networkConfig, sslFactory,
           routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
