@@ -518,10 +518,20 @@ class PutOperation {
 
   /**
    * The time at which this operation was submitted.
-   * @return return the time at which the operation was submitted.
+   * @return the time at which the operation was submitted.
    */
   long getSubmissionTimeMs() {
     return submissionTimeMs;
+  }
+
+  /**
+   * if this is a composite object, fill the list with successfully put chunk ids.
+   * @param chunkIdList the list to fill with chunk ids.
+   */
+  void addSuccessfullyPutChunkIds(List<String> chunkIdList) {
+    if (numDataChunks > 1) {
+      metadataPutChunk.addChunkIds(chunkIdList);
+    }
   }
 
   /**
@@ -1047,6 +1057,9 @@ class PutOperation {
   class MetadataPutChunk extends PutChunk {
     StoreKey[] chunkIds;
     int chunksDone;
+    // since chunk operations could complete out of order, this index simply tracks the farthest chunk that was
+    // successfully put (which helps in the getChunkIds() method).
+    int maxFilledChunkIndex = -1;
 
     /**
      * Initialize the MetadataPutChunk.
@@ -1066,10 +1079,25 @@ class PutOperation {
     void addChunkId(BlobId chunkBlobId, int chunkIndex) {
       chunkIds[chunkIndex] = chunkBlobId;
       chunksDone++;
+      if (chunkIndex > maxFilledChunkIndex) {
+        maxFilledChunkIndex = chunkIndex;
+      }
       if (chunksDone == numDataChunks) {
         buf = MetadataContentSerDe
             .serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, blobSize, Arrays.asList(chunkIds));
         onFillComplete();
+      }
+    }
+
+    /**
+     * Add all the successfully put chunk ids of the overall blob to the passed in list.
+     * @param chunkIdList list to fill with chunk ids.
+     */
+    void addChunkIds(List<String> chunkIdList) {
+      for (int i = 0; i <= maxFilledChunkIndex; i++) {
+        if (chunkIds[i] != null) {
+          chunkIdList.add(chunkIds[i].getID());
+        }
       }
     }
 
