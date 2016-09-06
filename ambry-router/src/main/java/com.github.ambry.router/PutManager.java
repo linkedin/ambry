@@ -64,7 +64,7 @@ class PutManager {
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
   private final OperationCompleteCallback operationCompleteCallback;
   private final ReadyForPollCallback readyForPollCallback;
-  private final List<String> listToFillWithIdsToDelete;
+  private final List<String> idsToDeleteList;
   private final ByteBufferAsyncWritableChannel.ChannelEventListener chunkArrivalListener;
 
   // shared by all PutOperations
@@ -98,15 +98,15 @@ class PutManager {
    * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
    * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
    *                             operations.
-   * @param listToFillWithIdsToDelete The list to fill with ids of successfully put data chunks of an unsuccessful
-   *                                  overall put operation.
+   * @param idsToDeleteList The list to fill with ids of successfully put data chunks of an unsuccessful
+   *                        overall put operation.
    * @param index the index of the {@link NonBlockingRouter.OperationController} in the {@link NonBlockingRouter}
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
-      List<String> listToFillWithIdsToDelete, int index, Time time) {
+      List<String> idsToDeleteList, int index, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
@@ -114,7 +114,7 @@ class PutManager {
     this.routerMetrics = routerMetrics;
     this.operationCompleteCallback = operationCompleteCallback;
     this.readyForPollCallback = readyForPollCallback;
-    this.listToFillWithIdsToDelete = listToFillWithIdsToDelete;
+    this.idsToDeleteList = idsToDeleteList;
     this.chunkArrivalListener = new ByteBufferAsyncWritableChannel.ChannelEventListener() {
       @Override
       public void onEvent(ByteBufferAsyncWritableChannel.EventType e) {
@@ -256,7 +256,7 @@ class PutManager {
     if (e != null) {
       blobId = null;
       routerMetrics.onPutBlobError(e);
-      listToFillWithIdsToDelete.addAll(op.getSuccessfullyPutChunkIds());
+      op.addSuccessfullyPutChunkIds(idsToDeleteList);
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);

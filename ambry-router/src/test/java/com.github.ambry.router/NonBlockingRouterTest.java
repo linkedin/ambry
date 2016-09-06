@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -308,11 +309,11 @@ public class NonBlockingRouterTest {
     MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
     // Since this test wants to ensure that successfully put data chunks are deleted when the overall put operation
     // fails, it uses a notification system to track the deletions.
-    final AtomicInteger completedDeletesCount = new AtomicInteger(0);
+    final CountDownLatch deletesDoneLatch = new CountDownLatch(2);
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
       public void onBlobDeleted(String blobId) {
-        completedDeletesCount.incrementAndGet();
+        deletesDoneLatch.countDown();
       }
     };
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
@@ -349,9 +350,8 @@ public class NonBlockingRouterTest {
     }
 
     // Now, wait until the deletes of the successfully put blobs are complete.
-    while (completedDeletesCount.get() < 2) {
-      Thread.yield();
-    }
+    Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
+        deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     router.close();
     assertClosed();

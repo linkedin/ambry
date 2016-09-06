@@ -327,7 +327,7 @@ class NonBlockingRouter implements Router {
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
     private final ReadyForPollCallback readyForPollCallback;
-    private final List<String> idsToDelete = new ArrayList<String>();
+    private final List<String> idsToDeleteList = new ArrayList<String>();
 
     /**
      * Constructs an OperationController
@@ -339,7 +339,7 @@ class NonBlockingRouter implements Router {
       networkClient = networkClientFactory.getNetworkClient();
       readyForPollCallback = new ReadyForPollCallback(networkClient);
       putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCompleteCallback, readyForPollCallback, idsToDelete, index, time);
+          operationCompleteCallback, readyForPollCallback, idsToDeleteList, index, time);
       getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback,
           readyForPollCallback, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
@@ -438,14 +438,14 @@ class NonBlockingRouter implements Router {
         putManager.poll(requests);
         getManager.poll(requests);
         // Before polling the delete manager, submit pending deletes, if any.
-        for (String blobId : idsToDelete) {
+        for (String blobId : idsToDeleteList) {
           // Although these deletes can be directly submitted to the delete manager of this operation controller,
           // these will be submitted like regular delete operations so that they are evenly spread across the
           // operation controllers and so that the metrics get tracked correctly.
           // Also, since these are best-effort deletions, the outcomes are disregarded.
           NonBlockingRouter.this.deleteBlob(blobId);
         }
-        idsToDelete.clear();
+        idsToDeleteList.clear();
         deleteManager.poll(requests);
       } catch (Exception e) {
         logger.error("Operation Manager poll received an unexpected error: ", e);
