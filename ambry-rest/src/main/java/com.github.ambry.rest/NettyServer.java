@@ -61,6 +61,7 @@ public class NettyServer implements NioServer {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
     this.channelInitializer = channelInitializer;
+    NettyRequest.bufferWatermark = nettyConfig.nettyServerRequestBufferWatermark;
     logger.trace("Instantiated NettyServer");
   }
 

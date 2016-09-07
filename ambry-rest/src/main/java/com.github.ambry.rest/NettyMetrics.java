@@ -98,6 +98,7 @@ public class NettyMetrics {
   // NettyRequest
   public final Counter contentCopyCount;
   public final Histogram digestCalculationTimeInMs;
+  public final Counter watermarkOverflowCount;
   // NettyMessageProcessor
   public final Histogram channelReadIntervalInMs;
   public final Counter idleConnectionCloseCount;
@@ -245,6 +246,7 @@ public class NettyMetrics {
     contentCopyCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "ContentCopyCount"));
     digestCalculationTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyRequest.class, "DigestCalculationTimeInMs"));
+    watermarkOverflowCount = metricRegistry.counter(MetricRegistry.name(NettyRequest.class, "WatermarkOverflowCount"));
     // NettyMessageProcessor
     channelReadIntervalInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "ChannelReadIntervalInMs"));

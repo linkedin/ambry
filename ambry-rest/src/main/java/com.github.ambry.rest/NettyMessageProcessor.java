@@ -285,9 +285,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           // attach content to the request as the content arrives.
           if (HttpPostRequestDecoder.isMultipart(httpRequest)) {
             nettyMetrics.multipartPostRequestRate.mark();
-            request = new NettyMultipartRequest(httpRequest, nettyMetrics);
+            request = new NettyMultipartRequest(httpRequest, ctx.channel(), nettyMetrics);
           } else {
-            request = new NettyRequest(httpRequest, nettyMetrics);
+            request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics);
           }
           responseChannel.setRequest(request);
           logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
