@@ -22,6 +22,9 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -264,16 +267,17 @@ class RouterServerTestFramework {
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
   private void startGetBlobInfo(final boolean afterDelete, final OperationChain opChain) {
-    Callback<BlobInfo> callback = new TestCallback<>(opChain, afterDelete);
-    Future<BlobInfo> future = router.getBlobInfo(opChain.blobId, callback);
-    TestFuture<BlobInfo> testFuture = new TestFuture<BlobInfo>(future, genLabel("getBlobInfo", afterDelete), opChain) {
+    Callback<GetBlobResult> callback = new TestCallback<>(opChain, afterDelete);
+    Future<GetBlobResult> future =
+        router.getBlob(opChain.blobId, new GetBlobOptions(GetOperationType.BlobInfo, null), callback);
+    TestFuture<GetBlobResult> testFuture = new TestFuture<GetBlobResult>(future, genLabel("getBlobInfo", afterDelete), opChain) {
       @Override
       void check()
           throws Exception {
         if (afterDelete) {
           checkDeleted();
         } else {
-          checkBlobInfo(get(), opChain, getOperationName());
+          checkBlobInfo(get().getBlobInfo(), opChain, getOperationName());
         }
       }
     };
@@ -286,17 +290,18 @@ class RouterServerTestFramework {
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
   private void startGetBlob(final boolean afterDelete, final OperationChain opChain) {
-    Callback<ReadableStreamChannel> callback = new TestCallback<>(opChain, afterDelete);
-    Future<ReadableStreamChannel> future = router.getBlob(opChain.blobId, null, callback);
-    TestFuture<ReadableStreamChannel> testFuture =
-        new TestFuture<ReadableStreamChannel>(future, genLabel("getBlob", afterDelete), opChain) {
+    Callback<GetBlobResult> callback = new TestCallback<>(opChain, afterDelete);
+    Future<GetBlobResult> future = router.getBlob(opChain.blobId, null, callback);
+    TestFuture<GetBlobResult> testFuture =
+        new TestFuture<GetBlobResult>(future, genLabel("getBlob", afterDelete), opChain) {
           @Override
           void check()
               throws Exception {
             if (afterDelete) {
               checkDeleted();
             } else {
-              checkBlob(get(), opChain, getOperationName());
+              checkBlobInfo(get().getBlobInfo(), opChain, getOperationName());
+              checkBlob(get().getBlobDataChannel(), opChain, getOperationName());
             }
           }
         };

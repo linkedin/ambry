@@ -74,6 +74,7 @@ public class NonBlockingRouterMetrics {
   public final Counter blobDoesNotExistErrorCount;
   public final Counter blobExpiredErrorCount;
   public final Counter rangeNotSatisfiableErrorCount;
+  public final Counter channelClosedErrorCount;
   public final Counter unknownReplicaResponseError;
   public final Counter unknownErrorCountForOperation;
   public final Counter responseDeserializationErrorCount;
@@ -194,6 +195,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BlobExpiredErrorCount"));
     rangeNotSatisfiableErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RangeNotSatisfiableErrorCount"));
+    channelClosedErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ChannelClosedErrorCount"));
     unknownReplicaResponseError =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "UnknownReplicaResponseError"));
     unknownErrorCountForOperation =
@@ -358,6 +361,9 @@ public class NonBlockingRouterMetrics {
         case BlobDoesNotExist:
           blobDoesNotExistErrorCount.inc();
           break;
+        case ChannelClosed:
+          channelClosedErrorCount.inc();
+          break;
         default:
           unknownErrorCountForOperation.inc();
           break;
@@ -385,13 +391,16 @@ public class NonBlockingRouterMetrics {
    * @param options the {@link GetBlobOptions} associated with the request.
    */
   void onGetBlobError(Exception e, GetBlobOptions options) {
-    onError(e);
-    if (RouterUtils.isSystemHealthError(e)) {
-      getBlobErrorCount.inc();
-      if (options != null && options.getRange() != null) {
-        getBlobWithRangeErrorCount.inc();
-      }
-      operationErrorRate.mark();
+    GetOperationType type =
+        options != null && options.getGetOperationType() != null ? options.getGetOperationType() : GetOperationType.All;
+    switch (type) {
+      case All:
+      case Data:
+        onGetBlobDataError(e, options);
+        break;
+      case BlobInfo:
+        onGetBlobInfoError(e);
+        break;
     }
   }
 
@@ -399,10 +408,26 @@ public class NonBlockingRouterMetrics {
    * Update appropriate metrics on a getBlobInfo operation related error.
    * @param e the {@link Exception} associated with the error.
    */
-  void onGetBlobInfoError(Exception e) {
+  private void onGetBlobInfoError(Exception e) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobInfoErrorCount.inc();
+      operationErrorRate.mark();
+    }
+  }
+
+  /**
+   * Update appropriate metrics on a getBlob (Data or All) operation related error.
+   * @param e the {@link Exception} associated with the error.
+   * @param options the {@link GetBlobOptions} associated with the request.
+   */
+  private void onGetBlobDataError(Exception e, GetBlobOptions options) {
+    onError(e);
+    if (RouterUtils.isSystemHealthError(e)) {
+      getBlobErrorCount.inc();
+      if (options != null && options.getRange() != null) {
+        getBlobWithRangeErrorCount.inc();
+      }
       operationErrorRate.mark();
     }
   }

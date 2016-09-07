@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * and completing it. A GetBlobInfo operation only needs to make requests for a single chunk to get the BlobInfo -
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
-class GetBlobInfoOperation extends GetOperation<BlobInfo> {
+class GetBlobInfoOperation extends GetOperation<GetBlobResult> {
   private final OperationCompleteCallback operationCompleteCallback;
   private final SimpleOperationTracker operationTracker;
   // map of correlation id to the request metadata for every request issued for this operation.
@@ -65,10 +65,11 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, FutureResult<BlobInfo> futureResult,
-      Callback<BlobInfo> callback, OperationCompleteCallback operationCompleteCallback, Time time)
+      ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
+      OperationCompleteCallback operationCompleteCallback, Time time)
       throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
         routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
@@ -85,7 +86,6 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
    * Return the {@link MessageFormatFlags} to associate with a getBlobInfo operation.
    * @return {@link MessageFormatFlags#BlobInfo}
    */
-  @Override
   MessageFormatFlags getOperationFlag() {
     return MessageFormatFlags.BlobInfo;
   }
@@ -189,10 +189,10 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
           // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
           // There is no other way to handle it.
           routerMetrics.unknownReplicaResponseError.inc();
-          setOperationException(
-              new RouterException("The correlation id in the GetResponse " + getResponse.getCorrelationId() +
-                  "is not the same as the correlation id in the associated GetRequest: " + correlationId,
-                  RouterErrorCode.UnexpectedInternalError));
+          setOperationException(new RouterException(
+              "The correlation id in the GetResponse " + getResponse.getCorrelationId()
+                  + "is not the same as the correlation id in the associated GetRequest: " + correlationId,
+              RouterErrorCode.UnexpectedInternalError));
           onErrorResponse(getRequestInfo.replicaId);
           // we do not notify the ResponseHandler responsible for failure detection as this is an unexpected error.
         } else {
@@ -226,8 +226,9 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       int partitionsInResponse = getResponse.getPartitionResponseInfoList().size();
       // Each get request issued by the router is for a single blob.
       if (partitionsInResponse != 1) {
-        setOperationException(new RouterException("Unexpected number of partition responses, expected: 1, " +
-            "received: " + partitionsInResponse, RouterErrorCode.UnexpectedInternalError));
+        setOperationException(new RouterException(
+            "Unexpected number of partition responses, expected: 1, " + "received: " + partitionsInResponse,
+            RouterErrorCode.UnexpectedInternalError));
         onErrorResponse(getRequestInfo.replicaId);
         // Again, no need to notify the responseHandler.
       } else {
@@ -276,8 +277,8 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
   private void handleBody(InputStream payload)
       throws IOException, MessageFormatException {
     if (operationResult == null) {
-      operationResult = new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
-          MessageFormatRecord.deserializeUserMetadata(payload).array());
+      operationResult = new GetBlobResult(new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
+          MessageFormatRecord.deserializeUserMetadata(payload).array()), null);
     } else {
       // If the successTarget is 1, this case will never get executed.
       // If it is more than 1, then, different responses will have to be reconciled in some way. Here is where that
@@ -330,7 +331,7 @@ class GetBlobInfoOperation extends GetOperation<BlobInfo> {
       }
       if (e != null) {
         operationResult = null;
-        routerMetrics.onGetBlobInfoError(e);
+        routerMetrics.onGetBlobError(e, options);
       }
       routerMetrics.getBlobInfoOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
       operationCompleteCallback.completeOperation(operationFuture, operationCallback, operationResult, e);

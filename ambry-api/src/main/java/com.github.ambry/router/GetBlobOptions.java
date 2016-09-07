@@ -19,14 +19,20 @@ package com.github.ambry.router;
  * {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
  */
 public class GetBlobOptions {
+  private final GetOperationType getOperationType;
   private final ByteRange range;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
    * @param range
    */
-  public GetBlobOptions(ByteRange range) {
+  public GetBlobOptions(GetOperationType getOperationType, ByteRange range) {
+    this.getOperationType = getOperationType;
     this.range = range;
+  }
+
+  public GetOperationType getGetOperationType() {
+    return getOperationType;
   }
 
   /**
@@ -39,7 +45,7 @@ public class GetBlobOptions {
 
   @Override
   public String toString() {
-    return "GetBlobOptions{range=" + range + '}';
+    return "GetBlobOptions{getOperationType=" + getOperationType +", range=" + range + '}';
   }
 
   @Override
@@ -53,11 +59,16 @@ public class GetBlobOptions {
 
     GetBlobOptions that = (GetBlobOptions) o;
 
+    if (getOperationType != that.getOperationType) {
+      return false;
+    }
     return range != null ? range.equals(that.range) : that.range == null;
   }
 
   @Override
   public int hashCode() {
-    return range != null ? range.hashCode() : 0;
+    int result = getOperationType != null ? getOperationType.hashCode() : 0;
+    result = 31 * result + (range != null ? range.hashCode() : 0);
+    return result;
   }
 }

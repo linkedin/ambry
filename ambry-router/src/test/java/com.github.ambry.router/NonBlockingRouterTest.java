@@ -183,7 +183,7 @@ public class NonBlockingRouterTest {
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.getBlob(blobId, null).get();
-    router.getBlobInfo(blobId).get();
+    router.getBlob(blobId, new GetBlobOptions(GetOperationType.BlobInfo, null)).get();
     router.deleteBlob(blobId).get();
     router.close();
     assertExpectedThreadCounts(0);
@@ -713,7 +713,8 @@ public class NonBlockingRouterTest {
           break;
         case GET:
           futureResult = new FutureResult<BlobInfo>();
-          getManager.submitGetBlobInfoOperation(blobId, futureResult, null);
+          getManager
+              .submitGetBlobOperation(blobId, new GetBlobOptions(GetOperationType.BlobInfo, null), futureResult, null);
           break;
         case DELETE:
           futureResult = new FutureResult<BlobInfo>();

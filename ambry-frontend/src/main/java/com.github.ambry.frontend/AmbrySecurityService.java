@@ -70,7 +70,8 @@ class AmbrySecurityService implements SecurityService {
               case UserMetadata:
                 break;
               default:
-                exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET", RestServiceErrorCode.BadRequest);
+                exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET",
+                    RestServiceErrorCode.BadRequest);
             }
           }
           break;

@@ -171,6 +171,44 @@ public class MessageFormatRecord {
   }
 
   /**
+   * Deserialize a complete blob record into a {@link BlobAll} object.
+   * @param stream the {@link InputStream} from which to read the blob record.
+   * @param storeKeyFactory the factory for parsing store keys.
+   * @return a {@link BlobAll} object with the {@link BlobInfo} and {@link BlobData} for the blob.
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  public static BlobAll deserializeBlobAll(InputStream stream, StoreKeyFactory storeKeyFactory)
+      throws IOException, MessageFormatException {
+    skipHeaders(stream);
+    StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(stream));
+    BlobProperties blobProperties = deserializeBlobProperties(stream);
+    byte[] userMetadata = deserializeUserMetadata(stream).array();
+    BlobData blobData = deserializeBlob(stream);
+    return new BlobAll(storeKey, new BlobInfo(blobProperties, userMetadata), blobData);
+  }
+
+  /**
+   * Skip over the message header in a complete blob record.
+   * @param stream the {@link InputStream} from which to read the blob record.
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  private static void skipHeaders(InputStream stream)
+      throws IOException, MessageFormatException {
+    DataInputStream inputStream = new DataInputStream(stream);
+    short headerVersion = inputStream.readShort();
+    switch (headerVersion) {
+      case Message_Header_Version_V1:
+        inputStream.skip(MessageHeader_Format_V1.getHeaderSize() - Version_Field_Size_In_Bytes);
+        break;
+      default:
+        throw new MessageFormatException("Message header version not supported",
+            MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+  }
+
+  /**
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |                 |                 |                 |                 |                 |            |
    * | version |  payload size   | Blob Property   |     Delete      |  User Metadata  |      Blob       |    Crc     |
@@ -221,10 +259,8 @@ public class MessageFormatRecord {
         Blob_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
     public static int getHeaderSize() {
-      return Version_Field_Size_In_Bytes +
-          Total_Size_Field_Size_In_Bytes +
-          (Number_Of_Relative_Offset_Fields * Relative_Offset_Field_Sizes_In_Bytes) +
-          Crc_Size;
+      return Version_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes +
+          (Number_Of_Relative_Offset_Fields * Relative_Offset_Field_Sizes_In_Bytes) + Crc_Size;
     }
 
     public static void serializeHeader(ByteBuffer outputBuffer, long totalSize, int blobPropertiesRecordRelativeOffset,
@@ -261,33 +297,31 @@ public class MessageFormatRecord {
         throws MessageFormatException {
       // check constraints
       if (totalSize <= 0) {
-        throw new MessageFormatException("checkHeaderConstraints - totalSize " + totalSize +
-            " needs to be greater than 0", MessageFormatErrorCodes.Header_Constraint_Error);
-      }
-
-      if (blobPropertiesRecordRelativeOffset > 0 && (
-          deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-              userMetadataRecordRelativeOffset <= 0 || blobRecordRelativeOffset <= 0)) {
         throw new MessageFormatException(
-            "checkHeaderConstraints - blobPropertiesRecordRelativeOffset is greater than 0 " +
-                " but other properties do not satisfy constraints" +
-                " blobPropertiesRecordRelativeOffset " + blobPropertiesRecordRelativeOffset +
-                " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
-                " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
-                " blobRecordRelativeOffset " + blobRecordRelativeOffset,
+            "checkHeaderConstraints - totalSize " + totalSize + " needs to be greater than 0",
             MessageFormatErrorCodes.Header_Constraint_Error);
       }
 
+      if (blobPropertiesRecordRelativeOffset > 0 && (
+          deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset || userMetadataRecordRelativeOffset <= 0
+              || blobRecordRelativeOffset <= 0)) {
+        throw new MessageFormatException(
+            "checkHeaderConstraints - blobPropertiesRecordRelativeOffset is greater than 0 "
+                + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
+                + blobPropertiesRecordRelativeOffset + " deleteRecordRelativeOffset " + deleteRecordRelativeOffset
+                + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
+                + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+      }
+
       if (deleteRecordRelativeOffset > 0 && (
-          blobPropertiesRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-              userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset ||
-              blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset)) {
-        throw new MessageFormatException("checkHeaderConstraints - deleteRecordRelativeOffset is greater than 0 " +
-            " but other properties do not satisfy constraints" +
-            " blobPropertiesRecordRelativeOffset " + blobPropertiesRecordRelativeOffset +
-            " deleteRecordRelativeOffset " + deleteRecordRelativeOffset +
-            " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset +
-            " blobRecordRelativeOffset " + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
+          blobPropertiesRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
+              || userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
+              || blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset)) {
+        throw new MessageFormatException("checkHeaderConstraints - deleteRecordRelativeOffset is greater than 0 "
+            + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
+            + blobPropertiesRecordRelativeOffset + " deleteRecordRelativeOffset " + deleteRecordRelativeOffset
+            + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
+            + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
       }
     }
 
@@ -359,9 +393,7 @@ public class MessageFormatRecord {
     private static Logger logger = LoggerFactory.getLogger(BlobProperties_Format_V1.class);
 
     public static int getBlobPropertiesRecordSize(BlobProperties properties) {
-      return Version_Field_Size_In_Bytes +
-          BlobPropertiesSerDe.getBlobPropertiesSize(properties) +
-          Crc_Size;
+      return Version_Field_Size_In_Bytes + BlobPropertiesSerDe.getBlobPropertiesSize(properties) + Crc_Size;
     }
 
     public static void serializeBlobPropertiesRecord(ByteBuffer outputBuffer, BlobProperties properties) {
@@ -415,9 +447,7 @@ public class MessageFormatRecord {
     private static Logger logger = LoggerFactory.getLogger(Delete_Format_V1.class);
 
     public static int getDeleteRecordSize() {
-      return Version_Field_Size_In_Bytes +
-          Delete_Field_Size_In_Bytes +
-          Crc_Size;
+      return Version_Field_Size_In_Bytes + Delete_Field_Size_In_Bytes + Crc_Size;
     }
 
     public static void serializeDeleteRecord(ByteBuffer outputBuffer, boolean deleteFlag) {
@@ -465,10 +495,7 @@ public class MessageFormatRecord {
     private static Logger logger = LoggerFactory.getLogger(UserMetadata_Format_V1.class);
 
     public static int getUserMetadataSize(ByteBuffer userMetadata) {
-      return Version_Field_Size_In_Bytes +
-          UserMetadata_Size_Field_In_Bytes +
-          userMetadata.limit() +
-          Crc_Size;
+      return Version_Field_Size_In_Bytes + UserMetadata_Size_Field_In_Bytes + userMetadata.limit() + Crc_Size;
     }
 
     public static void serializeUserMetadataRecord(ByteBuffer outputBuffer, ByteBuffer userMetadata) {
@@ -518,10 +545,7 @@ public class MessageFormatRecord {
     private static Logger logger = LoggerFactory.getLogger(Blob_Format_V1.class);
 
     public static long getBlobRecordSize(long blobSize) {
-      return Version_Field_Size_In_Bytes +
-          Blob_Size_Field_In_Bytes +
-          blobSize +
-          Crc_Size;
+      return Version_Field_Size_In_Bytes + Blob_Size_Field_In_Bytes + blobSize + Crc_Size;
     }
 
     public static void serializePartialBlobRecord(ByteBuffer outputBuffer, long blobSize) {
@@ -572,11 +596,7 @@ public class MessageFormatRecord {
     private static Logger logger = LoggerFactory.getLogger(Blob_Format_V2.class);
 
     public static long getBlobRecordSize(long blobSize) {
-      return Version_Field_Size_In_Bytes +
-          Blob_Type_Field_In_Bytes +
-          Blob_Size_Field_In_Bytes +
-          blobSize +
-          Crc_Size;
+      return Version_Field_Size_In_Bytes + Blob_Type_Field_In_Bytes + Blob_Size_Field_In_Bytes + blobSize + Crc_Size;
     }
 
     public static void serializePartialBlobRecord(ByteBuffer outputBuffer, long blobContentSize, BlobType blobType) {
@@ -611,20 +631,20 @@ public class MessageFormatRecord {
     }
   }
 
-   // Metadata_Content_Format_V1 (layout below) was unused and was removed to clean up the range request handling code.
-   //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   // |         |               |            |            |          |
-   // | version |   no of keys  |    key1    |     key2   |  ......  |
-   // |(2 bytes)|    (4 bytes)  |            |            |  ......  |
-   // |         |               |            |            |          |
-   //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   //  version         - The version of the metadata content record
-   //
-   //  no of keys      - total number of keys
-   //
-   //  key1            - first key to be part of metadata blob
-   //
-   //  key2            - second key to be part of metadata blob
+  // Metadata_Content_Format_V1 (layout below) was unused and was removed to clean up the range request handling code.
+  //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // |         |               |            |            |          |
+  // | version |   no of keys  |    key1    |     key2   |  ......  |
+  // |(2 bytes)|    (4 bytes)  |            |            |  ......  |
+  // |         |               |            |            |          |
+  //  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  //  version         - The version of the metadata content record
+  //
+  //  no of keys      - total number of keys
+  //
+  //  key1            - first key to be part of metadata blob
+  //
+  //  key2            - second key to be part of metadata blob
 
   /**
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -655,9 +675,7 @@ public class MessageFormatRecord {
      * @return The total size in bytes.
      */
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
-      return Version_Field_Size_In_Bytes +
-          Chunk_Size_Field_Size_In_Bytes +
-          Total_Size_Field_Size_In_Bytes +
+      return Version_Field_Size_In_Bytes + Chunk_Size_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes +
           (numberOfKeys * keySize);
     }
 

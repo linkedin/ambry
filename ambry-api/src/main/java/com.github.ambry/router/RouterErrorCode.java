@@ -84,5 +84,9 @@ public enum RouterErrorCode {
   /**
    * The range offsets provided for a getBlob operation are invalid for the specified blob.
    */
-  RangeNotSatisfiable
+  RangeNotSatisfiable,
+  /**
+   * The channel returned to the user in a getBlob operation has been closed before operation completion.
+   */
+  ChannelClosed
 }

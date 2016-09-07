@@ -65,14 +65,11 @@ class FrontendMetrics {
   public final Histogram headTimeInMs;
   public final Histogram headSecurityResponseTimeInMs;
   public final Histogram headSecurityResponseCallbackProcessingTimeInMs;
-  // HeadForGetCallback
-  public final Histogram headForGetCallbackProcessingTimeInMs;
-  public final Histogram headForGetTimeInMs;
-  public final Histogram getSecurityResponseCallbackProcessingTimeInMs;
-  public final Histogram getSecurityResponseTimeInMs;
   // GetCallback
   public final Histogram getCallbackProcessingTimeInMs;
   public final Histogram getTimeInMs;
+  public final Histogram getSecurityResponseCallbackProcessingTimeInMs;
+  public final Histogram getSecurityResponseTimeInMs;
   // PostCallback
   public final Histogram outboundIdConversionCallbackProcessingTimeInMs;
   public final Histogram outboundIdConversionTimeInMs;
@@ -107,11 +104,9 @@ class FrontendMetrics {
   public final Counter deleteCallbackProcessingError;
   // HeadCallback
   public final Counter headCallbackProcessingError;
-  // HeadForGetCallback
-  public final Counter headForGetCallbackProcessingError;
-  public final Counter getSecurityResponseCallbackProcessingError;
   // GetCallback
   public final Counter getCallbackProcessingError;
+  public final Counter getSecurityResponseCallbackProcessingError;
   // PostCallback
   public final Counter postCallbackProcessingError;
   public final Counter outboundIdConversionCallbackProcessingError;
@@ -177,20 +172,15 @@ class FrontendMetrics {
         MetricRegistry.name(AmbryBlobStorageService.class, "HeadSecurityResponseCallbackProcessingTimeInMs"));
     headSecurityResponseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadSecurityResponseTimeInMs"));
-    // HeadForGetCallback
-    headForGetCallbackProcessingTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadForGetCallbackProcessingTimeInMs"));
-    headForGetTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadForGetCallbackResultTimeInMs"));
-    getSecurityResponseCallbackProcessingTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseCallbackProcessingTimeInMs"));
-    getSecurityResponseTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseTimeInMs"));
     // GetCallback
     getCallbackProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetCallbackProcessingTimeInMs"));
     getTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetCallbackResultTimeInMs"));
+    getSecurityResponseCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseCallbackProcessingTimeInMs"));
+    getSecurityResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseTimeInMs"));
     // PostCallback
     outboundIdConversionCallbackProcessingTimeInMs = metricRegistry
         .histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OutboundIdCallbackProcessingTimeInMs"));
@@ -249,14 +239,11 @@ class FrontendMetrics {
     // HeadCallback
     headCallbackProcessingError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "HeadCallbackProcessingError"));
-    // HeadForGetCallback
-    headForGetCallbackProcessingError =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "HeadForGetCallbackProcessingError"));
-    getSecurityResponseCallbackProcessingError = metricRegistry
-        .counter(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseCallbackProcessingError"));
     // GetCallback
     getCallbackProcessingError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "GetCallbackProcessingError"));
+    getSecurityResponseCallbackProcessingError = metricRegistry
+        .counter(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityResponseCallbackProcessingError"));
     // PostCallback
     postCallbackProcessingError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "PostCallbackProcessingError"));

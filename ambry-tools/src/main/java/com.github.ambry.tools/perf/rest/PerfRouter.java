@@ -18,6 +18,8 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -67,56 +69,37 @@ class PerfRouter implements Router {
   }
 
   /**
-   * Returns pre-populated {@link BlobProperties} and user metadata. {@code blobId} is ignored.
-   * @param blobId (ignored).
-   * @return a {@link Future} that will eventually contain the {@link BlobInfo}.
-   */
-  @Override
-  public Future<BlobInfo> getBlobInfo(String blobId) {
-    return getBlobInfo(blobId, null);
-  }
-
-  /**
-   * Returns pre-populated {@link BlobProperties} and user metadata. {@code blobId} is ignored.
-   * @param blobId (ignored).
-   * @param callback the {@link Callback} to invoke on operation completion.
-   * @return a {@link Future} that will eventually contain the {@link BlobInfo}.
-   */
-  @Override
-  public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
-    logger.trace("Received getBlobInfo call");
-    FutureResult<BlobInfo> futureResult = new FutureResult<BlobInfo>();
-    if (!routerOpen) {
-      completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
-    } else {
-      BlobInfo blobInfo = new BlobInfo(blobProperties, usermetadata);
-      completeOperation(futureResult, callback, blobInfo, null);
-    }
-    return futureResult;
-  }
-
-  /**
    * Returns a stream of repeating data up to a pre-set size. {@code blobId} is ignored.
    * @param blobId The ID of the blob for which blob data is requested.
    * @param options The options associated with the request.
-   * @return a {@link Future} that will eventually contain the blob data in the form of a
-   * {@link ReadableStreamChannel}.
+   * @return a {@link Future} that will eventually contain a {@link GetBlobResult}.
    */
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
     return getBlob(blobId, options, null);
   }
 
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
-      Callback<ReadableStreamChannel> callback) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
     logger.trace("Received getBlob call");
-    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<ReadableStreamChannel>();
+    FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     if (!routerOpen) {
       completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
     } else {
-      ReadableStreamChannel blob = new PerfRSC(chunk, blobProperties.getBlobSize());
-      completeOperation(futureResult, callback, blob, null);
+      GetBlobResult result = null;
+      switch (GetOperationType.getTypeFromOptions(options)) {
+        case All:
+          result = new GetBlobResult(new BlobInfo(blobProperties, usermetadata),
+              new PerfRSC(chunk, blobProperties.getBlobSize()));
+          break;
+        case Data:
+          result = new GetBlobResult(null, new PerfRSC(chunk, blobProperties.getBlobSize()));
+          break;
+        case BlobInfo:
+          result = new GetBlobResult(new BlobInfo(blobProperties, usermetadata), null);
+          break;
+      }
+      completeOperation(futureResult, callback, result, null);
     }
     return futureResult;
   }

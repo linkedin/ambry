@@ -34,6 +34,8 @@ import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
@@ -59,7 +61,6 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static final String OPERATION_TYPE_GET_RESPONSE_SECURITY = "GET Response Security";
   private static final String OPERATION_TYPE_HEAD_RESPONSE_SECURITY = "HEAD Response Security";
   private static final String OPERATION_TYPE_POST_RESPONSE_SECURITY = "POST Response Security";
-  private static final String OPERATION_TYPE_HEAD_BEFORE_GET = "HEAD Before GET";
   private static final String OPERATION_TYPE_GET = "GET";
   private static final String OPERATION_TYPE_HEAD = "HEAD";
   private static final String OPERATION_TYPE_DELETE = "DELETE";
@@ -153,7 +154,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       }
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      HeadForGetCallback routerCallback = new HeadForGetCallback(restRequest, restResponseChannel, subresource);
+      GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -307,13 +308,13 @@ class AmbryBlobStorageService implements BlobStorageService {
   private class InboundIdConverterCallback implements Callback<String> {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
-    private final HeadForGetCallback headForGetCallback;
+    private final GetCallback getCallback;
     private final HeadCallback headCallback;
     private final DeleteCallback deleteCallback;
     private final CallbackTracker callbackTracker;
 
     InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        HeadForGetCallback callback) {
+        GetCallback callback) {
       this(restRequest, restResponseChannel, callback, null, null);
     }
 
@@ -328,10 +329,10 @@ class AmbryBlobStorageService implements BlobStorageService {
     }
 
     private InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        HeadForGetCallback headForGetCallback, HeadCallback headCallback, DeleteCallback deleteCallback) {
+        GetCallback getCallback, HeadCallback headCallback, DeleteCallback deleteCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.headForGetCallback = headForGetCallback;
+      this.getCallback = getCallback;
       this.headCallback = headCallback;
       this.deleteCallback = deleteCallback;
       callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_INBOUND_ID_CONVERSION,
@@ -356,13 +357,14 @@ class AmbryBlobStorageService implements BlobStorageService {
           logger.trace("Forwarding {} of {} to the router", restMethod, result);
           switch (restMethod) {
             case GET:
-              headForGetCallback.setBlobId(result);
-              headForGetCallback.markStartTime();
-              router.getBlobInfo(result, headForGetCallback);
+              getCallback.markStartTime();
+              GetOperationType getOperationType =
+                  getCallback.subResource != null ? GetOperationType.BlobInfo : GetOperationType.All;
+              router.getBlob(result, new GetBlobOptions(getOperationType, null), getCallback);
               break;
             case HEAD:
               headCallback.markStartTime();
-              router.getBlobInfo(result, headCallback);
+              router.getBlob(result, new GetBlobOptions(GetOperationType.BlobInfo, null), headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();
@@ -396,7 +398,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     private final RestResponseChannel restResponseChannel;
     private final CallbackTracker callbackTracker;
 
-    private HeadForGetCallback headForGetCallback;
+    private GetCallback getCallback;
     private HeadCallback headCallback;
     private PostCallback postCallback;
     private DeleteCallback deleteCallback;
@@ -405,10 +407,10 @@ class AmbryBlobStorageService implements BlobStorageService {
     private byte[] userMetadata;
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        HeadForGetCallback callback) {
+        GetCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_GET, frontendMetrics.getSecurityRequestTimeInMs,
           frontendMetrics.getSecurityRequestCallbackProcessingTimeInMs);
-      this.headForGetCallback = callback;
+      this.getCallback = callback;
     }
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
@@ -464,7 +466,7 @@ class AmbryBlobStorageService implements BlobStorageService {
                   .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
                       frontendConfig.frontendPathPrefixesToRemove);
               InboundIdConverterCallback idConverterCallback =
-                  new InboundIdConverterCallback(restRequest, restResponseChannel, headForGetCallback);
+                  new InboundIdConverterCallback(restRequest, restResponseChannel, getCallback);
               idConverter.convert(restRequest, receivedId, idConverterCallback);
               break;
             case HEAD:
@@ -557,44 +559,41 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   /**
-   * Callback for HEAD that precedes GET operations. Updates headers and invokes GET with a new callback.
+   * Callback for GET operations. Updates headers and submits the response body if there is no security exception.
    */
-  private class HeadForGetCallback implements Callback<BlobInfo> {
+  private class GetCallback implements Callback<GetBlobResult> {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final RestUtils.SubResource subResource;
     private final CallbackTracker callbackTracker;
-    private final Logger logger = LoggerFactory.getLogger(getClass());
-
-    private String blobId;
 
     /**
-     * Create a HEAD before GET callback.
+     * Create a GET callback.
      * @param restRequest the {@link RestRequest} for whose response this is a callback.
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
      */
-    HeadForGetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
+    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
         RestUtils.SubResource subResource) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.subResource = subResource;
       callbackTracker =
-          new CallbackTracker(restRequest, OPERATION_TYPE_HEAD_BEFORE_GET, frontendMetrics.headForGetTimeInMs,
-              frontendMetrics.headForGetCallbackProcessingTimeInMs);
-      blobId =
-          RestUtils.getOperationOrBlobIdFromUri(restRequest, subResource, frontendConfig.frontendPathPrefixesToRemove);
+          new CallbackTracker(restRequest, OPERATION_TYPE_GET, frontendMetrics.getTimeInMs,
+              frontendMetrics.getCallbackProcessingTimeInMs);
     }
 
     /**
      * If the request is not for a sub resource, makes a GET call to the router. If the request is for a sub resource,
      * responds immediately. If there was no {@code routerResult} or if there was an exception, bails out.
-     * @param routerResult The result of the request i.e a {@link BlobInfo} object with the properties of the blob that
-     *                     is going to be scheduled for GET. This is non null if the request executed successfully.
+     * Submits the GET response to {@link RestResponseHandler} so that it can be sent (or the exception handled).
+     * @param routerResult The result of the request i.e a {@link GetBlobResult} object with the properties of the blob
+     *                     (and a channel for blob data, if the request did not have a subresource) that is going to be
+     *                     returned if no exception occured. This is non null if the request executed successfully.
      * @param routerException The exception that was reported on execution of the request (if any).
      */
     @Override
-    public void onCompletion(final BlobInfo routerResult, Exception routerException) {
+    public void onCompletion(final GetBlobResult routerResult, Exception routerException) {
       callbackTracker.markOperationEnd();
       if (routerResult == null && routerException == null) {
         throw new IllegalStateException("Both response and exception are null");
@@ -606,45 +605,52 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.getSecurityResponseTimeInMs,
                   frontendMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService.processResponse(restRequest, restResponseChannel, routerResult, new Callback<Void>() {
-            @Override
-            public void onCompletion(Void securityResult, Exception securityException) {
-              securityCallbackTracker.markOperationEnd();
-              ReadableStreamChannel response = null;
-              boolean blobNotModified = restResponseChannel.getStatus() == ResponseStatus.NotModified;
-              try {
-                if (securityException == null) {
-                  if (subResource != null) {
-                    Map<String, String> userMetadata = RestUtils.buildUserMetadata(routerResult.getUserMetadata());
-                    if (userMetadata == null) {
-                      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-                      restResponseChannel
-                          .setHeader(RestUtils.Headers.CONTENT_LENGTH, routerResult.getUserMetadata().length);
-                      response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(routerResult.getUserMetadata()));
-                    } else {
-                      setUserMetadataHeaders(userMetadata, restResponseChannel);
-                      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-                      response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
+          securityService
+              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+                @Override
+                public void onCompletion(Void securityResult, Exception securityException) {
+                  securityCallbackTracker.markOperationEnd();
+                  ReadableStreamChannel response = null;
+                  boolean blobNotModified = restResponseChannel.getStatus() == ResponseStatus.NotModified;
+                  try {
+                    if (securityException == null) {
+                      if (subResource != null) {
+                        BlobInfo blobInfo = routerResult.getBlobInfo();
+                        Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
+                        if (userMetadata == null) {
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+                          restResponseChannel
+                              .setHeader(RestUtils.Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                          response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
+                        } else {
+                          setUserMetadataHeaders(userMetadata, restResponseChannel);
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+                          response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
+                        }
+                      } else if (!blobNotModified) {
+                        response = routerResult.getBlobDataChannel();
+                      }
                     }
-                  } else if (!blobNotModified) {
-                    logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
-                    router.getBlob(blobId, null, new GetCallback(restRequest, restResponseChannel));
+                  } catch (Exception e) {
+                    frontendMetrics.getSecurityResponseCallbackProcessingError.inc();
+                    securityException = e;
+                  } finally {
+                    if (response != null || securityException != null || blobNotModified) {
+                      submitResponse(restRequest, restResponseChannel, response, securityException);
+                    }
+                    if (securityException != null && routerResult.getBlobDataChannel() != null) {
+                      try {
+                        routerResult.getBlobDataChannel().close();
+                      } catch (IOException ignored){
+                      }
+                    }
+                    securityCallbackTracker.markCallbackProcessingEnd();
                   }
                 }
-              } catch (Exception e) {
-                frontendMetrics.getSecurityResponseCallbackProcessingError.inc();
-                securityException = e;
-              } finally {
-                if (response != null || securityException != null || blobNotModified) {
-                  submitResponse(restRequest, restResponseChannel, response, securityException);
-                }
-                securityCallbackTracker.markCallbackProcessingEnd();
-              }
-            }
-          });
+              });
         }
       } catch (Exception e) {
-        frontendMetrics.headForGetCallbackProcessingError.inc();
+        frontendMetrics.getCallbackProcessingError.inc();
         routerException = e;
       } finally {
         if (routerException != null) {
@@ -652,14 +658,6 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
         callbackTracker.markCallbackProcessingEnd();
       }
-    }
-
-    /**
-     * Sets the blob ID that should be used for {@link Router#getBlob(String, GetBlobOptions, Callback)}
-     * @param blobId the blob ID that should be used for {@link Router#getBlob(String, GetBlobOptions, Callback)}.
-     */
-    void setBlobId(String blobId) {
-      this.blobId = blobId;
     }
 
     /**
@@ -679,46 +677,6 @@ class AmbryBlobStorageService implements BlobStorageService {
         throws RestServiceException {
       for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
         restResponseChannel.setHeader(entry.getKey(), entry.getValue());
-      }
-    }
-  }
-
-  /**
-   * Callback for GET operations. Submits the response received to an instance of {@link RestResponseHandler}.
-   */
-  private class GetCallback implements Callback<ReadableStreamChannel> {
-    private final RestRequest restRequest;
-    private final RestResponseChannel restResponseChannel;
-    private final CallbackTracker callbackTracker;
-
-    /**
-     * Create a GET callback.
-     * @param restRequest the {@link RestRequest} for whose response this is a callback.
-     * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be
-     *                            sent.
-     */
-    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-      this.restRequest = restRequest;
-      this.restResponseChannel = restResponseChannel;
-      callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_GET, frontendMetrics.getTimeInMs,
-          frontendMetrics.getCallbackProcessingTimeInMs);
-      callbackTracker.markOperationStart();
-    }
-
-    /**
-     * Submits the GET response to {@link RestResponseHandler} so that it can be sent (or the exception handled).
-     * @param routerResult The result of the request. This is the actual blob data as a {@link ReadableStreamChannel}.
-     *               This is non null if the request executed successfully.
-     * @param routerException The exception that was reported on execution of the request (if any).
-     */
-    @Override
-    public void onCompletion(ReadableStreamChannel routerResult, Exception routerException) {
-      callbackTracker.markOperationEnd();
-      if (routerResult == null && routerException == null) {
-        throw new IllegalStateException("Both response and exception are null");
-      } else {
-        submitResponse(restRequest, restResponseChannel, routerResult, routerException);
-        callbackTracker.markCallbackProcessingEnd();
       }
     }
   }
@@ -880,7 +838,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * Callback for HEAD operations. Sends the headers to the client if operation is successful. Submits response either
    * to handle exceptions or to clean up after a response.
    */
-  private class HeadCallback implements Callback<BlobInfo> {
+  private class HeadCallback implements Callback<GetBlobResult> {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final CallbackTracker callbackTracker;
@@ -901,12 +859,12 @@ class AmbryBlobStorageService implements BlobStorageService {
     /**
      * If there was no exception, updates the header with the properties. Exceptions, if any, will be handled upon
      * submission.
-     * @param routerResult The result of the request i.e a {@link BlobInfo} object with the properties of the blob. This is
-     *               non null if the request executed successfully.
+     * @param routerResult The result of the request, which includes a {@link BlobInfo} object with the properties of
+     *                     the blob. This is non null if the request executed successfully.
      * @param routerException The exception that was reported on execution of the request (if any).
      */
     @Override
-    public void onCompletion(BlobInfo routerResult, Exception routerException) {
+    public void onCompletion(GetBlobResult routerResult, Exception routerException) {
       callbackTracker.markOperationEnd();
       if (routerResult == null && routerException == null) {
         throw new IllegalStateException("Both response and exception are null");
@@ -918,14 +876,15 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.headSecurityResponseTimeInMs,
                   frontendMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService.processResponse(restRequest, restResponseChannel, routerResult, new Callback<Void>() {
-            @Override
-            public void onCompletion(Void securityResult, Exception securityException) {
-              callbackTracker.markOperationEnd();
-              submitResponse(restRequest, restResponseChannel, null, securityException);
-              callbackTracker.markCallbackProcessingEnd();
-            }
-          });
+          securityService
+              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+                @Override
+                public void onCompletion(Void securityResult, Exception securityException) {
+                  callbackTracker.markOperationEnd();
+                  submitResponse(restRequest, restResponseChannel, null, securityException);
+                  callbackTracker.markCallbackProcessingEnd();
+                }
+              });
         }
       } catch (Exception e) {
         frontendMetrics.headCallbackProcessingError.inc();

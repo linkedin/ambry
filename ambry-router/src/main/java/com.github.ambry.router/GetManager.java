@@ -105,38 +105,24 @@ class GetManager {
   }
 
   /**
-   * Submit an operation to get the BlobInfo associated with a blob asynchronously.
-   * @param blobId the blobId for which the BlobInfo is being requested, in string form.
-   * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
-   * @param callback the {@link Callback} object to be called on completion of the operation.
-   */
-  void submitGetBlobInfoOperation(String blobId, FutureResult<BlobInfo> futureResult, Callback<BlobInfo> callback) {
-    try {
-      GetBlobInfoOperation getBlobInfoOperation =
-          new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, futureResult,
-              callback, operationCompleteCallback, time);
-      getOperations.add(getBlobInfoOperation);
-    } catch (RouterException e) {
-      routerMetrics.onGetBlobInfoError(e);
-      routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
-    }
-  }
-
-  /**
    * Submit an operation to get a blob asynchronously.
    * @param blobId The blobId for which the BlobInfo is being requested, in string form.
    * @param options The {@link GetBlobOptions} associated witht the operation.
    * @param futureResult The {@link FutureResult} that contains the pending result of the operation.
    * @param callback The {@link Callback} object to be called on completion of the operation.
    */
-  void submitGetBlobOperation(String blobId, GetBlobOptions options, FutureResult<ReadableStreamChannel> futureResult,
-      Callback<ReadableStreamChannel> callback) {
+  void submitGetBlobOperation(String blobId, GetBlobOptions options, FutureResult<GetBlobResult> futureResult,
+      Callback<GetBlobResult> callback) {
     try {
-      GetBlobOperation getBlobOperation =
-          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, futureResult,
-              callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
-      getOperations.add(getBlobOperation);
+      GetOperation getOperation;
+      if (options != null && options.getGetOperationType() == GetOperationType.BlobInfo) {
+        getOperation = new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId,
+            options, futureResult, callback, operationCompleteCallback, time);
+      } else {
+        getOperation = new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
+            futureResult, callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+      }
+      getOperations.add(getOperation);
     } catch (RouterException e) {
       routerMetrics.onGetBlobError(e, options);
       routerMetrics.operationDequeuingRate.mark();
@@ -263,11 +249,7 @@ class GetManager {
     if (remove(op)) {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
-      if (op instanceof GetBlobOperation) {
-        routerMetrics.onGetBlobError(abortCause, ((GetBlobOperation) op).getOptions());
-      } else {
-        routerMetrics.onGetBlobInfoError(abortCause);
-      }
+      routerMetrics.onGetBlobError(abortCause, op.getOptions());
     }
   }
 }
