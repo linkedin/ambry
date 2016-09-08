@@ -109,6 +109,10 @@ public class NettyMetrics {
   public final Counter processorUnknownExceptionCount;
 
   // NettyResponseChannel
+  public final Counter acceptedCount;
+  public final Counter createdCount;
+  public final Counter okCount;
+  public final Counter notModifiedCount;
   public final Counter badRequestCount;
   public final Counter unauthorizedCount;
   public final Counter goneCount;
@@ -263,6 +267,10 @@ public class NettyMetrics {
     processorUnknownExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "UnknownExceptionCount"));
     // NettyResponseChannel
+    acceptedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "AcceptedCount"));
+    createdCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "CreatedCount"));
+    okCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "OkCount"));
+    notModifiedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "NotModifiedCount"));
     badRequestCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount"));
     unauthorizedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnauthorizedCount"));
     goneCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "GoneCount"));
