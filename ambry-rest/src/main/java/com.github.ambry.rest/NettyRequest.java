@@ -119,17 +119,17 @@ class NettyRequest implements RestRequest {
     this.nettyMetrics = nettyMetrics;
 
     HttpMethod httpMethod = request.getMethod();
-    if (httpMethod == HttpMethod.GET) {
+    if (HttpMethod.GET.equals(httpMethod)) {
       restMethod = RestMethod.GET;
-    } else if (httpMethod == HttpMethod.POST) {
+    } else if (HttpMethod.POST.equals(httpMethod)) {
       restMethod = RestMethod.POST;
       if (bufferWatermark > 0) {
         setAutoRead(false);
         continueReadIfPossible(0);
       }
-    } else if (httpMethod == HttpMethod.DELETE) {
+    } else if (HttpMethod.DELETE.equals(httpMethod)) {
       restMethod = RestMethod.DELETE;
-    } else if (httpMethod == HttpMethod.HEAD) {
+    } else if (HttpMethod.HEAD.equals(httpMethod)) {
       restMethod = RestMethod.HEAD;
     } else {
       nettyMetrics.unsupportedHttpMethodError.inc();
