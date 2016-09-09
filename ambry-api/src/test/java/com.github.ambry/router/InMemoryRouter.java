@@ -111,8 +111,7 @@ public class InMemoryRouter implements Router {
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
-    GetOperationType opType =
-        options != null && options.getGetOperationType() != null ? options.getGetOperationType() : GetOperationType.All;
+    options = options == null ? GetBlobOptions.DEFAULT_OPTIONS : options;
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     handlePrechecks(futureResult, callback);
     ReadableStreamChannel blobDataChannel = null;
@@ -129,7 +128,7 @@ public class InMemoryRouter implements Router {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         } else {
           InMemoryBlob blob = blobs.get(blobId);
-          switch (opType) {
+          switch (options.getOperationType()) {
             case Data:
               blobDataChannel = new ByteBufferRSC(blob.getBlob());
               break;

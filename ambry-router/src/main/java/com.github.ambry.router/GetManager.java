@@ -19,7 +19,6 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -115,7 +114,7 @@ class GetManager {
       Callback<GetBlobResult> callback) {
     try {
       GetOperation getOperation;
-      if (options != null && options.getGetOperationType() == GetOperationType.BlobInfo) {
+      if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation = new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId,
             options, futureResult, callback, operationCompleteCallback, time);
       } else {

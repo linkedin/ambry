@@ -41,7 +41,6 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
-import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -250,7 +249,8 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests {@link AmbryBlobStorageService#submitResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, * Exception)}.
+   * Tests
+   * {@link AmbryBlobStorageService#submitResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)}.
    * @throws JSONException
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
@@ -1123,7 +1123,8 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     /**
      * Works in {@link SecurityService#processRequest(RestRequest, Callback)}.
      */
-    Request, /**
+    Request,
+    /**
      * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
      */
     Response
@@ -1323,7 +1324,9 @@ class FrontendTestRouter implements Router {
    * Enumerates the different operation types in the router.
    */
   enum OpType {
-    DeleteBlob, GetBlob, PutBlob
+    DeleteBlob,
+    GetBlob,
+    PutBlob
   }
 
   public OpType exceptionOpType = null;
@@ -1337,8 +1340,9 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
+    options = options == null ? GetBlobOptions.DEFAULT_OPTIONS : options;
     GetBlobResult result;
-    switch (GetOperationType.getTypeFromOptions(options)) {
+    switch (options.getOperationType()) {
       case BlobInfo:
         result = new GetBlobResult(new BlobInfo(new BlobProperties(0, "FrontendTestRouter"), new byte[0]), null);
         break;

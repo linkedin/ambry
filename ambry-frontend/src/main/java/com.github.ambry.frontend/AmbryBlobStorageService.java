@@ -35,7 +35,6 @@ import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
-import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
@@ -313,8 +312,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     private final DeleteCallback deleteCallback;
     private final CallbackTracker callbackTracker;
 
-    InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        GetCallback callback) {
+    InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, GetCallback callback) {
       this(restRequest, restResponseChannel, callback, null, null);
     }
 
@@ -358,13 +356,14 @@ class AmbryBlobStorageService implements BlobStorageService {
           switch (restMethod) {
             case GET:
               getCallback.markStartTime();
-              GetOperationType getOperationType =
-                  getCallback.subResource != null ? GetOperationType.BlobInfo : GetOperationType.All;
+              GetBlobOptions.OperationType getOperationType =
+                  getCallback.subResource != null ? GetBlobOptions.OperationType.BlobInfo
+                      : GetBlobOptions.OperationType.All;
               router.getBlob(result, new GetBlobOptions(getOperationType, null), getCallback);
               break;
             case HEAD:
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetOperationType.BlobInfo, null), headCallback);
+              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();
@@ -573,14 +572,12 @@ class AmbryBlobStorageService implements BlobStorageService {
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
      */
-    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        RestUtils.SubResource subResource) {
+    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, RestUtils.SubResource subResource) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.subResource = subResource;
-      callbackTracker =
-          new CallbackTracker(restRequest, OPERATION_TYPE_GET, frontendMetrics.getTimeInMs,
-              frontendMetrics.getCallbackProcessingTimeInMs);
+      callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_GET, frontendMetrics.getTimeInMs,
+          frontendMetrics.getCallbackProcessingTimeInMs);
     }
 
     /**
@@ -629,21 +626,17 @@ class AmbryBlobStorageService implements BlobStorageService {
                         }
                       } else if (!blobNotModified) {
                         response = routerResult.getBlobDataChannel();
+                      } else {
+                        // If the blob was not modified, we need to close the channel, as it will not be submitted to
+                        // the RestResponseHandler
+                        routerResult.getBlobDataChannel().close();
                       }
                     }
                   } catch (Exception e) {
                     frontendMetrics.getSecurityResponseCallbackProcessingError.inc();
                     securityException = e;
                   } finally {
-                    if (response != null || securityException != null || blobNotModified) {
-                      submitResponse(restRequest, restResponseChannel, response, securityException);
-                    }
-                    if (securityException != null && routerResult.getBlobDataChannel() != null) {
-                      try {
-                        routerResult.getBlobDataChannel().close();
-                      } catch (IOException ignored){
-                      }
-                    }
+                    submitResponse(restRequest, restResponseChannel, response, securityException);
                     securityCallbackTracker.markCallbackProcessingEnd();
                   }
                 }
@@ -654,7 +647,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         routerException = e;
       } finally {
         if (routerException != null) {
-          submitResponse(restRequest, restResponseChannel, null, routerException);
+          submitResponse(restRequest, restResponseChannel,
+              routerResult != null ? routerResult.getBlobDataChannel() : null, routerException);
         }
         callbackTracker.markCallbackProcessingEnd();
       }

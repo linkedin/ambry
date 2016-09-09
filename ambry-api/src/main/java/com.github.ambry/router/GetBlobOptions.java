@@ -19,20 +19,26 @@ package com.github.ambry.router;
  * {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
  */
 public class GetBlobOptions {
-  private final GetOperationType getOperationType;
+  public static final GetBlobOptions DEFAULT_OPTIONS = new GetBlobOptions(OperationType.All, null);
+
+  private final OperationType operationType;
   private final ByteRange range;
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
-   * @param range
+   * @param operationType the {@link OperationType} for this request. This must be non-null.
+   * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
    */
-  public GetBlobOptions(GetOperationType getOperationType, ByteRange range) {
-    this.getOperationType = getOperationType;
+  public GetBlobOptions(OperationType operationType, ByteRange range) {
+    if (operationType == null) {
+      throw new IllegalArgumentException("operationType must be defined");
+    }
+    this.operationType = operationType;
     this.range = range;
   }
 
-  public GetOperationType getGetOperationType() {
-    return getOperationType;
+  public OperationType getOperationType() {
+    return operationType;
   }
 
   /**
@@ -45,7 +51,7 @@ public class GetBlobOptions {
 
   @Override
   public String toString() {
-    return "GetBlobOptions{getOperationType=" + getOperationType +", range=" + range + '}';
+    return "GetBlobOptions{operationType=" + operationType + ", range=" + range + '}';
   }
 
   @Override
@@ -59,7 +65,7 @@ public class GetBlobOptions {
 
     GetBlobOptions that = (GetBlobOptions) o;
 
-    if (getOperationType != that.getOperationType) {
+    if (operationType != that.operationType) {
       return false;
     }
     return range != null ? range.equals(that.range) : that.range == null;
@@ -67,8 +73,23 @@ public class GetBlobOptions {
 
   @Override
   public int hashCode() {
-    int result = getOperationType != null ? getOperationType.hashCode() : 0;
+    int result = operationType != null ? operationType.hashCode() : 0;
     result = 31 * result + (range != null ? range.hashCode() : 0);
     return result;
+  }
+
+  public enum OperationType {
+    /**
+     * Return blob info and blob data in the response.
+     */
+    All,
+    /**
+     * Return just the blob data in the response.
+     */
+    Data,
+    /**
+     * Return just the blob info in the response.
+     */
+    BlobInfo;
   }
 }

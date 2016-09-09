@@ -180,7 +180,7 @@ public class MessageFormatRecord {
    */
   public static BlobAll deserializeBlobAll(InputStream stream, StoreKeyFactory storeKeyFactory)
       throws IOException, MessageFormatException {
-    skipHeaders(stream);
+    validateHeader(stream);
     StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(stream));
     BlobProperties blobProperties = deserializeBlobProperties(stream);
     byte[] userMetadata = deserializeUserMetadata(stream).array();
@@ -189,18 +189,23 @@ public class MessageFormatRecord {
   }
 
   /**
-   * Skip over the message header in a complete blob record.
+   * Read and validate the message header from a complete blob record.
    * @param stream the {@link InputStream} from which to read the blob record.
    * @throws IOException
    * @throws MessageFormatException
    */
-  private static void skipHeaders(InputStream stream)
+  private static void validateHeader(InputStream stream)
       throws IOException, MessageFormatException {
     DataInputStream inputStream = new DataInputStream(stream);
     short headerVersion = inputStream.readShort();
     switch (headerVersion) {
       case Message_Header_Version_V1:
-        inputStream.skip(MessageHeader_Format_V1.getHeaderSize() - Version_Field_Size_In_Bytes);
+        ByteBuffer headerBuf = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+        headerBuf.putShort(headerVersion);
+        inputStream.read(headerBuf.array(), Version_Field_Size_In_Bytes,
+            MessageHeader_Format_V1.getHeaderSize() - Version_Field_Size_In_Bytes);
+        headerBuf.rewind();
+        new MessageHeader_Format_V1(headerBuf).verifyHeader();
         break;
       default:
         throw new MessageFormatException("Message header version not supported",
@@ -259,8 +264,8 @@ public class MessageFormatRecord {
         Blob_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
     public static int getHeaderSize() {
-      return Version_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes +
-          (Number_Of_Relative_Offset_Fields * Relative_Offset_Field_Sizes_In_Bytes) + Crc_Size;
+      return Version_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes + (Number_Of_Relative_Offset_Fields
+          * Relative_Offset_Field_Sizes_In_Bytes) + Crc_Size;
     }
 
     public static void serializeHeader(ByteBuffer outputBuffer, long totalSize, int blobPropertiesRecordRelativeOffset,
@@ -675,8 +680,8 @@ public class MessageFormatRecord {
      * @return The total size in bytes.
      */
     public static int getMetadataContentSize(int keySize, int numberOfKeys) {
-      return Version_Field_Size_In_Bytes + Chunk_Size_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes +
-          (numberOfKeys * keySize);
+      return Version_Field_Size_In_Bytes + Chunk_Size_Field_Size_In_Bytes + Total_Size_Field_Size_In_Bytes + (
+          numberOfKeys * keySize);
     }
 
     /**

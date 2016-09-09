@@ -81,7 +81,7 @@ public class GetBlobInfoOperationTest {
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
   private final FutureResult<GetBlobResult> operationFuture = new FutureResult<>();
-  private final GetBlobOptions options = new GetBlobOptions(GetOperationType.BlobInfo, null);
+  private final GetBlobOptions options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;

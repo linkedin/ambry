@@ -56,7 +56,7 @@ public class GetManagerTest {
   private byte[] putUserMetadata;
   private byte[] putContent;
   private ReadableStreamChannel putChannel;
-  private GetBlobOptions options = null;
+  private GetBlobOptions options = GetBlobOptions.DEFAULT_OPTIONS;
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
@@ -93,7 +93,7 @@ public class GetManagerTest {
   @Test
   public void testSimpleBlobGetSuccess()
       throws Exception {
-    testGetSuccess(chunkSize, null);
+    testGetSuccess(chunkSize, GetBlobOptions.DEFAULT_OPTIONS);
   }
 
   /**
@@ -103,7 +103,7 @@ public class GetManagerTest {
   @Test
   public void testCompositeBlobGetSuccess()
       throws Exception {
-    testGetSuccess(chunkSize * 6 + 11, null);
+    testGetSuccess(chunkSize * 6 + 11, GetBlobOptions.DEFAULT_OPTIONS);
   }
 
   /**
@@ -113,8 +113,8 @@ public class GetManagerTest {
   @Test
   public void testRangeRequest()
       throws Exception {
-    testGetSuccess(chunkSize * 6 + 11,
-        new GetBlobOptions(GetOperationType.Data, ByteRange.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
+    testGetSuccess(chunkSize * 6 + 11, new GetBlobOptions(GetBlobOptions.OperationType.Data,
+        ByteRange.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
   }
 
   /**
@@ -129,7 +129,7 @@ public class GetManagerTest {
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     getBlobAndCompareContent(blobId);
     // Test GetBlobInfoOperation, regardless of options passed in.
-    this.options = new GetBlobOptions(GetOperationType.BlobInfo, null);
+    this.options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
     getBlobAndCompareContent(blobId);
     router.close();
   }
@@ -204,8 +204,8 @@ public class GetManagerTest {
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     List<Future<GetBlobResult>> getBlobInfoFutures = new ArrayList<>();
     List<Future<GetBlobResult>> getBlobDataFutures = new ArrayList<>();
-    GetBlobOptions infoOptions = new GetBlobOptions(GetOperationType.BlobInfo, null);
-    GetBlobOptions dataOptions = new GetBlobOptions(GetOperationType.Data, null);
+    GetBlobOptions infoOptions = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
+    GetBlobOptions dataOptions = new GetBlobOptions(GetBlobOptions.OperationType.Data, null);
     for (int i = 0; i < 5; i++) {
       if (i == 1) {
         getBlobInfoFutures.add(router.getBlob(blobId, infoOptions, new Callback<GetBlobResult>() {
@@ -221,11 +221,13 @@ public class GetManagerTest {
         getBlobDataFutures.add(router.getBlob(blobId, dataOptions));
       }
     }
+    options = dataOptions;
     for (int i = 0; i < getBlobDataFutures.size(); i++) {
       if (i != 1 || checkBadCallbackBlob) {
         compareContent(getBlobDataFutures.get(i).get().getBlobDataChannel());
       }
     }
+    options = infoOptions;
     for (Future<GetBlobResult> future : getBlobInfoFutures) {
       compareBlobInfo(future.get().getBlobInfo());
     }
@@ -235,7 +237,7 @@ public class GetManagerTest {
     Assert.assertTrue("Router should not be closed", router.isOpen());
 
     // Test that GetManager is still operational
-    setOperationParams(chunkSize, null);
+    setOperationParams(chunkSize, GetBlobOptions.DEFAULT_OPTIONS);
     blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     getBlobAndCompareContent(blobId);
     this.options = infoOptions;
@@ -257,7 +259,7 @@ public class GetManagerTest {
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     Future future;
     try {
-      future = router.getBlob(blobId, new GetBlobOptions(GetOperationType.BlobInfo, null));
+      future = router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null));
       while (!future.isDone()) {
         mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
         Thread.yield();
@@ -292,7 +294,7 @@ public class GetManagerTest {
   private void getBlobAndCompareContent(String blobId)
       throws Exception {
     GetBlobResult result = router.getBlob(blobId, options).get();
-    switch (GetOperationType.getTypeFromOptions(options)) {
+    switch (options.getOperationType()) {
       case All:
         compareBlobInfo(result.getBlobInfo());
         compareContent(result.getBlobDataChannel());
@@ -327,7 +329,7 @@ public class GetManagerTest {
       throws Exception {
     ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
     // If a range is set, compare the result against the specified byte range.
-    if (options != null && options.getRange() != null) {
+    if (options.getRange() != null) {
       ByteRange range = options.getRange().toResolvedByteRange(putContent.length);
       int startOffset = (int) range.getStartOffset();
       int endOffset = (int) range.getEndOffset();

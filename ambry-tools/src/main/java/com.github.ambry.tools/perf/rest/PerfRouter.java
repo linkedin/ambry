@@ -19,7 +19,6 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
-import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -81,13 +80,14 @@ class PerfRouter implements Router {
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
+    options = options == null ? GetBlobOptions.DEFAULT_OPTIONS : options;
     logger.trace("Received getBlob call");
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     if (!routerOpen) {
       completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
     } else {
       GetBlobResult result = null;
-      switch (GetOperationType.getTypeFromOptions(options)) {
+      switch (options.getOperationType()) {
         case All:
           result = new GetBlobResult(new BlobInfo(blobProperties, usermetadata),
               new PerfRSC(chunk, blobProperties.getBlobSize()));

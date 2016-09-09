@@ -35,7 +35,6 @@ import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
-import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
@@ -307,8 +306,7 @@ class AdminBlobStorageService implements BlobStorageService {
     private HeadCallback headCallback = null;
     private DeleteCallback deleteCallback = null;
 
-    InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        GetCallback callback) {
+    InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, GetCallback callback) {
       this(restRequest, restResponseChannel);
       getCallback = callback;
     }
@@ -358,8 +356,8 @@ class AdminBlobStorageService implements BlobStorageService {
               if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource
                   .equals(RestUtils.SubResource.UserMetadata)) {
                 getCallback.markStartTime();
-                GetOperationType getOperationType =
-                    getCallback.subResource != null ? GetOperationType.BlobInfo : GetOperationType.All;
+                GetBlobOptions.OperationType getOperationType =
+                    subresource != null ? GetBlobOptions.OperationType.BlobInfo : GetBlobOptions.OperationType.All;
                 router.getBlob(result, new GetBlobOptions(getOperationType, null), getCallback);
               } else {
                 switch (subresource) {
@@ -371,7 +369,7 @@ class AdminBlobStorageService implements BlobStorageService {
               break;
             case HEAD:
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetOperationType.BlobInfo, null), headCallback);
+              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();
@@ -542,14 +540,12 @@ class AdminBlobStorageService implements BlobStorageService {
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
      */
-    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        RestUtils.SubResource subResource) {
+    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, RestUtils.SubResource subResource) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.subResource = subResource;
-      callbackTracker =
-          new CallbackTracker(restRequest, OPERATION_TYPE_GET, adminMetrics.getTimeInMs,
-              adminMetrics.getCallbackProcessingTimeInMs);
+      callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_GET, adminMetrics.getTimeInMs,
+          adminMetrics.getCallbackProcessingTimeInMs);
     }
 
     /**
@@ -597,21 +593,17 @@ class AdminBlobStorageService implements BlobStorageService {
                         }
                       } else if (!blobNotModified) {
                         response = routerResult.getBlobDataChannel();
+                      } else {
+                        // If the blob was not modified, we need to close the channel, as it will not be submitted to
+                        // the RestResponseHandler
+                        routerResult.getBlobDataChannel().close();
                       }
                     }
                   } catch (Exception e) {
                     adminMetrics.getSecurityResponseCallbackProcessingError.inc();
                     securityException = e;
                   } finally {
-                    if (response != null || securityException != null || blobNotModified) {
-                      submitResponse(restRequest, restResponseChannel, response, securityException);
-                    }
-                    if (securityException != null && routerResult.getBlobDataChannel() != null) {
-                      try {
-                        routerResult.getBlobDataChannel().close();
-                      } catch (IOException ignored){
-                      }
-                    }
+                    submitResponse(restRequest, restResponseChannel, response, securityException);
                     securityCallbackTracker.markCallbackProcessingEnd();
                   }
                 }
@@ -622,7 +614,8 @@ class AdminBlobStorageService implements BlobStorageService {
         routerException = e;
       } finally {
         if (routerException != null) {
-          submitResponse(restRequest, restResponseChannel, null, routerException);
+          submitResponse(restRequest, restResponseChannel,
+              routerResult != null ? routerResult.getBlobDataChannel() : null, routerException);
         }
         callbackTracker.markCallbackProcessingEnd();
       }

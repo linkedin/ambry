@@ -33,15 +33,20 @@ public class GetBlobOptionsTest {
     long startOffset = 1;
     long endOffset = 2;
     ByteRange range = ByteRange.fromOffsetRange(startOffset, endOffset);
-    GetBlobOptions options = new GetBlobOptions(null, ByteRange.fromOffsetRange(startOffset, endOffset));
+    GetBlobOptions options =
+        new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromOffsetRange(startOffset, endOffset));
     assertEquals("Range from options not as expected.", range, options.getRange());
   }
 
+  /**
+   * Test that the OperationType option can be assigned and retrieved correctly.
+   * @throws Exception
+   */
   @Test
   public void testGetOperationTypeOption() {
-    GetBlobOptions options = new GetBlobOptions(GetOperationType.BlobInfo, null);
-    assertEquals("GetOperationType from options not as expected.", GetOperationType.BlobInfo,
-        options.getGetOperationType());
+    GetBlobOptions options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
+    assertEquals("OperationType from options not as expected.", GetBlobOptions.OperationType.BlobInfo,
+        options.getOperationType());
   }
 
   /**
@@ -50,17 +55,17 @@ public class GetBlobOptionsTest {
   @Test
   public void testToStringEqualsAndHashcode() {
     ByteRange byteRange = ByteRange.fromLastNBytes(4);
-    GetOperationType type = GetOperationType.Data;
+    GetBlobOptions.OperationType type = GetBlobOptions.OperationType.Data;
     GetBlobOptions a = new GetBlobOptions(type, byteRange);
     GetBlobOptions b = new GetBlobOptions(type, byteRange);
     assertEquals("GetBlobOptions should be equal", a, b);
     assertEquals("GetBlobOptions hashcodes should be equal", a.hashCode(), b.hashCode());
     assertEquals("toString output not as expected",
-        "GetBlobOptions{getOperationType=" + type + ", range=" + byteRange.toString() + "}", a.toString());
+        "GetBlobOptions{operationType=" + type + ", range=" + byteRange.toString() + "}", a.toString());
 
-    b = new GetBlobOptions(GetOperationType.Data, ByteRange.fromOffsetRange(2, 7));
+    b = new GetBlobOptions(GetBlobOptions.OperationType.Data, ByteRange.fromOffsetRange(2, 7));
     assertFalse("GetBlobOptions should not be equal.", a.equals(b));
-    b = new GetBlobOptions(GetOperationType.All, byteRange);
+    b = new GetBlobOptions(GetBlobOptions.OperationType.All, byteRange);
     assertFalse("GetBlobOptions should not be equal.", a.equals(b));
   }
 }

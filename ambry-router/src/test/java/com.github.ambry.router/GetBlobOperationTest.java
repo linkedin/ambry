@@ -102,7 +102,7 @@ public class GetBlobOperationTest {
   private byte[] putContent;
 
   // Options which are passed into GetBlobOperations
-  private GetBlobOptions options = null;
+  private GetBlobOptions options = GetBlobOptions.DEFAULT_OPTIONS;
 
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
@@ -140,7 +140,6 @@ public class GetBlobOperationTest {
   public void after() {
     router.close();
     Assert.assertEquals("All operations should have completed", 0, operationsCount.get());
-    options = null;
   }
 
   /**
@@ -179,8 +178,7 @@ public class GetBlobOperationTest {
    */
   private void doPut()
       throws Exception {
-    blobProperties =
-        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    blobProperties = new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     putContent = new byte[blobSize];
@@ -237,10 +235,10 @@ public class GetBlobOperationTest {
       doPut();
       switch (i % 2) {
         case 0:
-          options = new GetBlobOptions(GetOperationType.All, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.All, null);
           break;
         case 1:
-          options = new GetBlobOptions(GetOperationType.Data, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.Data, null);
           break;
       }
       getAndAssertSuccess();
@@ -283,10 +281,10 @@ public class GetBlobOperationTest {
       doPut();
       switch (i % 2) {
         case 0:
-          options = new GetBlobOptions(GetOperationType.All, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.All, null);
           break;
         case 1:
-          options = new GetBlobOptions(GetOperationType.Data, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.Data, null);
           break;
       }
       getAndAssertSuccess();
@@ -594,7 +592,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestOffsetRange(long startOffset, long endOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(null, ByteRange.fromOffsetRange(startOffset, endOffset));
+    options = new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromOffsetRange(startOffset, endOffset));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -608,7 +606,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestFromStartOffset(long startOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(null, ByteRange.fromStartOffset(startOffset));
+    options = new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromStartOffset(startOffset));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -622,7 +620,7 @@ public class GetBlobOperationTest {
   private void testRangeRequestLastNBytes(long lastNBytes, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(null, ByteRange.fromLastNBytes(lastNBytes));
+    options = new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromLastNBytes(lastNBytes));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -711,7 +709,6 @@ public class GetBlobOperationTest {
     final AtomicLong readCompleteResult = new AtomicLong(0);
     final AtomicReference<Exception> operationException = new AtomicReference<>(null);
     final int numChunks = ((blobSize + maxChunkSize - 1) / maxChunkSize) + (blobSize > maxChunkSize ? 1 : 0);
-    final GetOperationType opType = GetOperationType.getTypeFromOptions(options);
     mockNetworkClient.resetProcessedResponseCount();
     Callback<GetBlobResult> callback = new Callback<GetBlobResult>() {
       @Override
@@ -721,7 +718,7 @@ public class GetBlobOperationTest {
           readCompleteLatch.countDown();
         } else {
           try {
-            switch (opType) {
+            switch (options.getOperationType()) {
               case All:
                 BlobInfo blobInfo = result.getBlobInfo();
                 Assert.assertTrue("Blob properties must be the same",
@@ -744,7 +741,8 @@ public class GetBlobOperationTest {
             public void run() {
               if (getChunksBeforeRead) {
                 // wait for all chunks (data + metadata) to be received
-                while (mockNetworkClient.getProcessedResponseCount() < numChunks * routerConfig.routerGetRequestParallelism) {
+                while (mockNetworkClient.getProcessedResponseCount()
+                    < numChunks * routerConfig.routerGetRequestParallelism) {
                   Thread.yield();
                 }
               }
@@ -768,9 +766,9 @@ public class GetBlobOperationTest {
     if (readCompleteException.get() != null) {
       throw readCompleteException.get();
     }
-    if (opType != GetOperationType.BlobInfo) {
+    if (options.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
       int sizeWritten = blobSize;
-      if (options != null && options.getRange() != null) {
+      if (options.getRange() != null) {
         ByteRange range = options.getRange().toResolvedByteRange(blobSize);
         sizeWritten = (int) (range.getEndOffset() - range.getStartOffset() + 1);
       }

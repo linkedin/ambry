@@ -219,10 +219,11 @@ class MockServer {
           case All:
             blobProperties = originalBlobPutReq.getBlobProperties();
             userMetadata = originalBlobPutReq.getUsermetadata();
-            BlobId blobId = new BlobId(key.getID(), clusterMap);
             int blobHeaderSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
-            int blobInfoSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties)
-                + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
+            int blobPropertiesSize =
+                MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
+            int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
+            int blobInfoSize = blobPropertiesSize + userMetadataSize;
             int blobRecordSize;
             switch (blobFormatVersion) {
               case MessageFormatRecord.Blob_Version_V2:
@@ -236,14 +237,18 @@ class MockServer {
               default:
                 throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
             }
-            byteBufferSize = blobHeaderSize + blobId.sizeInBytes() + blobInfoSize + blobRecordSize;
+            byteBufferSize = blobHeaderSize + key.sizeInBytes() + blobInfoSize + blobRecordSize;
             byteBuffer = ByteBuffer.allocate(byteBufferSize);
             try {
-              MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(byteBuffer, 50, 0, 0, 0, 0);
+              MessageFormatRecord.MessageHeader_Format_V1
+                  .serializeHeader(byteBuffer, blobInfoSize + blobRecordSize, blobHeaderSize + key.sizeInBytes(),
+                      MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+                      blobHeaderSize + key.sizeInBytes() + blobPropertiesSize,
+                      blobHeaderSize + key.sizeInBytes() + blobInfoSize);
             } catch (MessageFormatException e) {
               e.printStackTrace();
             }
-            byteBuffer.put(blobId.toBytes());
+            byteBuffer.put(key.toBytes());
             MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(byteBuffer, blobProperties);
             MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             int blobRecordStart = byteBuffer.position();

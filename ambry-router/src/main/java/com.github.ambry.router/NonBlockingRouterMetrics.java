@@ -391,16 +391,10 @@ public class NonBlockingRouterMetrics {
    * @param options the {@link GetBlobOptions} associated with the request.
    */
   void onGetBlobError(Exception e, GetBlobOptions options) {
-    GetOperationType type =
-        options != null && options.getGetOperationType() != null ? options.getGetOperationType() : GetOperationType.All;
-    switch (type) {
-      case All:
-      case Data:
-        onGetBlobDataError(e, options);
-        break;
-      case BlobInfo:
-        onGetBlobInfoError(e);
-        break;
+    if (options != null && options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      onGetBlobInfoError(e);
+    } else {
+      onGetBlobDataError(e, options);
     }
   }
 

@@ -125,11 +125,15 @@ class NonBlockingRouter implements Router {
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options,
-      Callback<GetBlobResult> callback) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
+    options = options == null ? GetBlobOptions.DEFAULT_OPTIONS : options;
     currentOperationsCount.incrementAndGet();
-    routerMetrics.getBlobOperationRate.mark();
-    if (options != null && options.getRange() != null) {
+    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      routerMetrics.getBlobInfoOperationRate.mark();
+    } else {
+      routerMetrics.getBlobOperationRate.mark();
+    }
+    if (options.getRange() != null) {
       routerMetrics.getBlobWithRangeOperationRate.mark();
     }
     routerMetrics.operationQueuingRate.mark();

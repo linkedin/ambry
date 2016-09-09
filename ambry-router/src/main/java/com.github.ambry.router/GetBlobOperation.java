@@ -68,7 +68,7 @@ import org.slf4j.LoggerFactory;
  * buffered up to the maximum that can be buffered. When fetched chunks are consumed by the caller, subsequent chunks
  * become eligible to be fetched.
  */
-class GetBlobOperation extends GetOperation<GetBlobResult> {
+class GetBlobOperation extends GetOperation {
   // the callback to use to complete the operation.
   private final OperationCompleteCallback operationCompleteCallback;
   // whether the operationCompleteCallback has been called already.
@@ -98,9 +98,9 @@ class GetBlobOperation extends GetOperation<GetBlobResult> {
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
-  // the blob info that is populated on GetOperationType.BlobInfo or GetOperationType.All
+  // the blob info that is populated on OperationType.BlobInfo or OperationType.All
   private BlobInfo blobInfo;
-  // the ReadableStreamChannel that is populated on GetOperationType.Blob or GetOperationType.All requests.
+  // the ReadableStreamChannel that is populated on OperationType.Blob or OperationType.All requests.
   private BlobDataReadableStreamChannel blobDataChannel;
   private final ReadyForPollCallback readyForPollCallback;
 
@@ -177,9 +177,12 @@ class GetBlobOperation extends GetOperation<GetBlobResult> {
         long timeElapsed = time.milliseconds() - submissionTimeMs;
         routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
         Exception e = getOperationException();
-        blobDataChannel = e == null ? new BlobDataReadableStreamChannel() : null;
-        operationResult = e == null ? new GetBlobResult(blobInfo, blobDataChannel) : null;
-        if (e != null) {
+        if (e == null) {
+          blobDataChannel = new BlobDataReadableStreamChannel();
+          operationResult = new GetBlobResult(blobInfo, blobDataChannel);
+        } else {
+          blobDataChannel = null;
+          operationResult = null;
           routerMetrics.onGetBlobError(e, options);
         }
         operationCompleteCallback.completeOperation(operationFuture, operationCallback, operationResult, e);
@@ -837,12 +840,12 @@ class GetBlobOperation extends GetOperation<GetBlobResult> {
 
     /**
      * Return the {@link MessageFormatFlags} to associate with the first getBlob chunk operation.
-     * @return {@link MessageFormatFlags#Blob} for {@link GetOperationType#Data}, or {@link MessageFormatFlags#All} by
+     * @return {@link MessageFormatFlags#Blob} for {@link GetBlobOptions.OperationType#Data}, or {@link MessageFormatFlags#All} by
      *         default.
      */
     @Override
     MessageFormatFlags getOperationFlag() {
-      switch (GetOperationType.getTypeFromOptions(options)) {
+      switch (options.getOperationType()) {
         case Data:
           return MessageFormatFlags.Blob;
         default:

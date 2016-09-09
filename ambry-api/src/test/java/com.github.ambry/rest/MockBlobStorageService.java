@@ -20,7 +20,6 @@ import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
-import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
@@ -90,7 +89,7 @@ public class MockBlobStorageService implements BlobStorageService {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
       MockGetCallback callback = new MockGetCallback(this, restRequest, restResponseChannel);
-      router.getBlob(blobId, new GetBlobOptions(GetOperationType.All, null), callback);
+      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.All, null), callback);
     }
   }
 
@@ -120,7 +119,7 @@ public class MockBlobStorageService implements BlobStorageService {
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.getBlob(blobId, new GetBlobOptions(GetOperationType.BlobInfo, null),
+      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null),
           new MockHeadCallback(this, restRequest, restResponseChannel));
     }
   }
@@ -313,14 +312,8 @@ class MockGetCallback implements Callback<GetBlobResult> {
       }
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      if (result != null && result.getBlobDataChannel() != null) {
-        try {
-          result.getBlobDataChannel().close();
-        } catch (IOException ioe) {
-          throw new IllegalStateException(ioe);
-        }
-      }
-      mockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
+      mockBlobStorageService.handleResponse(restRequest, restResponseChannel,
+          result != null ? result.getBlobDataChannel() : null, exception);
     }
   }
 

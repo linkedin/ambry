@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * and completing it. A GetBlobInfo operation only needs to make requests for a single chunk to get the BlobInfo -
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
-class GetBlobInfoOperation extends GetOperation<GetBlobResult> {
+class GetBlobInfoOperation extends GetOperation {
   private final OperationCompleteCallback operationCompleteCallback;
   private final SimpleOperationTracker operationTracker;
   // map of correlation id to the request metadata for every request issued for this operation.

@@ -24,7 +24,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
-import com.github.ambry.router.GetOperationType;
 import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -269,7 +268,7 @@ class RouterServerTestFramework {
   private void startGetBlobInfo(final boolean afterDelete, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, afterDelete);
     Future<GetBlobResult> future =
-        router.getBlob(opChain.blobId, new GetBlobOptions(GetOperationType.BlobInfo, null), callback);
+        router.getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), callback);
     TestFuture<GetBlobResult> testFuture = new TestFuture<GetBlobResult>(future, genLabel("getBlobInfo", afterDelete), opChain) {
       @Override
       void check()
