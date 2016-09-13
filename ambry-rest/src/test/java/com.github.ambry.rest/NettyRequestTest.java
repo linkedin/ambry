@@ -944,15 +944,13 @@ public class NettyRequestTest {
         if (future == null && addedCount == numChunksToAddBeforeRead) {
           future = nettyRequest.readInto(writeChannel, callback);
         }
-        if (addedCount < httpContents.size()) {
-          final HttpContent httpContent = httpContents.get(addedCount);
-          bytesToVerify += (httpContent.content().readableBytes());
-          suspended = bytesToVerify >= NettyRequest.bufferWatermark;
-          addedCount++;
-          nettyRequest.addContent(httpContent);
-          int expectedRefCountOnAdd = future == null || httpContent.content().nioBufferCount() > 0 ? 2 : 1;
-          assertEquals("Reference count is not as expected", expectedRefCountOnAdd, httpContent.refCnt());
-        }
+        final HttpContent httpContent = httpContents.get(addedCount);
+        bytesToVerify += (httpContent.content().readableBytes());
+        suspended = bytesToVerify >= NettyRequest.bufferWatermark;
+        addedCount++;
+        nettyRequest.addContent(httpContent);
+        int expectedRefCountOnAdd = future == null || httpContent.content().nioBufferCount() > 0 ? 2 : 1;
+        assertEquals("Reference count is not as expected", expectedRefCountOnAdd, httpContent.refCnt());
       }
     }
 
