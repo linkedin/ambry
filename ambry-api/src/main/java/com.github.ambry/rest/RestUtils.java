@@ -256,12 +256,12 @@ public class RestUtils {
           // key size
           sizeToAllocate += 4;
           String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
-          sizeToAllocate += keyToStore.length();
+          sizeToAllocate += keyToStore.getBytes(StandardCharsets.US_ASCII).length;
           String value = getHeader(args, key, true);
           userMetadataMap.put(keyToStore, value);
           // value size
           sizeToAllocate += 4;
-          sizeToAllocate += value.getBytes().length;
+          sizeToAllocate += value.getBytes(StandardCharsets.US_ASCII).length;
         }
       }
       if (sizeToAllocate == 0) {
