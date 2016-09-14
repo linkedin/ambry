@@ -140,7 +140,8 @@ public class AmbryRequests implements RequestAPI {
 
   public void handlePutRequest(Request request)
       throws IOException, InterruptedException {
-    PutRequest putRequest = PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    PutRequest.ReceivedPutRequest receivedRequest =
+        PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
@@ -148,34 +149,35 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     PutResponse response = null;
     try {
-      ServerErrorCode error = validateRequest(putRequest.getBlobId().getPartition(), true);
+      ServerErrorCode error = validateRequest(receivedRequest.getBlobId().getPartition(), true);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating put request failed with error {} for request {}", error, putRequest);
-        response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), error);
+        logger.error("Validating put request failed with error {} for request {}", error, receivedRequest);
+        response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream =
-            new PutMessageFormatInputStream(putRequest.getBlobId(), putRequest.getBlobProperties(),
-                putRequest.getUsermetadata(), putRequest.getBlobStream(), putRequest.getBlobSize(),
-                putRequest.getBlobType());
-        MessageInfo info = new MessageInfo(putRequest.getBlobId(), stream.getSize(), Utils
-            .addSecondsToEpochTime(putRequest.getBlobProperties().getCreationTimeInMs(),
-                putRequest.getBlobProperties().getTimeToLiveInSeconds()));
+            new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobProperties(),
+                receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(), receivedRequest.getBlobSize(),
+                receivedRequest.getBlobType());
+        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), Utils
+            .addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
+                receivedRequest.getBlobProperties().getTimeToLiveInSeconds()));
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
-        Store storeToPut = storeManager.getStore(putRequest.getBlobId().getPartition());
+        Store storeToPut = storeManager.getStore(receivedRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
-        response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.No_Error);
-        metrics.blobSizeInBytes.update(putRequest.getBlobSize());
-        metrics.blobUserMetadataSizeInBytes.update(putRequest.getUsermetadata().limit());
+        response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
+            ServerErrorCode.No_Error);
+        metrics.blobSizeInBytes.update(receivedRequest.getBlobSize());
+        metrics.blobUserMetadataSizeInBytes.update(receivedRequest.getUsermetadata().limit());
         if (notification != null) {
-          notification
-              .onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(), putRequest.getBlobId().getID(),
-                  BlobReplicaSourceType.PRIMARY);
+          notification.onBlobReplicaCreated(currentNode.getHostname(), currentNode.getPort(),
+              receivedRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {
-      logger.error("Store exception on a put with error code " + e.getErrorCode() + " for request " + putRequest, e);
+      logger
+          .error("Store exception on a put with error code " + e.getErrorCode() + " for request " + receivedRequest, e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
@@ -183,20 +185,21 @@ public class AmbryRequests implements RequestAPI {
       } else {
         metrics.unExpectedStorePutError.inc();
       }
-      response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(),
+      response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception on a put for request " + putRequest, e);
-      response =
-          new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(), ServerErrorCode.Unknown_Error);
+      logger.error("Unknown exception on a put for request " + receivedRequest, e);
+      response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
-      publicAccessLogger.info("{} {} processingTime {}", putRequest, response, processingTime);
+      publicAccessLogger.info("{} {} processingTime {}", receivedRequest, response, processingTime);
       metrics.putBlobProcessingTimeInMs.update(processingTime);
     }
     sendPutResponse(requestResponseChannel, response, request, metrics.putBlobResponseQueueTimeInMs,
-        metrics.putBlobSendTimeInMs, metrics.putBlobTotalTimeInMs, totalTimeSpent, putRequest.getBlobSize(), metrics);
+        metrics.putBlobSendTimeInMs, metrics.putBlobTotalTimeInMs, totalTimeSpent, receivedRequest.getBlobSize(),
+        metrics);
   }
 
   public void handleGetRequest(Request request)

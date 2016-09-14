@@ -32,13 +32,12 @@ import java.nio.channels.WritableByteChannel;
  */
 public class PutRequest extends RequestOrResponse {
   protected final ByteBuffer usermetadata;
-  protected final InputStream blobStream;
   protected final long blobSize;
   protected final BlobId blobId;
   protected long sentBytes = 0;
   protected final BlobProperties properties;
   protected final BlobType blobType;
-  protected ByteBuffer materializedBlobBuffer;
+  protected final ByteBuffer blob;
 
   private static final int UserMetadata_Size_InBytes = 4;
   protected static final int Blob_Size_InBytes = 8;
@@ -46,49 +45,28 @@ public class PutRequest extends RequestOrResponse {
   protected static final short Put_Request_Version_V2 = 2;
 
   /**
-   * Public constructor that takes in a materialized blob stream to create a PutRequest
+   * Construct a PutRequest
    * @param correlationId the correlation id associated with the request.
    * @param clientId the clientId associated with the request.
    * @param blobId the {@link BlobId} of the blob that is being put as part of this request.
    * @param properties the {@link BlobProperties} associated with the request.
    * @param usermetadata the user metadata associated with the request.
-   * @param materializedBlobStream the materialized stream containing the blob data.
+   * @param materializedBlob the materialized buffer containing the blob data.
    * @param blobSize the size of the blob data.
    * @param blobType the type of the blob data.
    */
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBufferInputStream materializedBlobStream, long blobSize, BlobType blobType) {
-    this(correlationId, clientId, blobId, properties, usermetadata, (InputStream) materializedBlobStream, blobSize,
-        blobType);
-    this.materializedBlobBuffer = materializedBlobStream.getByteBuffer();
-  }
-
-  /**
-   * Private constructor that differs from the public constructor in that the associated stream containing blob data
-   * may or may not be already materialized in memory. This constructor is used when reconstructing a received
-   * PutRequest.
-   * @param correlationId the correlation id associated with the request.
-   * @param clientId the clientId associated with the request.
-   * @param blobId the {@link BlobId} of the blob that is being put as part of this request.
-   * @param properties the {@link BlobProperties} associated with the request.
-   * @param usermetadata the user metadata associated with the request.
-   * @param blobStream the stream containing the blob data (may or may not already be materialized).
-   * @param blobSize the size of the blob data.
-   * @param blobType the type of the blob data.
-   */
-  private PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream blobStream, long blobSize, BlobType blobType) {
+      ByteBuffer usermetadata, ByteBuffer materializedBlob, long blobSize, BlobType blobType) {
     super(RequestOrResponseType.PutRequest, Put_Request_Version_V2, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
     this.usermetadata = usermetadata;
-    this.blobStream = blobStream;
     this.blobSize = blobSize;
     this.blobType = blobType;
-    this.materializedBlobBuffer = null;
+    this.blob = materializedBlob;
   }
 
-  public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
+  public static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map)
       throws IOException {
     short versionId = stream.readShort();
     switch (versionId) {
@@ -112,7 +90,7 @@ public class PutRequest extends RequestOrResponse {
   }
 
   public InputStream getBlobStream() {
-    return blobStream;
+    return new ByteBufferInputStream(blob);
   }
 
   public long getBlobSize() {
@@ -137,10 +115,6 @@ public class PutRequest extends RequestOrResponse {
   @Override
   public long writeTo(WritableByteChannel channel)
       throws IOException {
-    if (materializedBlobBuffer == null) {
-      // This PutRequest was constructed from a stream and cannot be written out.
-      throw new IllegalStateException("Attempt to write out a PutRequest that cannot be written out.");
-    }
     long written = 0;
     if (sentBytes < sizeInBytes()) {
       if (bufferToSend == null) {
@@ -165,7 +139,7 @@ public class PutRequest extends RequestOrResponse {
       // If the header and metadata were written out completely (in this call or a previous call),
       // try and write out as much of the blob now.
       if (!bufferToSend.hasRemaining()) {
-        written += channel.write(materializedBlobBuffer);
+        written += channel.write(blob);
       }
       sentBytes += written;
     }
@@ -202,7 +176,7 @@ public class PutRequest extends RequestOrResponse {
 
   // Class to read protocol version 2 Put Request from the stream.
   private static class PutRequest_V2 {
-    static PutRequest readFrom(DataInputStream stream, ClusterMap map)
+    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map)
         throws IOException {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
@@ -211,7 +185,100 @@ public class PutRequest extends RequestOrResponse {
       ByteBuffer metadata = Utils.readIntBuffer(stream);
       BlobType blobType = BlobType.values()[stream.readShort()];
       long blobSize = stream.readLong();
-      return new PutRequest(correlationId, clientId, id, properties, metadata, stream, blobSize, blobType);
+      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, stream);
+    }
+  }
+
+  /**
+   * Class that represents a PutRequest that was received and cannot be sent out.
+   */
+  public static class ReceivedPutRequest {
+    private final int correlationId;
+    private final String clientId;
+    private final BlobId blobId;
+    private final BlobProperties blobProperties;
+    private final ByteBuffer userMetadata;
+    private final long blobSize;
+    private final BlobType blobType;
+    private final InputStream blobStream;
+
+    /**
+     * Construct a ReceivedPutRequest with the given parameters.
+     * @param correlationId the correlation id in the request.
+     * @param clientId the clientId in the request.
+     * @param blobId the {@link BlobId} of the blob being put.
+     * @param blobProperties the {@link BlobProperties} associated with the blob being put.
+     * @param userMetadata the userMetadata associated with the blob being put.
+     * @param blobSize the size of the blob data.
+     * @param blobType the type of the blob being put.
+     * @param blobStream the {@link InputStream} containing the data associated with the blob.
+     */
+    ReceivedPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
+        ByteBuffer userMetadata, long blobSize, BlobType blobType, InputStream blobStream) {
+      this.correlationId = correlationId;
+      this.clientId = clientId;
+      this.blobId = blobId;
+      this.blobProperties = blobProperties;
+      this.userMetadata = userMetadata;
+      this.blobSize = blobSize;
+      this.blobType = blobType;
+      this.blobStream = blobStream;
+    }
+
+    /**
+     * @return the correlation id.
+     */
+    public int getCorrelationId() {
+      return correlationId;
+    }
+
+    /**
+     * @return the client id.
+     */
+    public String getClientId() {
+      return clientId;
+    }
+
+    /**
+     * @return the {@link BlobId} associated with the blob in this request.
+     */
+    public BlobId getBlobId() {
+      return blobId;
+    }
+
+    /**
+     * @return the {@link BlobProperties} associated with the blob in this request.
+     */
+    public BlobProperties getBlobProperties() {
+      return blobProperties;
+    }
+
+    /**
+     * @return the userMetadata associated with the blob in this request.
+     */
+    public ByteBuffer getUsermetadata() {
+      return userMetadata;
+    }
+
+    /**
+     * @return the size of the blob content.
+     */
+    public long getBlobSize() {
+      return blobSize;
+    }
+
+    /**
+     * @return the {@link BlobType} of the blob in this request.
+     */
+    public BlobType getBlobType() {
+      return blobType;
+    }
+
+    /**
+     * @return the {@link InputStream} from which to stream in the data associated with the blob.
+     */
+    public InputStream getBlobStream() {
+      return blobStream;
     }
   }
 }

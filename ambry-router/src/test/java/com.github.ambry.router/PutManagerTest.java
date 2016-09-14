@@ -696,7 +696,7 @@ public class PutManagerTest {
   private void verifyBlob(String blobId, byte[] originalPutContent, HashMap<String, ByteBuffer> serializedRequests)
       throws Exception {
     ByteBuffer serializedRequest = serializedRequests.get(blobId);
-    PutRequest request = deserializePutRequest(serializedRequest);
+    PutRequest.ReceivedPutRequest request = deserializePutRequest(serializedRequest);
     if (request.getBlobType() == BlobType.MetadataBlob) {
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe
@@ -707,7 +707,7 @@ public class PutManagerTest {
       byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
       int offset = 0;
       for (StoreKey key : dataBlobIds) {
-        PutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
+        PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
         Utils.readBytesFromStream(dataBlobPutRequest.getBlobStream(), content, offset,
             (int) dataBlobPutRequest.getBlobSize());
         offset += (int) dataBlobPutRequest.getBlobSize();
@@ -724,7 +724,7 @@ public class PutManagerTest {
    * @param serialized the serialized ByteBuffer.
    * @return returns the deserialized output.
    */
-  private PutRequest deserializePutRequest(ByteBuffer serialized)
+  private PutRequest.ReceivedPutRequest deserializePutRequest(ByteBuffer serialized)
       throws IOException {
     serialized.getLong();
     serialized.getShort();

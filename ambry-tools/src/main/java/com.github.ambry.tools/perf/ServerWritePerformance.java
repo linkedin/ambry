@@ -305,7 +305,7 @@ public class ServerWritePerformance {
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(partitionId);
             PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
-                new ByteBufferInputStream(ByteBuffer.wrap(blob)), props.getBlobSize(), BlobType.DataBlob);
+                ByteBuffer.wrap(blob), props.getBlobSize(), BlobType.DataBlob);
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
             Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacenters);
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);

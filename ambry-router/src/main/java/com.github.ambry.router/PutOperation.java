@@ -31,7 +31,6 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -879,8 +878,8 @@ class PutOperation {
      */
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, blobProperties, ByteBuffer.wrap(userMetadata), new ByteBufferInputStream(buf.duplicate()),
-          buf.remaining(), BlobType.DataBlob);
+          chunkBlobId, blobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
+          BlobType.DataBlob);
     }
 
     /**
@@ -1110,8 +1109,8 @@ class PutOperation {
     @Override
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, blobProperties, ByteBuffer.wrap(userMetadata), new ByteBufferInputStream(buf.duplicate()),
-          buf.remaining(), BlobType.MetadataBlob);
+          chunkBlobId, blobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
+          BlobType.MetadataBlob);
     }
   }
 

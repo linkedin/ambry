@@ -42,7 +42,6 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
@@ -252,8 +251,7 @@ public class ServerHardDeleteTest {
     // put blob 0
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobIdList.get(0), properties.get(0), ByteBuffer.wrap(usermetadata.get(0)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(0))), properties.get(0).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(0)), properties.get(0).getBlobSize(), BlobType.DataBlob);
     BlockingChannel channel = ServerTestUtil
         .getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "localhost", null, null);
     channel.connect();
@@ -265,8 +263,7 @@ public class ServerHardDeleteTest {
     // put blob 1
     PutRequest putRequest1 =
         new PutRequest(1, "client1", blobIdList.get(1), properties.get(1), ByteBuffer.wrap(usermetadata.get(1)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(1))), properties.get(1).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(1)), properties.get(1).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest1);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response1 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -275,8 +272,7 @@ public class ServerHardDeleteTest {
     // put blob 2
     PutRequest putRequest2 =
         new PutRequest(1, "client1", blobIdList.get(2), properties.get(2), ByteBuffer.wrap(usermetadata.get(2)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(2))), properties.get(2).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(2)), properties.get(2).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest2);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -285,8 +281,7 @@ public class ServerHardDeleteTest {
     // put blob 3 that is expired
     PutRequest putRequest3 =
         new PutRequest(1, "client1", blobIdList.get(3), properties.get(3), ByteBuffer.wrap(usermetadata.get(3)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(3))), properties.get(3).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(3)), properties.get(3).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest3);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -295,8 +290,7 @@ public class ServerHardDeleteTest {
     // put blob 4
     PutRequest putRequest4 =
         new PutRequest(1, "client1", blobIdList.get(4), properties.get(4), ByteBuffer.wrap(usermetadata.get(4)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(4))), properties.get(4).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(4)), properties.get(4).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest4);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response4 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -305,8 +299,7 @@ public class ServerHardDeleteTest {
     // put blob 5 that is expired
     PutRequest putRequest5 =
         new PutRequest(1, "client1", blobIdList.get(5), properties.get(5), ByteBuffer.wrap(usermetadata.get(5)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(5))), properties.get(5).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(5)), properties.get(5).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest5);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response5 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -403,8 +396,7 @@ public class ServerHardDeleteTest {
     // put blob 6
     PutRequest putRequest6 =
         new PutRequest(1, "client1", blobIdList.get(6), properties.get(6), ByteBuffer.wrap(usermetadata.get(6)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(6))), properties.get(6).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(6)), properties.get(6).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest6);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response6 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -413,8 +405,7 @@ public class ServerHardDeleteTest {
     // put blob 7
     PutRequest putRequest7 =
         new PutRequest(1, "client1", blobIdList.get(7), properties.get(7), ByteBuffer.wrap(usermetadata.get(7)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(7))), properties.get(7).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(7)), properties.get(7).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest7);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response7 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -423,8 +414,7 @@ public class ServerHardDeleteTest {
     // put blob 8
     PutRequest putRequest8 =
         new PutRequest(1, "client1", blobIdList.get(8), properties.get(8), ByteBuffer.wrap(usermetadata.get(8)),
-            new ByteBufferInputStream(ByteBuffer.wrap(data.get(8))), properties.get(8).getBlobSize(),
-            BlobType.DataBlob);
+            ByteBuffer.wrap(data.get(8)), properties.get(8).getBlobSize(), BlobType.DataBlob);
     channel.send(putRequest8);
     putResponseStream = channel.receive().getInputStream();
     PutResponse response9 = PutResponse.readFrom(new DataInputStream(putResponseStream));

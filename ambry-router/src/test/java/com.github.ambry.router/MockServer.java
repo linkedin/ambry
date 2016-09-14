@@ -178,7 +178,7 @@ class MockServer {
         buf.getLong();
         // read off the type.
         buf.getShort();
-        PutRequest originalBlobPutReq =
+        PutRequest.ReceivedPutRequest originalBlobPutReq =
             PutRequest.readFrom(new DataInputStream(new ByteBufferInputStream(buf)), clusterMap);
         switch (getRequest.getMessageFormatFlag()) {
           case BlobInfo:
