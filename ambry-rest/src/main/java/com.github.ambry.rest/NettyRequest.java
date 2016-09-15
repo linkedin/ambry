@@ -525,8 +525,10 @@ class NettyRequest implements RestRequest {
   }
 
   /**
-   * Continues reading from the channel if the buffer watermark has not been reached and if auto-read is off.
-   * @param delta number of bytes read from the channel in the current read.
+   * Invokes a read from the read channel if the number of bytes buffered is below the buffer watermark. No effect if
+   * auto-read is on.
+   * @param delta number of bytes read from the read channel in the current read (positive) or number of bytes written
+   *              to the write channel in the current write (negative).
    */
   private void continueReadIfPossible(long delta) {
     if (!channel.config().isAutoRead()) {
