@@ -893,7 +893,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   private void handleRequest(HttpRequest httpRequest)
       throws Exception {
     writeCallbacksToVerify.clear();
-    request = new NettyRequest(httpRequest, nettyMetrics);
+    request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics);
     restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics);
     restResponseChannel.setRequest(request);
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");

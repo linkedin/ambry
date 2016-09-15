@@ -73,6 +73,16 @@ public class NettyConfig {
   @Default("8192")
   public final int nettyServerMaxChunkSize;
 
+  /**
+   * The threshold of the size of buffered data at which reading from a client channel will be suspended. If the size
+   * drops below the threshold, reading will be resumed. This value is respected on a per-request basis.
+   * Note that the actual amount of data buffered may be >= this number.
+   * If this is <=0, it is assumed that there is no limit on the size of buffered data.
+   */
+  @Config("netty.server.request.buffer.watermark")
+  @Default("32 * 1024 * 1024")
+  public final int nettyServerRequestBufferWatermark;
+
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
@@ -82,5 +92,7 @@ public class NettyConfig {
     nettyServerMaxInitialLineLength = verifiableProperties.getInt("netty.server.max.initial.line.length", 4096);
     nettyServerMaxHeaderSize = verifiableProperties.getInt("netty.server.max.header.size", 8192);
     nettyServerMaxChunkSize = verifiableProperties.getInt("netty.server.max.chunk.size", 8192);
+    nettyServerRequestBufferWatermark =
+        verifiableProperties.getInt("netty.server.request.buffer.watermark", 32 * 1024 * 1024);
   }
 }
