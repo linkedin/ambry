@@ -34,21 +34,22 @@ import org.junit.Test;
  * so it has been put into a separate class with per-test initialization and cleanup
  */
 public class ServerPlaintextTokenTest {
-  private Properties coordinatorProps;
+  private Properties routerProps;
   private MockNotificationSystem notificationSystem;
   private MockCluster plaintextCluster;
 
   @Before
   public void initializeTests()
       throws Exception {
-    coordinatorProps = new Properties();
+    routerProps = new Properties();
     notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
   }
 
   @After
-  public void cleanup() throws IOException {
+  public void cleanup()
+      throws IOException {
     long start = System.currentTimeMillis();
     System.out.println("About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {
@@ -66,7 +67,7 @@ public class ServerPlaintextTokenTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
-        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null,
-        null, notificationSystem, coordinatorProps);
+        new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, notificationSystem,
+        routerProps);
   }
 }

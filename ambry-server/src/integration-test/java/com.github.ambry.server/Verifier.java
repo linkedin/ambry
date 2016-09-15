@@ -99,8 +99,7 @@ class Verifier implements Runnable {
                 throw new IllegalStateException();
               } else {
                 try {
-                  BlobProperties propertyOutput =
-                      MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
+                  BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
                   if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
                     System.out.println("blob size not matching " + " expected " +
                         payload.blobProperties.getBlobSize() + " actual " + propertyOutput.getBlobSize());
@@ -123,9 +122,8 @@ class Verifier implements Runnable {
               partitionRequestInfoList.clear();
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
-              getRequest =
-                  new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-                      GetOptions.None);
+              getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
+                  GetOptions.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);

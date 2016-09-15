@@ -126,7 +126,6 @@ project(':ambry-network') {
 project(':ambry-server') {
     dependencies {
         compile project(':ambry-clustermap'),
-                project(':ambry-coordinator'),
                 project(':ambry-messageformat'),
                 project(':ambry-metrics'),
                 project(':ambry-network'),
@@ -140,6 +139,7 @@ project(':ambry-server') {
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-network').sourceSets.test.output
+        testCompile project(':ambry-api').sourceSets.test.output
         testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
@@ -179,25 +179,10 @@ project(':ambry-replication') {
     }
 }
 
-project(':ambry-coordinator') {
-    dependencies {
-        compile project(':ambry-api'),
-                project(':ambry-clustermap'),
-                project(':ambry-messageformat'),
-                project(':ambry-commons'),
-                project(':ambry-utils'),
-                project(':ambry-protocol'),
-                project(':ambry-network')
-        testCompile project(':ambry-clustermap').sourceSets.test.output
-        testCompile project(':ambry-network').sourceSets.test.output
-    }
-}
-
 project(':ambry-tools') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-store'),
-                project(':ambry-coordinator'),
                 project(':ambry-rest'),
                 project(':ambry-admin'),
                 project(':ambry-frontend')

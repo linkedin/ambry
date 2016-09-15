@@ -25,8 +25,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.coordinator.AmbryCoordinator;
-import com.github.ambry.coordinator.CoordinatorException;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.BlockingChannelConnectionPool;
@@ -124,7 +122,7 @@ public class ServerTool {
 
   public void walkDirectoryToCreateBlobs(String path, FileWriter writer, String datacenter,
       boolean enableVerboseLogging)
-      throws CoordinatorException, InterruptedException {
+      throws InterruptedException {
 
     File root = new File(path);
     File[] list = root.listFiles();
@@ -141,7 +139,6 @@ public class ServerTool {
         byte[] usermetadata = new byte[1];
         FileInputStream stream = null;
         try {
-          long startMs = System.currentTimeMillis();
           int replicaCount = 0;
           BlobId blobId = new BlobId(partitionId);
           List<ReplicaId> successList = new ArrayList<ReplicaId>();
@@ -238,7 +235,6 @@ public class ServerTool {
     } finally {
       if (stream != null) {
         stream.close();
-        stream = null;
       }
       if (blockingChannel != null) {
         connectionPool.checkInConnection(blockingChannel);
@@ -271,7 +267,6 @@ public class ServerTool {
 
   public static void main(String args[]) {
     FileWriter writer = null;
-    AmbryCoordinator coordinator = null;
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> rootDirectoryOpt =
@@ -308,8 +303,8 @@ public class ServerTool {
               .withOptionalArg().describedAs("nodeHostname").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> nodePortOpt =
-          parser.accepts("nodePort", "The port of the node to put to (if specifying single node)")
-              .withOptionalArg().describedAs("nodePort").ofType(Integer.class);
+          parser.accepts("nodePort", "The port of the node to put to (if specifying single node)").withOptionalArg()
+              .describedAs("nodePort").ofType(Integer.class);
 
       OptionSet options = parser.parse(args);
 
@@ -387,9 +382,6 @@ public class ServerTool {
         } catch (Exception e) {
           System.out.println("Error when closing the writer");
         }
-      }
-      if (coordinator != null) {
-        coordinator.close();
       }
     }
   }
