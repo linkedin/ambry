@@ -192,6 +192,10 @@ public class NonBlockingRouterTest {
     assertClosed();
   }
 
+  /**
+   * Test behavior with various null inputs to router methods.
+   * @throws Exception
+   */
   @Test
   public void testNullArguments()
       throws Exception {

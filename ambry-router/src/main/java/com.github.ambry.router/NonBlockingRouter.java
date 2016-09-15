@@ -179,7 +179,9 @@ class NonBlockingRouter implements Router {
     if (blobProperties == null || channel == null) {
       throw new IllegalArgumentException("blobProperties or channel must not be null");
     }
-    userMetadata = userMetadata == null ? new byte[0] : userMetadata;
+    if (userMetadata == null) {
+      userMetadata = new byte[0];
+    }
     currentOperationsCount.incrementAndGet();
     routerMetrics.putBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
