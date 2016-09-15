@@ -25,40 +25,26 @@ import java.util.concurrent.Future;
  */
 public interface Router extends Closeable {
   /**
-   * Requests for the {@link BlobInfo} asynchronously and returns a future that will eventually contain the
-   * {@link BlobInfo} on a successful response.
-   * @param blobId The ID of the blob for which the {@link BlobInfo} is requested.
-   * @return A future that would contain the {@link BlobInfo} eventually.
-   */
-  public Future<BlobInfo> getBlobInfo(String blobId);
-
-  /**
-   * Requests for the {@link BlobInfo} asynchronously and invokes the {@link Callback} when the request completes.
-   * @param blobId The ID of the blob for which the {@link BlobInfo} is requested.
-   * @param callback The {@link Callback} which will be invoked on the completion of the request.
-   * @return A future that would contain the {@link BlobInfo} eventually.
-   */
-  public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback);
-
-  /**
-   * Requests for blob data asynchronously with user-set {@link GetBlobOptions} and returns a future that will
-   * eventually contain a {@link ReadableStreamChannel} that represents blob data on a successful response.
+   * Requests for blob (info, data, or both) asynchronously with user-set {@link GetBlobOptions} and returns a future
+   * that will eventually contain a {@link GetBlobResult} that can contain either the {@link BlobInfo}, the
+   * {@link ReadableStreamChannel} containing the blob data, or both.
    * @param blobId The ID of the blob for which blob data is requested.
    * @param options The options associated with the request.
-   * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.
+   * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
+   *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
-  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options);
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options);
 
   /**
-   * Requests for the blob data asynchronously with user-set {@link GetBlobOptions} and invokes the {@link Callback}
-   * when the request completes.
+   * Requests for the blob (info, data, or both) asynchronously and invokes the {@link Callback} when the request
+   * completes.
    * @param blobId The ID of the blob for which blob data is requested.
-   * @param options The {@link GetBlobOptions} associated with the request.
+   * @param options The options associated with the request. This cannot be null.
    * @param callback The callback which will be invoked on the completion of the request.
-   * @return A future that would contain a {@link ReadableStreamChannel} that represents the blob data eventually.
+   * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
+   *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
-  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
-      Callback<ReadableStreamChannel> callback);
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback);
 
   /**
    * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of

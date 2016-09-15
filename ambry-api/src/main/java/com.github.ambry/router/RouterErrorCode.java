@@ -27,8 +27,7 @@ public enum RouterErrorCode {
   AmbryUnavailable,
   /**
    * Caller passed in an invalid blob id and so operation could not be attempted. May occur for
-   * {@link Router#getBlobInfo(String)}, {@link Router#getBlob(String, GetBlobOptions)},
-   * {@link Router#deleteBlob(String)} (and their variants) operations.
+   * {@link Router#getBlob(String, GetBlobOptions)}, {@link Router#deleteBlob(String)} (and their variants) operations.
    */
   InvalidBlobId,
   /**
@@ -84,5 +83,9 @@ public enum RouterErrorCode {
   /**
    * The range offsets provided for a getBlob operation are invalid for the specified blob.
    */
-  RangeNotSatisfiable
+  RangeNotSatisfiable,
+  /**
+   * The channel returned to the user in a getBlob operation has been closed before operation completion.
+   */
+  ChannelClosed
 }

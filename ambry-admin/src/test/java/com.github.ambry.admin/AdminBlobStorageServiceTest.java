@@ -42,6 +42,7 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -248,8 +249,8 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
-   * Tests {@link AdminBlobStorageService#submitResponse(RestRequest, RestResponseChannel, ReadableStreamChannel,
-   * Exception)}.
+   * Tests
+   * {@link AdminBlobStorageService#submitResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)}.
    * @throws JSONException
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
@@ -997,12 +998,10 @@ public class AdminBlobStorageServiceTest {
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
         case HEAD:
-          testRouter.exceptionOpType = AdminTestRouter.OpType.GetBlobInfo;
+          testRouter.exceptionOpType = AdminTestRouter.OpType.GetBlob;
           checkRouterExceptionPipeline(exceptionMsg, AdminTestUtils.createRestRequest(restMethod, "/", null, null));
           break;
         case GET:
-          testRouter.exceptionOpType = AdminTestRouter.OpType.GetBlobInfo;
-          checkRouterExceptionPipeline(exceptionMsg, AdminTestUtils.createRestRequest(restMethod, "/", null, null));
           testRouter.exceptionOpType = AdminTestRouter.OpType.GetBlob;
           checkRouterExceptionPipeline(exceptionMsg, AdminTestUtils.createRestRequest(restMethod, "/", null, null));
           break;
@@ -1333,7 +1332,6 @@ class AdminTestRouter implements Router {
    */
   enum OpType {
     DeleteBlob,
-    GetBlobInfo,
     GetBlob,
     PutBlob
   }
@@ -1343,25 +1341,26 @@ class AdminTestRouter implements Router {
   public RuntimeException exceptionToThrow = null;
 
   @Override
-  public Future<BlobInfo> getBlobInfo(String blobId) {
-    return getBlobInfo(blobId, null);
-  }
-
-  @Override
-  public Future<BlobInfo> getBlobInfo(String blobId, Callback<BlobInfo> callback) {
-    return completeOperation(new BlobInfo(new BlobProperties(0, "AdminTestRouter"), new byte[0]), callback,
-        OpType.GetBlobInfo);
-  }
-
-  @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options) {
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
     return getBlob(blobId, options, null);
   }
 
   @Override
-  public Future<ReadableStreamChannel> getBlob(String blobId, GetBlobOptions options,
-      Callback<ReadableStreamChannel> callback) {
-    return completeOperation(new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)), callback, OpType.GetBlob);
+  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
+    GetBlobResult result;
+    switch (options.getOperationType()) {
+      case BlobInfo:
+        result = new GetBlobResult(new BlobInfo(new BlobProperties(0, "FrontendTestRouter"), new byte[0]), null);
+        break;
+      case Data:
+        result = new GetBlobResult(null, new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
+        break;
+      default:
+        result = new GetBlobResult(new BlobInfo(new BlobProperties(0, "FrontendTestRouter"), new byte[0]),
+            new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
+        break;
+    }
+    return completeOperation(result, callback, OpType.GetBlob);
   }
 
   @Override

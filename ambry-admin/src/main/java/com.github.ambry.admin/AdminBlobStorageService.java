@@ -34,6 +34,7 @@ import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
@@ -57,7 +58,6 @@ class AdminBlobStorageService implements BlobStorageService {
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
   private static final String OPERATION_TYPE_GET_RESPONSE_SECURITY = "GET Response Security";
   private static final String OPERATION_TYPE_HEAD_RESPONSE_SECURITY = "HEAD Response Security";
-  private static final String OPERATION_TYPE_HEAD_BEFORE_GET = "HEAD Before GET";
   private static final String OPERATION_TYPE_GET = "GET";
   private static final String OPERATION_TYPE_HEAD = "HEAD";
   private static final String OPERATION_TYPE_DELETE = "DELETE";
@@ -141,7 +141,7 @@ class AdminBlobStorageService implements BlobStorageService {
       checkAvailable();
       RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
       RestRequestMetrics requestMetrics = adminMetrics.getBlobMetrics;
-      HeadForGetCallback routerCallback = new HeadForGetCallback(restRequest, restResponseChannel, subresource);
+      GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource);
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
       if (subresource != null) {
@@ -302,14 +302,13 @@ class AdminBlobStorageService implements BlobStorageService {
     private final RestResponseChannel restResponseChannel;
     private final CallbackTracker callbackTracker;
 
-    private HeadForGetCallback headForGetCallback = null;
+    private GetCallback getCallback = null;
     private HeadCallback headCallback = null;
     private DeleteCallback deleteCallback = null;
 
-    InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        HeadForGetCallback callback) {
+    InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, GetCallback callback) {
       this(restRequest, restResponseChannel);
-      headForGetCallback = callback;
+      getCallback = callback;
     }
 
     InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
@@ -356,9 +355,10 @@ class AdminBlobStorageService implements BlobStorageService {
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
               if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource
                   .equals(RestUtils.SubResource.UserMetadata)) {
-                headForGetCallback.setBlobId(result);
-                headForGetCallback.markStartTime();
-                router.getBlobInfo(result, headForGetCallback);
+                getCallback.markStartTime();
+                GetBlobOptions.OperationType getOperationType =
+                    subresource != null ? GetBlobOptions.OperationType.BlobInfo : GetBlobOptions.OperationType.All;
+                router.getBlob(result, new GetBlobOptions(getOperationType, null), getCallback);
               } else {
                 switch (subresource) {
                   case Replicas:
@@ -369,7 +369,7 @@ class AdminBlobStorageService implements BlobStorageService {
               break;
             case HEAD:
               headCallback.markStartTime();
-              router.getBlobInfo(result, headCallback);
+              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();
@@ -406,7 +406,7 @@ class AdminBlobStorageService implements BlobStorageService {
     private InboundIdConverterCallback idConverterCallback;
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        HeadForGetCallback callback) {
+        GetCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_GET, adminMetrics.getSecurityRequestTimeInMs,
           adminMetrics.getSecurityRequestCallbackProcessingTimeInMs);
       idConverterCallback = new InboundIdConverterCallback(restRequest, restResponseChannel, callback);
@@ -525,43 +525,40 @@ class AdminBlobStorageService implements BlobStorageService {
   }
 
   /**
-   * Callback for HEAD that precedes GET operations. Updates headers and invokes GET with a new callback.
+   * Callback for GET operations. Updates headers and submits the response body if there is no security exception.
    */
-  private class HeadForGetCallback implements Callback<BlobInfo> {
+  private class GetCallback implements Callback<GetBlobResult> {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final RestUtils.SubResource subResource;
     private final CallbackTracker callbackTracker;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
-    private String blobId;
-
     /**
-     * Create a HEAD before GET callback.
+     * Create a GET callback.
      * @param restRequest the {@link RestRequest} for whose response this is a callback.
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
      */
-    HeadForGetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        RestUtils.SubResource subResource) {
+    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, RestUtils.SubResource subResource) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.subResource = subResource;
-      callbackTracker =
-          new CallbackTracker(restRequest, OPERATION_TYPE_HEAD_BEFORE_GET, adminMetrics.headForGetTimeInMs,
-              adminMetrics.headForGetCallbackProcessingTimeInMs);
-      blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest, subResource, adminConfig.adminPathPrefixesToRemove);
+      callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_GET, adminMetrics.getTimeInMs,
+          adminMetrics.getCallbackProcessingTimeInMs);
     }
 
     /**
      * If the request is not for a sub resource, makes a GET call to the router. If the request is for a sub resource,
      * responds immediately. If there was no {@code routerResult} or if there was an exception, bails out.
-     * @param routerResult The result of the request i.e a {@link BlobInfo} object with the properties of the blob that
-     *                     is going to be scheduled for GET. This is non null if the request executed successfully.
+     * Submits the GET response to {@link RestResponseHandler} so that it can be sent (or the exception handled).
+     * @param routerResult The result of the request i.e a {@link GetBlobResult} object with the properties of the blob
+     *                     (and a channel for blob data, if the request did not have a subresource) that is going to be
+     *                     returned if no exception occured. This is non null if the request executed successfully.
      * @param routerException The exception that was reported on execution of the request (if any).
      */
     @Override
-    public void onCompletion(final BlobInfo routerResult, Exception routerException) {
+    public void onCompletion(final GetBlobResult routerResult, Exception routerException) {
       callbackTracker.markOperationEnd();
       if (routerResult == null && routerException == null) {
         throw new IllegalStateException("Both response and exception are null");
@@ -572,60 +569,56 @@ class AdminBlobStorageService implements BlobStorageService {
               new CallbackTracker(restRequest, OPERATION_TYPE_GET_RESPONSE_SECURITY,
                   adminMetrics.getSecurityResponseTimeInMs, adminMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService.processResponse(restRequest, restResponseChannel, routerResult, new Callback<Void>() {
-            @Override
-            public void onCompletion(Void securityResult, Exception securityException) {
-              securityCallbackTracker.markOperationEnd();
-              ReadableStreamChannel response = null;
-              boolean blobNotModified = restResponseChannel.getStatus() == ResponseStatus.NotModified;
-              try {
-                if (securityException == null) {
-                  if (subResource != null) {
-                    Map<String, String> userMetadata = RestUtils.buildUserMetadata(routerResult.getUserMetadata());
-                    if (userMetadata == null) {
-                      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-                      restResponseChannel
-                          .setHeader(RestUtils.Headers.CONTENT_LENGTH, routerResult.getUserMetadata().length);
-                      response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(routerResult.getUserMetadata()));
-                    } else {
-                      setUserMetadataHeaders(userMetadata, restResponseChannel);
-                      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-                      response = new ByteBufferReadableStreamChannel(EMPTY_BUFFER);
+          securityService
+              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+                @Override
+                public void onCompletion(Void securityResult, Exception securityException) {
+                  securityCallbackTracker.markOperationEnd();
+                  ReadableStreamChannel response = null;
+                  boolean blobNotModified = restResponseChannel.getStatus() == ResponseStatus.NotModified;
+                  try {
+                    if (securityException == null) {
+                      if (subResource != null) {
+                        BlobInfo blobInfo = routerResult.getBlobInfo();
+                        Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
+                        if (userMetadata == null) {
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+                          restResponseChannel
+                              .setHeader(RestUtils.Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                          response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
+                        } else {
+                          setUserMetadataHeaders(userMetadata, restResponseChannel);
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+                          response = new ByteBufferReadableStreamChannel(AdminBlobStorageService.EMPTY_BUFFER);
+                        }
+                      } else if (!blobNotModified) {
+                        response = routerResult.getBlobDataChannel();
+                      } else {
+                        // If the blob was not modified, we need to close the channel, as it will not be submitted to
+                        // the RestResponseHandler
+                        routerResult.getBlobDataChannel().close();
+                      }
                     }
-                  } else if (!blobNotModified) {
-                    logger.trace("Forwarding GET after HEAD for {} to the router", blobId);
-                    router.getBlob(blobId, null, new GetCallback(restRequest, restResponseChannel));
+                  } catch (Exception e) {
+                    adminMetrics.getSecurityResponseCallbackProcessingError.inc();
+                    securityException = e;
+                  } finally {
+                    submitResponse(restRequest, restResponseChannel, response, securityException);
+                    securityCallbackTracker.markCallbackProcessingEnd();
                   }
                 }
-              } catch (Exception e) {
-                adminMetrics.getSecurityResponseCallbackProcessingError.inc();
-                securityException = e;
-              } finally {
-                if (response != null || securityException != null || blobNotModified) {
-                  submitResponse(restRequest, restResponseChannel, response, securityException);
-                }
-                securityCallbackTracker.markCallbackProcessingEnd();
-              }
-            }
-          });
+              });
         }
       } catch (Exception e) {
-        adminMetrics.headForGetCallbackProcessingError.inc();
+        adminMetrics.getCallbackProcessingError.inc();
         routerException = e;
       } finally {
         if (routerException != null) {
-          submitResponse(restRequest, restResponseChannel, null, routerException);
+          submitResponse(restRequest, restResponseChannel,
+              routerResult != null ? routerResult.getBlobDataChannel() : null, routerException);
         }
         callbackTracker.markCallbackProcessingEnd();
       }
-    }
-
-    /**
-     * Sets the blob ID that should be used for {@link Router#getBlob(String, GetBlobOptions, Callback)}.
-     * @param blobId the blob ID that should be used for {@link Router#getBlob(String, GetBlobOptions, Callback)}.
-     */
-    void setBlobId(String blobId) {
-      this.blobId = blobId;
     }
 
     /**
@@ -645,46 +638,6 @@ class AdminBlobStorageService implements BlobStorageService {
         throws RestServiceException {
       for (Map.Entry<String, String> entry : userMetadata.entrySet()) {
         restResponseChannel.setHeader(entry.getKey(), entry.getValue());
-      }
-    }
-  }
-
-  /**
-   * Callback for GET operations. Submits the response received to an instance of {@link RestResponseHandler}.
-   */
-  private class GetCallback implements Callback<ReadableStreamChannel> {
-    private final RestRequest restRequest;
-    private final RestResponseChannel restResponseChannel;
-    private final CallbackTracker callbackTracker;
-
-    /**
-     * Create a GET callback.
-     * @param restRequest the {@link RestRequest} for whose response this is a callback.
-     * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be
-     *                            sent.
-     */
-    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-      this.restRequest = restRequest;
-      this.restResponseChannel = restResponseChannel;
-      callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_GET, adminMetrics.getTimeInMs,
-          adminMetrics.getCallbackProcessingTimeInMs);
-      callbackTracker.markOperationStart();
-    }
-
-    /**
-     * Submits the GET response to {@link RestResponseHandler} so that it can be sent (or the exception handled).
-     * @param routerResult The result of the request. This is the actual blob data as a {@link ReadableStreamChannel}.
-     *               This is non null if the request executed successfully.
-     * @param routerException The exception that was reported on execution of the request (if any).
-     */
-    @Override
-    public void onCompletion(ReadableStreamChannel routerResult, Exception routerException) {
-      callbackTracker.markOperationEnd();
-      if (routerResult == null && routerException == null) {
-        throw new IllegalStateException("Both response and exception are null");
-      } else {
-        submitResponse(restRequest, restResponseChannel, routerResult, routerException);
-        callbackTracker.markCallbackProcessingEnd();
       }
     }
   }
@@ -748,7 +701,7 @@ class AdminBlobStorageService implements BlobStorageService {
    * Callback for HEAD operations. Sends the headers to the client if operation is successful. Submits response either
    * to handle exceptions or to clean up after a response.
    */
-  private class HeadCallback implements Callback<BlobInfo> {
+  private class HeadCallback implements Callback<GetBlobResult> {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final CallbackTracker callbackTracker;
@@ -769,12 +722,12 @@ class AdminBlobStorageService implements BlobStorageService {
     /**
      * If there was no exception, updates the header with the properties. Exceptions, if any, will be handled upon
      * submission.
-     * @param routerResult The result of the request i.e a {@link BlobInfo} object with the properties of the blob. This is
-     *               non null if the request executed successfully.
+     * @param routerResult The result of the request, which includes a {@link BlobInfo} object with the properties of
+     *                     the blob. This is non null if the request executed successfully.
      * @param routerException The exception that was reported on execution of the request (if any).
      */
     @Override
-    public void onCompletion(BlobInfo routerResult, Exception routerException) {
+    public void onCompletion(GetBlobResult routerResult, Exception routerException) {
       callbackTracker.markOperationEnd();
       if (routerResult == null && routerException == null) {
         throw new IllegalStateException("Both response and exception are null");
@@ -786,14 +739,15 @@ class AdminBlobStorageService implements BlobStorageService {
                   adminMetrics.headSecurityResponseTimeInMs,
                   adminMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService.processResponse(restRequest, restResponseChannel, routerResult, new Callback<Void>() {
-            @Override
-            public void onCompletion(Void securityResult, Exception securityException) {
-              callbackTracker.markOperationEnd();
-              submitResponse(restRequest, restResponseChannel, null, securityException);
-              callbackTracker.markCallbackProcessingEnd();
-            }
-          });
+          securityService
+              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+                @Override
+                public void onCompletion(Void securityResult, Exception securityException) {
+                  callbackTracker.markOperationEnd();
+                  submitResponse(restRequest, restResponseChannel, null, securityException);
+                  callbackTracker.markCallbackProcessingEnd();
+                }
+              });
         }
       } catch (Exception e) {
         adminMetrics.headCallbackProcessingError.inc();

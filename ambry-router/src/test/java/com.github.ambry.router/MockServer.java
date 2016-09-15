@@ -14,9 +14,11 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.BoundedByteBufferReceive;
 import com.github.ambry.network.ByteBufferSend;
@@ -212,6 +214,61 @@ class MockServer {
                 Utils.readBytesFromStream(originalBlobPutReq.getBlobStream(), (int) originalBlobPutReq.getBlobSize()));
             Crc32 crc = new Crc32();
             crc.update(byteBuffer.array(), 0, byteBuffer.position());
+            byteBuffer.putLong(crc.getValue());
+            break;
+          case All:
+            blobProperties = originalBlobPutReq.getBlobProperties();
+            userMetadata = originalBlobPutReq.getUsermetadata();
+            int blobHeaderSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+            int blobPropertiesSize =
+                MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
+            int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
+            int blobInfoSize = blobPropertiesSize + userMetadataSize;
+            int blobRecordSize;
+            switch (blobFormatVersion) {
+              case MessageFormatRecord.Blob_Version_V2:
+                blobRecordSize =
+                    (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+                break;
+              case MessageFormatRecord.Blob_Version_V1:
+                blobRecordSize =
+                    (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
+                break;
+              default:
+                throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
+            }
+            byteBufferSize = blobHeaderSize + key.sizeInBytes() + blobInfoSize + blobRecordSize;
+            byteBuffer = ByteBuffer.allocate(byteBufferSize);
+            try {
+              MessageFormatRecord.MessageHeader_Format_V1
+                  .serializeHeader(byteBuffer, blobInfoSize + blobRecordSize, blobHeaderSize + key.sizeInBytes(),
+                      MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+                      blobHeaderSize + key.sizeInBytes() + blobPropertiesSize,
+                      blobHeaderSize + key.sizeInBytes() + blobInfoSize);
+            } catch (MessageFormatException e) {
+              e.printStackTrace();
+            }
+            byteBuffer.put(key.toBytes());
+            MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(byteBuffer, blobProperties);
+            MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
+            int blobRecordStart = byteBuffer.position();
+            switch (blobFormatVersion) {
+              case MessageFormatRecord.Blob_Version_V2:
+                MessageFormatRecord.Blob_Format_V2
+                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize(),
+                        originalBlobPutReq.getBlobType());
+                break;
+              case MessageFormatRecord.Blob_Version_V1:
+                MessageFormatRecord.Blob_Format_V1
+                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize());
+                break;
+              default:
+                throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
+            }
+            byteBuffer.put(
+                Utils.readBytesFromStream(originalBlobPutReq.getBlobStream(), (int) originalBlobPutReq.getBlobSize()));
+            crc = new Crc32();
+            crc.update(byteBuffer.array(), blobRecordStart, blobRecordSize - MessageFormatRecord.Crc_Size);
             byteBuffer.putLong(crc.getValue());
             break;
           default:

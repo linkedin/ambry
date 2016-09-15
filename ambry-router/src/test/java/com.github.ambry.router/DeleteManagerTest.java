@@ -171,7 +171,7 @@ public class DeleteManagerTest {
   @Test
   public void testBlobIdNotValid()
       throws Exception {
-    String[] input = {"123", "abcd", "", "/", null};
+    String[] input = {"123", "abcd", "", "/"};
     for (String s : input) {
       future = router.deleteBlob(s);
       assertFailureAndCheckErrorCode(future, RouterErrorCode.InvalidBlobId);

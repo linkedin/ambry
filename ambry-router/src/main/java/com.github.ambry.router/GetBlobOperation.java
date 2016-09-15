@@ -20,7 +20,9 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -66,9 +68,7 @@ import org.slf4j.LoggerFactory;
  * buffered up to the maximum that can be buffered. When fetched chunks are consumed by the caller, subsequent chunks
  * become eligible to be fetched.
  */
-class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
-  // the options associated with the operation.
-  private final GetBlobOptions options;
+class GetBlobOperation extends GetOperation {
   // the callback to use to complete the operation.
   private final OperationCompleteCallback operationCompleteCallback;
   // whether the operationCompleteCallback has been called already.
@@ -98,9 +98,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
   private Map<Integer, ByteBuffer> chunkIndexToBuffer;
   // To find the GetChunk to hand over the response quickly.
   private final Map<Integer, GetChunk> correlationIdToGetChunk = new HashMap<>();
-  // The result of this operation. This is instantiated if/when the first bytes of the result arrive and just before
-  // the operation callback is invoked.
-  private GetBlobResult getBlobResult;
+  // the blob info that is populated on OperationType.BlobInfo or OperationType.All
+  private BlobInfo blobInfo;
+  // the ReadableStreamChannel that is populated on OperationType.Blob or OperationType.All requests.
+  private BlobDataReadableStreamChannel blobDataChannel;
   private final ReadyForPollCallback readyForPollCallback;
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
@@ -124,12 +125,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
-      FutureResult<ReadableStreamChannel> futureResult, Callback<ReadableStreamChannel> callback,
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
       OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
       BlobIdFactory blobIdFactory, Time time)
       throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, futureResult, callback, time);
-    this.options = options;
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     this.readyForPollCallback = readyForPollCallback;
     this.blobIdFactory = blobIdFactory;
@@ -149,27 +149,11 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
     } else {
       operationException.set(abortCause);
-      if (getBlobResult != null && getBlobResult.isReadCalled()) {
-        getBlobResult.completeRead();
+      if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
+        blobDataChannel.completeRead();
       }
     }
     operationCompleted = true;
-  }
-
-  /**
-   * Return the {@link MessageFormatFlags} to associate with a getBlob operation.
-   * @return {@link MessageFormatFlags#Blob}
-   */
-  @Override
-  MessageFormatFlags getOperationFlag() {
-    return MessageFormatFlags.Blob;
-  }
-
-  /**
-   * @return The {@link GetBlobOptions} associated with this operation.
-   */
-  GetBlobOptions getOptions() {
-    return options;
   }
 
   /**
@@ -193,16 +177,20 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         long timeElapsed = time.milliseconds() - submissionTimeMs;
         routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
         Exception e = getOperationException();
-        getBlobResult = e == null ? new GetBlobResult() : null;
-        if (e != null) {
+        if (e == null) {
+          blobDataChannel = new BlobDataReadableStreamChannel();
+          operationResult = new GetBlobResult(blobInfo, blobDataChannel);
+        } else {
+          blobDataChannel = null;
+          operationResult = null;
           routerMetrics.onGetBlobError(e, options);
         }
-        operationCompleteCallback.completeOperation(operationFuture, operationCallback, getBlobResult, e);
+        operationCompleteCallback.completeOperation(operationFuture, operationCallback, operationResult, e);
       }
     }
     chunk.postCompletionCleanup();
-    if (getBlobResult != null) {
-      getBlobResult.maybeWriteToChannel();
+    if (blobDataChannel != null) {
+      blobDataChannel.maybeWriteToChannel();
     }
   }
 
@@ -241,8 +229,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
         // Although an attempt is made to write to the channel as soon as a chunk is successfully retrieved,
         // the caller might not have called readInto() and passed in a channel at the time. So an attempt is always
         // made from within poll.
-        if (getBlobResult != null) {
-          getBlobResult.maybeWriteToChannel();
+        if (blobDataChannel != null) {
+          blobDataChannel.maybeWriteToChannel();
         }
         // If this is a composite blob, poll for requests for subsequent chunks.
         if (dataChunks != null) {
@@ -251,7 +239,8 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
               dataChunk.initialize(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
             }
             if (dataChunk.isInProgress() || (dataChunk.isReady()
-                && numChunksRetrieved - getBlobResult.getNumChunksWrittenOut() < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
+                && numChunksRetrieved - blobDataChannel.getNumChunksWrittenOut()
+                < NonBlockingRouter.MAX_IN_MEM_CHUNKS)) {
               dataChunk.poll(requestRegistrationCallback);
               if (dataChunk.isComplete()) {
                 onChunkOperationComplete(dataChunk);
@@ -275,9 +264,9 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
    * A class that implements the result of this GetBlobOperation. This is instantiated if/when the first data chunk of
    * the blob arrives, when the operation callback is invoked.
    */
-  private class GetBlobResult implements ReadableStreamChannel {
+  private class BlobDataReadableStreamChannel implements ReadableStreamChannel {
     // whether this ReadableStreamChannel is open.
-    private boolean isOpen = true;
+    private volatile boolean isOpen = true;
     // whether readInto() has been called yet by the caller on this ReadableStreamChannel.
     private volatile boolean readCalled = false;
     // The channel to write chunks of the blob into. This will be initialized when the caller calls the readInto().
@@ -318,6 +307,9 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
 
     @Override
     public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
+      if (!isOpen) {
+        throw new IllegalStateException("This ReadableStreamChannel has been closed");
+      }
       if (readCalled) {
         throw new IllegalStateException("Cannot read the result of a GetBlob operation more than once");
       }
@@ -341,6 +333,10 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     public void close()
         throws IOException {
       isOpen = false;
+      if (!operationCompleted) {
+        abort(new RouterException("The ReadableStreamChannel for blob data has been closed by the user.",
+            RouterErrorCode.ChannelClosed));
+      }
     }
 
     @Override
@@ -474,6 +470,14 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
       // to the blob getting expired or deleted in the middle of a retrieval - after the metadata chunk was
       // successfully retrieved.
       return GetOptions.Include_All;
+    }
+
+    /**
+     * Return the {@link MessageFormatFlags} to associate with a getBlob chunk operation.
+     * @return {@link MessageFormatFlags#Blob}
+     */
+    MessageFormatFlags getOperationFlag() {
+      return MessageFormatFlags.Blob;
     }
 
     /**
@@ -835,6 +839,17 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     }
 
     /**
+     * Return the {@link MessageFormatFlags} to associate with the first getBlob chunk operation.
+     * @return {@link MessageFormatFlags#Blob} for {@link GetBlobOptions.OperationType#Data}, or {@link MessageFormatFlags#All} by
+     *         default.
+     */
+    @Override
+    MessageFormatFlags getOperationFlag() {
+      return options.getOperationType() == GetBlobOptions.OperationType.Data ? MessageFormatFlags.Blob
+          : MessageFormatFlags.All;
+    }
+
+    /**
      * {@inheritDoc}
      * <br>
      * It would help to keep in mind while going through this method that the first chunk is either a metadata chunk
@@ -844,7 +859,14 @@ class GetBlobOperation extends GetOperation<ReadableStreamChannel> {
     void handleBody(InputStream payload)
         throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
-        BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
+        BlobData blobData;
+        if (getOperationFlag() == MessageFormatFlags.Blob) {
+          blobData = MessageFormatRecord.deserializeBlob(payload);
+        } else {
+          BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
+          blobInfo = blobAll.getBlobInfo();
+          blobData = blobAll.getBlobData();
+        }
         BlobType blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();
         if (blobType == BlobType.MetadataBlob) {

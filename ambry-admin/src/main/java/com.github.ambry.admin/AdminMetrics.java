@@ -63,14 +63,11 @@ class AdminMetrics {
   public final Histogram headTimeInMs;
   public final Histogram headSecurityResponseTimeInMs;
   public final Histogram headSecurityResponseCallbackProcessingTimeInMs;
-  // HeadForGetCallback
-  public final Histogram headForGetCallbackProcessingTimeInMs;
-  public final Histogram headForGetTimeInMs;
-  public final Histogram getSecurityResponseCallbackProcessingTimeInMs;
-  public final Histogram getSecurityResponseTimeInMs;
   // GetCallback
   public final Histogram getCallbackProcessingTimeInMs;
   public final Histogram getTimeInMs;
+  public final Histogram getSecurityResponseCallbackProcessingTimeInMs;
+  public final Histogram getSecurityResponseTimeInMs;
   // InboundIdConverterCallback
   public final Histogram inboundIdConversionCallbackProcessingTimeInMs;
   public final Histogram inboundIdConversionTimeInMs;
@@ -98,11 +95,9 @@ class AdminMetrics {
   public final Counter deleteCallbackProcessingError;
   // HeadCallback
   public final Counter headCallbackProcessingError;
-  // HeadForGetCallback
-  public final Counter headForGetCallbackProcessingError;
-  public final Counter getSecurityResponseCallbackProcessingError;
   // GetCallback
   public final Counter getCallbackProcessingError;
+  public final Counter getSecurityResponseCallbackProcessingError;
   // GetReplicasHandler
   public final Counter invalidBlobIdError;
   public final Counter responseConstructionError;
@@ -164,20 +159,15 @@ class AdminMetrics {
         MetricRegistry.name(AdminBlobStorageService.class, "HeadSecurityResponseCallbackProcessingTimeInMs"));
     headSecurityResponseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "HeadSecurityResponseTimeInMs"));
-    // HeadForGetCallback
-    headForGetCallbackProcessingTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AdminBlobStorageService.class, "HeadForGetCallbackProcessingTimeInMs"));
-    headForGetTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AdminBlobStorageService.class, "HeadForGetCallbackResultTimeInMs"));
-    getSecurityResponseCallbackProcessingTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AdminBlobStorageService.class, "GetSecurityResponseCallbackProcessingTimeInMs"));
-    getSecurityResponseTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "GetSecurityResponseTimeInMs"));
     // GetCallback
     getCallbackProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "GetCallbackProcessingTimeInMs"));
     getTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "GetCallbackResultTimeInMs"));
+    getSecurityResponseCallbackProcessingTimeInMs = metricRegistry
+        .histogram(MetricRegistry.name(AdminBlobStorageService.class, "GetSecurityResponseCallbackProcessingTimeInMs"));
+    getSecurityResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AdminBlobStorageService.class, "GetSecurityResponseTimeInMs"));
     // InboundIdConverterCallback
     inboundIdConversionCallbackProcessingTimeInMs = metricRegistry
         .histogram(MetricRegistry.name(AdminBlobStorageService.class, "InboundIdCallbackProcessingTimeInMs"));
@@ -222,14 +212,11 @@ class AdminMetrics {
     // HeadCallback
     headCallbackProcessingError =
         metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "HeadCallbackProcessingError"));
-    // HeadForGetCallback
-    headForGetCallbackProcessingError =
-        metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "HeadForGetCallbackProcessingError"));
-    getSecurityResponseCallbackProcessingError = metricRegistry
-        .counter(MetricRegistry.name(AdminBlobStorageService.class, "GetSecurityResponseCallbackProcessingError"));
     // GetCallback
     getCallbackProcessingError =
         metricRegistry.counter(MetricRegistry.name(AdminBlobStorageService.class, "GetCallbackProcessingError"));
+    getSecurityResponseCallbackProcessingError = metricRegistry
+        .counter(MetricRegistry.name(AdminBlobStorageService.class, "GetSecurityResponseCallbackProcessingError"));
     // GetReplicasHandler
     invalidBlobIdError = metricRegistry.counter(MetricRegistry.name(GetReplicasHandler.class, "InvalidBlobIdError"));
     responseConstructionError =
