@@ -192,6 +192,47 @@ public class NonBlockingRouterTest {
     assertClosed();
   }
 
+  @Test
+  public void testNullArguments()
+      throws Exception {
+    setRouter();
+    assertExpectedThreadCounts(1);
+    setOperationParams();
+
+    try {
+      router.getBlob(null, new GetBlobOptions());
+      Assert.fail("null blobId should have resulted in IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+    try {
+      router.getBlob("", null);
+      Assert.fail("null options should have resulted in IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+    try {
+      router.putBlob(putBlobProperties, putUserMetadata, null);
+      Assert.fail("null channel should have resulted in IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+    try {
+      router.putBlob(null, putUserMetadata, putChannel);
+      Assert.fail("null blobProperties should have resulted in IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+    try {
+      router.deleteBlob(null);
+      Assert.fail("null blobId should have resulted in IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
+    // null user metadata should work.
+    router.putBlob(putBlobProperties, null, putChannel).get();
+
+    router.close();
+    assertExpectedThreadCounts(0);
+    //submission after closing should return a future that is already done.
+    assertClosed();
+  }
+
   /**
    * Test router put operation in a scenario where there are no partitions available.
    */
@@ -713,8 +754,8 @@ public class NonBlockingRouterTest {
           break;
         case GET:
           futureResult = new FutureResult<BlobInfo>();
-          getManager
-              .submitGetBlobOperation(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), futureResult, null);
+          getManager.submitGetBlobOperation(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null),
+              futureResult, null);
           break;
         case DELETE:
           futureResult = new FutureResult<BlobInfo>();

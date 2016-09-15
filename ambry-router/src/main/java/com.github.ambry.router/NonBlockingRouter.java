@@ -126,8 +126,8 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
-    if (options == null) {
-      throw new IllegalArgumentException("options must not be null");
+    if (blobId == null || options == null) {
+      throw new IllegalArgumentException("blobId or options must not be null");
     }
     currentOperationsCount.incrementAndGet();
     if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
@@ -179,6 +179,7 @@ class NonBlockingRouter implements Router {
     if (blobProperties == null || channel == null) {
       throw new IllegalArgumentException("blobProperties or channel must not be null");
     }
+    userMetadata = userMetadata == null ? new byte[0] : userMetadata;
     currentOperationsCount.incrementAndGet();
     routerMetrics.putBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
@@ -214,6 +215,9 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
     currentOperationsCount.incrementAndGet();
     routerMetrics.deleteBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
