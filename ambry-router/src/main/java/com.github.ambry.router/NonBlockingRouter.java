@@ -126,6 +126,9 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
+    if (options == null) {
+      throw new IllegalArgumentException("options must not be null");
+    }
     currentOperationsCount.incrementAndGet();
     if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       routerMetrics.getBlobInfoOperationRate.mark();
@@ -173,6 +176,9 @@ class NonBlockingRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
+    if (blobProperties == null || channel == null) {
+      throw new IllegalArgumentException("blobProperties or channel must not be null");
+    }
     currentOperationsCount.incrementAndGet();
     routerMetrics.putBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
