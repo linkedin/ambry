@@ -610,7 +610,7 @@ class AdminBlobStorageService implements BlobStorageService {
               });
         }
       } catch (Exception e) {
-        adminMetrics.headForGetCallbackProcessingError.inc();
+        adminMetrics.getCallbackProcessingError.inc();
         routerException = e;
       } finally {
         if (routerException != null) {
