@@ -302,18 +302,15 @@ class MockGetCallback implements Callback<GetBlobResult> {
       restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
       if (exception == null && result != null) {
         setResponseHeaders(result.getBlobInfo());
-        mockBlobStorageService.handleResponse(restRequest, restResponseChannel, result.getBlobDataChannel(), null);
-      } else {
-        if (exception != null && exception instanceof RouterException) {
-          exception = new RestServiceException(exception,
-              RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
-        }
-        mockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
+      } else if (exception != null && exception instanceof RouterException) {
+        exception = new RestServiceException(exception,
+            RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
       }
     } catch (Exception e) {
       exception = exception == null ? e : exception;
-      mockBlobStorageService.handleResponse(restRequest, restResponseChannel,
-          result != null ? result.getBlobDataChannel() : null, exception);
+    } finally {
+      ReadableStreamChannel channel = result != null ? result.getBlobDataChannel() : null;
+      mockBlobStorageService.handleResponse(restRequest, restResponseChannel, channel, exception);
     }
   }
 

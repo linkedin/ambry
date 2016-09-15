@@ -44,6 +44,10 @@ public class GetBlobOptions {
     this.range = range;
   }
 
+  /**
+   * Get the {@link OperationType} for the associated getBlob request.
+   * @return the {@link OperationType} for the request.
+   */
   public OperationType getOperationType() {
     return operationType;
   }
@@ -85,6 +89,9 @@ public class GetBlobOptions {
     return result;
   }
 
+  /**
+   * Describes the type of getBlob operation to perform.
+   */
   public enum OperationType {
     /**
      * Return blob info and blob data in the response.
