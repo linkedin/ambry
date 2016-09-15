@@ -182,7 +182,7 @@ public class NonBlockingRouterTest {
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
-    router.getBlob(blobId, null).get();
+    router.getBlob(blobId, new GetBlobOptions()).get();
     router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null)).get();
     router.deleteBlob(blobId).get();
     router.close();

@@ -1347,7 +1347,6 @@ class AdminTestRouter implements Router {
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
-    options = options == null ? GetBlobOptions.DEFAULT_OPTIONS : options;
     GetBlobResult result;
     switch (options.getOperationType()) {
       case BlobInfo:

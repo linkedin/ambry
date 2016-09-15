@@ -106,7 +106,7 @@ class NonBlockingRouter implements Router {
    * eventually contain a {@link GetBlobResult} that can contain either the {@link BlobInfo}, the
    * {@link ReadableStreamChannel} containing the blob data, or both.
    * @param blobId The ID of the blob for which blob data is requested.
-   * @param options The options associated with the request.
+   * @param options The options associated with the request. This cannot be null.
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
@@ -119,14 +119,13 @@ class NonBlockingRouter implements Router {
    * Requests for the blob data asynchronously with user-set {@link GetBlobOptions} and invokes the {@link Callback}
    * when the request completes.
    * @param blobId The ID of the blob for which blob data is requested.
-   * @param options The options associated with the request.
+   * @param options The options associated with the request. This cannot be null.
    * @param callback The callback which will be invoked on the completion of the request.
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
-    options = options == null ? GetBlobOptions.DEFAULT_OPTIONS : options;
     currentOperationsCount.incrementAndGet();
     if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       routerMetrics.getBlobInfoOperationRate.mark();

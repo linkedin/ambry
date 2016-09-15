@@ -102,7 +102,7 @@ public class GetBlobOperationTest {
   private byte[] putContent;
 
   // Options which are passed into GetBlobOperations
-  private GetBlobOptions options = GetBlobOptions.DEFAULT_OPTIONS;
+  private GetBlobOptions options = new GetBlobOptions();
 
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();

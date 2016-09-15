@@ -70,7 +70,7 @@ class PerfRouter implements Router {
   /**
    * Returns a stream of repeating data up to a pre-set size. {@code blobId} is ignored.
    * @param blobId The ID of the blob for which blob data is requested.
-   * @param options The options associated with the request.
+   * @param options The options associated with the request. This cannot be null.
    * @return a {@link Future} that will eventually contain a {@link GetBlobResult}.
    */
   @Override
@@ -80,7 +80,6 @@ class PerfRouter implements Router {
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
-    options = options == null ? GetBlobOptions.DEFAULT_OPTIONS : options;
     logger.trace("Received getBlob call");
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     if (!routerOpen) {

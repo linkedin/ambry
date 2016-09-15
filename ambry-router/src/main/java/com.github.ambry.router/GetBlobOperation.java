@@ -845,12 +845,8 @@ class GetBlobOperation extends GetOperation {
      */
     @Override
     MessageFormatFlags getOperationFlag() {
-      switch (options.getOperationType()) {
-        case Data:
-          return MessageFormatFlags.Blob;
-        default:
-          return MessageFormatFlags.All;
-      }
+      return options.getOperationType() == GetBlobOptions.OperationType.Data ? MessageFormatFlags.Blob
+          : MessageFormatFlags.All;
     }
 
     /**
@@ -864,15 +860,12 @@ class GetBlobOperation extends GetOperation {
         throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
-        switch (getOperationFlag()) {
-          case Blob:
-            blobData = MessageFormatRecord.deserializeBlob(payload);
-            break;
-          default:
-            BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
-            blobInfo = blobAll.getBlobInfo();
-            blobData = blobAll.getBlobData();
-            break;
+        if (getOperationFlag() == MessageFormatFlags.Blob) {
+          blobData = MessageFormatRecord.deserializeBlob(payload);
+        } else {
+          BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
+          blobInfo = blobAll.getBlobInfo();
+          blobData = blobAll.getBlobData();
         }
         BlobType blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();

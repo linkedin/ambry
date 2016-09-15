@@ -290,7 +290,7 @@ class RouterServerTestFramework {
    */
   private void startGetBlob(final boolean afterDelete, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, afterDelete);
-    Future<GetBlobResult> future = router.getBlob(opChain.blobId, null, callback);
+    Future<GetBlobResult> future = router.getBlob(opChain.blobId, new GetBlobOptions(), callback);
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlob", afterDelete), opChain) {
           @Override

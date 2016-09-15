@@ -56,7 +56,7 @@ public class GetManagerTest {
   private byte[] putUserMetadata;
   private byte[] putContent;
   private ReadableStreamChannel putChannel;
-  private GetBlobOptions options = GetBlobOptions.DEFAULT_OPTIONS;
+  private GetBlobOptions options = new GetBlobOptions();
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
@@ -93,7 +93,7 @@ public class GetManagerTest {
   @Test
   public void testSimpleBlobGetSuccess()
       throws Exception {
-    testGetSuccess(chunkSize, GetBlobOptions.DEFAULT_OPTIONS);
+    testGetSuccess(chunkSize, new GetBlobOptions());
   }
 
   /**
@@ -103,7 +103,7 @@ public class GetManagerTest {
   @Test
   public void testCompositeBlobGetSuccess()
       throws Exception {
-    testGetSuccess(chunkSize * 6 + 11, GetBlobOptions.DEFAULT_OPTIONS);
+    testGetSuccess(chunkSize * 6 + 11, new GetBlobOptions());
   }
 
   /**
@@ -199,7 +199,7 @@ public class GetManagerTest {
       Boolean checkBadCallbackBlob)
       throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize * 6 + 11, null);
+    setOperationParams(chunkSize * 6 + 11, new GetBlobOptions());
     final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     List<Future<GetBlobResult>> getBlobInfoFutures = new ArrayList<>();
@@ -237,7 +237,7 @@ public class GetManagerTest {
     Assert.assertTrue("Router should not be closed", router.isOpen());
 
     // Test that GetManager is still operational
-    setOperationParams(chunkSize, GetBlobOptions.DEFAULT_OPTIONS);
+    setOperationParams(chunkSize, new GetBlobOptions());
     blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     getBlobAndCompareContent(blobId);
     this.options = infoOptions;
@@ -254,7 +254,7 @@ public class GetManagerTest {
   public void testFailureOnAllPollThatSends()
       throws Exception {
     router = getNonBlockingRouter();
-    setOperationParams(chunkSize, null);
+    setOperationParams(chunkSize, new GetBlobOptions());
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     Future future;

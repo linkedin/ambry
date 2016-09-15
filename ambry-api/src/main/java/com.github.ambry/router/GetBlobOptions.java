@@ -19,10 +19,17 @@ package com.github.ambry.router;
  * {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
  */
 public class GetBlobOptions {
-  public static final GetBlobOptions DEFAULT_OPTIONS = new GetBlobOptions(OperationType.All, null);
 
   private final OperationType operationType;
   private final ByteRange range;
+
+  /**
+   * Construct a {@link GetBlobOptions} object with the default options: {@link OperationType#All} and no
+   * {@link ByteRange}
+   */
+  public GetBlobOptions() {
+    this(OperationType.All, null);
+  }
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
