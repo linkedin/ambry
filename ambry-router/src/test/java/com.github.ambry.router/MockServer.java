@@ -48,7 +48,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -173,7 +172,7 @@ class MockServer {
       ByteBuffer byteBuffer;
       StoreKey key = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0);
       if (blobs.containsKey(key.getID())) {
-        ByteBuffer buf = blobs.get(key.getID()).data.duplicate();
+        ByteBuffer buf = blobs.get(key.getID()).serializedSentPutRequest.duplicate();
         // read off the size
         buf.getLong();
         // read off the type.
@@ -322,7 +321,7 @@ class MockServer {
    */
   private void updateBlobMap(PutRequest putRequest)
       throws IOException {
-    StoredBlob blob = new StoredBlob(putRequest);
+    StoredBlob blob = new StoredBlob(putRequest, clusterMap);
     blobs.put(blob.id, blob);
   }
 
@@ -405,17 +404,25 @@ class StoredBlob {
   final BlobType type;
   final BlobProperties properties;
   final ByteBuffer userMetadata;
-  final ByteBuffer data;
+  final ByteBuffer serializedSentPutRequest;
+  final PutRequest.ReceivedPutRequest receivedPutRequest;
 
-  StoredBlob(PutRequest putRequest)
+  StoredBlob(PutRequest putRequest, ClusterMap clusterMap)
       throws IOException {
-    id = putRequest.getBlobId().getID();
-    type = putRequest.getBlobType();
-    properties = putRequest.getBlobProperties();
-    userMetadata = putRequest.getUsermetadata();
-    data = ByteBuffer.allocate((int) putRequest.sizeInBytes());
-    ByteBufferChannel bufChannel = new ByteBufferChannel(data);
+    serializedSentPutRequest = ByteBuffer.allocate((int) putRequest.sizeInBytes());
+    ByteBufferChannel bufChannel = new ByteBufferChannel(serializedSentPutRequest);
     putRequest.writeTo(bufChannel);
-    data.flip();
+    serializedSentPutRequest.flip();
+    DataInputStream receivedStream =
+        new DataInputStream(new ByteBufferInputStream(serializedSentPutRequest.duplicate()));
+    // read off the size
+    receivedStream.readLong();
+    // read of the RequestResponse type.
+    receivedStream.readShort();
+    receivedPutRequest = PutRequest.readFrom(receivedStream, clusterMap);
+    id = receivedPutRequest.getBlobId().getID();
+    type = receivedPutRequest.getBlobType();
+    properties = receivedPutRequest.getBlobProperties();
+    userMetadata = receivedPutRequest.getUsermetadata();
   }
 }

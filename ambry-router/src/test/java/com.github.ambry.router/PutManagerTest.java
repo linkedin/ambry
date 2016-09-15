@@ -23,8 +23,8 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
-import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.messageformat.CompositeBlobInfo;
+import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -668,10 +668,10 @@ public class PutManagerTest {
       for (Map.Entry<String, StoredBlob> blobEntry : mockServer.getBlobs().entrySet()) {
         ByteBuffer chunk = allChunks.get(blobEntry.getKey());
         if (chunk == null) {
-          allChunks.put(blobEntry.getKey(), blobEntry.getValue().data);
+          allChunks.put(blobEntry.getKey(), blobEntry.getValue().serializedSentPutRequest);
         } else {
           Assert.assertTrue("All requests for the same blob id must be identical except for correlation id",
-              areIdenticalPutRequests(chunk.array(), blobEntry.getValue().data.array()));
+              areIdenticalPutRequests(chunk.array(), blobEntry.getValue().serializedSentPutRequest.array()));
         }
       }
     }

@@ -18,7 +18,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobPropertiesSerDe;
 import com.github.ambry.messageformat.BlobType;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -75,30 +74,6 @@ public class PutRequest extends RequestOrResponse {
       default:
         throw new IllegalStateException("Unknown Request response version" + versionId);
     }
-  }
-
-  public BlobId getBlobId() {
-    return blobId;
-  }
-
-  public BlobProperties getBlobProperties() {
-    return properties;
-  }
-
-  public ByteBuffer getUsermetadata() {
-    return usermetadata;
-  }
-
-  public InputStream getBlobStream() {
-    return new ByteBufferInputStream(blob);
-  }
-
-  public long getBlobSize() {
-    return blobSize;
-  }
-
-  public BlobType getBlobType() {
-    return blobType;
   }
 
   @Override
@@ -159,17 +134,17 @@ public class PutRequest extends RequestOrResponse {
     sb.append(", ").append("ClientId=").append(clientId);
     sb.append(", ").append("CorrelationId=").append(correlationId);
     if (properties != null) {
-      sb.append(", ").append(getBlobProperties());
+      sb.append(", ").append(properties);
     } else {
       sb.append(", ").append("Properties=Null");
     }
     if (usermetadata != null) {
-      sb.append(", ").append("UserMetaDataSize=").append(getUsermetadata().capacity());
+      sb.append(", ").append("UserMetaDataSize=").append(usermetadata.capacity());
     } else {
       sb.append(", ").append("UserMetaDataSize=0");
     }
-    sb.append(", ").append("blobType=").append(getBlobType());
-    sb.append(", ").append("blobSize=").append(getBlobSize());
+    sb.append(", ").append("blobType=").append(blobType);
+    sb.append(", ").append("blobSize=").append(blobSize);
     sb.append("]");
     return sb.toString();
   }
