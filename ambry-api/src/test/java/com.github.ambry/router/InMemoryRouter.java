@@ -19,6 +19,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.NotificationSystem;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -102,6 +103,23 @@ public class InMemoryRouter implements Router {
     public ByteBuffer getBlob() {
       return ByteBuffer.wrap(blob.array());
     }
+
+    /**
+     * @param range the {@link ByteRange} for the blob, or null.
+     * @return the blob content within the provided range, or the entire blob, if the range is null.
+     */
+    public ByteBuffer getBlobRange(ByteRange range) {
+//      ByteBuffer blobBuffer = getBlob();
+      if (range == null) {
+        return getBlob();
+      }
+      ByteRange resolvedRange = range.toResolvedByteRange(blob.array().length);
+      return ByteBuffer.wrap(Arrays
+          .copyOfRange(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getEndOffset() + 1));
+//      blobBuffer.position((int) resolvedRange.getStartOffset());
+//      blobBuffer.limit((int) resolvedRange.getEndOffset() + 1);
+//      return blobBuffer.slice();
+    }
   }
 
   @Override
@@ -129,17 +147,19 @@ public class InMemoryRouter implements Router {
           InMemoryBlob blob = blobs.get(blobId);
           switch (options.getOperationType()) {
             case Data:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob());
+              blobDataChannel = new ByteBufferRSC(blob.getBlobRange(options.getRange()));
               break;
             case BlobInfo:
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
             case All:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob());
+              blobDataChannel = new ByteBufferRSC(blob.getBlobRange(options.getRange()));
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
           }
         }
+      } catch (IllegalArgumentException e) {
+        exception = new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
       } catch (Exception e) {
         exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
       } finally {

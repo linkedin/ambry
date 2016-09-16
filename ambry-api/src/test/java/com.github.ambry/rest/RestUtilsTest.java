@@ -14,6 +14,8 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
@@ -21,12 +23,15 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.TimeZone;
 import org.json.JSONException;
@@ -499,6 +504,74 @@ public class RestUtilsTest {
             RestUtils.getBlobSubResource(restRequest));
       }
     }
+  }
+
+  /**
+   * This tests the construction of {@link GetBlobOptions} objects with various range and sub-resource settings.
+   * @throws RestServiceException
+   */
+  @Test
+  public void buildGetBlobOptionsTest()
+      throws RestServiceException {
+    // no range
+    doBuildGetBlobOptionsTest(null, null, true, true);
+    // valid ranges
+    doBuildGetBlobOptionsTest("bytes=0-7", ByteRange.fromOffsetRange(0, 7), true, false);
+    doBuildGetBlobOptionsTest("bytes=234-56679090", ByteRange.fromOffsetRange(234, 56679090), true, false);
+    doBuildGetBlobOptionsTest("bytes=1-", ByteRange.fromStartOffset(1), true, false);
+    doBuildGetBlobOptionsTest("bytes=12345678-", ByteRange.fromStartOffset(12345678), true, false);
+    doBuildGetBlobOptionsTest("bytes=-8", ByteRange.fromLastNBytes(8), true, false);
+    doBuildGetBlobOptionsTest("bytes=-123456789", ByteRange.fromLastNBytes(123456789), true, false);
+    // bad ranges
+    doBuildGetBlobOptionsTest("bytes=0-abcd", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=0as23-44444444", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=22-7777777777777777777777777777777777777777777", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=22--53", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=223-34", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=-34ab", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=--12", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=-12-", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=12ab-", null, false, false);
+    doBuildGetBlobOptionsTest("bytes=---", null, false, false);
+    doBuildGetBlobOptionsTest("btes=3-5", null, false, false);
+  }
+
+  private void doBuildGetBlobOptionsTest(String rangeHeader, ByteRange expectedRange,
+      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithSubResource)
+      throws RestServiceException {
+    Map<String, Object> args = new HashMap<>();
+    if (rangeHeader != null) {
+      args.put(RestUtils.Headers.RANGE, rangeHeader);
+    }
+    doBuildGetBlobOptionsTestForSubResource(args, null, expectedRange, GetBlobOptions.OperationType.All,
+        shouldSucceedWithoutSubResource);
+    for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+      doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, GetBlobOptions.OperationType.BlobInfo,
+          shouldSucceedWithSubResource);
+    }
+  }
+
+  private void doBuildGetBlobOptionsTestForSubResource(Map<String, Object> args, RestUtils.SubResource subResource,
+      ByteRange expectedRange, GetBlobOptions.OperationType expectedOpType, boolean shouldSucceed)
+      throws RestServiceException {
+    if (shouldSucceed) {
+      GetBlobOptions options = RestUtils.buildGetBlobOptions(args, subResource);
+      assertEquals("Unexpected range for args=" + args + " and subResource=" + subResource, expectedRange,
+          options.getRange());
+      assertEquals("Unexpected operation type for args=" + args + " and subResource=" + subResource, expectedOpType,
+          options.getOperationType());
+    } else {
+      try {
+        RestUtils.buildGetBlobOptions(args, subResource);
+        fail("buildGetBlobOptions should not have succeeded with args=" + args + "and subResource=" + subResource);
+      } catch (RestServiceException expected) {
+      }
+    }
+  }
+
+  @Test
+  public void buildContentRangeHeaderTest() {
+    assertEquals("bytes 4-8/12", RestUtils.buildContentRangeHeader(ByteRange.fromOffsetRange(4, 8), 12));
   }
 
   // helpers.

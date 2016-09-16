@@ -32,6 +32,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
+import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
@@ -153,7 +154,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       }
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource);
+      GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource);
+      GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -356,10 +358,7 @@ class AmbryBlobStorageService implements BlobStorageService {
           switch (restMethod) {
             case GET:
               getCallback.markStartTime();
-              GetBlobOptions.OperationType getOperationType =
-                  getCallback.subResource != null ? GetBlobOptions.OperationType.BlobInfo
-                      : GetBlobOptions.OperationType.All;
-              router.getBlob(result, new GetBlobOptions(getOperationType, null), getCallback);
+              router.getBlob(result, getCallback.options, getCallback);
               break;
             case HEAD:
               headCallback.markStartTime();
@@ -564,6 +563,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final RestUtils.SubResource subResource;
+    private final GetBlobOptions options;
     private final CallbackTracker callbackTracker;
 
     /**
@@ -571,11 +571,15 @@ class AmbryBlobStorageService implements BlobStorageService {
      * @param restRequest the {@link RestRequest} for whose response this is a callback.
      * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
      * @param subResource the sub-resource requested.
+     * @param options the {@link GetBlobOptions} associated with the
+     *                {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
      */
-    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, RestUtils.SubResource subResource) {
+    GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, RestUtils.SubResource subResource,
+        GetBlobOptions options) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.subResource = subResource;
+      this.options = options;
       callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_GET, frontendMetrics.getTimeInMs,
           frontendMetrics.getCallbackProcessingTimeInMs);
     }

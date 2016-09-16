@@ -14,6 +14,8 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
@@ -24,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +73,18 @@ public class RestUtils {
      * {@code "Pragma"}
      */
     public static final String PRAGMA = "Pragma";
+    /**
+     * {@code "Accept-Ranges"}
+     */
+    public static final String ACCEPT_RANGES = "Accept-Ranges";
+    /**
+     * {@code "Content-Range"}
+     */
+    public static final String CONTENT_RANGE = "Content-Range";
+    /**
+     * {@code "Range"}
+     */
+    public static final String RANGE = "Range";
 
     // ambry specific headers
     /**
@@ -126,10 +141,12 @@ public class RestUtils {
      * User metadata and BlobProperties i.e., blob properties returned in headers and user metadata as content/headers.
      */
     BlobInfo,
+
     /**
      * User metadata on its own i.e., no "blob properties" headers returned with response.
      */
     UserMetadata,
+
     /**
      * All the replicas of the blob ID returned as content (Admin only).
      * <p/>
@@ -146,8 +163,8 @@ public class RestUtils {
 
   private static final int CRC_SIZE = 8;
   private static final short USER_METADATA_VERSION_V1 = 1;
+  private static final String BYTE_RANGE_PREFIX = "bytes=";
   public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
-
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
   /**
@@ -342,6 +359,68 @@ public class RestUtils {
       }
     }
     return toReturn;
+  }
+
+  /**
+   * Build a {@link ByteRange} given the arguments associated with a request.
+   * @param args the arguments associated with the request.
+   * @return The {@link ByteRange} parsed from the arguments, or {@code null}, if no range argument was found
+   * @throws RestServiceException if the range could not be parsed from the header value, or it was otherwise invalid.
+   */
+  public static ByteRange buildByteRange(Map<String, Object> args)
+      throws RestServiceException {
+    String rangeValue = getHeader(args, Headers.RANGE, false);
+    if (rangeValue == null) {
+      return null;
+    }
+    if (!rangeValue.startsWith(BYTE_RANGE_PREFIX)) {
+      throw new RestServiceException("Invalid byte range syntax; does not start with 'bytes='",
+          RestServiceErrorCode.RangeNotSatisfiable);
+    }
+    try {
+      int hyphenIndex = rangeValue.indexOf('-', BYTE_RANGE_PREFIX.length());
+      String startOffsetStr = rangeValue.substring(BYTE_RANGE_PREFIX.length(), hyphenIndex);
+      String endOffsetStr = rangeValue.substring(hyphenIndex + 1);
+      if (startOffsetStr.isEmpty()) {
+        return ByteRange.fromLastNBytes(Long.parseLong(endOffsetStr));
+      } else if (endOffsetStr.isEmpty()) {
+        return ByteRange.fromStartOffset(Long.parseLong(startOffsetStr));
+      } else {
+        return ByteRange.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
+      }
+    } catch (Exception e) {
+      throw new RestServiceException("Invalid byte range syntax", e, RestServiceErrorCode.RangeNotSatisfiable);
+    }
+  }
+
+  /**
+   * Build a {@link GetBlobOptions} object from an argument map for a certain sub-resource.
+   * @param args the arguments associated with the request.
+   * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
+   * @return a populated {@link GetBlobOptions} object.
+   * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
+   */
+  public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource)
+      throws RestServiceException {
+    if (subResource == null) {
+      return new GetBlobOptions(GetBlobOptions.OperationType.All, RestUtils.buildByteRange(args));
+    }
+
+    if (args.containsKey(RestUtils.Headers.RANGE)) {
+      throw new RestServiceException("Range requests not supported for subresources.",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    return new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
+  }
+
+  /**
+   * Build the value for the content range header that corresponds to the provided range and blob size.
+   * @param resolvedByteRange a {@link ByteRange} with a defined start and end offset.
+   * @param blobSize the total size of the associated blob in bytes.
+   * @return
+   */
+  public static String buildContentRangeHeader(ByteRange resolvedByteRange, long blobSize) {
+    return "bytes " + resolvedByteRange.getStartOffset() + "-" + resolvedByteRange.getEndOffset() + "/" + blobSize;
   }
 
   /**

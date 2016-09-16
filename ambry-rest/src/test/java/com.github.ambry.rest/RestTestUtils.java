@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.router.ByteRange;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -66,5 +67,21 @@ public class RestTestUtils {
     byte[] bytes = new byte[size];
     new Random().nextBytes(bytes);
     return bytes;
+  }
+
+  /**
+   * Build the range header value from a {@link ByteRange}
+   * @param range the {@link ByteRange} representing the range
+   * @return
+   */
+  public static String getRangeHeaderString(ByteRange range) {
+    switch (range.getType()) {
+      case LAST_N_BYTES:
+        return "bytes=-" + range.getLastNBytes();
+      case FROM_START_OFFSET:
+        return "bytes=" + range.getStartOffset() + "-";
+      default:
+        return "bytes=" + range.getStartOffset() + "-" + range.getEndOffset();
+    }
   }
 }

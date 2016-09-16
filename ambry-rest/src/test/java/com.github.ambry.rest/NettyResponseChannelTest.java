@@ -77,6 +77,8 @@ public class NettyResponseChannelTest {
     REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.ResourceDirty, HttpResponseStatus.FORBIDDEN);
     REST_ERROR_CODE_TO_HTTP_STATUS
         .put(RestServiceErrorCode.InternalServerError, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+    REST_ERROR_CODE_TO_HTTP_STATUS
+        .put(RestServiceErrorCode.RangeNotSatisfiable, HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE);
   }
 
   /**
@@ -695,9 +697,9 @@ public class NettyResponseChannelTest {
         while (channel.readOutbound() != null) {
         }
       }
-      boolean shouldBeAlive = keepAlive &&
-          !httpMethod.equals(HttpMethod.POST) && !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES
-          .contains(expectedResponseStatus);
+      boolean shouldBeAlive =
+          keepAlive && !httpMethod.equals(HttpMethod.POST) && !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES
+              .contains(expectedResponseStatus);
       assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
       assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
           HttpHeaders.isKeepAlive(response));

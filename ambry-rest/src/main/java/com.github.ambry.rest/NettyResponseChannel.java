@@ -438,6 +438,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.acceptedCount.inc();
         status = HttpResponseStatus.ACCEPTED;
         break;
+      case PartialContent:
+        nettyMetrics.partialContentCount.inc();
+        status = HttpResponseStatus.PARTIAL_CONTENT;
+        break;
       case NotModified:
         nettyMetrics.notModifiedCount.inc();
         status = HttpResponseStatus.NOT_MODIFIED;
@@ -465,6 +469,10 @@ class NettyResponseChannel implements RestResponseChannel {
       case ProxyAuthenticationRequired:
         nettyMetrics.proxyAuthRequiredCount.inc();
         status = HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED;
+        break;
+      case RangeNotSatisfiable:
+        nettyMetrics.rangeNotSatisfiableCount.inc();
+        status = HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE;
         break;
       case InternalServerError:
         nettyMetrics.internalServerErrorCount.inc();

@@ -938,9 +938,7 @@ public class GetBlobOperationTest {
       // If a range is set, compare the result against the specified byte range.
       if (options != null && options.getRange() != null) {
         ByteRange range = options.getRange().toResolvedByteRange(blobSize);
-        int startOffset = (int) range.getStartOffset();
-        int endOffset = (int) range.getEndOffset();
-        putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);
+        putContentBuf = ByteBuffer.wrap(putContent, (int) range.getStartOffset(), (int) range.getRangeSize());
       }
       long written;
       Assert.assertTrue("ReadyForPollCallback should have been invoked as readInto() was called",

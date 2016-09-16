@@ -113,6 +113,7 @@ public class NettyMetrics {
   public final Counter acceptedCount;
   public final Counter createdCount;
   public final Counter okCount;
+  public final Counter partialContentCount;
   public final Counter notModifiedCount;
   public final Counter badRequestCount;
   public final Counter unauthorizedCount;
@@ -121,6 +122,7 @@ public class NettyMetrics {
   public final Counter notFoundCount;
   public final Counter forbiddenCount;
   public final Counter proxyAuthRequiredCount;
+  public final Counter rangeNotSatisfiableCount;
   public final Counter throwableCount;
   public final Counter unknownResponseStatusCount;
   // NettyServer
@@ -272,6 +274,8 @@ public class NettyMetrics {
     acceptedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "AcceptedCount"));
     createdCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "CreatedCount"));
     okCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "OkCount"));
+    partialContentCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "PartialContentCount"));
     notModifiedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "NotModifiedCount"));
     badRequestCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "BadRequestCount"));
     unauthorizedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnauthorizedCount"));
@@ -282,6 +286,8 @@ public class NettyMetrics {
     forbiddenCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ForbiddenCount"));
     proxyAuthRequiredCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ProxyAuthenticationRequiredCount"));
+    rangeNotSatisfiableCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "RangeNotSatisfiableCount"));
     throwableCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ThrowableCount"));
     unknownResponseStatusCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "UnknownResponseStatusCount"));
