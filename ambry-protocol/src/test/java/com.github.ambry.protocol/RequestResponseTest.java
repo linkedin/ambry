@@ -109,10 +109,10 @@ public class RequestResponseTest {
             ByteBuffer.wrap(blob), blobSize, blobType).sizeInBytes();
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
-    int channelWriteLimit[] =
+    int channelWriteLimits[] =
         {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (random.nextInt(sizeInBytes - 1) + 1)};
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
-    for (int allocationSize : channelWriteLimit) {
+    for (int allocationSize : channelWriteLimits) {
       PutRequest request =
           new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
               ByteBuffer.wrap(blob), blobSize, blobType);
