@@ -48,11 +48,11 @@ import org.junit.Assert;
 
 /**
  * This class provides a framework for creating router/server integration test cases. It instantiates a non-blocking
- * and coordinator-backed router from the provided properties, cluster and notification system. The user defines
- * chains of operations on a certain blob (i.e. putBlob, getBlobInfo, deleteBlob). These chains can be executed
- * asynchronously using the {@link #startOperationChain(int, int, Queue)} method. The results of each stage of the
- * chains can be checked using the {@link #checkOperationChains(List)} method. See {@link RouterServerPlaintextTest}
- * and {@link RouterServerSSLTest} for example usage.
+ * router from the provided properties, cluster and notification system. The user defines chains of operations on a
+ * certain blob (i.e. putBlob, getBlobInfo, deleteBlob). These chains can be executed asynchronously using the
+ * {@link #startOperationChain(int, int, Queue)} method. The results of each stage of the chains can be checked using
+ * the {@link #checkOperationChains(List)} method. See {@link RouterServerPlaintextTest} and {@link RouterServerSSLTest}
+ * for example usage.
  */
 class RouterServerTestFramework {
   static final int AWAIT_TIMEOUT = 20;
@@ -64,9 +64,9 @@ class RouterServerTestFramework {
   private final Router router;
 
   /**
-   * Instantiate a framework for testing router-server interaction. Creates a non-blocking and coordinator-backed router
-   * to interact with the passed-in {@link MockCluster}.
-   * @param routerProps All of the properties to be used when instantiating the coordinator and routers
+   * Instantiate a framework for testing router-server interaction. Creates a non-blocking router to interact with the
+   * passed-in {@link MockCluster}.
+   * @param routerProps All of the properties to be used when instantiating the router.
    * @param cluster A {@link MockCluster} that contains the servers to be used in the tests.
    * @param notificationSystem A {@link MockNotificationSystem} that is used to determine if
    * @throws Exception
@@ -148,10 +148,10 @@ class RouterServerTestFramework {
   }
 
   /**
-   * Generate the properties needed by the router and coordinator.  NOTE: Properties for SSL interaction need
+   * Generate the properties needed by the router.  NOTE: Properties for SSL interaction need
    * to be added manually.
    * @param routerDatacenter the datacenter name where the router will be running.
-   * @return a {@link Properties} object with the properties needed to instantiate the router/coordinator.
+   * @return a {@link Properties} object with the properties needed to instantiate the router.
    */
   static Properties getRouterProperties(String routerDatacenter) {
     Properties properties = new Properties();
@@ -161,8 +161,6 @@ class RouterServerTestFramework {
     properties.setProperty("router.request.timeout.ms", "10000");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(CHUNK_SIZE));
     properties.setProperty("router.put.success.target", "1");
-    properties.setProperty("coordinator.hostname", "localhost");
-    properties.setProperty("coordinator.datacenter.name", routerDatacenter);
     return properties;
   }
 
@@ -269,17 +267,18 @@ class RouterServerTestFramework {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, afterDelete);
     Future<GetBlobResult> future =
         router.getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), callback);
-    TestFuture<GetBlobResult> testFuture = new TestFuture<GetBlobResult>(future, genLabel("getBlobInfo", afterDelete), opChain) {
-      @Override
-      void check()
-          throws Exception {
-        if (afterDelete) {
-          checkDeleted();
-        } else {
-          checkBlobInfo(get().getBlobInfo(), opChain, getOperationName());
-        }
-      }
-    };
+    TestFuture<GetBlobResult> testFuture =
+        new TestFuture<GetBlobResult>(future, genLabel("getBlobInfo", afterDelete), opChain) {
+          @Override
+          void check()
+              throws Exception {
+            if (afterDelete) {
+              checkDeleted();
+            } else {
+              checkBlobInfo(get().getBlobInfo(), opChain, getOperationName());
+            }
+          }
+        };
     opChain.testFutures.add(testFuture);
   }
 

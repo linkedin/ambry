@@ -30,14 +30,14 @@ import org.junit.Test;
 
 
 public class ServerPlaintextTest {
-  private static Properties coordinatorProps;
+  private static Properties routerProps;
   private static MockNotificationSystem notificationSystem;
   private static MockCluster plaintextCluster;
 
   @BeforeClass
   public static void initializeTests()
       throws Exception {
-    coordinatorProps = new Properties();
+    routerProps = new Properties();
     notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
@@ -69,8 +69,9 @@ public class ServerPlaintextTest {
   public void endToEndTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
-        null, coordinatorProps);
+    ServerTestUtil
+        .endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null, null,
+            routerProps);
   }
 
   @Test
@@ -89,7 +90,8 @@ public class ServerPlaintextTest {
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest()
       throws Exception {
-    ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT,
-        plaintextCluster, notificationSystem, coordinatorProps);
+    ServerTestUtil
+        .endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT, plaintextCluster,
+            notificationSystem, routerProps);
   }
 }
