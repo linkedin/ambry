@@ -83,6 +83,7 @@ import javax.net.ssl.SSLSocketFactory;
 import org.junit.Assert;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 
 public final class ServerTestUtil {
@@ -712,6 +713,7 @@ public final class ServerTestUtil {
     int numberOfVerifierThreads = 3;
     final LinkedBlockingQueue<Payload> payloadQueue = new LinkedBlockingQueue<Payload>();
     final AtomicReference<Exception> exceptionRef = new AtomicReference<>(null);
+    final CountDownLatch callbackLatch = new CountDownLatch(numberOfRequestsToSend);
     List<Future<String>> putFutures = new ArrayList<>(numberOfRequestsToSend);
     for (int i = 0; i < numberOfRequestsToSend; i++) {
       int size = new Random().nextInt(5000);
@@ -726,14 +728,11 @@ public final class ServerTestUtil {
                 @Override
                 public void onCompletion(String result, Exception exception) {
                   if (exception == null) {
-                    try {
-                      payloadQueue.put(new Payload(properties, metadata, blob, result));
-                    } catch (Exception e) {
-                      exceptionRef.set(e);
-                    }
+                    payloadQueue.add(new Payload(properties, metadata, blob, result));
                   } else {
                     exceptionRef.set(exception);
                   }
+                  callbackLatch.countDown();
                 }
               });
       putFutures.add(future);
@@ -741,6 +740,7 @@ public final class ServerTestUtil {
     for (Future<String> future : putFutures) {
       future.get(1, TimeUnit.SECONDS);
     }
+    assertTrue("Did not receive all callbacks in time", callbackLatch.await(1, TimeUnit.SECONDS));
     if (exceptionRef.get() != null) {
       throw exceptionRef.get();
     }
