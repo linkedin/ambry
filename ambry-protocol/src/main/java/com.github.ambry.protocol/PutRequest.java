@@ -31,79 +31,49 @@ import java.nio.channels.WritableByteChannel;
  */
 public class PutRequest extends RequestOrResponse {
   protected final ByteBuffer usermetadata;
-  protected final InputStream blobStream;
   protected final long blobSize;
   protected final BlobId blobId;
   protected long sentBytes = 0;
   protected final BlobProperties properties;
   protected final BlobType blobType;
+  protected final ByteBuffer blob;
 
   private static final int UserMetadata_Size_InBytes = 4;
   protected static final int Blob_Size_InBytes = 8;
   protected static final int BlobType_Size_InBytes = 2;
-  protected static final short Put_Request_Version_V1 = 1;
-  // Version 2 added to support chunking for large objects, where the size of a chunk can be different from the size
-  // in the BlobProperties (which will be the size of the whole object).
   protected static final short Put_Request_Version_V2 = 2;
 
-  protected PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream blobStream, long blobSize, BlobType blobType, short versionId) {
-    super(RequestOrResponseType.PutRequest, versionId, correlationId, clientId);
+  /**
+   * Construct a PutRequest
+   * @param correlationId the correlation id associated with the request.
+   * @param clientId the clientId associated with the request.
+   * @param blobId the {@link BlobId} of the blob that is being put as part of this request.
+   * @param properties the {@link BlobProperties} associated with the request.
+   * @param usermetadata the user metadata associated with the request.
+   * @param materializedBlob the materialized buffer containing the blob data.
+   * @param blobSize the size of the blob data.
+   * @param blobType the type of the blob data.
+   */
+  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
+      ByteBuffer usermetadata, ByteBuffer materializedBlob, long blobSize, BlobType blobType) {
+    super(RequestOrResponseType.PutRequest, Put_Request_Version_V2, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
     this.usermetadata = usermetadata;
-    this.blobStream = blobStream;
     this.blobSize = blobSize;
     this.blobType = blobType;
+    this.blob = materializedBlob;
   }
 
-  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream blobStream, long blobSize, BlobType blobType) {
-    this(correlationId, clientId, blobId, properties, usermetadata, blobStream, blobSize, blobType,
-        Put_Request_Version_V2);
-  }
-
-  @Deprecated
-  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream data) {
-    this(correlationId, clientId, blobId, properties, usermetadata, data, properties.getBlobSize(), BlobType.DataBlob);
-  }
-
-  public static PutRequest readFrom(DataInputStream stream, ClusterMap map)
+  public static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map)
       throws IOException {
     short versionId = stream.readShort();
     switch (versionId) {
-      case Put_Request_Version_V1:
-        return PutRequest_V1.readFrom(stream, map);
       case Put_Request_Version_V2:
         return PutRequest_V2.readFrom(stream, map);
       default:
         throw new IllegalStateException("Unknown Request response version" + versionId);
     }
-  }
-
-  public BlobId getBlobId() {
-    return blobId;
-  }
-
-  public BlobProperties getBlobProperties() {
-    return properties;
-  }
-
-  public ByteBuffer getUsermetadata() {
-    return usermetadata;
-  }
-
-  public InputStream getBlobStream() {
-    return blobStream;
-  }
-
-  public long getBlobSize() {
-    return blobSize;
-  }
-
-  public BlobType getBlobType() {
-    return blobType;
   }
 
   @Override
@@ -120,35 +90,35 @@ public class PutRequest extends RequestOrResponse {
   @Override
   public long writeTo(WritableByteChannel channel)
       throws IOException {
-    long totalWritten = 0;
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate(sizeExcludingBlobSize());
-      writeHeader();
-      bufferToSend.put(blobId.toBytes());
-      BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
-      bufferToSend.putInt(usermetadata.capacity());
-      bufferToSend.put(usermetadata);
-      bufferToSend.putShort((short) blobType.ordinal());
-      bufferToSend.putLong(blobSize);
-      bufferToSend.flip();
-    }
-    while (sentBytes < sizeInBytes()) {
-      if (bufferToSend.remaining() > 0) {
-        int toWrite = bufferToSend.remaining();
-        int written = channel.write(bufferToSend);
-        totalWritten += written;
-        sentBytes += written;
-        if (toWrite != written || sentBytes == sizeInBytes()) {
-          break;
-        }
+    long written = 0;
+    if (sentBytes < sizeInBytes()) {
+      if (bufferToSend == null) {
+        // this is the first time this method was called, prepare the buffer to send the header and other metadata
+        // (everything except the blob content).
+        bufferToSend = ByteBuffer.allocate(sizeExcludingBlobSize());
+        writeHeader();
+        bufferToSend.put(blobId.toBytes());
+        BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
+        bufferToSend.putInt(usermetadata.capacity());
+        bufferToSend.put(usermetadata);
+        bufferToSend.putShort((short) blobType.ordinal());
+        bufferToSend.putLong(blobSize);
+        bufferToSend.flip();
       }
-      logger.trace("sent Bytes from Put Request {}", sentBytes);
-      bufferToSend.clear();
-      int streamReadCount = blobStream
-          .read(bufferToSend.array(), 0, (int) Math.min(bufferToSend.capacity(), (sizeInBytes() - sentBytes)));
-      bufferToSend.limit(streamReadCount);
+
+      // If the header and metadata are not yet written out completely, try and write out as much of it now.
+      if (bufferToSend.hasRemaining()) {
+        written = channel.write(bufferToSend);
+      }
+
+      // If the header and metadata were written out completely (in this call or a previous call),
+      // try and write out as much of the blob now.
+      if (!bufferToSend.hasRemaining()) {
+        written += channel.write(blob);
+      }
+      sentBytes += written;
     }
-    return totalWritten;
+    return written;
   }
 
   @Override
@@ -164,38 +134,24 @@ public class PutRequest extends RequestOrResponse {
     sb.append(", ").append("ClientId=").append(clientId);
     sb.append(", ").append("CorrelationId=").append(correlationId);
     if (properties != null) {
-      sb.append(", ").append(getBlobProperties());
+      sb.append(", ").append(properties);
     } else {
       sb.append(", ").append("Properties=Null");
     }
     if (usermetadata != null) {
-      sb.append(", ").append("UserMetaDataSize=").append(getUsermetadata().capacity());
+      sb.append(", ").append("UserMetaDataSize=").append(usermetadata.capacity());
     } else {
       sb.append(", ").append("UserMetaDataSize=0");
     }
-    sb.append(", ").append("blobType=").append(getBlobType());
-    sb.append(", ").append("blobSize=").append(getBlobSize());
+    sb.append(", ").append("blobType=").append(blobType);
+    sb.append(", ").append("blobSize=").append(blobSize);
     sb.append("]");
     return sb.toString();
   }
 
-  // Class to read protocol version 1 Put Request from the stream.
-  private static class PutRequest_V1 {
-    static PutRequest readFrom(DataInputStream stream, ClusterMap map)
-        throws IOException {
-      int correlationId = stream.readInt();
-      String clientId = Utils.readIntString(stream);
-      BlobId id = new BlobId(stream, map);
-      BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
-      ByteBuffer metadata = Utils.readIntBuffer(stream);
-      return new PutRequest(correlationId, clientId, id, properties, metadata, stream, properties.getBlobSize(),
-          BlobType.DataBlob, Put_Request_Version_V1);
-    }
-  }
-
   // Class to read protocol version 2 Put Request from the stream.
   private static class PutRequest_V2 {
-    static PutRequest readFrom(DataInputStream stream, ClusterMap map)
+    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map)
         throws IOException {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
@@ -204,8 +160,100 @@ public class PutRequest extends RequestOrResponse {
       ByteBuffer metadata = Utils.readIntBuffer(stream);
       BlobType blobType = BlobType.values()[stream.readShort()];
       long blobSize = stream.readLong();
-      return new PutRequest(correlationId, clientId, id, properties, metadata, stream, blobSize, blobType,
-          Put_Request_Version_V2);
+      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, stream);
+    }
+  }
+
+  /**
+   * Class that represents a PutRequest that was received and cannot be sent out.
+   */
+  public static class ReceivedPutRequest {
+    private final int correlationId;
+    private final String clientId;
+    private final BlobId blobId;
+    private final BlobProperties blobProperties;
+    private final ByteBuffer userMetadata;
+    private final long blobSize;
+    private final BlobType blobType;
+    private final InputStream blobStream;
+
+    /**
+     * Construct a ReceivedPutRequest with the given parameters.
+     * @param correlationId the correlation id in the request.
+     * @param clientId the clientId in the request.
+     * @param blobId the {@link BlobId} of the blob being put.
+     * @param blobProperties the {@link BlobProperties} associated with the blob being put.
+     * @param userMetadata the userMetadata associated with the blob being put.
+     * @param blobSize the size of the blob data.
+     * @param blobType the type of the blob being put.
+     * @param blobStream the {@link InputStream} containing the data associated with the blob.
+     */
+    ReceivedPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
+        ByteBuffer userMetadata, long blobSize, BlobType blobType, InputStream blobStream) {
+      this.correlationId = correlationId;
+      this.clientId = clientId;
+      this.blobId = blobId;
+      this.blobProperties = blobProperties;
+      this.userMetadata = userMetadata;
+      this.blobSize = blobSize;
+      this.blobType = blobType;
+      this.blobStream = blobStream;
+    }
+
+    /**
+     * @return the correlation id.
+     */
+    public int getCorrelationId() {
+      return correlationId;
+    }
+
+    /**
+     * @return the client id.
+     */
+    public String getClientId() {
+      return clientId;
+    }
+
+    /**
+     * @return the {@link BlobId} associated with the blob in this request.
+     */
+    public BlobId getBlobId() {
+      return blobId;
+    }
+
+    /**
+     * @return the {@link BlobProperties} associated with the blob in this request.
+     */
+    public BlobProperties getBlobProperties() {
+      return blobProperties;
+    }
+
+    /**
+     * @return the userMetadata associated with the blob in this request.
+     */
+    public ByteBuffer getUsermetadata() {
+      return userMetadata;
+    }
+
+    /**
+     * @return the size of the blob content.
+     */
+    public long getBlobSize() {
+      return blobSize;
+    }
+
+    /**
+     * @return the {@link BlobType} of the blob in this request.
+     */
+    public BlobType getBlobType() {
+      return blobType;
+    }
+
+    /**
+     * @return the {@link InputStream} from which to stream in the data associated with the blob.
+     */
+    public InputStream getBlobStream() {
+      return blobStream;
     }
   }
 }

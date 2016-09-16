@@ -18,12 +18,12 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.BlobPropertiesSerDe;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
@@ -31,7 +31,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
@@ -88,112 +87,70 @@ class MockFindToken implements FindToken {
   }
 }
 
-class MockPutRequestV1 extends PutRequest {
-  public MockPutRequestV1(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, InputStream blobStream, long blobSize, BlobType blobType, short versionId) {
-    super(correlationId, clientId, blobId, properties, usermetadata, blobStream, blobSize, blobType, versionId);
-  }
+class InvalidVersionPutRequest extends PutRequest {
+  static final short Put_Request_Invalid_version = 0;
 
-  protected int sizeExcludingBlobSize() {
-    // size of (header + blobId + blob properties + metadata size + metadata + blob size + blob type)
-    return super.sizeExcludingBlobSize() - Blob_Size_InBytes - BlobType_Size_InBytes;
-  }
-
-  @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
-    long totalWritten = 0;
-    if (bufferToSend == null) {
-      bufferToSend = ByteBuffer.allocate(sizeExcludingBlobSize());
-      writeHeader();
-      bufferToSend.put(blobId.toBytes());
-      BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
-      bufferToSend.putInt(usermetadata.capacity());
-      bufferToSend.put(usermetadata);
-      bufferToSend.flip();
-    }
-    while (sentBytes < sizeInBytes()) {
-      if (bufferToSend.remaining() > 0) {
-        int toWrite = bufferToSend.remaining();
-        int written = channel.write(bufferToSend);
-        totalWritten += written;
-        sentBytes += written;
-        if (toWrite != written || sentBytes == sizeInBytes()) {
-          break;
-        }
-      }
-      logger.trace("sent Bytes from Put Request {}", sentBytes);
-      bufferToSend.clear();
-      int streamReadCount = blobStream
-          .read(bufferToSend.array(), 0, (int) Math.min(bufferToSend.capacity(), (sizeInBytes() - sentBytes)));
-      bufferToSend.limit(streamReadCount);
-    }
-    return totalWritten;
+  public InvalidVersionPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
+      ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType) {
+    super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType);
+    versionId = Put_Request_Invalid_version;
   }
 }
 
 public class RequestResponseTest {
+  private final Random random = new Random();
+
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
       throws IOException {
+    // This PutRequest is created just to get the size.
+    int sizeInBytes =
+        (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+            ByteBuffer.wrap(blob), blobSize, blobType).sizeInBytes();
+    // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
+    // data at once.
+    int channelWriteLimits[] =
+        {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (random.nextInt(sizeInBytes - 1) + 1)};
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
-    PutRequest request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-        new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    while (!request.isSendComplete()) {
-      request.writeTo(writableByteChannel);
+    for (int allocationSize : channelWriteLimits) {
+      PutRequest request =
+          new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+              ByteBuffer.wrap(blob), blobSize, blobType);
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      int expectedWriteToCount = ((int) request.sizeInBytes() + allocationSize - 1) / allocationSize;
+      int actualWriteToCount = 0;
+      while (!request.isSendComplete()) {
+        ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(allocationSize));
+        request.writeTo(channel);
+        ByteBuffer underlyingBuf = channel.getBuffer();
+        underlyingBuf.flip();
+        outputStream.write(underlyingBuf.array(), underlyingBuf.arrayOffset(), underlyingBuf.remaining());
+        actualWriteToCount++;
+      }
+      Assert.assertEquals("writeTo() should have written out as much as the channel could take in every call",
+          expectedWriteToCount, actualWriteToCount);
+      DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+      requestStream.readLong();
+      Assert.assertEquals(RequestOrResponseType.values()[requestStream.readShort()], RequestOrResponseType.PutRequest);
+      PutRequest.ReceivedPutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
+      Assert.assertEquals(deserializedPutRequest.getBlobId(), blobId);
+      Assert.assertEquals(deserializedPutRequest.getBlobProperties().getBlobSize(), sizeInBlobProperties);
+      Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
+      Assert.assertEquals(deserializedPutRequest.getBlobSize(), blobSize);
+      Assert.assertEquals(deserializedPutRequest.getBlobType(), blobType);
+      byte[] blobRead = new byte[blobSize];
+      deserializedPutRequest.getBlobStream().read(blobRead);
+      Assert.assertArrayEquals(blob, blobRead);
     }
-    DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong();
-    Assert.assertEquals(RequestOrResponseType.values()[requestStream.readShort()], RequestOrResponseType.PutRequest);
-    PutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
-    Assert.assertEquals(deserializedPutRequest.getBlobId(), blobId);
-    Assert.assertEquals(deserializedPutRequest.getBlobProperties().getBlobSize(), sizeInBlobProperties);
-    Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
-    Assert.assertEquals(deserializedPutRequest.getBlobSize(), blobSize);
-    Assert.assertEquals(deserializedPutRequest.getBlobType(), blobType);
-    byte[] blobRead = new byte[blobSize];
-    deserializedPutRequest.getBlobStream().read(blobRead);
-    Assert.assertArrayEquals(blob, blobRead);
-  }
-
-  private void testPutRequestV1(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
-      BlobProperties blobProperties, byte[] userMetadata, byte[] blob)
-      throws IOException {
-    int sizeInBlobProperties = (int) blobProperties.getBlobSize();
-    PutRequest request =
-        new MockPutRequestV1(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-            new ByteBufferInputStream(ByteBuffer.wrap(blob)), sizeInBlobProperties, BlobType.DataBlob,
-            PutRequest.Put_Request_Version_V1);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    while (!request.isSendComplete()) {
-      request.writeTo(writableByteChannel);
-    }
-    DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong();
-    Assert.assertEquals(RequestOrResponseType.values()[requestStream.readShort()], RequestOrResponseType.PutRequest);
-    PutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
-    Assert.assertEquals(deserializedPutRequest.getBlobId(), blobId);
-    Assert.assertEquals(deserializedPutRequest.getBlobProperties().getBlobSize(), sizeInBlobProperties);
-    Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
-    Assert.assertEquals(deserializedPutRequest.getBlobSize(), sizeInBlobProperties);
-    Assert.assertEquals(deserializedPutRequest.getBlobType(), BlobType.DataBlob);
-    byte[] blobRead = new byte[sizeInBlobProperties];
-    deserializedPutRequest.getBlobStream().read(blobRead);
-    Assert.assertArrayEquals(blob, blobRead);
   }
 
   private void testPutRequestInvalidVersion(MockClusterMap clusterMap, int correlationId, String clientId,
       BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, byte[] blob)
       throws IOException {
-    final short Put_Request_Invalid_version = 0;
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     PutRequest request =
-        new MockPutRequestV1(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-            new ByteBufferInputStream(ByteBuffer.wrap(blob)), sizeInBlobProperties, BlobType.DataBlob,
-            Put_Request_Invalid_version);
+        new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+            ByteBuffer.wrap(blob), sizeInBlobProperties, BlobType.DataBlob);
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
     while (!request.isSendComplete()) {
@@ -249,8 +206,6 @@ public class RequestResponseTest {
         blob, blobSize);
 
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
-    // Ensure Put Request V1 still deserializes correctly.
-    testPutRequestV1(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blob);
     // Ensure a Put Request with an invalid version does not get deserialized correctly.
     testPutRequestInvalidVersion(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blob);
 

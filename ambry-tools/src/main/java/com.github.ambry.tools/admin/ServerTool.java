@@ -34,6 +34,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -135,6 +136,11 @@ public class ServerTool {
     for (File f : list) {
       if (!f.isDirectory()) {
         System.out.println("File :" + f.getAbsoluteFile());
+        if (f.length() > Integer.MAX_VALUE) {
+          System.out.println("File length is " + f.length());
+          throw new IllegalArgumentException("File length is " + f.length() + "; files larger than " + Integer.MAX_VALUE
+              + " cannot be put using this tool.");
+        }
         BlobProperties props = new BlobProperties(f.length(), "migration");
         byte[] usermetadata = new byte[1];
         FileInputStream stream = null;
@@ -211,9 +217,11 @@ public class ServerTool {
     try {
       blockingChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(),
           new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT), 100000);
+      int size = (int) blobProperties.getBlobSize();
+      ByteBufferInputStream blobStream = new ByteBufferInputStream(stream, size);
       PutRequest putRequest =
           new PutRequest(correlationId.incrementAndGet(), "consumerThread", blobId, blobProperties, userMetaData,
-              stream, blobProperties.getBlobSize(), BlobType.DataBlob);
+              blobStream.getByteBuffer(), size, BlobType.DataBlob);
 
       if (enableVerboseLogging) {
         System.out.println("Put Request to a replica : " + putRequest + " for blobId " + blobId);

@@ -20,6 +20,9 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 
 
+/**
+ * A non-blocking {@link ByteBuffer} based {@link InputStream} extension that materializes the whole content in memory.
+ */
 public class ByteBufferInputStream extends InputStream {
   private ByteBuffer byteBuffer;
   private int mark;
