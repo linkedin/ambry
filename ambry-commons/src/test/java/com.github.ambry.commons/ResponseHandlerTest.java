@@ -27,8 +27,11 @@ import com.github.ambry.router.RouterException;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.SocketException;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.Assert;
 import org.junit.Test;
@@ -106,69 +109,39 @@ public class ResponseHandlerTest {
 
   @Test
   public void basicTest() {
-    DummyMap map = new DummyMap();
-    ResponseHandler handler = new ResponseHandler(map);
+    DummyMap mockClusterMap = new DummyMap();
+    ResponseHandler handler = new ResponseHandler(mockClusterMap);
 
-    handler.onEvent(new MockReplicaId(), new SocketException());
-    Assert.assertEquals(1, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Timeout));
+    Map<Object, ReplicaEventType[]> expectedEventTypes = new HashMap<>();
 
-    map.reset();
-    handler.onEvent(new MockReplicaId(), new IOException());
-    Assert.assertEquals(1, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Timeout));
+    expectedEventTypes.put(new SocketException(), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes.put(new IOException(), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes
+        .put(new ConnectionPoolTimeoutException(""), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes.put(ServerErrorCode.IO_Error,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
+    expectedEventTypes.put(ServerErrorCode.Disk_Unavailable,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
+    expectedEventTypes.put(ServerErrorCode.Partition_ReadOnly,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
+            ReplicaEventType.Partition_ReadOnly});
+    expectedEventTypes.put(ServerErrorCode.Unknown_Error,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok});
+    expectedEventTypes.put(ServerErrorCode.No_Error,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok});
+    expectedEventTypes.put(NetworkClientErrorCode.NetworkError, new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes.put(NetworkClientErrorCode.ConnectionUnavailable, new ReplicaEventType[]{});
+    expectedEventTypes.put(new RouterException("", RouterErrorCode.UnexpectedInternalError), new ReplicaEventType[]{});
+    expectedEventTypes.put(RouterErrorCode.AmbryUnavailable, new ReplicaEventType[]{});
 
-    map.reset();
-    handler.onEvent(new MockReplicaId(), new ConnectionPoolTimeoutException(""));
-    Assert.assertEquals(1, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Timeout));
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), ServerErrorCode.IO_Error);
-    Assert.assertEquals(2, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Error));
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), ServerErrorCode.Disk_Unavailable);
-    Assert.assertEquals(2, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Error));
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), ServerErrorCode.Partition_ReadOnly);
-    Assert.assertEquals(3, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Partition_ReadOnly));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Ok));
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), ServerErrorCode.Unknown_Error);
-    Assert.assertEquals(2, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Ok));
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), ServerErrorCode.No_Error);
-    Assert.assertEquals(2, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Ok));
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), NetworkClientErrorCode.NetworkError);
-    Assert.assertEquals(1, map.getLastReplicaEvents().size());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Timeout));
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), NetworkClientErrorCode.ConnectionUnavailable);
-    Assert.assertEquals("Unrecognized events should be ignored", 0, map.getLastReplicaEvents().size());
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), new RouterException("", RouterErrorCode.UnexpectedInternalError));
-    Assert.assertEquals("Unrecognized events should be ignored", 0, map.getLastReplicaEvents().size());
-
-    map.reset();
-    handler.onEvent(new MockReplicaId(), RouterErrorCode.AmbryUnavailable);
-    Assert.assertEquals("Unrecognized events should be ignored", 0, map.getLastReplicaEvents().size());
+    for (Map.Entry<Object, ReplicaEventType[]> entry : expectedEventTypes.entrySet()) {
+      mockClusterMap.reset();
+      handler.onEvent(new MockReplicaId(), entry.getKey());
+      Set<ReplicaEventType> expectedEvents = new HashSet<>(Arrays.asList(entry.getValue()));
+      Set<ReplicaEventType> generatedEvents = mockClusterMap.getLastReplicaEvents();
+      Assert.assertEquals(
+          "Unexpected generated event for event " + entry.getKey() + " \nExpected: " + expectedEvents + " \nReceived: "
+              + generatedEvents, expectedEvents, generatedEvents);
+    }
   }
 }
