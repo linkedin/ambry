@@ -335,7 +335,8 @@ class GetBlobOperation extends GetOperation {
       if (isOpen) {
         isOpen = false;
         if (numChunksWrittenOut != numChunksTotal) {
-          abort(new RouterException("The ReadableStreamChannel for blob data has been closed by the user.",
+          abort(new RouterException(
+              "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
               RouterErrorCode.ChannelClosed));
         }
       }
