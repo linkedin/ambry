@@ -581,6 +581,11 @@ public class GetBlobOperationTest {
     testRangeRequestFromStartOffset(maxChunkSize + maxChunkSize / 2, true);
   }
 
+  /**
+   * Test that the operation is completed and an exception with the error code {@link RouterErrorCode#ChannelClosed} is
+   * set when the {@link ReadableStreamChannel} is closed before all chunks are read.
+   * @throws Exception
+   */
   @Test
   public void testEarlyReadableStreamChannelClose()
       throws Exception {
