@@ -780,7 +780,7 @@ public class GetBlobOperationTest {
               Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
                   : result.getBlobDataChannel().readInto(asyncWritableChannel, new Callback<Long>() {
                     @Override
-                    public void onCompletion(Long p, Exception exception) {
+                    public void onCompletion(Long bytesWritten, Exception exception) {
                       try {
                         result.getBlobDataChannel().close();
                       } catch (IOException e) {
