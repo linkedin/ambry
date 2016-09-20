@@ -196,7 +196,7 @@ class ReplicaThread implements Runnable {
                 // exception happened in checkout connection phase
                 checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
                 // recording an exception for any replica on a node will record a node timeout failure
-                responseHandler.onRequestResponseException(activeReplicasPerNode.get(0).getReplicaId(), e);
+                responseHandler.onEvent(activeReplicasPerNode.get(0).getReplicaId(), e);
               } else if (exchangeMetadataTimeInMs == -1) {
                 // exception happened in exchange metadata phase
                 exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
@@ -286,8 +286,7 @@ class ReplicaThread implements Runnable {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               response.getReplicaMetadataResponseInfoList().get(i);
-          responseHandler
-              .onRequestResponseError(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
+          responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getError());
           if (replicaMetadataResponseInfo.getError() == ServerErrorCode.No_Error) {
             try {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
@@ -307,7 +306,7 @@ class ReplicaThread implements Runnable {
               replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
               logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
                   " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
-              responseHandler.onRequestResponseException(remoteReplicaInfo.getReplicaId(), e);
+              responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), e);
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
@@ -423,7 +422,7 @@ class ReplicaThread implements Runnable {
       }
       return response;
     } catch (IOException e) {
-      responseHandler.onRequestResponseException(replicasToReplicatePerNode.get(0).getReplicaId(), e);
+      responseHandler.onEvent(replicasToReplicatePerNode.get(0).getReplicaId(), e);
       throw e;
     }
   }
@@ -635,7 +634,7 @@ class ReplicaThread implements Runnable {
       }
       return getResponse;
     } catch (IOException e) {
-      responseHandler.onRequestResponseException(replicasToReplicatePerNode.get(0).getReplicaId(), e);
+      responseHandler.onEvent(replicasToReplicatePerNode.get(0).getReplicaId(), e);
       throw e;
     }
   }
@@ -661,8 +660,7 @@ class ReplicaThread implements Runnable {
         if (exchangeMetadataResponse.missingStoreKeys.size() > 0) {
           PartitionResponseInfo partitionResponseInfo =
               getResponse.getPartitionResponseInfoList().get(partitionResponseInfoIndex);
-          responseHandler
-              .onRequestResponseError(remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
+          responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           partitionResponseInfoIndex++;
           if (partitionResponseInfo.getPartition().compareTo(remoteReplicaInfo.getReplicaId().getPartitionId()) != 0) {
             throw new IllegalStateException("The partition id from partitionResponseInfo " +

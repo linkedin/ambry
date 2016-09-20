@@ -442,16 +442,15 @@ public class NonBlockingRouterTest {
     final AtomicBoolean invalidResponse = new AtomicBoolean(false);
     ResponseHandler mockResponseHandler = new ResponseHandler(mockClusterMap) {
       @Override
-      public void onRequestResponseException(ReplicaId replicaId, Exception e) {
-        failedReplicaIds.add(replicaId);
-      }
-
-      @Override
-      public void onRequestResponseError(ReplicaId replicaId, ServerErrorCode serverErrorCode) {
-        if (serverErrorCode == ServerErrorCode.No_Error) {
-          successfulResponseCount.incrementAndGet();
+      public void onEvent(ReplicaId replicaId, Object e) {
+        if (e instanceof ServerErrorCode) {
+          if (e == ServerErrorCode.No_Error) {
+            successfulResponseCount.incrementAndGet();
+          } else {
+            invalidResponse.set(true);
+          }
         } else {
-          invalidResponse.set(true);
+          failedReplicaIds.add(replicaId);
         }
       }
     };
@@ -479,15 +478,13 @@ public class NonBlockingRouterTest {
         new ArrayList<String>(), 0, mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
-        invalidResponse, -1, null);
+        invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
-        invalidResponse, 0, NetworkClientErrorCode.NetworkError);
+        invalidResponse, 0);
     // Test that if a failed response comes after the operation is completed, failure detector is notified.
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
-        invalidResponse, PUT_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.NetworkError);
-    testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
-        invalidResponse, PUT_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.ConnectionUnavailable);
+        invalidResponse, PUT_REQUEST_PARALLELISM - 1);
     testNoResponseNoNotification(opHelper, failedReplicaIds, null, successfulResponseCount, invalidResponse);
     testResponseDeserializationError(opHelper, networkClient, null);
 
@@ -496,15 +493,13 @@ public class NonBlockingRouterTest {
         new NonBlockingRouterMetrics(mockClusterMap), new OperationCompleteCallback(new AtomicInteger(0)),
         new ReadyForPollCallback(networkClient), mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, -1, null);
+        invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, 0, NetworkClientErrorCode.NetworkError);
+        invalidResponse, 0);
     // Test that if a failed response comes after the operation is completed, failure detector is notified.
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, GET_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.NetworkError);
-    testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, GET_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.ConnectionUnavailable);
+        invalidResponse, GET_REQUEST_PARALLELISM - 1);
     testNoResponseNoNotification(opHelper, failedReplicaIds, blobId, successfulResponseCount, invalidResponse);
     testResponseDeserializationError(opHelper, networkClient, blobId);
 
@@ -513,15 +508,13 @@ public class NonBlockingRouterTest {
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new OperationCompleteCallback(new AtomicInteger(0)), mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, -1, null);
+        invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, 0, NetworkClientErrorCode.NetworkError);
+        invalidResponse, 0);
     // Test that if a failed response comes after the operation is completed, failure detector is notified.
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, DELETE_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.NetworkError);
-    testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
-        invalidResponse, DELETE_REQUEST_PARALLELISM - 1, NetworkClientErrorCode.ConnectionUnavailable);
+        invalidResponse, DELETE_REQUEST_PARALLELISM - 1);
     testNoResponseNoNotification(opHelper, failedReplicaIds, blobId, successfulResponseCount, invalidResponse);
     testResponseDeserializationError(opHelper, networkClient, blobId);
     putManager.close();
@@ -543,12 +536,10 @@ public class NonBlockingRouterTest {
    *                    For example, if index is 0, then the first response will be failed.
    *                    If the index is -1, no responses will be failed, and successful responses will be returned to
    *                    the operation managers.
-   * @param error the NetworkClient error code with which request at indexToFail should be failed, honored only if
-   *              indexToFail is not -1.
    */
   private void testFailureDetectorNotification(OperationHelper opHelper, NetworkClient networkClient,
       List<ReplicaId> failedReplicaIds, String blobId, AtomicInteger successfulResponseCount,
-      AtomicBoolean invalidResponse, int indexToFail, NetworkClientErrorCode error)
+      AtomicBoolean invalidResponse, int indexToFail)
       throws Exception {
     failedReplicaIds.clear();
     successfulResponseCount.set(0);
@@ -569,7 +560,7 @@ public class NonBlockingRouterTest {
     for (RequestInfo requestInfo : allRequests) {
       ResponseInfo responseInfo;
       if (replicaIdToFail != null && replicaIdToFail.equals(((RouterRequestInfo) requestInfo).getReplicaId())) {
-        responseInfo = new ResponseInfo(requestInfo, error, null);
+        responseInfo = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null);
       } else {
         List<RequestInfo> requestInfoListToSend = new ArrayList<>();
         requestInfoListToSend.add(requestInfo);
@@ -591,11 +582,6 @@ public class NonBlockingRouterTest {
       Assert.assertEquals("Successful notification should have arrived for replicas that were up",
           opHelper.requestParallelism, successfulResponseCount.get());
       Assert.assertEquals("Failure detector should not have been notified", 0, failedReplicaIds.size());
-      Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
-    } else if (error == NetworkClientErrorCode.ConnectionUnavailable) {
-      Assert.assertEquals("Failure detector should not have been notified", 0, failedReplicaIds.size());
-      Assert.assertEquals("Successful notification should have arrived for replicas that were up",
-          opHelper.requestParallelism - 1, successfulResponseCount.get());
       Assert.assertFalse("There should be no notifications of any other kind", invalidResponse.get());
     } else {
       Assert.assertEquals("Failure detector should have been notified", 1, failedReplicaIds.size());

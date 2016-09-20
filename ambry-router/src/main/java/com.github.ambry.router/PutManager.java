@@ -30,7 +30,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -227,15 +226,14 @@ class PutManager {
     if (networkClientErrorCode == null) {
       try {
         putResponse = PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())));
-        responseHandler.onRequestResponseError(replicaId, putResponse.getError());
+        responseHandler.onEvent(replicaId, putResponse.getError());
       } catch (Exception e) {
         // Ignore. There is no value in notifying the response handler.
         logger.error("Response deserialization received unexpected error", e);
         routerMetrics.responseDeserializationErrorCount.inc();
       }
-    } else if (networkClientErrorCode == NetworkClientErrorCode.NetworkError) {
-      logger.trace("Network client returned a network error, notifying response handler");
-      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
+    } else {
+      responseHandler.onEvent(replicaId, networkClientErrorCode);
     }
     return putResponse;
   }

@@ -14,7 +14,7 @@
 package com.github.ambry.network;
 
 /**
- * Errors that the {@link NetworkClient} can encounter.
+ * Errors that can be received from the NetworkClient.
  */
 public enum NetworkClientErrorCode {
   /**
