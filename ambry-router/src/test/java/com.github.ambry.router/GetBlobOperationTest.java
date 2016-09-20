@@ -581,6 +581,37 @@ public class GetBlobOperationTest {
     testRangeRequestFromStartOffset(maxChunkSize + maxChunkSize / 2, true);
   }
 
+  @Test
+  public void testEarlyReadableStreamChannelClose()
+      throws Exception {
+    final AtomicReference<Exception> callbackException = new AtomicReference<>();
+    Callback<GetBlobResult> callback = new Callback<GetBlobResult>() {
+      @Override
+      public void onCompletion(GetBlobResult result, Exception exception) {
+        if (exception != null) {
+          callbackException.set(exception);
+        } else {
+          try {
+            result.getBlobDataChannel().close();
+          } catch (IOException e) {
+            callbackException.set(e);
+          }
+        }
+      }
+    };
+
+    doPut();
+    GetBlobOperation op = createOperationAndComplete(callback);
+
+    if (callbackException.get() != null) {
+      throw callbackException.get();
+    }
+    Exception operationException = op.getOperationException();
+    Assert.assertTrue("Unexpected operation exception type", operationException instanceof RouterException);
+    Assert.assertEquals("Unexpected RouterErrorCode", RouterErrorCode.ChannelClosed,
+        ((RouterException) operationException).getErrorCode());
+  }
+
   /**
    * Send a range request and test that it either completes successfully or fails with a
    * {@link RouterErrorCode#RangeNotSatisfiable} error.
@@ -747,7 +778,16 @@ public class GetBlobOperationTest {
                 }
               }
               Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
-                  : result.getBlobDataChannel().readInto(asyncWritableChannel, null);
+                  : result.getBlobDataChannel().readInto(asyncWritableChannel, new Callback<Long>() {
+                    @Override
+                    public void onCompletion(Long p, Exception exception) {
+                      try {
+                        result.getBlobDataChannel().close();
+                      } catch (IOException e) {
+                        readCompleteException.set(e);
+                      }
+                    }
+                  });
               assertBlobReadSuccess(options, readIntoFuture, asyncWritableChannel, readCompleteLatch,
                   readCompleteResult, readCompleteException);
             }
@@ -766,6 +806,8 @@ public class GetBlobOperationTest {
     if (readCompleteException.get() != null) {
       throw readCompleteException.get();
     }
+    // Ensure that a ChannelClosed exception is not set when the ReadableStreamChannel is closed correctly.
+    Assert.assertNull("Callback operation exception should be null", op.getOperationException());
     if (options.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
       int sizeWritten = blobSize;
       if (options.getRange() != null) {

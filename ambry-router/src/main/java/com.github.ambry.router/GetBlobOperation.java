@@ -333,7 +333,7 @@ class GetBlobOperation extends GetOperation {
     public void close()
         throws IOException {
       isOpen = false;
-      if (!operationCompleted) {
+      if (!readIntoCallbackCalled.get()) {
         abort(new RouterException("The ReadableStreamChannel for blob data has been closed by the user.",
             RouterErrorCode.ChannelClosed));
       }
