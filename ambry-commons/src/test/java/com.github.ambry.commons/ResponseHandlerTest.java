@@ -16,17 +16,22 @@ package com.github.ambry.commons;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.NetworkClientErrorCode;
+import com.github.ambry.router.RouterErrorCode;
+import com.github.ambry.router.RouterException;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.SocketException;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.Assert;
 import org.junit.Test;
@@ -104,31 +109,39 @@ public class ResponseHandlerTest {
 
   @Test
   public void basicTest() {
-    DummyMap map = new DummyMap();
-    ResponseHandler handler = new ResponseHandler(map);
-    handler.onRequestResponseException(new MockReplicaId(), new SocketException());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Timeout));
-    map.reset();
-    handler.onRequestResponseException(new MockReplicaId(), new IOException());
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Timeout));
-    map.reset();
-    handler.onRequestResponseException(new MockReplicaId(), new ConnectionPoolTimeoutException("test"));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Timeout));
-    map.reset();
-    handler.onRequestResponseError(new MockReplicaId(), ServerErrorCode.IO_Error);
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Error));
-    map.reset();
-    handler.onRequestResponseError(new MockReplicaId(), ServerErrorCode.Disk_Unavailable);
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Error));
-    map.reset();
-    handler.onRequestResponseError(new MockReplicaId(), ServerErrorCode.Partition_ReadOnly);
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Ok));
-    map.reset();
-    handler.onRequestResponseError(new MockReplicaId(), ServerErrorCode.Unknown_Error);
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Node_Response));
-    Assert.assertTrue(map.getLastReplicaEvents().contains(ReplicaEventType.Disk_Ok));
+    DummyMap mockClusterMap = new DummyMap();
+    ResponseHandler handler = new ResponseHandler(mockClusterMap);
+
+    Map<Object, ReplicaEventType[]> expectedEventTypes = new HashMap<>();
+
+    expectedEventTypes.put(new SocketException(), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes.put(new IOException(), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes
+        .put(new ConnectionPoolTimeoutException(""), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes.put(ServerErrorCode.IO_Error,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
+    expectedEventTypes.put(ServerErrorCode.Disk_Unavailable,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
+    expectedEventTypes.put(ServerErrorCode.Partition_ReadOnly,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
+            ReplicaEventType.Partition_ReadOnly});
+    expectedEventTypes.put(ServerErrorCode.Unknown_Error,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok});
+    expectedEventTypes.put(ServerErrorCode.No_Error,
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok});
+    expectedEventTypes.put(NetworkClientErrorCode.NetworkError, new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes.put(NetworkClientErrorCode.ConnectionUnavailable, new ReplicaEventType[]{});
+    expectedEventTypes.put(new RouterException("", RouterErrorCode.UnexpectedInternalError), new ReplicaEventType[]{});
+    expectedEventTypes.put(RouterErrorCode.AmbryUnavailable, new ReplicaEventType[]{});
+
+    for (Map.Entry<Object, ReplicaEventType[]> entry : expectedEventTypes.entrySet()) {
+      mockClusterMap.reset();
+      handler.onEvent(new MockReplicaId(), entry.getKey());
+      Set<ReplicaEventType> expectedEvents = new HashSet<>(Arrays.asList(entry.getValue()));
+      Set<ReplicaEventType> generatedEvents = mockClusterMap.getLastReplicaEvents();
+      Assert.assertEquals(
+          "Unexpected generated event for event " + entry.getKey() + " \nExpected: " + expectedEvents + " \nReceived: "
+              + generatedEvents, expectedEvents, generatedEvents);
+    }
   }
 }

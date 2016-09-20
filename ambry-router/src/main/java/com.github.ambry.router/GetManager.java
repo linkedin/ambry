@@ -28,7 +28,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -115,8 +114,9 @@ class GetManager {
     try {
       GetOperation getOperation;
       if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-        getOperation = new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId,
-            options, futureResult, callback, operationCompleteCallback, time);
+        getOperation =
+            new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
+                futureResult, callback, operationCompleteCallback, time);
       } else {
         getOperation = new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
             futureResult, callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
@@ -212,15 +212,14 @@ class GetManager {
         if (serverError == ServerErrorCode.No_Error) {
           serverError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
         }
-        responseHandler.onRequestResponseError(replicaId, serverError);
+        responseHandler.onEvent(replicaId, serverError);
       } catch (Exception e) {
         // Ignore. There is no value in notifying the response handler.
         logger.error("Response deserialization received unexpected error", e);
         routerMetrics.responseDeserializationErrorCount.inc();
       }
-    } else if (networkClientErrorCode == NetworkClientErrorCode.NetworkError) {
-      logger.trace("Network client returned a network error, notifying response handler");
-      responseHandler.onRequestResponseException(replicaId, new IOException("NetworkClient error"));
+    } else {
+      responseHandler.onEvent(replicaId, networkClientErrorCode);
     }
     return getResponse;
   }
