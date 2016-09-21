@@ -13,7 +13,11 @@
  */
 package com.github.ambry.rest;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -68,6 +72,74 @@ public class RestServer {
   private final RestServerState restServerState;
 
   /**
+   * {@link RestServer} specific metrics tracking.
+   */
+  private class RestServerMetrics {
+    // Errors
+    public final Counter restServerInstantiationError;
+
+    // Others
+    public final Histogram blobStorageServiceShutdownTimeInMs;
+    public final Histogram blobStorageServiceStartTimeInMs;
+    public final Histogram nioServerShutdownTimeInMs;
+    public final Histogram nioServerStartTimeInMs;
+    public final Histogram jmxReporterShutdownTimeInMs;
+    public final Histogram jmxReporterStartTimeInMs;
+    public final Histogram restRequestHandlerShutdownTimeInMs;
+    public final Histogram restRequestHandlerStartTimeInMs;
+    public final Histogram restResponseHandlerShutdownTimeInMs;
+    public final Histogram restResponseHandlerStartTimeInMs;
+    public final Histogram restServerShutdownTimeInMs;
+    public final Histogram restServerStartTimeInMs;
+    public final Histogram routerCloseTime;
+
+    /**
+     * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
+     * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+     * @param restServerState the {@link RestServerState} object used to track the state of the {@link RestServer}.
+     */
+    public RestServerMetrics(MetricRegistry metricRegistry, final RestServerState restServerState) {
+      // Errors
+      restServerInstantiationError =
+          metricRegistry.counter(MetricRegistry.name(RestServer.class, "InstantiationError"));
+
+      // Others
+      blobStorageServiceShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "BlobStorageServiceShutdownTimeInMs"));
+      blobStorageServiceStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "BlobStorageServiceStartTimeInMs"));
+      jmxReporterShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxShutdownTimeInMs"));
+      jmxReporterStartTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "JmxStartTimeInMs"));
+      nioServerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerShutdownTimeInMs"));
+      nioServerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "NioServerStartTimeInMs"));
+      restRequestHandlerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestHandlerShutdownTimeInMs"));
+      restRequestHandlerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestRequestHandlerStartTimeInMs"));
+      restResponseHandlerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestResponseHandlerShutdownTimeInMs"));
+      restResponseHandlerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestResponseHandlerStartTimeInMs"));
+      restServerShutdownTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerShutdownTimeInMs"));
+      restServerStartTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
+      routerCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
+
+      Gauge<Integer> restServerStatus = new Gauge<Integer>() {
+        @Override
+        public Integer getValue() {
+          return restServerState.isServiceUp() ? 1 : 0;
+        }
+      };
+      metricRegistry.register(MetricRegistry.name(RestServer.class, "RestServerState"), restServerStatus);
+    }
+  }
+
+  /**
    * Creates an instance of RestServer.
    * @param verifiableProperties the properties that define the behavior of the RestServer and its components.
    * @param clusterMap the {@link ClusterMap} instance that needs to be used.
@@ -76,48 +148,42 @@ public class RestServer {
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem)
-      throws InstantiationException {
+      throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
+    MetricRegistry metricRegistry = clusterMap.getMetricRegistry();
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
-    reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
-    RestRequestMetricsTracker.setDefaults(clusterMap.getMetricRegistry());
+    reporter = JmxReporter.forRegistry(metricRegistry).build();
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
-    restServerMetrics = new RestServerMetrics(clusterMap.getMetricRegistry(), restServerState);
-    try {
-      RouterFactory routerFactory =
-          Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
-      router = routerFactory.getRouter();
+    restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
+    RouterFactory routerFactory =
+        Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
+    router = routerFactory.getRouter();
 
-      RestResponseHandlerFactory restResponseHandlerFactory = Utils
-          .getObj(restServerConfig.restServerResponseHandlerFactory,
-              restServerConfig.restServerResponseHandlerScalingUnitCount, restServerMetrics);
-      restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
+    RestResponseHandlerFactory restResponseHandlerFactory = Utils
+        .getObj(restServerConfig.restServerResponseHandlerFactory,
+            restServerConfig.restServerResponseHandlerScalingUnitCount, metricRegistry);
+    restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
 
-      BlobStorageServiceFactory blobStorageServiceFactory = Utils
-          .getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
-              restResponseHandler, router);
-      blobStorageService = blobStorageServiceFactory.getBlobStorageService();
+    BlobStorageServiceFactory blobStorageServiceFactory = Utils
+        .getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
+            restResponseHandler, router);
+    blobStorageService = blobStorageServiceFactory.getBlobStorageService();
 
-      RestRequestHandlerFactory restRequestHandlerFactory = Utils
-          .getObj(restServerConfig.restServerRequestHandlerFactory,
-              restServerConfig.restServerRequestHandlerScalingUnitCount, restServerMetrics, blobStorageService);
-      restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
-      publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
-          restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
-      NioServerFactory nioServerFactory = Utils
-          .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, clusterMap.getMetricRegistry(),
-              restRequestHandler, publicAccessLogger, restServerState);
-      nioServer = nioServerFactory.getNioServer();
-      if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
-          || nioServer == null) {
-        throw new InstantiationException("Some of the server components were null");
-      }
-    } catch (Exception e) {
-      restServerMetrics.restServerInstantiationError.inc();
-      logger.error("Exception during instantiation of RestServer", e);
-      throw new InstantiationException("Exception while creating RestServer components - " + e.getLocalizedMessage());
+    RestRequestHandlerFactory restRequestHandlerFactory = Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
+        restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, blobStorageService);
+    restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
+    publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
+        restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
+    NioServerFactory nioServerFactory = Utils
+        .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry, restRequestHandler,
+            publicAccessLogger, restServerState);
+    nioServer = nioServerFactory.getNioServer();
+    if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
+        || nioServer == null) {
+      throw new InstantiationException("Some of the server components were null");
     }
     logger.trace("Instantiated RestServer");
   }

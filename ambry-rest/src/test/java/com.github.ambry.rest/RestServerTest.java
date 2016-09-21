@@ -33,13 +33,11 @@ public class RestServerTest {
 
   /**
    * Tests {@link RestServer#start()} and {@link RestServer#shutdown()}.
-   * @throws InstantiationException
-   * @throws InterruptedException
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void startShutdownTest()
-      throws InstantiationException, InterruptedException, IOException {
+      throws Exception {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = getVProps(properties);
     ClusterMap clusterMap = new MockClusterMap();
@@ -54,13 +52,11 @@ public class RestServerTest {
   /**
    * Tests for {@link RestServer#shutdown()} when {@link RestServer#start()} had not been called previously. This test
    * is for cases where {@link RestServer#start()} has failed and {@link RestServer#shutdown()} needs to be run.
-   * @throws InstantiationException
-   * @throws InterruptedException
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void shutdownWithoutStartTest()
-      throws InstantiationException, InterruptedException, IOException {
+      throws Exception {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = getVProps(properties);
     ClusterMap clusterMap = new MockClusterMap();
@@ -73,12 +69,12 @@ public class RestServerTest {
 
   /**
    * Tests for correct exceptions thrown on {@link RestServer} instantiation/{@link RestServer#start()} with bad input.
-   * @throws InstantiationException
+   * @throws Exception
    * @throws IOException
    */
   @Test
   public void serverCreationWithBadInputTest()
-      throws InstantiationException, IOException {
+      throws Exception {
     badArgumentsTest();
     badFactoriesTest();
   }
@@ -86,12 +82,11 @@ public class RestServerTest {
   /**
    * Tests for correct exceptions thrown on {@link RestServer#start()}/{@link RestServer#shutdown()} with bad
    * components.
-   * @throws InstantiationException
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void startShutdownTestWithBadComponent()
-      throws InstantiationException, IOException {
+      throws Exception {
     Properties properties = new Properties();
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     // makes MockNioServer throw exceptions.
@@ -139,11 +134,11 @@ public class RestServerTest {
 
   /**
    * Tests {@link RestServer} instantiation attempts with bad input.
-   * @throws InstantiationException
+   * @throws Exception
    * @throws IOException
    */
   private void badArgumentsTest()
-      throws InstantiationException, IOException {
+      throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -175,8 +170,12 @@ public class RestServerTest {
     }
   }
 
+  /**
+   * Tests for bad factory class names in {@link RestServer}.
+   * @throws Exception
+   */
   private void badFactoriesTest()
-      throws IOException {
+      throws Exception {
     doBadFactoryClassTest("rest.server.nio.server.factory");
     doBadFactoryClassTest("rest.server.blob.storage.service.factory");
     doBadFactoryClassTest("rest.server.router.factory");
@@ -184,8 +183,13 @@ public class RestServerTest {
     doBadFactoryClassTest("rest.server.request.handler.factory");
   }
 
+  /**
+   * Tests for bad factory class name for {@code configKey} in {@link RestServer}.
+   * @param configKey the property whose value is the bad factory class
+   * @throws Exception
+   */
   private void doBadFactoryClassTest(String configKey)
-      throws IOException {
+      throws Exception {
     Properties properties = new Properties();
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     properties.setProperty("rest.server.response.handler.factory",
@@ -202,17 +206,17 @@ public class RestServerTest {
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
       fail("Properties file contained non existent " + configKey + ", yet no exception was thrown");
-    } catch (InstantiationException e) {
+    } catch (ClassNotFoundException e) {
       // nothing to do. expected.
     }
 
     // invalid factory class.
-    properties.setProperty(configKey, RestServer.class.getCanonicalName());
+    properties.setProperty(configKey, RestServerTest.class.getCanonicalName());
     verifiableProperties = new VerifiableProperties(properties);
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
       fail("Properties file contained invalid " + configKey + " class, yet no exception was thrown");
-    } catch (InstantiationException e) {
+    } catch (NullPointerException e) {
       // nothing to do. expected.
     }
 
@@ -224,9 +228,7 @@ public class RestServerTest {
           new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
       restServer.start();
       fail("Properties file contained faulty " + configKey + " class, yet no exception was thrown");
-    } catch (InstantiationException e) {
-      // nothing to do. expected.
-    } catch (NullPointerException e) {
+    } catch (InstantiationException | NullPointerException e) {
       // nothing to do. expected.
     }
   }

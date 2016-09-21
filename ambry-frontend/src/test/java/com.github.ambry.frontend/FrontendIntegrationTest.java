@@ -94,12 +94,11 @@ public class FrontendIntegrationTest {
 
   /**
    * Sets up an Ambry frontend server.
-   * @throws InstantiationException
-   * @throws InterruptedException
+   * @throws Exception
    */
   @BeforeClass
   public static void setup()
-      throws InstantiationException, InterruptedException {
+      throws Exception {
     ambryRestServer = new RestServer(buildFrontendVProps(), CLUSTER_MAP, new LoggingNotificationSystem());
     ambryRestServer.start();
     nettyClient = new NettyClient("localhost", SERVER_PORT);

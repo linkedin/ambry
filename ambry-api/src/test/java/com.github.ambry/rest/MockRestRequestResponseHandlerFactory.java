@@ -27,10 +27,10 @@ public class MockRestRequestResponseHandlerFactory implements RestRequestHandler
   private static final AtomicBoolean instantiated = new AtomicBoolean(false);
   private static MockRestRequestResponseHandler instance;
 
-  public MockRestRequestResponseHandlerFactory(Object handlerCount, Object restServerMetrics) {
+  public MockRestRequestResponseHandlerFactory(Object handlerCount, Object metricRegistry) {
   }
 
-  public MockRestRequestResponseHandlerFactory(Object handlerCount, Object restServerMetrics,
+  public MockRestRequestResponseHandlerFactory(Object handlerCount, Object metricRegistry,
       BlobStorageService blobStorageService) {
     MockRestRequestResponseHandler requestHandler = getInstance();
     requestHandler.setBlobStorageService(blobStorageService);

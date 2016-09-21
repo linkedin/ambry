@@ -93,12 +93,11 @@ public class AdminIntegrationTest {
 
   /**
    * Sets up an Admin server.
-   * @throws InstantiationException
-   * @throws InterruptedException
+   * @throws Exception
    */
   @BeforeClass
   public static void setup()
-      throws InstantiationException, InterruptedException {
+      throws Exception {
     adminRestServer = new RestServer(buildAdminVProps(), CLUSTER_MAP, new LoggingNotificationSystem());
     router = InMemoryRouterFactory.getLatestInstance();
     adminRestServer.start();
