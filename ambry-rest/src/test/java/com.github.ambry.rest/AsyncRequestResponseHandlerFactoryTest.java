@@ -29,8 +29,7 @@ import static org.junit.Assert.fail;
  * Tests functionality of {@link AsyncRequestResponseHandlerFactory}.
  */
 public class AsyncRequestResponseHandlerFactoryTest {
-  private static final RestServerMetrics restServerMetrics =
-      new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri"));
+  private static final MetricRegistry METRIC_REGISTRY = new MetricRegistry();
 
   /**
    * Tests the instantiation of an {@link AsyncRequestResponseHandler} instance through the
@@ -46,7 +45,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // Get response handler.
     AsyncRequestResponseHandlerFactory responseHandlerFactory =
-        new AsyncRequestResponseHandlerFactory(1, restServerMetrics);
+        new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY);
     RestResponseHandler restResponseHandler = responseHandlerFactory.getRestResponseHandler();
     assertNotNull("No RestResponseHandler returned", restResponseHandler);
     assertEquals("Did not receive an AsyncRequestResponseHandler instance",
@@ -56,7 +55,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
         new MockBlobStorageService(verifiableProperties, restResponseHandler, router);
     // Get request handler.
     AsyncRequestResponseHandlerFactory requestHandlerFactory =
-        new AsyncRequestResponseHandlerFactory(1, restServerMetrics, blobStorageService);
+        new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY, blobStorageService);
     RestRequestHandler restRequestHandler = requestHandlerFactory.getRestRequestHandler();
     assertNotNull("No RestRequestHandler returned", restRequestHandler);
     assertEquals("Did not receive an AsyncRequestResponseHandler instance",
@@ -84,20 +83,20 @@ public class AsyncRequestResponseHandlerFactoryTest {
     // RestResponseHandlerFactory constructor.
     // handlerCount = 0
     try {
-      new AsyncRequestResponseHandlerFactory(0, restServerMetrics);
+      new AsyncRequestResponseHandlerFactory(0, METRIC_REGISTRY);
       fail("Instantiation should have failed because response handler count is 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
     // handlerCount < 0
     try {
-      new AsyncRequestResponseHandlerFactory(-1, restServerMetrics);
+      new AsyncRequestResponseHandlerFactory(-1, METRIC_REGISTRY);
       fail("Instantiation should have failed because response handler count is less than 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
-    // RestServerMetrics null.
+    // MetricRegistry null.
     try {
       new AsyncRequestResponseHandlerFactory(1, null);
       fail("Instantiation should have failed because one of the arguments was null");
@@ -108,7 +107,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
     // RestRequestHandlerFactory constructor.
     // handlerCount = 0
     try {
-      new AsyncRequestResponseHandlerFactory(0, restServerMetrics, blobStorageService);
+      new AsyncRequestResponseHandlerFactory(0, METRIC_REGISTRY, blobStorageService);
       fail("Instantiation should have failed because request handler count is 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -116,13 +115,13 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // handlerCount < 0
     try {
-      new AsyncRequestResponseHandlerFactory(-1, restServerMetrics, blobStorageService);
+      new AsyncRequestResponseHandlerFactory(-1, METRIC_REGISTRY, blobStorageService);
       fail("Instantiation should have failed because request handler count is less than 0");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
-    // RestServerMetrics null.
+    // MetricRegistry null.
     try {
       new AsyncRequestResponseHandlerFactory(1, null, blobStorageService);
       fail("Instantiation should have failed because one of the arguments was null");
@@ -132,18 +131,17 @@ public class AsyncRequestResponseHandlerFactoryTest {
 
     // BlobStorageService null.
     try {
-      new AsyncRequestResponseHandlerFactory(1, restServerMetrics, null);
+      new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY, null);
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
-    // Different instances of RestServerMetrics during construction of different instances of the factory.
-    new AsyncRequestResponseHandlerFactory(1, restServerMetrics);
+    // Different instances of MetricRegistry during construction of different instances of the factory.
+    new AsyncRequestResponseHandlerFactory(1, METRIC_REGISTRY);
     try {
-      new AsyncRequestResponseHandlerFactory(1,
-          new RestServerMetrics(new MetricRegistry(), new RestServerState("/healthCheckUri")), blobStorageService);
-      fail("Instantiation should have failed because different instances of RestServerMetrics was provided");
+      new AsyncRequestResponseHandlerFactory(1, new MetricRegistry(), blobStorageService);
+      fail("Instantiation should have failed because different instances of MetricRegistry was provided");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
     }
