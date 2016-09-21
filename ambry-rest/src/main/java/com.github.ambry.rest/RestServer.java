@@ -96,6 +96,7 @@ public class RestServer {
     /**
      * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
      * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
+     * @param restServerState the {@link RestServerState} object used to track the state of the {@link RestServer}.
      */
     public RestServerMetrics(MetricRegistry metricRegistry, final RestServerState restServerState) {
       // Errors
