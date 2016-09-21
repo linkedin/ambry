@@ -589,30 +589,68 @@ public class GetBlobOperationTest {
   @Test
   public void testEarlyReadableStreamChannelClose()
       throws Exception {
+    for (int numChunksInBlob = 0; numChunksInBlob <= 4; numChunksInBlob++) {
+      for (int numChunksToRead = 0; numChunksToRead < numChunksInBlob; numChunksToRead++) {
+        testEarlyReadableStreamChannelClose(numChunksInBlob, numChunksToRead);
+      }
+    }
+  }
+
+  /**
+   * Test that the operation is completed and an exception with the error code {@link RouterErrorCode#ChannelClosed} is
+   * set when the {@link ReadableStreamChannel} is closed before all chunks are read for a specific blob size and
+   * number of chunks to read.
+   * @param numChunksInBlob the number of chunks in the blob to put/get.
+   * @param numChunksToRead the number of chunks to read from the {@link AsyncWritableChannel} before closing the
+   *                        {@link ReadableStreamChannel}.
+   * @throws Exception
+   */
+  private void testEarlyReadableStreamChannelClose(int numChunksInBlob, final int numChunksToRead)
+      throws Exception {
     final AtomicReference<Exception> callbackException = new AtomicReference<>();
+    final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     Callback<GetBlobResult> callback = new Callback<GetBlobResult>() {
       @Override
-      public void onCompletion(GetBlobResult result, Exception exception) {
+      public void onCompletion(final GetBlobResult result, Exception exception) {
         if (exception != null) {
           callbackException.set(exception);
+          readCompleteLatch.countDown();
         } else {
-          try {
-            result.getBlobDataChannel().close();
-          } catch (IOException e) {
-            callbackException.set(e);
-          }
+            final ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+            result.getBlobDataChannel().readInto(writableChannel, null);
+            Utils.newThread(new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  int chunksLeftToRead = numChunksToRead;
+                  while (chunksLeftToRead > 0) {
+                    writableChannel.getNextChunk();
+                    writableChannel.resolveOldestChunk(null);
+                    chunksLeftToRead--;
+                  }
+                  result.getBlobDataChannel().close();
+                } catch (Exception e) {
+                  callbackException.set(e);
+                } finally {
+                  readCompleteLatch.countDown();
+                }
+              }
+            }, false).start();
         }
       }
     };
 
+    blobSize = numChunksInBlob * maxChunkSize;
     doPut();
     GetBlobOperation op = createOperationAndComplete(callback);
 
+    readCompleteLatch.await();
     if (callbackException.get() != null) {
       throw callbackException.get();
     }
     Exception operationException = op.getOperationException();
-    Assert.assertTrue("Unexpected operation exception type", operationException instanceof RouterException);
+    Assert.assertTrue("Unexpected type for exception: " + operationException,
+        operationException instanceof RouterException);
     Assert.assertEquals("Unexpected RouterErrorCode", RouterErrorCode.ChannelClosed,
         ((RouterException) operationException).getErrorCode());
   }
