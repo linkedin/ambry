@@ -159,20 +159,7 @@ public class RestUtils {
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args)
       throws RestServiceException {
-    String blobSizeStr = null;
-    long blobSize;
-    try {
-      blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
-      blobSize = Long.parseLong(blobSizeStr);
-      if (blobSize < 0) {
-        throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSize + "] is less than 0",
-            RestServiceErrorCode.InvalidArgs);
-      }
-    } catch (NumberFormatException e) {
-      throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
-          RestServiceErrorCode.InvalidArgs);
-    }
-
+    long blobSize = getBlobSize(getHeader(args, Headers.BLOB_SIZE, true));
     long ttl = Utils.Infinite_Time;
     String ttlStr = getHeader(args, Headers.TTL, false);
     if (ttlStr != null) {
@@ -444,6 +431,27 @@ public class RestUtils {
     } catch (ParseException e) {
       logger.warn("Could not parse milliseconds from an HTTP date header (" + dateString + ").");
       return null;
+    }
+  }
+
+  /**
+   * Parse a blob size string and return the blob size as a number, if valid.
+   * @param blobSizeStr a string representing the blob size.
+   * @return the blob size as a {@code long}.
+   * @throws RestServiceException if a valid blob size could not be parsed.
+   */
+  public static long getBlobSize(String blobSizeStr)
+      throws RestServiceException {
+    try {
+      long blobSize = Long.parseLong(blobSizeStr);
+      if (blobSize < 0) {
+        throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSize + "] is less than 0",
+            RestServiceErrorCode.InvalidArgs);
+      }
+      return blobSize;
+    } catch (NumberFormatException e) {
+      throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
+          RestServiceErrorCode.InvalidArgs);
     }
   }
 

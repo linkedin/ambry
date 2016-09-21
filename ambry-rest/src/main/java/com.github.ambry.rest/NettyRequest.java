@@ -104,7 +104,7 @@ class NettyRequest implements RestRequest {
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @throws IllegalArgumentException if {@code request} is null.
    * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
-   *                                {@link RestMethod}.
+   *                                {@link RestMethod} or if the {@link RestUtils.Headers#BLOB_SIZE} header is invalid.
    */
   public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics)
       throws RestServiceException {
@@ -138,7 +138,7 @@ class NettyRequest implements RestRequest {
     }
 
     if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
-      size = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
+      size = RestUtils.getBlobSize(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
     } else {
       size = HttpHeaders.getContentLength(request, -1);
     }

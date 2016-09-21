@@ -29,6 +29,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.TimeZone;
+import junit.framework.Assert;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -702,5 +703,20 @@ public class RestUtilsTest {
     assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString(dateStr));
 
     assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString("abc"));
+  }
+
+  @Test
+  public void getBlobSizeTest()
+      throws Exception {
+    Assert.assertEquals("Unexpected blob size parsed", 2345, RestUtils.getBlobSize("2345"));
+    String[] invalidBlobSizeStrs = {"aba123", "12ab", "-1", "ddsdd", "999999999999999999999999999"};
+    for (String blobSizeStr : invalidBlobSizeStrs) {
+      try {
+        RestUtils.getBlobSize(blobSizeStr);
+        fail("blobSize parsing should not have succeeded");
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected error code", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+      }
+    }
   }
 }
