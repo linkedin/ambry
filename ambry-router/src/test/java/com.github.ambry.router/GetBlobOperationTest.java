@@ -646,7 +646,7 @@ public class GetBlobOperationTest {
     doPut();
     GetBlobOperation op = createOperationAndComplete(callback);
 
-    Assert.assertTrue(readCompleteLatch.await(2, TimeUnit.SECONDS));
+    Assert.assertTrue("Timeout waiting for read to complete", readCompleteLatch.await(2, TimeUnit.SECONDS));
     if (callbackException.get() != null) {
       throw callbackException.get();
     }
