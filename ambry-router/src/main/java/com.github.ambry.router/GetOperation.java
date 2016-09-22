@@ -162,10 +162,17 @@ abstract class GetOperation {
    * previously received exception.
    * @param exception the {@link RouterException} to possibly set.
    */
-  void setOperationException(RouterException exception) {
-    if (operationException.get() == null || exception.getErrorCode() == RouterErrorCode.BlobDeleted
-        || exception.getErrorCode() == RouterErrorCode.BlobExpired) {
-      operationException.set(exception);
+  void setOperationException(Exception exception) {
+    if (exception instanceof RouterException) {
+      RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
+      if (operationException.get() == null || routerErrorCode == RouterErrorCode.BlobDeleted
+          || routerErrorCode == RouterErrorCode.BlobExpired) {
+        operationException.set(exception);
+      }
+    } else {
+      if (operationException.get() == null) {
+        operationException.set(exception);
+      }
     }
   }
 

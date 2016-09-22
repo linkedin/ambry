@@ -102,8 +102,6 @@ class GetBlobOperation extends GetOperation {
   private BlobInfo blobInfo;
   // the ReadableStreamChannel that is populated on OperationType.Blob or OperationType.All requests.
   private BlobDataReadableStreamChannel blobDataChannel;
-  // true if the currently set operation exception should not be overwritten
-  private volatile boolean retainCurrentOperationException = false;
   private final ReadyForPollCallback readyForPollCallback;
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
@@ -150,7 +148,7 @@ class GetBlobOperation extends GetOperation {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
       operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
     } else {
-      operationException.set(abortCause);
+      setOperationException(abortCause);
       if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
         blobDataChannel.completeRead();
       }
@@ -164,7 +162,7 @@ class GetBlobOperation extends GetOperation {
    * @param chunk the chunk that has completed.
    */
   private void onChunkOperationComplete(GetChunk chunk) {
-    if (chunk.getChunkException() != null && !retainCurrentOperationException) {
+    if (chunk.getChunkException() != null) {
       // if operation callback was already called, then this exception will have to be notified as part of the
       // read callback.
       setOperationException(chunk.getChunkException());
@@ -291,7 +289,7 @@ class GetBlobOperation extends GetOperation {
       public void onCompletion(Long result, Exception exception) {
         bytesWritten += result;
         if (exception != null) {
-          operationException.set(exception);
+          setOperationException(exception);
         }
         numChunksWrittenOut++;
         readyForPollCallback.onPollReady();
@@ -336,8 +334,7 @@ class GetBlobOperation extends GetOperation {
         throws IOException {
       if (isOpen.compareAndSet(true, false)) {
         if (numChunksWrittenOut != numChunksTotal) {
-          retainCurrentOperationException = true;
-          operationException.set(new RouterException(
+          setOperationException(new RouterException(
               "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
               RouterErrorCode.ChannelClosed));
         }
@@ -601,9 +598,7 @@ class GetBlobOperation extends GetOperation {
         chunkCompleted = true;
       }
       if (chunkCompleted) {
-        if (!retainCurrentOperationException) {
-          operationException.set(chunkException);
-        }
+        setOperationException(chunkException);
         state = ChunkState.Complete;
       }
     }
