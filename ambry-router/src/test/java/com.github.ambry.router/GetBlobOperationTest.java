@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -608,6 +609,7 @@ public class GetBlobOperationTest {
   private void testEarlyReadableStreamChannelClose(int numChunksInBlob, final int numChunksToRead)
       throws Exception {
     final AtomicReference<Exception> callbackException = new AtomicReference<>();
+    final AtomicReference<Future<Long>> readIntoFuture = new AtomicReference<>();
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     Callback<GetBlobResult> callback = new Callback<GetBlobResult>() {
       @Override
@@ -617,7 +619,7 @@ public class GetBlobOperationTest {
           readCompleteLatch.countDown();
         } else {
             final ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
-            result.getBlobDataChannel().readInto(writableChannel, null);
+            readIntoFuture.set(result.getBlobDataChannel().readInto(writableChannel, null));
             Utils.newThread(new Runnable() {
               @Override
               public void run() {
@@ -647,6 +649,14 @@ public class GetBlobOperationTest {
     readCompleteLatch.await();
     if (callbackException.get() != null) {
       throw callbackException.get();
+    }
+    try {
+      readIntoFuture.get().get();
+    } catch (ExecutionException e) {
+      Assert.assertTrue("Unexpected type for exception: " + e.getCause(),
+          e.getCause() instanceof RouterException);
+      Assert.assertEquals("Unexpected RouterErrorCode", RouterErrorCode.ChannelClosed,
+          ((RouterException) e.getCause()).getErrorCode());
     }
     Exception operationException = op.getOperationException();
     Assert.assertTrue("Unexpected type for exception: " + operationException,
@@ -821,18 +831,9 @@ public class GetBlobOperationTest {
                 }
               }
               Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
-                  : result.getBlobDataChannel().readInto(asyncWritableChannel, new Callback<Long>() {
-                    @Override
-                    public void onCompletion(Long bytesWritten, Exception exception) {
-                      try {
-                        result.getBlobDataChannel().close();
-                      } catch (IOException e) {
-                        readCompleteException.set(e);
-                      }
-                    }
-                  });
-              assertBlobReadSuccess(options, readIntoFuture, asyncWritableChannel, readCompleteLatch,
-                  readCompleteResult, readCompleteException);
+                  : result.getBlobDataChannel().readInto(asyncWritableChannel, null);
+              assertBlobReadSuccess(options, readIntoFuture, asyncWritableChannel, result.getBlobDataChannel(),
+                  readCompleteLatch, readCompleteResult, readCompleteException);
             }
           }, false).start();
         }
@@ -922,13 +923,15 @@ public class GetBlobOperationTest {
    *                       operation.
    * @param asyncWritableChannel The {@link ByteBufferAsyncWritableChannel} to which bytes will be written by the
    *                             operation.
+   * @param readableStreamChannel The {@link ReadableStreamChannel} that bytes are read from in the operation.
    * @param readCompleteLatch The latch to count down once the read is completed.
    * @param readCompleteResult This will contain the bytes written on return.
    * @param readCompleteException This will contain any exceptions encountered during the read.
    */
   private void assertBlobReadSuccess(GetBlobOptions options, Future<Long> readIntoFuture,
-      ByteBufferAsyncWritableChannel asyncWritableChannel, CountDownLatch readCompleteLatch,
-      AtomicLong readCompleteResult, AtomicReference<Exception> readCompleteException) {
+      ByteBufferAsyncWritableChannel asyncWritableChannel, ReadableStreamChannel readableStreamChannel,
+      CountDownLatch readCompleteLatch, AtomicLong readCompleteResult,
+      AtomicReference<Exception> readCompleteException) {
     try {
       ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
       // If a range is set, compare the result against the specified byte range.
@@ -961,6 +964,7 @@ public class GetBlobOperationTest {
       Assert.assertEquals("the returned length in the future should be the length of data written", (long) readBytes,
           written);
       Assert.assertNull("There should be no more data in the channel", asyncWritableChannel.getNextChunk(0));
+      readableStreamChannel.close();
       readCompleteResult.set(written);
     } catch (Exception e) {
       readCompleteException.set(e);
