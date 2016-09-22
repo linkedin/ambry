@@ -41,6 +41,7 @@ import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -398,18 +399,15 @@ class NettyResponseChannel implements RestResponseChannel {
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
     }
-    String fullMsg = "Failure: " + status + errReason;
+    String fullMsg =
+        new String(("Failure - " + status + errReason).replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
+            StandardCharsets.US_ASCII);
     logger.trace("Constructed error response for the client - [{}]", fullMsg);
     FullHttpResponse response;
-    if (request != null && request.getRestMethod().equals(RestMethod.HEAD)) {
-      // for HEAD, we cannot send the actual body but we need to return what the length would have been if this was GET.
-      // https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html (Section 9.4)
-      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
-    } else {
-      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
-    }
+    response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
-    HttpHeaders.setContentLength(response, fullMsg.length());
+    HttpHeaders.setContentLength(response, 0);
+    HttpHeaders.setHeader(response, RestUtils.Headers.FAILURE_REASON, fullMsg);
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
     boolean keepAlive = !forceClose && HttpHeaders.isKeepAlive(responseMetadata) &&
         request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES

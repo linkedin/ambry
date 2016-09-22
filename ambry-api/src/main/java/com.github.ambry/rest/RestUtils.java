@@ -103,6 +103,10 @@ public class RestUtils {
      */
     public final static String CREATION_TIME = "x-ambry-creation-time";
     /**
+     * not allowed in request. Detailed message about an error in an error response.
+     */
+    public final static String FAILURE_REASON = "x-ambry-failure-reason";
+    /**
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
