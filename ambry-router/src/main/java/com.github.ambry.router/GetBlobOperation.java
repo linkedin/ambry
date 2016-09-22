@@ -148,7 +148,7 @@ class GetBlobOperation extends GetOperation {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
       operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
     } else {
-      operationException.set(abortCause);
+      setOperationException(abortCause);
       if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
         blobDataChannel.completeRead();
       }
@@ -266,7 +266,7 @@ class GetBlobOperation extends GetOperation {
    */
   private class BlobDataReadableStreamChannel implements ReadableStreamChannel {
     // whether this ReadableStreamChannel is open.
-    private volatile boolean isOpen = true;
+    private AtomicBoolean isOpen = new AtomicBoolean(true);
     // whether readInto() has been called yet by the caller on this ReadableStreamChannel.
     private volatile boolean readCalled = false;
     // The channel to write chunks of the blob into. This will be initialized when the caller calls the readInto().
@@ -289,7 +289,7 @@ class GetBlobOperation extends GetOperation {
       public void onCompletion(Long result, Exception exception) {
         bytesWritten += result;
         if (exception != null) {
-          operationException.set(exception);
+          setOperationException(exception);
         }
         numChunksWrittenOut++;
         readyForPollCallback.onPollReady();
@@ -307,7 +307,7 @@ class GetBlobOperation extends GetOperation {
 
     @Override
     public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
-      if (!isOpen) {
+      if (!isOpen()) {
         throw new IllegalStateException("This ReadableStreamChannel has been closed");
       }
       if (readCalled) {
@@ -326,16 +326,18 @@ class GetBlobOperation extends GetOperation {
 
     @Override
     public boolean isOpen() {
-      return isOpen;
+      return isOpen.get();
     }
 
     @Override
     public void close()
         throws IOException {
-      isOpen = false;
-      if (!operationCompleted) {
-        abort(new RouterException("The ReadableStreamChannel for blob data has been closed by the user.",
-            RouterErrorCode.ChannelClosed));
+      if (isOpen.compareAndSet(true, false)) {
+        if (numChunksWrittenOut != numChunksTotal) {
+          setOperationException(new RouterException(
+              "The ReadableStreamChannel for blob data has been closed by the user before all chunks were written out.",
+              RouterErrorCode.ChannelClosed));
+        }
       }
     }
 
@@ -431,7 +433,7 @@ class GetBlobOperation extends GetOperation {
     private boolean chunkCompleted;
     // In general, when the operation tracker returns success, any previously saved exceptions are cleared. This flag
     // indicates that the set chunk exception should not be overwritten even when the operation tracker reports success.
-    protected boolean retainExceptionOnSuccess;
+    protected boolean retainChunkExceptionOnSuccess;
     // the index of the current chunk in the overall blob.
     protected int chunkIndex;
     // the most relevant exception encountered for the current chunk.
@@ -486,7 +488,7 @@ class GetBlobOperation extends GetOperation {
     void reset() {
       chunkOperationTracker = null;
       chunkCompleted = false;
-      retainExceptionOnSuccess = false;
+      retainChunkExceptionOnSuccess = false;
       chunkBlobId = null;
       chunkIndex = -1;
       chunkException = null;
@@ -589,14 +591,14 @@ class GetBlobOperation extends GetOperation {
      */
     void checkAndMaybeComplete() {
       if (chunkOperationTracker.isDone()) {
-        if (!retainExceptionOnSuccess && chunkOperationTracker.hasSucceeded()) {
+        if (!retainChunkExceptionOnSuccess && chunkOperationTracker.hasSucceeded()) {
           // override any previously set exceptions
           chunkException = null;
         }
         chunkCompleted = true;
       }
       if (chunkCompleted) {
-        operationException.set(chunkException);
+        setOperationException(chunkException);
         state = ChunkState.Complete;
       }
     }
@@ -980,7 +982,7 @@ class GetBlobOperation extends GetOperation {
     private void onInvalidRange(Exception exception) {
       setChunkException(
           new RouterException("Range provided was not satisfiable.", exception, RouterErrorCode.RangeNotSatisfiable));
-      retainExceptionOnSuccess = true;
+      retainChunkExceptionOnSuccess = true;
       chunkIdIterator = null;
       dataChunks = null;
       numChunksTotal = 0;
