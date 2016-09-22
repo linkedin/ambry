@@ -401,12 +401,12 @@ class NettyResponseChannel implements RestResponseChannel {
     String fullMsg = "Failure: " + status + errReason;
     logger.trace("Constructed error response for the client - [{}]", fullMsg);
     FullHttpResponse response;
-    if (request != null && !request.getRestMethod().equals(RestMethod.HEAD)) {
-      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
-    } else {
+    if (request != null && request.getRestMethod().equals(RestMethod.HEAD)) {
       // for HEAD, we cannot send the actual body but we need to return what the length would have been if this was GET.
       // https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html (Section 9.4)
       response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
+    } else {
+      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
     }
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setContentLength(response, fullMsg.length());

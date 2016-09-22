@@ -435,12 +435,24 @@ public class RestUtils {
   }
 
   /**
+   * Reduces the precision of a time in milliseconds to seconds precision. Result returned is in milliseconds with last
+   * three digits 000. Useful for comparing times kept in milliseconds that get converted to seconds and back (as is
+   * done with HTTP date format).
+   *
+   * @param ms time that needs to be parsed
+   * @return milliseconds with seconds precision (last three digits 000).
+   */
+  public static long toSecondsPrecisionInMs(long ms) {
+    return ms - (ms % 1000);
+  }
+
+  /**
    * Parse a blob size string and return the blob size as a number, if valid.
    * @param blobSizeStr a string representing the blob size.
    * @return the blob size as a {@code long}.
    * @throws RestServiceException if a valid blob size could not be parsed.
    */
-  public static long getBlobSize(String blobSizeStr)
+  static long getBlobSize(String blobSizeStr)
       throws RestServiceException {
     try {
       long blobSize = Long.parseLong(blobSizeStr);
@@ -453,17 +465,5 @@ public class RestUtils {
       throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
           RestServiceErrorCode.InvalidArgs);
     }
-  }
-
-  /**
-   * Reduces the precision of a time in milliseconds to seconds precision. Result returned is in milliseconds with last
-   * three digits 000. Useful for comparing times kept in milliseconds that get converted to seconds and back (as is
-   * done with HTTP date format).
-   *
-   * @param ms time that needs to be parsed
-   * @return milliseconds with seconds precision (last three digits 000).
-   */
-  public static long toSecondsPrecisionInMs(long ms) {
-    return ms - (ms % 1000);
   }
 }
