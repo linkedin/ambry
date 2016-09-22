@@ -652,6 +652,7 @@ public class GetBlobOperationTest {
     }
     try {
       readIntoFuture.get().get();
+      Assert.fail("Expected ExecutionException");
     } catch (ExecutionException e) {
       Assert.assertTrue("Unexpected type for exception: " + e.getCause(),
           e.getCause() instanceof RouterException);
