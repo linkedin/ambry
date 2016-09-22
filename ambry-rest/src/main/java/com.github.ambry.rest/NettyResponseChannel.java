@@ -386,28 +386,28 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private FullHttpResponse getErrorResponse(Throwable cause) {
     HttpResponseStatus status;
-    StringBuilder errReason = new StringBuilder();
+    String errReason = null;
     if (cause instanceof RestServiceException) {
       RestServiceErrorCode restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
       status = getHttpResponseStatus(errorResponseStatus);
       if (status == HttpResponseStatus.BAD_REQUEST) {
-        errReason.append(" [").append(Utils.getRootCause(cause).getMessage()).append("]");
+        errReason = new String(
+            Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
+            StandardCharsets.US_ASCII);
       }
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
     }
-    String fullMsg =
-        new String(("Failure - " + status + errReason).replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
-            StandardCharsets.US_ASCII);
-    logger.trace("Constructed error response for the client - [{}]", fullMsg);
-    FullHttpResponse response;
-    response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
+    logger.trace("Constructed error response for the client - [{} - {}]", status, errReason);
+    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setContentLength(response, 0);
-    HttpHeaders.setHeader(response, RestUtils.Headers.FAILURE_REASON, fullMsg);
+    if (errReason != null) {
+      HttpHeaders.setHeader(response, RestUtils.Headers.FAILURE_REASON, errReason);
+    }
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
     boolean keepAlive = !forceClose && HttpHeaders.isKeepAlive(responseMetadata) &&
         request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES

@@ -401,10 +401,10 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Tests that HEAD returns no body in error responses.
+   * Tests that error responses are correctly formed.
    */
   @Test
-  public void noBodyForHeadTest() {
+  public void errorResponseTest() {
     EmbeddedChannel channel = createEmbeddedChannel();
     for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_ERROR_CODE_TO_HTTP_STATUS.entrySet()) {
       HttpHeaders httpHeaders = new DefaultHttpHeaders();
@@ -413,6 +413,12 @@ public class NettyResponseChannelTest {
           .createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(), httpHeaders));
       HttpResponse response = (HttpResponse) channel.readOutbound();
       assertEquals("Unexpected response status", entry.getValue(), response.getStatus());
+      boolean containsFailureReasonHeader = response.headers().contains(RestUtils.Headers.FAILURE_REASON);
+      if (entry.getValue() == HttpResponseStatus.BAD_REQUEST) {
+        assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
+      } else {
+        assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
+      }
       if (response instanceof FullHttpResponse) {
         // assert that there is no content
         assertEquals("The response should not contain content", 0,
