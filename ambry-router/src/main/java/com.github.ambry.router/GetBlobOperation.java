@@ -388,12 +388,15 @@ class GetBlobOperation extends GetOperation {
      */
     void completeRead() {
       if (readIntoCallbackCalled.compareAndSet(false, true)) {
-        readIntoFuture.done(bytesWritten, operationException.get());
+        Exception e = operationException.get();
+        readIntoFuture.done(bytesWritten, e);
         if (readIntoCallback != null) {
-          readIntoCallback.onCompletion(bytesWritten, operationException.get());
+          readIntoCallback.onCompletion(bytesWritten, e);
         }
-        if (operationException.get() == null) {
+        if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
+        } else {
+          routerMetrics.onGetBlobError(e, options);
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
         routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
