@@ -497,7 +497,7 @@ public class AmbryBlobStorageServiceTest {
       doOperation(createRestRequest(RestMethod.GET, "/", headers, null), new MockRestResponseChannel());
       fail("GET operation should have failed because of an invalid range header");
     } catch (RestServiceException e) {
-      assertEquals("Unexpected error code", RestServiceErrorCode.RangeNotSatisfiable, e.getErrorCode());
+      assertEquals("Unexpected error code", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
   }
   // helpers

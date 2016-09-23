@@ -86,7 +86,7 @@ public enum RestServiceErrorCode {
    */
   UnsupportedHttpMethod,
   /**
-   * Range request is not satisfiable (because the provided range is invalid or outside of the bounds of an object.
+   * Range request is not satisfiable (because the provided range is invalid or outside of the bounds of an object.)
    */
   RangeNotSatisfiable,
 
@@ -141,6 +141,7 @@ public enum RestServiceErrorCode {
       case OperationTimedOut:
       case RouterClosed:
       case UnexpectedInternalError:
+      case ChannelClosed:
       default:
         return InternalServerError;
     }

@@ -100,6 +100,9 @@ public class InMemoryRouter implements Router {
       return userMetadata;
     }
 
+    /**
+     * @return the entire blob as a {@link ByteBuffer}
+     */
     public ByteBuffer getBlob() {
       return ByteBuffer.wrap(blob.array());
     }
@@ -108,17 +111,12 @@ public class InMemoryRouter implements Router {
      * @param range the {@link ByteRange} for the blob, or null.
      * @return the blob content within the provided range, or the entire blob, if the range is null.
      */
-    public ByteBuffer getBlobRange(ByteRange range) {
-//      ByteBuffer blobBuffer = getBlob();
+    public ByteBuffer getBlob(ByteRange range) {
       if (range == null) {
         return getBlob();
       }
       ByteRange resolvedRange = range.toResolvedByteRange(blob.array().length);
-      return ByteBuffer.wrap(Arrays
-          .copyOfRange(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getEndOffset() + 1));
-//      blobBuffer.position((int) resolvedRange.getStartOffset());
-//      blobBuffer.limit((int) resolvedRange.getEndOffset() + 1);
-//      return blobBuffer.slice();
+      return ByteBuffer.wrap(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
     }
   }
 
@@ -147,13 +145,13 @@ public class InMemoryRouter implements Router {
           InMemoryBlob blob = blobs.get(blobId);
           switch (options.getOperationType()) {
             case Data:
-              blobDataChannel = new ByteBufferRSC(blob.getBlobRange(options.getRange()));
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
               break;
             case BlobInfo:
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
             case All:
-              blobDataChannel = new ByteBufferRSC(blob.getBlobRange(options.getRange()));
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
           }

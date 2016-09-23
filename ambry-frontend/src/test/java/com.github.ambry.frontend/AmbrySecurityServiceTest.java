@@ -310,11 +310,20 @@ public class AmbrySecurityServiceTest {
       throws Exception {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
     testGetBlob(blobInfo, null);
-    testGetBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(blobSize)));
-    testGetBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(blobSize + 1)));
-    long random1 = ThreadLocalRandom.current().nextLong(blobSize);
-    long random2 = ThreadLocalRandom.current().nextLong(blobSize);
-    testGetBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+
+    testGetBlob(blobInfo, ByteRange.fromLastNBytes(0));
+    if (blobSize > 0) {
+      testGetBlob(blobInfo, ByteRange.fromStartOffset(0));
+      testGetBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
+      testGetBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
+
+      long random1 = ThreadLocalRandom.current().nextLong(blobSize);
+      long random2 = ThreadLocalRandom.current().nextLong(blobSize);
+      testGetBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+
+      testGetBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(blobSize)));
+      testGetBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+    }
   }
 
   /**
@@ -531,9 +540,10 @@ public class AmbrySecurityServiceTest {
 
     Assert.assertEquals("Accept ranges header not set correctly", "bytes",
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
-    ByteRange resolvedByteRange = null;
+    long contentLength = blobProperties.getBlobSize();
     if (range != null) {
-      resolvedByteRange = range.toResolvedByteRange(blobProperties.getBlobSize());
+      ByteRange resolvedByteRange = range.toResolvedByteRange(blobProperties.getBlobSize());
+      contentLength = resolvedByteRange.getRangeSize();
       Assert.assertEquals("Content range header not set correctly for range " + range,
           RestUtils.buildContentRangeHeader(resolvedByteRange, blobProperties.getBlobSize()),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
@@ -542,9 +552,8 @@ public class AmbrySecurityServiceTest {
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     }
 
-    if (blobProperties.getBlobSize() < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
-      Assert.assertEquals("Content length value mismatch",
-          resolvedByteRange == null ? blobProperties.getBlobSize() : resolvedByteRange.getRangeSize(),
+    if (contentLength < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
+      Assert.assertEquals("Content length value mismatch", contentLength,
           Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     } else {
       Assert.assertNull("Content length value should not be set",

@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.NettyClient;
@@ -73,6 +74,9 @@ import static org.junit.Assert.*;
 public class FrontendIntegrationTest {
   private static final int SERVER_PORT = 1174;
   private static final ClusterMap CLUSTER_MAP;
+  private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps();
+  private static final int CHUNKED_GET_RESPONSE_THRESHOLD_BYTES =
+      new FrontendConfig(FRONTEND_VERIFIABLE_PROPS).frontendChunkedGetResponseThresholdInBytes;
 
   static {
     try {
@@ -101,7 +105,7 @@ public class FrontendIntegrationTest {
   @BeforeClass
   public static void setup()
       throws Exception {
-    ambryRestServer = new RestServer(buildFrontendVProps(), CLUSTER_MAP, new LoggingNotificationSystem());
+    ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem());
     ambryRestServer.start();
     nettyClient = new NettyClient("localhost", SERVER_PORT);
   }
@@ -157,8 +161,9 @@ public class FrontendIntegrationTest {
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-    ByteBuffer content = getContent(responseParts, HttpHeaders.getContentLength(response));
-    assertEquals("GET content does not match original content", "GOOD", new String(content.array()));
+    final String expectedResponseBody = "GOOD";
+    ByteBuffer content = getContent(responseParts, expectedResponseBody.length());
+    assertEquals("GET content does not match original content", expectedResponseBody, new String(content.array()));
   }
 
   // helpers
@@ -399,7 +404,7 @@ public class FrontendIntegrationTest {
     } else {
       assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
     }
-    if (HttpHeaders.isContentLengthSet(response)) {
+    if (expectedContentArray.length < CHUNKED_GET_RESPONSE_THRESHOLD_BYTES) {
       assertEquals("Content-length not as expected", expectedContentArray.length,
           HttpHeaders.getContentLength(response));
     }

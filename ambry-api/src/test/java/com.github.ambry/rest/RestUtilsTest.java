@@ -507,7 +507,43 @@ public class RestUtilsTest {
   }
 
   /**
-   * This tests the construction of {@link GetBlobOptions} objects with various range and sub-resource settings.
+   * Tests {@link RestUtils#toSecondsPrecisionInMs(long)}.
+   */
+  @Test
+  public void toSecondsPrecisionInMsTest() {
+    assertEquals(0, RestUtils.toSecondsPrecisionInMs(999));
+    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1000));
+    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1001));
+  }
+
+  /**
+   * Tests {@link RestUtils#getTimeFromDateString(String)}.
+   */
+  @Test
+  public void getTimeFromDateStringTest() {
+    SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
+    dateFormatter.setTimeZone(TimeZone.getTimeZone("GMT"));
+    long curTime = System.currentTimeMillis();
+    Date curDate = new Date(curTime);
+    String dateStr = dateFormatter.format(curDate);
+    long epochTime = RestUtils.getTimeFromDateString(dateStr);
+    long actualExpectedTime = (curTime / 1000L) * 1000;
+    // Note http time is kept in Seconds so last three digits will be 000
+    assertEquals("Time mismatch ", actualExpectedTime, epochTime);
+
+    dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.CHINA);
+    curTime = System.currentTimeMillis();
+    curDate = new Date(curTime);
+    dateStr = dateFormatter.format(curDate);
+    // any other locale is not accepted
+    assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString(dateStr));
+
+    assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString("abc"));
+  }
+
+  /**
+   * This tests the construction of {@link GetBlobOptions} objects with various range and sub-resource settings using
+   * {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource)} and {@link RestUtils#buildByteRange(String)}.
    * @throws RestServiceException
    */
   @Test
@@ -523,55 +559,22 @@ public class RestUtilsTest {
     doBuildGetBlobOptionsTest("bytes=-8", ByteRange.fromLastNBytes(8), true, false);
     doBuildGetBlobOptionsTest("bytes=-123456789", ByteRange.fromLastNBytes(123456789), true, false);
     // bad ranges
-    doBuildGetBlobOptionsTest("bytes=0-abcd", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=0as23-44444444", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=22-7777777777777777777777777777777777777777777", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=22--53", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=223-34", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=-34ab", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=--12", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=-12-", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=12ab-", null, false, false);
-    doBuildGetBlobOptionsTest("bytes=---", null, false, false);
-    doBuildGetBlobOptionsTest("btes=3-5", null, false, false);
-  }
-
-  private void doBuildGetBlobOptionsTest(String rangeHeader, ByteRange expectedRange,
-      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithSubResource)
-      throws RestServiceException {
-    Map<String, Object> args = new HashMap<>();
-    if (rangeHeader != null) {
-      args.put(RestUtils.Headers.RANGE, rangeHeader);
-    }
-    doBuildGetBlobOptionsTestForSubResource(args, null, expectedRange, GetBlobOptions.OperationType.All,
-        shouldSucceedWithoutSubResource);
-    for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
-      doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, GetBlobOptions.OperationType.BlobInfo,
-          shouldSucceedWithSubResource);
+    String[] badRanges = {"bytes=0-abcd", "bytes=0as23-44444444",
+        "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53", "bytes=223-34", "bytes=-34ab",
+        "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345"};
+    for (String badRange : badRanges) {
+      doBuildGetBlobOptionsTest(badRange, null, false, false);
     }
   }
 
-  private void doBuildGetBlobOptionsTestForSubResource(Map<String, Object> args, RestUtils.SubResource subResource,
-      ByteRange expectedRange, GetBlobOptions.OperationType expectedOpType, boolean shouldSucceed)
-      throws RestServiceException {
-    if (shouldSucceed) {
-      GetBlobOptions options = RestUtils.buildGetBlobOptions(args, subResource);
-      assertEquals("Unexpected range for args=" + args + " and subResource=" + subResource, expectedRange,
-          options.getRange());
-      assertEquals("Unexpected operation type for args=" + args + " and subResource=" + subResource, expectedOpType,
-          options.getOperationType());
-    } else {
-      try {
-        RestUtils.buildGetBlobOptions(args, subResource);
-        fail("buildGetBlobOptions should not have succeeded with args=" + args + "and subResource=" + subResource);
-      } catch (RestServiceException expected) {
-      }
-    }
-  }
-
+  /**
+   * Test {@link RestUtils#buildContentRangeHeader(ByteRange, long)}.
+   */
   @Test
   public void buildContentRangeHeaderTest() {
     assertEquals("bytes 4-8/12", RestUtils.buildContentRangeHeader(ByteRange.fromOffsetRange(4, 8), 12));
+    assertEquals("bytes 10-789/144", RestUtils.buildContentRangeHeader(ByteRange.fromOffsetRange(10, 789), 144));
+    assertEquals("bytes 0-0/0", RestUtils.buildContentRangeHeader(ByteRange.fromOffsetRange(0, 0), 0));
   }
 
   // helpers.
@@ -603,7 +606,7 @@ public class RestUtilsTest {
    * @param length the length of random string required.
    * @return a string of size {@code length} with random characters from {@link #ALPHABET}.
    */
-  public String generateRandomString(int length) {
+  private String generateRandomString(int length) {
     char[] text = new char[length];
     for (int i = 0; i < length; i++) {
       text[i] = ALPHABET.charAt(RANDOM.nextInt(ALPHABET.length()));
@@ -730,6 +733,62 @@ public class RestUtilsTest {
   }
 
   /**
+   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource)} works correctly for a given range
+   * with and without a specified sub-resource.
+   * @param rangeHeader the Range header value to add to the {@code args} map.
+   * @param expectedRange the {@link ByteRange} expected to be parsed if the call should succeed, or {@code null} if no
+   *                      range is expected.
+   * @param shouldSucceedWithoutSubResource {@code true} if the call should succeed with no specified sub-resource.
+   * @param shouldSucceedWithSubResource {@code true} if the call should succeed with a specified sub-resource.
+   * @throws RestServiceException
+   */
+  private void doBuildGetBlobOptionsTest(String rangeHeader, ByteRange expectedRange,
+      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithSubResource)
+      throws RestServiceException {
+    Map<String, Object> args = new HashMap<>();
+    if (rangeHeader != null) {
+      args.put(RestUtils.Headers.RANGE, rangeHeader);
+    }
+    doBuildGetBlobOptionsTestForSubResource(args, null, expectedRange, GetBlobOptions.OperationType.All,
+        shouldSucceedWithoutSubResource);
+    for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+      doBuildGetBlobOptionsTestForSubResource(args, subResource, expectedRange, GetBlobOptions.OperationType.BlobInfo,
+          shouldSucceedWithSubResource);
+    }
+  }
+
+  /**
+   * Test that {@link RestUtils#buildGetBlobOptions(Map, RestUtils.SubResource)} works correctly with given args and a
+   * specified sub-resource.
+   * @param args the map of args for the method call.
+   * @param subResource the sub-resource for the call.
+   * @param expectedRange the {@link ByteRange} expected to be parsed if the call should succeed, or {@code null} if no
+   *                      range is expected.
+   * @param expectedOpType the {@link GetBlobOptions.OperationType} expected to be set in the {@link GetBlobOptions}
+   *                       object.
+   * @param shouldSucceed {@code true} if the call should succeed.
+   * @throws RestServiceException
+   */
+  private void doBuildGetBlobOptionsTestForSubResource(Map<String, Object> args, RestUtils.SubResource subResource,
+      ByteRange expectedRange, GetBlobOptions.OperationType expectedOpType, boolean shouldSucceed)
+      throws RestServiceException {
+    if (shouldSucceed) {
+      GetBlobOptions options = RestUtils.buildGetBlobOptions(args, subResource);
+      assertEquals("Unexpected range for args=" + args + " and subResource=" + subResource, expectedRange,
+          options.getRange());
+      assertEquals("Unexpected operation type for args=" + args + " and subResource=" + subResource, expectedOpType,
+          options.getOperationType());
+    } else {
+      try {
+        RestUtils.buildGetBlobOptions(args, subResource);
+        fail("buildGetBlobOptions should not have succeeded with args=" + args + "and subResource=" + subResource);
+      } catch (RestServiceException expected) {
+        assertEquals("Unexpected error code.", RestServiceErrorCode.InvalidArgs, expected.getErrorCode());
+      }
+    }
+  }
+
+  /**
    * Sets entries from the passed in HashMap to the @{link JSONObject} headers
    * @param headers  {@link JSONObject} to which the new headers are to be added
    * @param userMetadata {@link Map} which has the new entries that has to be added
@@ -740,40 +799,5 @@ public class RestUtilsTest {
     for (String key : userMetadata.keySet()) {
       headers.put(key, userMetadata.get(key));
     }
-  }
-
-  /**
-   * Tests {@link RestUtils#toSecondsPrecisionInMs(long)}.
-   */
-  @Test
-  public void toSecondsPrecisionInMsTest() {
-    assertEquals(0, RestUtils.toSecondsPrecisionInMs(999));
-    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1000));
-    assertEquals(1000, RestUtils.toSecondsPrecisionInMs(1001));
-  }
-
-  /**
-   * Tests {@link RestUtils#getTimeFromDateString(String)}.
-   */
-  @Test
-  public void getTimeFromDateStringTest() {
-    SimpleDateFormat dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
-    dateFormatter.setTimeZone(TimeZone.getTimeZone("GMT"));
-    long curTime = System.currentTimeMillis();
-    Date curDate = new Date(curTime);
-    String dateStr = dateFormatter.format(curDate);
-    long epochTime = RestUtils.getTimeFromDateString(dateStr);
-    long actualExpectedTime = (curTime / 1000L) * 1000;
-    // Note http time is kept in Seconds so last three digits will be 000
-    assertEquals("Time mismatch ", actualExpectedTime, epochTime);
-
-    dateFormatter = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.CHINA);
-    curTime = System.currentTimeMillis();
-    curDate = new Date(curTime);
-    dateStr = dateFormatter.format(curDate);
-    // any other locale is not accepted
-    assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString(dateStr));
-
-    assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString("abc"));
   }
 }
