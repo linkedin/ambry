@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.StoreConfig;
@@ -264,9 +265,9 @@ public final class ReplicationManager {
   private static final short Crc_Size = 8;
   private static final short Replication_Delay_Multiplier = 5;
 
-  public ReplicationManager(ReplicationConfig replicationConfig, SSLConfig sslConfig, StoreConfig storeConfig,
-      StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Scheduler scheduler,
-      DataNodeId dataNode, ConnectionPool connectionPool, MetricRegistry metricRegistry,
+  public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+      StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      Scheduler scheduler, DataNodeId dataNode, ConnectionPool connectionPool, MetricRegistry metricRegistry,
       NotificationSystem requestNotification)
       throws ReplicationException {
 
@@ -288,7 +289,7 @@ public final class ReplicationManager {
       this.notification = requestNotification;
       this.metricRegistry = metricRegistry;
       this.dataNodeRemoteReplicaInfosPerDC = new HashMap<String, DataNodeRemoteReplicaInfos>();
-      this.sslEnabledDatacenters = Utils.splitString(sslConfig.sslEnabledDatacenters, ",");
+      this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
       this.numberOfReplicaThreads = new HashMap<String, Integer>();
 
       // initialize all partitions
@@ -424,9 +425,7 @@ public final class ReplicationManager {
     PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
     for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
       if (remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo.getReplicaId()
-          .getDataNodeId()
-          .getHostname()
-          .equals(hostName)) {
+          .getDataNodeId().getHostname().equals(hostName)) {
         foundRemoteReplicaInfo = remoteReplicaInfo;
       }
     }
@@ -607,8 +606,9 @@ public final class ReplicationManager {
                 if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
                     remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port &&
                     remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
-                  logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname,
-                      port, token);
+                  logger
+                      .info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname, port,
+                          token);
                   if (partitionInfo.getStore().getSizeInBytes() > 0) {
                     remoteReplicaInfo.initializeTokens(token);
                     remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
@@ -644,8 +644,8 @@ public final class ReplicationManager {
         throw new ReplicationException("IO error while reading from replica token file " + e);
       } finally {
         stream.close();
-        replicationMetrics.remoteReplicaTokensRestoreTime.update(
-            SystemTime.getInstance().milliseconds() - readStartTimeMs);
+        replicationMetrics.remoteReplicaTokensRestoreTime
+            .update(SystemTime.getInstance().milliseconds() - readStartTimeMs);
       }
     }
 
@@ -705,8 +705,8 @@ public final class ReplicationManager {
         throw new ReplicationException("IO error while persisting replica tokens to disk ");
       } finally {
         writer.close();
-        replicationMetrics.remoteReplicaTokensPersistTime.update(
-            SystemTime.getInstance().milliseconds() - writeStartTimeMs);
+        replicationMetrics.remoteReplicaTokensPersistTime
+            .update(SystemTime.getInstance().milliseconds() - writeStartTimeMs);
       }
       logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
     }

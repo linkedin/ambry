@@ -13,7 +13,6 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.EOFException;
 import java.io.File;
@@ -202,7 +201,7 @@ public class TestSSLUtils {
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", TRUSTSTORE_PASSWORD);
     props.put("ssl.cipher.suites", SSL_CIPHER_SUITES);
-    props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.put("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
   }
 
   /**
@@ -212,17 +211,16 @@ public class TestSSLUtils {
    * @param mode Represents if the caller is a client or server
    * @param trustStoreFile File path of the truststore file
    * @param certAlias alais used for the certificate
-   * @return {@SSLConfig} with all the required values populated
+   * @return {@link VerifiableProperties} with all the required values populated
    * @throws IOException
    * @throws GeneralSecurityException
    */
-  public static SSLConfig createSSLConfig(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
-      String certAlias)
+  public static VerifiableProperties createSslProps(String sslEnabledDatacenters, SSLFactory.Mode mode,
+      File trustStoreFile, String certAlias)
       throws IOException, GeneralSecurityException {
     Properties props = new Properties();
     addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias);
-    SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(props));
-    return sslConfig;
+    return new VerifiableProperties(props);
   }
 
   public static void verifySSLConfig(SSLContext sslContext, SSLEngine sslEngine, boolean isClient) {

@@ -125,13 +125,6 @@ public class SSLConfig {
   @Default("")
   public final String sslCipherSuites;
 
-  /**
-   * List of Datacenters to which local node needs SSL encryption to communicate
-   */
-  @Config("ssl.enabled.datacenters")
-  @Default("")
-  public final String sslEnabledDatacenters;
-
   public SSLConfig(VerifiableProperties verifiableProperties) {
     sslContextProtocol = verifiableProperties.getString("ssl.context.protocol", "TLS");
     sslContextProvider = verifiableProperties.getString("ssl.context.provider", "");
@@ -148,6 +141,5 @@ public class SSLConfig {
     sslTruststorePath = verifiableProperties.getString("ssl.truststore.path", "");
     sslTruststorePassword = verifiableProperties.getString("ssl.truststore.password", "");
     sslCipherSuites = verifiableProperties.getString("ssl.cipher.suites", "");
-    sslEnabledDatacenters = verifiableProperties.getString("ssl.enabled.datacenters", "");
   }
 }

@@ -70,9 +70,12 @@ public class ServerTool {
 
   public ServerTool()
       throws Exception {
-    ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-    SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
-    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+    VerifiableProperties vProps = new VerifiableProperties(new Properties());
+    ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
+    SSLConfig sslConfig = new SSLConfig(vProps);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+    connectionPool =
+        new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
     connectionPool.start();
   }
 

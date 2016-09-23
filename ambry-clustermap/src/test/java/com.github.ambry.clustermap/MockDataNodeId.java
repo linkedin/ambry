@@ -27,19 +27,14 @@ public class MockDataNodeId extends DataNodeId {
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
-  long rackId = -1;
   ArrayList<String> sslEnabledDataCenters = new ArrayList<String>();
+  boolean sslPortRequested = false;
 
   public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
     this.ports = new HashMap<PortType, Port>();
     populatePorts(ports);
-  }
-
-  public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter, int rackId) {
-    this(ports, mountPaths, dataCenter);
-    this.rackId = rackId;
   }
 
   private void populatePorts(ArrayList<Port> ports) {
@@ -54,6 +49,32 @@ public class MockDataNodeId extends DataNodeId {
     if (!plainTextPortFound) {
       throw new IllegalArgumentException("No Plain Text port found");
     }
+  }
+
+  /**
+   * Set the datacenters to which ssl is enabled. If the datacenter on which this datanode resides is
+   * part of the datacenters to which ssl is enabled, then this datanode will always return an SSL port in
+   * {@link #getPortToConnectTo()}
+   * @param sslEnabledDataCenters list of datacenters to which ssl is enabled.
+   */
+  public void setSslEnabledDataCenters(ArrayList<String> sslEnabledDataCenters) {
+    this.sslEnabledDataCenters = sslEnabledDataCenters;
+  }
+
+  /**
+   * Set the status for whether an SSL port was requested from this datanode.
+   * @param status the status to set.
+   */
+  public void setSslPortRequestedStatus(boolean status) {
+    sslPortRequested = status;
+  }
+
+  /**
+   * Get the status for whether an SSL port was requested from this datanode.
+   * @return true if SSL port was requested; false otherwise.
+   */
+  public boolean sslPortWasRequested() {
+    return sslPortRequested;
   }
 
   @Override
@@ -100,6 +121,7 @@ public class MockDataNodeId extends DataNodeId {
   public Port getPortToConnectTo() {
     if (sslEnabledDataCenters.contains(datacenter)) {
       if (ports.containsKey(PortType.SSL)) {
+        setSslPortRequestedStatus(true);
         return ports.get(PortType.SSL);
       } else {
         throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
@@ -120,7 +142,7 @@ public class MockDataNodeId extends DataNodeId {
 
   @Override
   public long getRackId() {
-    return rackId;
+    return -1;
   }
 
   public List<String> getMountPaths() {

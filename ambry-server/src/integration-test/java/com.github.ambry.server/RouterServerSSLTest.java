@@ -13,6 +13,8 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.server.RouterServerTestFramework.OperationChain;
@@ -26,7 +28,10 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Random;
+import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -36,20 +41,41 @@ import static com.github.ambry.server.RouterServerTestFramework.getRouterPropert
 public class RouterServerSSLTest {
   private static MockCluster sslCluster;
   private static RouterServerTestFramework testFramework;
+  private static MockClusterMap clusterMap;
 
   @BeforeClass
   public static void initializeTests()
       throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
+    String sslEnabledDataCentersStr = "DC1,DC2,DC3";
     Properties serverSSLProps = new Properties();
-    TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    TestSSLUtils
+        .addSSLProperties(serverSSLProps, sslEnabledDataCentersStr, SSLFactory.Mode.SERVER, trustStoreFile, "server");
     Properties routerProps = getRouterProperties("DC1");
-    TestSSLUtils.addSSLProperties(routerProps, "DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
+    TestSSLUtils.addSSLProperties(routerProps, sslEnabledDataCentersStr, SSLFactory.Mode.CLIENT, trustStoreFile,
+        "router-client");
     MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
-    sslCluster =
-        new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
-    testFramework = new RouterServerTestFramework(routerProps, sslCluster, notificationSystem);
+    clusterMap = sslCluster.getClusterMap();
+    testFramework = new RouterServerTestFramework(routerProps, clusterMap, notificationSystem);
+  }
+
+  @Before
+  public void before() {
+    for (MockDataNodeId m : clusterMap.getDataNodes()) {
+      m.setSslPortRequestedStatus(false);
+    }
+  }
+
+  @After
+  public void after() {
+    for (MockDataNodeId m : clusterMap.getDataNodes()) {
+      if (m.sslPortWasRequested()) {
+        return;
+      }
+    }
+    Assert.fail("Router did not communicate over SSL");
   }
 
   @AfterClass

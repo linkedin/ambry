@@ -70,7 +70,7 @@ public final class ToolUtils {
     props.put("ssl.truststore.path", sslTruststorePath);
     props.put("ssl.truststore.password", sslTruststorePassword);
     props.put("ssl.cipher.suites", sslCipherSuites);
-    props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.put("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
 

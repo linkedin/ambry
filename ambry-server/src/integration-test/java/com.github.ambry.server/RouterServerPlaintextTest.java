@@ -13,6 +13,7 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.server.RouterServerTestFramework.OperationChain;
 import com.github.ambry.server.RouterServerTestFramework.OperationType;
 import com.github.ambry.utils.SystemTime;
@@ -40,7 +41,8 @@ public class RouterServerPlaintextTest {
     MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
-    testFramework = new RouterServerTestFramework(getRouterProperties("DC1"), plaintextCluster, notificationSystem);
+    MockClusterMap routerClusterMap = plaintextCluster.getClusterMap();
+    testFramework = new RouterServerTestFramework(getRouterProperties("DC1"), routerClusterMap, notificationSystem);
   }
 
   @AfterClass

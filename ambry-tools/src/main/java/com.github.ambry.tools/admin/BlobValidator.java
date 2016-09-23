@@ -178,10 +178,13 @@ public class BlobValidator {
         sslProperties = new Properties();
       }
       Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
+      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
+      SSLConfig sslConfig = new SSLConfig(vProps);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
 
       boolean verbose = Boolean.parseBoolean(options.valueOf(verboseOpt));
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
