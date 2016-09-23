@@ -11,9 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.router;
+package com.github.ambry.commons;
 
-import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -24,7 +25,7 @@ import java.nio.ByteBuffer;
  *  <p/>
  *  This class is not thread-safe and will result in undefined behaviour if accesses to the stream are not synchronized.
  */
-class ReadableStreamChannelInputStream extends InputStream {
+public class ReadableStreamChannelInputStream extends InputStream {
   private final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
   private final CloseWriteChannelCallback callback = new CloseWriteChannelCallback(asyncWritableChannel);
   private final ReadableStreamChannel readableStreamChannel;
