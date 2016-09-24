@@ -589,7 +589,7 @@ public class AmbrySecurityServiceTest {
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Content length should have been 0", "0",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
-    Assert.assertEquals("Accept-Ranges not set correctly", "bytes",
+    Assert.assertNull("Accept-Ranges should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     Assert.assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));

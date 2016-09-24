@@ -161,10 +161,11 @@ public class RestUtils {
     public final static String USER_METADATA_PART = "UserMetadata";
   }
 
+  public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
+  public static final String BYTE_RANGE_UNITS = "bytes";
   private static final int CRC_SIZE = 8;
   private static final short USER_METADATA_VERSION_V1 = 1;
-  private static final String BYTE_RANGE_PREFIX = "bytes=";
-  public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
+  private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
   /**
@@ -364,7 +365,8 @@ public class RestUtils {
 
   /**
    * Build a {@link GetBlobOptions} object from an argument map for a certain sub-resource.
-   * @param args the arguments associated with the request.
+   * @param args the arguments associated with the request. This is typically a map of header names and query string
+   *             arguments to values.
    * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
    * @return a populated {@link GetBlobOptions} object.
    * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
@@ -390,7 +392,8 @@ public class RestUtils {
    * @return the content range header value.
    */
   public static String buildContentRangeHeader(ByteRange resolvedByteRange, long blobSize) {
-    return "bytes " + resolvedByteRange.getStartOffset() + "-" + resolvedByteRange.getEndOffset() + "/" + blobSize;
+    return BYTE_RANGE_UNITS + " " + resolvedByteRange.getStartOffset() + "-" + resolvedByteRange.getEndOffset() + "/"
+        + blobSize;
   }
 
   /**

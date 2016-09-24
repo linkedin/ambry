@@ -561,7 +561,8 @@ public class RestUtilsTest {
     // bad ranges
     String[] badRanges = {"bytes=0-abcd", "bytes=0as23-44444444",
         "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53", "bytes=223-34", "bytes=-34ab",
-        "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345"};
+        "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345", "bytes=3.14-22",
+        "bytes=3-6.2"};
     for (String badRange : badRanges) {
       doBuildGetBlobOptionsTest(badRange, null, false, false);
     }

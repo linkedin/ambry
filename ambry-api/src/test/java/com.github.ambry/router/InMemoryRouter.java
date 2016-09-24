@@ -110,13 +110,19 @@ public class InMemoryRouter implements Router {
     /**
      * @param range the {@link ByteRange} for the blob, or null.
      * @return the blob content within the provided range, or the entire blob, if the range is null.
+     * @throws RouterException if the range was non-null, but could not be resolved.
      */
-    public ByteBuffer getBlob(ByteRange range) {
-      if (range == null) {
-        return getBlob();
+    public ByteBuffer getBlob(ByteRange range)
+        throws RouterException {
+      try {
+        if (range == null) {
+          return getBlob();
+        }
+        ByteRange resolvedRange = range.toResolvedByteRange(blob.array().length);
+        return ByteBuffer.wrap(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
+      } catch (IllegalArgumentException e) {
+        throw new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
       }
-      ByteRange resolvedRange = range.toResolvedByteRange(blob.array().length);
-      return ByteBuffer.wrap(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
     }
   }
 
@@ -138,9 +144,9 @@ public class InMemoryRouter implements Router {
     } else {
       try {
         if (deletedBlobs.contains(blobId)) {
-          exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
+          throw new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
         } else if (!blobs.containsKey(blobId)) {
-          exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+          throw new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         } else {
           InMemoryBlob blob = blobs.get(blobId);
           switch (options.getOperationType()) {
@@ -156,8 +162,8 @@ public class InMemoryRouter implements Router {
               break;
           }
         }
-      } catch (IllegalArgumentException e) {
-        exception = new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
+      } catch (RouterException e) {
+        exception = e;
       } catch (Exception e) {
         exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
       } finally {

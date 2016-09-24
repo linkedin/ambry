@@ -428,7 +428,7 @@ public class FrontendIntegrationTest {
     assertEquals("Unexpected response status", HttpResponseStatus.NOT_MODIFIED, response.getStatus());
     assertTrue("No Date header", response.headers().get(RestUtils.Headers.DATE) != null);
     assertNull("No Last-Modified header expected", response.headers().get("Last-Modified"));
-    assertEquals("Accept-Ranges not set correctly", "bytes", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
+    assertNull("Accept-Ranges should not be set", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
     assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         response.headers().get(RestUtils.Headers.BLOB_SIZE));

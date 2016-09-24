@@ -131,7 +131,6 @@ class AmbrySecurityService implements SecurityService {
                     new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
                 setGetBlobResponseHeaders(blobInfo, options, responseChannel);
               }
-              responseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, "bytes");
             } else {
               responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
@@ -190,14 +189,15 @@ class AmbrySecurityService implements SecurityService {
       RestResponseChannel restResponseChannel)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
-    restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, "bytes");
+    restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
+    long contentLength = blobProperties.getBlobSize();
     if (options.getRange() != null) {
-      setContentRangeHeader(options.getRange(), blobProperties.getBlobSize(), restResponseChannel);
+      contentLength = setContentRangeHeader(options.getRange(), blobProperties.getBlobSize(), restResponseChannel);
     }
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     setBlobPropertiesHeaders(blobProperties, restResponseChannel);
   }
 
@@ -213,6 +213,7 @@ class AmbrySecurityService implements SecurityService {
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
     long contentLength = blobProperties.getBlobSize();
     if (options.getRange() != null) {
       contentLength = setContentRangeHeader(options.getRange(), blobProperties.getBlobSize(), restResponseChannel);

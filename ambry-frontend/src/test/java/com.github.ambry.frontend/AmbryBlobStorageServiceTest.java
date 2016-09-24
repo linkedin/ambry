@@ -488,6 +488,10 @@ public class AmbryBlobStorageServiceTest {
     doRouterExceptionPipelineTest(testRouter, exceptionMsg);
   }
 
+  /**
+   * Test that GET operations fail with the expected error code when a bad range header is provided.
+   * @throws Exception
+   */
   @Test
   public void badRangeHeaderTest()
       throws Exception {
@@ -765,8 +769,7 @@ public class AmbryBlobStorageServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertEquals("No content expected as blob is not modified", 0, restResponseChannel.getResponseBody().length);
-    assertEquals("Accept-Ranges not set correctly", "bytes",
-        restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
   }
