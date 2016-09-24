@@ -118,7 +118,8 @@ public class AmbrySecurityServiceTest {
     // security service closed
     securityService.close();
     for (RestMethod restMethod : methods) {
-      testExceptionCasesProcessRequest(createRestRequest(restMethod, "/", null) ,RestServiceErrorCode.ServiceUnavailable);
+      testExceptionCasesProcessRequest(createRestRequest(restMethod, "/", null),
+          RestServiceErrorCode.ServiceUnavailable);
     }
   }
 

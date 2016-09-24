@@ -56,7 +56,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
@@ -1281,6 +1280,16 @@ class BadRestRequest extends BadRSC implements RestRequest {
   public RestRequestMetricsTracker getMetricsTracker() {
     return new RestRequestMetricsTracker();
   }
+
+  @Override
+  public void setDigestAlgorithm(String digestAlgorithm) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public byte[] getDigest() {
+    throw new IllegalStateException("Not implemented");
+  }
 }
 
 /**
@@ -1295,17 +1304,6 @@ class BadRSC implements ReadableStreamChannel {
 
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
-    throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
-  public void setDigestAlgorithm(String digestAlgorithm)
-      throws NoSuchAlgorithmException {
-    throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
-  public byte[] getDigest() {
     throw new IllegalStateException("Not implemented");
   }
 

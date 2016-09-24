@@ -618,26 +618,26 @@ public class GetBlobOperationTest {
           callbackException.set(exception);
           readCompleteLatch.countDown();
         } else {
-            final ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
-            readIntoFuture.set(result.getBlobDataChannel().readInto(writableChannel, null));
-            Utils.newThread(new Runnable() {
-              @Override
-              public void run() {
-                try {
-                  int chunksLeftToRead = numChunksToRead;
-                  while (chunksLeftToRead > 0) {
-                    writableChannel.getNextChunk();
-                    writableChannel.resolveOldestChunk(null);
-                    chunksLeftToRead--;
-                  }
-                  result.getBlobDataChannel().close();
-                } catch (Exception e) {
-                  callbackException.set(e);
-                } finally {
-                  readCompleteLatch.countDown();
+          final ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+          readIntoFuture.set(result.getBlobDataChannel().readInto(writableChannel, null));
+          Utils.newThread(new Runnable() {
+            @Override
+            public void run() {
+              try {
+                int chunksLeftToRead = numChunksToRead;
+                while (chunksLeftToRead > 0) {
+                  writableChannel.getNextChunk();
+                  writableChannel.resolveOldestChunk(null);
+                  chunksLeftToRead--;
                 }
+                result.getBlobDataChannel().close();
+              } catch (Exception e) {
+                callbackException.set(e);
+              } finally {
+                readCompleteLatch.countDown();
               }
-            }, false).start();
+            }
+          }, false).start();
         }
       }
     };
@@ -654,8 +654,7 @@ public class GetBlobOperationTest {
       readIntoFuture.get().get();
       Assert.fail("Expected ExecutionException");
     } catch (ExecutionException e) {
-      Assert.assertTrue("Unexpected type for exception: " + e.getCause(),
-          e.getCause() instanceof RouterException);
+      Assert.assertTrue("Unexpected type for exception: " + e.getCause(), e.getCause() instanceof RouterException);
       Assert.assertEquals("Unexpected RouterErrorCode", RouterErrorCode.ChannelClosed,
           ((RouterException) e.getCause()).getErrorCode());
     }

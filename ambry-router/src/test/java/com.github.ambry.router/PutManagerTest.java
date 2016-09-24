@@ -895,16 +895,6 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
     return returnedFuture;
   }
 
-  @Override
-  public void setDigestAlgorithm(String digestAlgorithm) {
-    throw new IllegalStateException("Not implemented");
-  }
-
-  @Override
-  public byte[] getDigest() {
-    throw new IllegalStateException("Not implemented");
-  }
-
   /**
    * {@inheritDoc}
    */
