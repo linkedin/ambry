@@ -868,15 +868,6 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
   }
 
   @Override
-  public void setDigestAlgorithm(String digestAlgorithm) {
-  }
-
-  @Override
-  public byte[] getDigest() {
-    return null;
-  }
-
-  @Override
   public boolean isOpen() {
     return channelOpen.get();
   }

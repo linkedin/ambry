@@ -14,7 +14,6 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;

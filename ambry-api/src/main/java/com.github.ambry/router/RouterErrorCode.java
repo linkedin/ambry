@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-
 /**
  * All the error codes that accompany a {@link RouterException}.
  */

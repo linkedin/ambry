@@ -341,16 +341,6 @@ class GetBlobOperation extends GetOperation {
       }
     }
 
-    @Override
-    public void setDigestAlgorithm(String digestAlgorithm) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public byte[] getDigest() {
-      throw new UnsupportedOperationException();
-    }
-
     /**
      * @return whether readInto() has been called yet.
      */

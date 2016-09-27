@@ -329,18 +329,18 @@ public class DeleteManagerTest {
     setServerResponse(false);
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.OperationTimedOut, new ErrorCodeChecker() {
-      @Override
-      public void testAndAssert(RouterErrorCode expectedError)
-          throws Exception {
-        CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-        future = router.deleteBlob(blobIdString, new ClientCallback(operationCompleteLatch));
-        do {
-          // increment mock time
-          mockTime.sleep(1000);
-        } while (!operationCompleteLatch.await(10, TimeUnit.MILLISECONDS));
-        assertFailureAndCheckErrorCode(future, expectedError);
-      }
-    });
+          @Override
+          public void testAndAssert(RouterErrorCode expectedError)
+              throws Exception {
+            CountDownLatch operationCompleteLatch = new CountDownLatch(1);
+            future = router.deleteBlob(blobIdString, new ClientCallback(operationCompleteLatch));
+            do {
+              // increment mock time
+              mockTime.sleep(1000);
+            } while (!operationCompleteLatch.await(10, TimeUnit.MILLISECONDS));
+            assertFailureAndCheckErrorCode(future, expectedError);
+          }
+        });
   }
 
   /**
@@ -383,14 +383,14 @@ public class DeleteManagerTest {
       throws Exception {
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
-      @Override
-      public void testAndAssert(RouterErrorCode expectedError)
-          throws Exception {
-        future = router.deleteBlob(blobIdString);
-        router.close();
-        assertFailureAndCheckErrorCode(future, expectedError);
-      }
-    });
+          @Override
+          public void testAndAssert(RouterErrorCode expectedError)
+              throws Exception {
+            future = router.deleteBlob(blobIdString);
+            router.close();
+            assertFailureAndCheckErrorCode(future, expectedError);
+          }
+        });
   }
 
   /**

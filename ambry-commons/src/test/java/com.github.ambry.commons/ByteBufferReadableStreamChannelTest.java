@@ -20,9 +20,6 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.security.MessageDigest;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -47,10 +44,32 @@ public class ByteBufferReadableStreamChannelTest {
   @Test
   public void commonCaseTest()
       throws Exception {
-    String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
-    for (String digestAlgorithm : digestAlgorithms) {
-      readToAWCTest(digestAlgorithm);
+    ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
+    ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(content);
+    assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
+    assertEquals("Size returned by ByteBufferReadableStreamChannel did not match source array size", content.capacity(),
+        readableStreamChannel.getSize());
+    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
+    ReadIntoCallback callback = new ReadIntoCallback();
+    Future<Long> future = readableStreamChannel.readInto(writeChannel, callback);
+    ByteBuffer contentWrapper = ByteBuffer.wrap(content.array());
+    while (contentWrapper.hasRemaining()) {
+      ByteBuffer recvdContent = writeChannel.getNextChunk();
+      assertNotNull("Written content lesser than original content", recvdContent);
+      while (recvdContent.hasRemaining()) {
+        assertTrue("Written content is more than original content", contentWrapper.hasRemaining());
+        assertEquals("Unexpected byte", contentWrapper.get(), recvdContent.get());
+      }
+      writeChannel.resolveOldestChunk(null);
     }
+    assertNull("There should have been no more data in the channel", writeChannel.getNextChunk(0));
+    writeChannel.close();
+    if (callback.exception != null) {
+      throw callback.exception;
+    }
+    long futureBytesRead = future.get();
+    assertEquals("Total bytes written does not match (callback)", content.limit(), callback.bytesRead);
+    assertEquals("Total bytes written does not match (future)", content.limit(), futureBytesRead);
   }
 
   /**
@@ -151,68 +170,6 @@ public class ByteBufferReadableStreamChannelTest {
     assertFalse("ByteBufferReadableStreamChannel is not closed", byteBufferReadableStreamChannel.isOpen());
   }
 
-  /**
-   * {@link ByteBufferReadableStreamChannel} has no restrictions on when and what algorithms can be used to generate
-   * the digest. This function tests the correctness of such support.
-   * @throws Exception
-   */
-  @Test
-  public void changingAlgorithmsTest()
-      throws Exception {
-    String[] digestAlgorithms = {"MD5", "SHA-1", "SHA-256"};
-    ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
-    Map<String, ByteBuffer> truthDigests = new HashMap<>();
-    for (String digestAlgorithm : digestAlgorithms) {
-      MessageDigest digest = MessageDigest.getInstance(digestAlgorithm);
-      digest.update(content.array());
-      truthDigests.put(digestAlgorithm, ByteBuffer.wrap(digest.digest()));
-    }
-    ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(content);
-    assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
-    for (String digestAlgorithm : digestAlgorithms) {
-      readableStreamChannel.setDigestAlgorithm(digestAlgorithm);
-      assertArrayEquals("Digest from channel should match original", truthDigests.get(digestAlgorithm).array(),
-          readableStreamChannel.getDigest());
-    }
-    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
-    ReadIntoCallback callback = new ReadIntoCallback();
-    Future<Long> future = readableStreamChannel.readInto(writeChannel, callback);
-    ByteBuffer contentWrapper = ByteBuffer.wrap(content.array());
-    while (contentWrapper.hasRemaining()) {
-      ByteBuffer recvdContent = writeChannel.getNextChunk();
-      assertNotNull("Written content lesser than original content", recvdContent);
-      for (String digestAlgorithm : digestAlgorithms) {
-        readableStreamChannel.setDigestAlgorithm(digestAlgorithm);
-        assertArrayEquals("Digest from channel should match original", truthDigests.get(digestAlgorithm).array(),
-            readableStreamChannel.getDigest());
-      }
-      while (recvdContent.hasRemaining()) {
-        // getting any digest at any time is ok.
-        for (String digestAlgorithm : digestAlgorithms) {
-          readableStreamChannel.setDigestAlgorithm(digestAlgorithm);
-          assertArrayEquals("Digest from channel should match original", truthDigests.get(digestAlgorithm).array(),
-              readableStreamChannel.getDigest());
-        }
-        assertTrue("Written content is more than original content", contentWrapper.hasRemaining());
-        assertEquals("Unexpected byte", contentWrapper.get(), recvdContent.get());
-      }
-      writeChannel.resolveOldestChunk(null);
-    }
-    assertNull("There should have been no more data in the channel", writeChannel.getNextChunk(0));
-    writeChannel.close();
-    if (callback.exception != null) {
-      throw callback.exception;
-    }
-    long futureBytesRead = future.get();
-    assertEquals("Total bytes written does not match (callback)", content.limit(), callback.bytesRead);
-    assertEquals("Total bytes written does not match (future)", content.limit(), futureBytesRead);
-    for (String digestAlgorithm : digestAlgorithms) {
-      readableStreamChannel.setDigestAlgorithm(digestAlgorithm);
-      assertArrayEquals("Digest from channel should match original", truthDigests.get(digestAlgorithm).array(),
-          readableStreamChannel.getDigest());
-    }
-  }
-
   // helpers
   // general
 
@@ -224,56 +181,6 @@ public class ByteBufferReadableStreamChannelTest {
   private byte[] fillRandomBytes(byte[] in) {
     new Random().nextBytes(in);
     return in;
-  }
-
-  // commonCaseTest() helpers
-
-  /**
-   * Tests reading into a {@link AsyncWritableChannel}.
-   * @param digestAlgorithm the digest algorithm to use. Can be empty or {@code null} if digest checking is not
-   *                        required.
-   * @throws Exception
-   */
-  private void readToAWCTest(String digestAlgorithm)
-      throws Exception {
-    ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
-    byte[] truthDigest = null;
-    ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(content);
-    if (digestAlgorithm != null && !digestAlgorithm.isEmpty()) {
-      MessageDigest digest = MessageDigest.getInstance(digestAlgorithm);
-      digest.update(content.array());
-      truthDigest = digest.digest();
-      readableStreamChannel.setDigestAlgorithm(digestAlgorithm);
-    }
-    assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
-    assertEquals("Size returned by ByteBufferReadableStreamChannel did not match source array size", content.capacity(),
-        readableStreamChannel.getSize());
-    assertArrayEquals("Digest from channel should match original", truthDigest, readableStreamChannel.getDigest());
-    ByteBufferAsyncWritableChannel writeChannel = new ByteBufferAsyncWritableChannel();
-    ReadIntoCallback callback = new ReadIntoCallback();
-    Future<Long> future = readableStreamChannel.readInto(writeChannel, callback);
-    ByteBuffer contentWrapper = ByteBuffer.wrap(content.array());
-    while (contentWrapper.hasRemaining()) {
-      ByteBuffer recvdContent = writeChannel.getNextChunk();
-      assertNotNull("Written content lesser than original content", recvdContent);
-      assertArrayEquals("Digest from channel should match original", truthDigest, readableStreamChannel.getDigest());
-      while (recvdContent.hasRemaining()) {
-        // getting a digest at any time is ok.
-        assertArrayEquals("Digest from channel should match original", truthDigest, readableStreamChannel.getDigest());
-        assertTrue("Written content is more than original content", contentWrapper.hasRemaining());
-        assertEquals("Unexpected byte", contentWrapper.get(), recvdContent.get());
-      }
-      writeChannel.resolveOldestChunk(null);
-    }
-    assertNull("There should have been no more data in the channel", writeChannel.getNextChunk(0));
-    writeChannel.close();
-    if (callback.exception != null) {
-      throw callback.exception;
-    }
-    long futureBytesRead = future.get();
-    assertEquals("Total bytes written does not match (callback)", content.limit(), callback.bytesRead);
-    assertEquals("Total bytes written does not match (future)", content.limit(), futureBytesRead);
-    assertArrayEquals("Digest from channel should match original", truthDigest, readableStreamChannel.getDigest());
   }
 }
 

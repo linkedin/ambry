@@ -19,7 +19,6 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -74,17 +73,6 @@ class PerfRSC implements ReadableStreamChannel {
       throw new IllegalStateException("ReadInto should not be called more than once");
     }
     return futureResult;
-  }
-
-  @Override
-  public void setDigestAlgorithm(String digestAlgorithm)
-      throws NoSuchAlgorithmException {
-    // no op
-  }
-
-  @Override
-  public byte[] getDigest() {
-    return null;
   }
 
   @Override

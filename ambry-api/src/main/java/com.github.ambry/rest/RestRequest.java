@@ -13,8 +13,11 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 
 
@@ -89,4 +92,33 @@ public interface RestRequest extends ReadableStreamChannel {
    * @return the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
    */
   public RestRequestMetricsTracker getMetricsTracker();
+
+  /**
+   * Set the digest algorithm to use on the data that is being streamed from the request. Once the data is emptied,
+   * the digest can be obtained via {@link #getDigest()}.
+   * <p/>
+   * This function is ideally called before {@link #readInto(AsyncWritableChannel, Callback)}. After a call to
+   * {@link #readInto(AsyncWritableChannel, Callback)}, some content may have been consumed and getting a digest may no
+   * longer be possible. The safety of doing otherwise depends on the implementation.
+   * @param digestAlgorithm the digest algorithm to use.
+   * @throws NoSuchAlgorithmException if the {@code digestAlgorithm} does not exist or is not supported.
+   * @throws IllegalStateException if {@link #readInto(AsyncWritableChannel, Callback)} has already been called.
+   */
+  public void setDigestAlgorithm(String digestAlgorithm)
+      throws NoSuchAlgorithmException;
+
+  /**
+   * Gets the digest as specified by the digest algorithm set through {@link #setDigestAlgorithm(String)}. If none was
+   * set, returns {@code null}.
+   * <p/>
+   * This function is ideally called after the data is emptied completely. Otherwise, the complete digest may not
+   * have been calculated yet. The safety of doing otherwise depends on the implementation.
+   * <p/>
+   * "Emptying the data" refers to awaiting on the future or getting the callback after a
+   * {@link #readInto(AsyncWritableChannel, Callback)} call.
+   * @return the digest as computed by the digest algorithm set through {@link #setDigestAlgorithm(String)}. If none
+   * was set, {@code null}.
+   * @throws IllegalStateException if called before the data has been emptied.
+   */
+  public byte[] getDigest();
 }

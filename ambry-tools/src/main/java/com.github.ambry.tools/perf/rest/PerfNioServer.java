@@ -30,7 +30,6 @@ import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -291,14 +290,13 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void setDigestAlgorithm(String digestAlgorithm)
-        throws NoSuchAlgorithmException {
-      readableStreamChannel.setDigestAlgorithm(digestAlgorithm);
+    public void setDigestAlgorithm(String digestAlgorithm) {
+      // no op;
     }
 
     @Override
     public byte[] getDigest() {
-      return readableStreamChannel.getDigest();
+      return null;
     }
 
     /**
