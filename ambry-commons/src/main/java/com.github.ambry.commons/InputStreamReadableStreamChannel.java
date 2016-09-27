@@ -160,7 +160,7 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
   }
 
   /**
-   * Fills the buffer from the {@link InputStream}.
+   * Fills the buffer from the {@link InputStream}. Waits untils the buffer is full or the {@link InputStream} is empty.
    * @return the number of bytes read from the {@link InputStream}.
    * @throws IOException if there were any problems reading the {@link InputStream}.
    */
@@ -173,7 +173,7 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
       if (currentRead > 0) {
         totalRead += currentRead;
       }
-    } while (currentRead < buffer.length && currentRead > 0);
+    } while (totalRead < buffer.length && currentRead != -1);
     return totalRead;
   }
 
