@@ -29,7 +29,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.TimeZone;
-import junit.framework.Assert;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
