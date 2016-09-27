@@ -13,10 +13,15 @@
  */
 package com.github.ambry.utils;
 
+import java.util.Random;
+
+
 /**
  * A class consisting of common util methods useful for tests.
  */
 public class TestUtils {
+  public static final Random RANDOM = new Random();
+
   /**
    * Return the number of threads currently running with a name containing the given pattern.
    * @param pattern the pattern to compare
@@ -47,5 +52,16 @@ public class TestUtils {
       }
     }
     return thread;
+  }
+
+  /**
+   * Gets a byte array of length {@code size} with random bytes.
+   * @param size the required length of the random byte array.
+   * @return a byte array of length {@code size} with random bytes.
+   */
+  public static byte[] getRandomBytes(int size) {
+    byte[] bytes = new byte[size];
+    RANDOM.nextBytes(bytes);
+    return bytes;
   }
 }
