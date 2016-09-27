@@ -103,10 +103,6 @@ public class RestUtils {
      */
     public final static String CREATION_TIME = "x-ambry-creation-time";
     /**
-     * not allowed in request. Detailed message about an error in an error response.
-     */
-    public final static String FAILURE_REASON = "x-ambry-failure-reason";
-    /**
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
@@ -163,7 +159,19 @@ public class RestUtils {
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args)
       throws RestServiceException {
-    long blobSize = getBlobSize(getHeader(args, Headers.BLOB_SIZE, true));
+    String blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
+    long blobSize;
+    try {
+      blobSize = Long.parseLong(blobSizeStr);
+      if (blobSize < 0) {
+        throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSize + "] is less than 0",
+            RestServiceErrorCode.InvalidArgs);
+      }
+    } catch (NumberFormatException e) {
+      throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
+          RestServiceErrorCode.InvalidArgs);
+    }
+
     long ttl = Utils.Infinite_Time;
     String ttlStr = getHeader(args, Headers.TTL, false);
     if (ttlStr != null) {
@@ -448,26 +456,5 @@ public class RestUtils {
    */
   public static long toSecondsPrecisionInMs(long ms) {
     return ms - (ms % 1000);
-  }
-
-  /**
-   * Parse a blob size string and return the blob size as a number, if valid.
-   * @param blobSizeStr a string representing the blob size.
-   * @return the blob size as a {@code long}.
-   * @throws RestServiceException if a valid blob size could not be parsed.
-   */
-  static long getBlobSize(String blobSizeStr)
-      throws RestServiceException {
-    try {
-      long blobSize = Long.parseLong(blobSizeStr);
-      if (blobSize < 0) {
-        throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSize + "] is less than 0",
-            RestServiceErrorCode.InvalidArgs);
-      }
-      return blobSize;
-    } catch (NumberFormatException e) {
-      throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
-          RestServiceErrorCode.InvalidArgs);
-    }
   }
 }

@@ -413,7 +413,7 @@ public class NettyResponseChannelTest {
           .createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(), httpHeaders));
       HttpResponse response = (HttpResponse) channel.readOutbound();
       assertEquals("Unexpected response status", entry.getValue(), response.getStatus());
-      boolean containsFailureReasonHeader = response.headers().contains(RestUtils.Headers.FAILURE_REASON);
+      boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
       if (entry.getValue() == HttpResponseStatus.BAD_REQUEST) {
         assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
       } else {

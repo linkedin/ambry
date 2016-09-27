@@ -704,23 +704,4 @@ public class RestUtilsTest {
 
     assertEquals("Should have returned null", null, RestUtils.getTimeFromDateString("abc"));
   }
-
-  /**
-   * Tests {@link RestUtils#getBlobSize(String)}.
-   * @throws RestServiceException
-   */
-  @Test
-  public void getBlobSizeTest()
-      throws RestServiceException {
-    Assert.assertEquals("Unexpected blob size parsed", 2345, RestUtils.getBlobSize("2345"));
-    String[] invalidBlobSizeStrs = {"aba123", "12ab", "-1", "ddsdd", "999999999999999999999999999"};
-    for (String blobSizeStr : invalidBlobSizeStrs) {
-      try {
-        RestUtils.getBlobSize(blobSizeStr);
-        fail("blobSize parsing should not have succeeded");
-      } catch (RestServiceException e) {
-        assertEquals("Unexpected error code", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
-      }
-    }
-  }
 }

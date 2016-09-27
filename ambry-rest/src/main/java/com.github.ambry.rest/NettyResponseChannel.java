@@ -65,6 +65,8 @@ import org.slf4j.LoggerFactory;
  * will be accepted and all scheduled writes will be notified of the failure.
  */
 class NettyResponseChannel implements RestResponseChannel {
+  // Detailed message about an error in an error response.
+  static final String FAILURE_REASON_HEADER = "x-failure-reason";
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
@@ -406,12 +408,12 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
     HttpHeaders.setContentLength(response, 0);
     if (errReason != null) {
-      HttpHeaders.setHeader(response, RestUtils.Headers.FAILURE_REASON, errReason);
+      HttpHeaders.setHeader(response, FAILURE_REASON_HEADER, errReason);
     }
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    boolean keepAlive = !forceClose && HttpHeaders.isKeepAlive(responseMetadata) &&
-        request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES
-        .contains(status);
+    boolean keepAlive =
+        !forceClose && HttpHeaders.isKeepAlive(responseMetadata) && request != null && !request.getRestMethod()
+            .equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES.contains(status);
     HttpHeaders.setKeepAlive(response, keepAlive);
     return response;
   }
