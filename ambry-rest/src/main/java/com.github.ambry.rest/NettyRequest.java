@@ -142,12 +142,12 @@ class NettyRequest implements RestRequest {
       try {
         size = Long.parseLong(blobSizeStr);
         if (size < 0) {
-          throw new RestServiceException(RestUtils.Headers.BLOB_SIZE + "[" + size + "] is less than 0",
+          throw new RestServiceException(RestUtils.Headers.BLOB_SIZE + " [" + size + "] is less than 0",
               RestServiceErrorCode.InvalidArgs);
         }
       } catch (NumberFormatException e) {
         throw new RestServiceException(
-            RestUtils.Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
+            RestUtils.Headers.BLOB_SIZE + " [" + blobSizeStr + "] could not parsed into a number",
             RestServiceErrorCode.InvalidArgs);
       }
     } else {
