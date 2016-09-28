@@ -206,6 +206,18 @@ public class NettyRequestTest {
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.UnsupportedHttpMethod, e.getErrorCode());
     }
+
+    String[] invalidBlobSizeStrs = {"aba123", "12ab", "-1", "ddsdd", "999999999999999999999999999", "1.234"};
+    for (String blobSizeStr : invalidBlobSizeStrs) {
+      // bad blob size
+      try {
+        createNettyRequest(HttpMethod.GET, "/", new DefaultHttpHeaders().add(RestUtils.Headers.BLOB_SIZE, blobSizeStr),
+            new MockChannel());
+        fail("Bad blob size header was supplied to NettyRequest. It should have failed to construct");
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+      }
+    }
   }
 
   /**

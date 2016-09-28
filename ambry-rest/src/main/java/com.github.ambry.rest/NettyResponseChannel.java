@@ -41,6 +41,7 @@ import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -64,6 +65,8 @@ import org.slf4j.LoggerFactory;
  * will be accepted and all scheduled writes will be notified of the failure.
  */
 class NettyResponseChannel implements RestResponseChannel {
+  // Detailed message about an error in an error response.
+  static final String FAILURE_REASON_HEADER = "x-failure-reason";
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
@@ -385,35 +388,32 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private FullHttpResponse getErrorResponse(Throwable cause) {
     HttpResponseStatus status;
-    StringBuilder errReason = new StringBuilder();
+    String errReason = null;
     if (cause instanceof RestServiceException) {
       RestServiceErrorCode restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
       status = getHttpResponseStatus(errorResponseStatus);
       if (status == HttpResponseStatus.BAD_REQUEST) {
-        errReason.append(" [").append(Utils.getRootCause(cause).getMessage()).append("]");
+        errReason = new String(
+            Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
+            StandardCharsets.US_ASCII);
       }
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
     }
-    String fullMsg = "Failure: " + status + errReason;
-    logger.trace("Constructed error response for the client - [{}]", fullMsg);
-    FullHttpResponse response;
-    if (request != null && !request.getRestMethod().equals(RestMethod.HEAD)) {
-      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, Unpooled.wrappedBuffer(fullMsg.getBytes()));
-    } else {
-      // for HEAD, we cannot send the actual body but we need to return what the length would have been if this was GET.
-      // https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html (Section 9.4)
-      response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
-    }
+    logger.trace("Constructed error response for the client - [{} - {}]", status, errReason);
+    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
     HttpHeaders.setDate(response, new GregorianCalendar().getTime());
-    HttpHeaders.setContentLength(response, fullMsg.length());
+    HttpHeaders.setContentLength(response, 0);
+    if (errReason != null) {
+      HttpHeaders.setHeader(response, FAILURE_REASON_HEADER, errReason);
+    }
     HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    boolean keepAlive = !forceClose && HttpHeaders.isKeepAlive(responseMetadata) &&
-        request != null && !request.getRestMethod().equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES
-        .contains(status);
+    boolean keepAlive =
+        !forceClose && HttpHeaders.isKeepAlive(responseMetadata) && request != null && !request.getRestMethod()
+            .equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES.contains(status);
     HttpHeaders.setKeepAlive(response, keepAlive);
     return response;
   }

@@ -104,7 +104,7 @@ class NettyRequest implements RestRequest {
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @throws IllegalArgumentException if {@code request} is null.
    * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
-   *                                {@link RestMethod}.
+   *                                {@link RestMethod} or if the {@link RestUtils.Headers#BLOB_SIZE} header is invalid.
    */
   public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics)
       throws RestServiceException {
@@ -137,8 +137,19 @@ class NettyRequest implements RestRequest {
           RestServiceErrorCode.UnsupportedHttpMethod);
     }
 
-    if (HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null) != null) {
-      size = Long.parseLong(HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE));
+    String blobSizeStr = HttpHeaders.getHeader(request, RestUtils.Headers.BLOB_SIZE, null);
+    if (blobSizeStr != null) {
+      try {
+        size = Long.parseLong(blobSizeStr);
+        if (size < 0) {
+          throw new RestServiceException(RestUtils.Headers.BLOB_SIZE + " [" + size + "] is less than 0",
+              RestServiceErrorCode.InvalidArgs);
+        }
+      } catch (NumberFormatException e) {
+        throw new RestServiceException(
+            RestUtils.Headers.BLOB_SIZE + " [" + blobSizeStr + "] could not parsed into a number",
+            RestServiceErrorCode.InvalidArgs);
+      }
     } else {
       size = HttpHeaders.getContentLength(request, -1);
     }

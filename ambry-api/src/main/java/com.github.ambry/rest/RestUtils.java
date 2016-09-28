@@ -159,10 +159,9 @@ public class RestUtils {
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args)
       throws RestServiceException {
-    String blobSizeStr = null;
+    String blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
     long blobSize;
     try {
-      blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
       blobSize = Long.parseLong(blobSizeStr);
       if (blobSize < 0) {
         throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSize + "] is less than 0",
