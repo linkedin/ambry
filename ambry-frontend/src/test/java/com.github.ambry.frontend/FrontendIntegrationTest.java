@@ -57,7 +57,6 @@ import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
-import junit.framework.Assert;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -75,8 +74,7 @@ public class FrontendIntegrationTest {
   private static final int SERVER_PORT = 1174;
   private static final ClusterMap CLUSTER_MAP;
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps();
-  private static final int CHUNKED_GET_RESPONSE_THRESHOLD_BYTES =
-      new FrontendConfig(FRONTEND_VERIFIABLE_PROPS).frontendChunkedGetResponseThresholdInBytes;
+  private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
 
   static {
     try {
@@ -154,7 +152,7 @@ public class FrontendIntegrationTest {
    * @throws IOException
    */
   @Test
-  public void healtCheckRequestTest()
+  public void healthCheckRequestTest()
       throws ExecutionException, InterruptedException, IOException {
     FullHttpRequest httpRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/healthCheck", Unpooled.buffer(0));
@@ -207,7 +205,8 @@ public class FrontendIntegrationTest {
       endMarkerFound = object instanceof LastHttpContent;
       ReferenceCountUtil.release(content);
     }
-    Assert.assertEquals("Content length did not match expected", expectedContentLength, buffer.position());
+    assertEquals("Content length did not match expected", expectedContentLength, buffer.position());
+    assertTrue("End marker was not found", endMarkerFound);
     return buffer;
   }
 
@@ -220,7 +219,7 @@ public class FrontendIntegrationTest {
     for (HttpObject object : contents) {
       assertFalse("There should have been no more data after the end marker was found", endMarkerFound);
       HttpContent content = (HttpContent) object;
-      Assert.assertEquals("No content expected ", 0, content.content().readableBytes());
+      assertEquals("No content expected ", 0, content.content().readableBytes());
       endMarkerFound = object instanceof LastHttpContent;
       ReferenceCountUtil.release(content);
     }
@@ -251,8 +250,8 @@ public class FrontendIntegrationTest {
    */
   private static VerifiableProperties buildFrontendVProps() {
     Properties properties = new Properties();
-    properties
-        .put("rest.server.blob.storage.service.factory", "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
+    properties.put("rest.server.blob.storage.service.factory",
+        "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
     properties.put("netty.server.port", Integer.toString(SERVER_PORT));
     // to test that backpressure does not impede correct operation.
@@ -288,20 +287,23 @@ public class FrontendIntegrationTest {
       blobId = postBlobAndVerify(headers, content);
     }
     getBlobAndVerify(blobId, null, headers, content);
+    getHeadAndVerify(blobId, null, headers);
     ByteRange range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
     getBlobAndVerify(blobId, range, headers, content);
+    getHeadAndVerify(blobId, range, headers);
     if (contentSize > 0) {
       range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(content.capacity()));
       getBlobAndVerify(blobId, range, headers, content);
+      getHeadAndVerify(blobId, range, headers);
       long random1 = ThreadLocalRandom.current().nextLong(content.capacity());
       long random2 = ThreadLocalRandom.current().nextLong(content.capacity());
       range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
       getBlobAndVerify(blobId, range, headers, content);
+      getHeadAndVerify(blobId, range, headers);
     }
     getNotModifiedBlobAndVerify(blobId);
     getUserMetadataAndVerify(blobId, headers, usermetadata);
     getBlobInfoAndVerify(blobId, headers, usermetadata);
-    getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
@@ -404,7 +406,7 @@ public class FrontendIntegrationTest {
     } else {
       assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
     }
-    if (expectedContentArray.length < CHUNKED_GET_RESPONSE_THRESHOLD_BYTES) {
+    if (expectedContentArray.length < FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes) {
       assertEquals("Content-length not as expected", expectedContentArray.length,
           HttpHeaders.getContentLength(response));
     }
@@ -480,19 +482,35 @@ public class FrontendIntegrationTest {
   /**
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param range the {@link ByteRange} for the request.
    * @param expectedHeaders the expected headers in the response.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getHeadAndVerify(String blobId, HttpHeaders expectedHeaders)
+  private void getHeadAndVerify(String blobId, ByteRange range, HttpHeaders expectedHeaders)
       throws ExecutionException, InterruptedException {
-    FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
+    HttpHeaders headers = null;
+    if (range != null) {
+      headers = new DefaultHttpHeaders().add(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+    }
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
     checkCommonGetHeadHeaders(response.headers());
-    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match " + RestUtils.Headers.BLOB_SIZE,
-        Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE)), HttpHeaders.getContentLength(response));
+    long contentLength = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
+    if (range != null) {
+      long blobSize = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
+      ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
+      contentLength = resolvedRange.getRangeSize();
+      assertEquals("Content-Range header not set correctly", RestUtils.buildContentRangeHeader(resolvedRange, blobSize),
+          response.headers().get(RestUtils.Headers.CONTENT_RANGE));
+    } else {
+      assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
+    }
+    assertEquals("Accept-Ranges not set correctly", "bytes", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
+    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match " + RestUtils.Headers.BLOB_SIZE, contentLength,
+        HttpHeaders.getContentLength(response));
     assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
         expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         HttpHeaders.getHeader(response, HttpHeaders.Names.CONTENT_TYPE));

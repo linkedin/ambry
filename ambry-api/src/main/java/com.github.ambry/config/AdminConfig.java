@@ -26,7 +26,7 @@ public class AdminConfig {
    * Cache validity in seconds for non-private blobs for GET.
    */
   @Config("admin.cache.validity.seconds")
-  @Default("365*24*60*60")
+  @Default("365 * 24 * 60 * 60")
   public final long adminCacheValiditySeconds;
 
   /**

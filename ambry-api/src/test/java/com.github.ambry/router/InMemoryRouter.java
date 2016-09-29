@@ -19,7 +19,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.NotificationSystem;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -114,15 +113,19 @@ public class InMemoryRouter implements Router {
      */
     public ByteBuffer getBlob(ByteRange range)
         throws RouterException {
-      try {
-        if (range == null) {
-          return getBlob();
+      ByteBuffer buf;
+      if (range == null) {
+        buf = getBlob();
+      } else {
+        ByteRange resolvedRange;
+        try {
+          resolvedRange = range.toResolvedByteRange(blob.array().length);
+        } catch (IllegalArgumentException e) {
+          throw new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
         }
-        ByteRange resolvedRange = range.toResolvedByteRange(blob.array().length);
-        return ByteBuffer.wrap(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
-      } catch (IllegalArgumentException e) {
-        throw new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
+        buf = ByteBuffer.wrap(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
       }
+      return buf;
     }
   }
 
@@ -144,9 +147,9 @@ public class InMemoryRouter implements Router {
     } else {
       try {
         if (deletedBlobs.contains(blobId)) {
-          throw new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
+          exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
         } else if (!blobs.containsKey(blobId)) {
-          throw new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+          exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
         } else {
           InMemoryBlob blob = blobs.get(blobId);
           switch (options.getOperationType()) {

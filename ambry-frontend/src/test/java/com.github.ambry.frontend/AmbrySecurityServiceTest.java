@@ -26,6 +26,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.ByteRange;
@@ -172,17 +173,17 @@ public class AmbrySecurityServiceTest {
 
     // HEAD
     // normal
-    testHeadBlob(DEFAULT_INFO);
+    testHeadBlobWithVariousRanges(DEFAULT_INFO);
     // with no owner id
     BlobInfo blobInfo =
         new BlobInfo(new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time), null);
-    testHeadBlob(blobInfo);
+    testHeadBlobWithVariousRanges(blobInfo);
     // with no content type
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time), null);
-    testHeadBlob(blobInfo);
+    testHeadBlobWithVariousRanges(blobInfo);
     // with a TTL
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000), null);
-    testHeadBlob(blobInfo);
+    testHeadBlobWithVariousRanges(blobInfo);
 
     // GET BlobInfo
     testGetSubResource(RestUtils.SubResource.BlobInfo);
@@ -320,9 +321,10 @@ public class AmbrySecurityServiceTest {
       long random1 = ThreadLocalRandom.current().nextLong(blobSize);
       long random2 = ThreadLocalRandom.current().nextLong(blobSize);
       testGetBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
-
-      testGetBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(blobSize)));
       testGetBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+    }
+    if (blobSize > 1) {
+      testGetBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
     }
   }
 
@@ -337,26 +339,13 @@ public class AmbrySecurityServiceTest {
       throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    JSONObject headers = null;
-    if (range != null) {
-      headers = new JSONObject();
-      switch (range.getType()) {
-        case LAST_N_BYTES:
-          headers.put(RestUtils.Headers.RANGE, "bytes=-" + range.getLastNBytes());
-          break;
-        case FROM_START_OFFSET:
-          headers.put(RestUtils.Headers.RANGE, "bytes=" + range.getStartOffset() + "-");
-          break;
-        case OFFSET_RANGE:
-          headers.put(RestUtils.Headers.RANGE, "bytes=" + range.getStartOffset() + "-" + range.getEndOffset());
-          break;
-      }
-    }
+    JSONObject headers =
+        range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", headers);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response should have been set",
+    Assert.assertEquals("Response status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForGetBlob(blobInfo.getBlobProperties(), range, restResponseChannel);
   }
@@ -383,8 +372,8 @@ public class AmbrySecurityServiceTest {
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
-      Assert
-          .assertEquals("Not modified response expected", ResponseStatus.NotModified, restResponseChannel.getStatus());
+      Assert.assertEquals("Not modified response expected", ResponseStatus.NotModified,
+          restResponseChannel.getStatus());
       verifyHeadersForGetBlobNotModified(restResponseChannel);
     } else {
       Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
@@ -394,21 +383,52 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
+   * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Head
+   * request with the passed in {@link BlobInfo} and various range settings, including no set range (entire blob).
+   * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}s
+   * @throws Exception
+   */
+  private void testHeadBlobWithVariousRanges(BlobInfo blobInfo)
+      throws Exception {
+    long blobSize = blobInfo.getBlobProperties().getBlobSize();
+    testHeadBlob(blobInfo, null);
+
+    testHeadBlob(blobInfo, ByteRange.fromLastNBytes(0));
+    if (blobSize > 0) {
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(0));
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
+
+      long random1 = ThreadLocalRandom.current().nextLong(blobSize);
+      long random2 = ThreadLocalRandom.current().nextLong(blobSize);
+      testHeadBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+
+      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+    }
+    if (blobSize > 1) {
+      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
+    }
+  }
+
+  /**
    * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
    * {@link RestMethod#HEAD}.
    * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
+   * @param range the {@link ByteRange} used for a range request, or {@code null} for non-ranged requests.
    * @throws Exception
    */
-  private void testHeadBlob(BlobInfo blobInfo)
+  private void testHeadBlob(BlobInfo blobInfo, ByteRange range)
       throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", null);
+    JSONObject headers =
+        range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
+    RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", headers);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     Assert.assertEquals("Response status should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
-    verifyHeadersForHead(blobInfo.getBlobProperties(), restResponseChannel);
+    verifyHeadersForHead(blobInfo.getBlobProperties(), range, restResponseChannel);
   }
 
   /**
@@ -452,8 +472,8 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert
-        .assertEquals("Response status should have been set", ResponseStatus.Created, restResponseChannel.getStatus());
+    Assert.assertEquals("Response status should have been set", ResponseStatus.Created,
+        restResponseChannel.getStatus());
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Creation time should have been set correctly",
         RestUtils.toSecondsPrecisionInMs(DEFAULT_INFO.getBlobProperties().getCreationTimeInMs()),
@@ -494,16 +514,31 @@ public class AmbrySecurityServiceTest {
   /**
    * Verify the headers from the response are as expected
    * @param blobProperties the {@link BlobProperties} to refer to while getting headers.
+   * @param range the {@link ByteRange} used for a range request, or {@code null} for non-ranged requests.
    * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
    * @throws RestServiceException if there was any problem getting the headers.
    */
-  private void verifyHeadersForHead(BlobProperties blobProperties, MockRestResponseChannel restResponseChannel)
+  private void verifyHeadersForHead(BlobProperties blobProperties, ByteRange range,
+      MockRestResponseChannel restResponseChannel)
       throws RestServiceException {
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Last Modified does not match creation time",
         RestUtils.toSecondsPrecisionInMs(blobProperties.getCreationTimeInMs()),
         RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED)).longValue());
-    Assert.assertEquals("Content length mismatch", blobProperties.getBlobSize(),
+    Assert.assertEquals("Accept ranges header not set correctly", "bytes",
+        restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    long contentLength = blobProperties.getBlobSize();
+    if (range != null) {
+      ByteRange resolvedByteRange = range.toResolvedByteRange(blobProperties.getBlobSize());
+      contentLength = resolvedByteRange.getRangeSize();
+      Assert.assertEquals("Content range header not set correctly for range " + range,
+          RestUtils.buildContentRangeHeader(resolvedByteRange, blobProperties.getBlobSize()),
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+    } else {
+      Assert.assertNull("Content range header should not be set",
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+    }
+    Assert.assertEquals("Content length mismatch", contentLength,
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
     if (blobProperties.getContentType() != null) {
       Assert.assertEquals("Content Type mismatch", blobProperties.getContentType(),
@@ -515,6 +550,7 @@ public class AmbrySecurityServiceTest {
   /**
    * Verify the headers from the response are as expected
    * @param blobProperties the {@link BlobProperties} to refer to while getting headers.
+   * @param range the {@link ByteRange} used for a range request, or {@code null} for non-ranged requests.
    * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
    * @throws RestServiceException if there was any problem getting the headers.
    */
@@ -574,8 +610,8 @@ public class AmbrySecurityServiceTest {
       Assert.assertEquals("Cache-Control value not as expected",
           "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
-      Assert
-          .assertNull("Pragma value should not have been set", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
+      Assert.assertNull("Pragma value should not have been set",
+          restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     }
   }
 

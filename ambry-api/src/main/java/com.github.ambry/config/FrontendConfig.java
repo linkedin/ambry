@@ -26,7 +26,7 @@ public class FrontendConfig {
    * Cache validity in seconds for non-private blobs for GET.
    */
   @Config("frontend.cache.validity.seconds")
-  @Default("365*24*60*60")
+  @Default("365 * 24 * 60 * 60")
   public final long frontendCacheValiditySeconds;
 
   /**
@@ -40,7 +40,7 @@ public class FrontendConfig {
    * The SecurityServiceFactory that needs to be used by AmbryBlobStorageService to validate requests.
    */
   @Config("frontend.security.service.factory")
-  @Default("com.github.ambry.frontend.AmbryIdConverterFactory")
+  @Default("com.github.ambry.frontend.AmbrySecurityServiceFactory")
   public final String frontendSecurityServiceFactory;
 
   /**

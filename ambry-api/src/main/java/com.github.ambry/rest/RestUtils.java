@@ -187,7 +187,6 @@ public class RestUtils {
             RestServiceErrorCode.InvalidArgs);
       }
     } catch (NumberFormatException e) {
-      System.out.println("WHAT HAPPENED? " + e);
       throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
           RestServiceErrorCode.InvalidArgs);
     }
@@ -531,21 +530,23 @@ public class RestUtils {
       throw new RestServiceException("Invalid byte range syntax; does not start with '" + BYTE_RANGE_PREFIX + "'",
           RestServiceErrorCode.InvalidArgs);
     }
+    ByteRange range;
     try {
       int hyphenIndex = rangeHeaderValue.indexOf('-', BYTE_RANGE_PREFIX.length());
       String startOffsetStr = rangeHeaderValue.substring(BYTE_RANGE_PREFIX.length(), hyphenIndex);
       String endOffsetStr = rangeHeaderValue.substring(hyphenIndex + 1);
       if (startOffsetStr.isEmpty()) {
-        return ByteRange.fromLastNBytes(Long.parseLong(endOffsetStr));
+        range = ByteRange.fromLastNBytes(Long.parseLong(endOffsetStr));
       } else if (endOffsetStr.isEmpty()) {
-        return ByteRange.fromStartOffset(Long.parseLong(startOffsetStr));
+        range = ByteRange.fromStartOffset(Long.parseLong(startOffsetStr));
       } else {
-        return ByteRange.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
+        range = ByteRange.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
       }
     } catch (Exception e) {
       throw new RestServiceException(
           "Valid byte range could not be parsed from Range header value: " + rangeHeaderValue,
           RestServiceErrorCode.InvalidArgs);
     }
+    return range;
   }
 }
