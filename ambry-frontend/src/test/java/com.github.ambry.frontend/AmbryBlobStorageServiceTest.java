@@ -37,6 +37,7 @@ import com.github.ambry.rest.RestUtilsTest;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.AsyncWritableChannel;
+import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -56,6 +57,7 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -67,6 +69,7 @@ import java.util.Properties;
 import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -345,11 +348,27 @@ public class AmbryBlobStorageServiceTest {
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
-    getBlobAndVerify(blobId, headers, content);
+
+    getBlobAndVerify(blobId, null, headers, content);
+    getHeadAndVerify(blobId, null, headers);
+
+    ByteRange range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH));
+    getBlobAndVerify(blobId, range, headers, content);
+    getHeadAndVerify(blobId, range, headers);
+
+    range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH + 1));
+    getBlobAndVerify(blobId, range, headers, content);
+    getHeadAndVerify(blobId, range, headers);
+
+    long random1 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
+    long random2 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
+    range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
+    getBlobAndVerify(blobId, range, headers, content);
+    getHeadAndVerify(blobId, range, headers);
+
     getNotModifiedBlobAndVerify(blobId);
     getUserMetadataAndVerify(blobId, headers);
     getBlobInfoAndVerify(blobId, headers);
-    getHeadAndVerify(blobId, headers);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
@@ -466,6 +485,22 @@ public class AmbryBlobStorageServiceTest {
     doRouterExceptionPipelineTest(testRouter, exceptionMsg);
   }
 
+  /**
+   * Test that GET operations fail with the expected error code when a bad range header is provided.
+   * @throws Exception
+   */
+  @Test
+  public void badRangeHeaderTest()
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    headers.put(RestUtils.Headers.RANGE, "adsfksakdfsdfkdaklf");
+    try {
+      doOperation(createRestRequest(RestMethod.GET, "/", headers, null), new MockRestResponseChannel());
+      fail("GET operation should have failed because of an invalid range header");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected error code", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
+  }
   // helpers
   // general
 
@@ -659,6 +694,8 @@ public class AmbryBlobStorageServiceTest {
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
         restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertNull("Content-Range header should not be set",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     String blobId = restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
     if (blobId == null) {
       fail("postBlobAndVerify did not return a blob ID");
@@ -669,23 +706,39 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the headers and content match with what is expected.
    * @param blobId the blob ID of the blob to GET.
+   * @param range the optional {@link ByteRange} for the request.
    * @param expectedHeaders the expected headers in the response.
    * @param expectedContent the expected content of the blob.
    * @throws Exception
    */
-  public void getBlobAndVerify(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent)
+  public void getBlobAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders, ByteBuffer expectedContent)
       throws Exception {
-    RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
+    RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, createRequestHeaders(range), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("Unexpected response status", range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent,
+        restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
         expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    assertArrayEquals("GET content does not match original content", expectedContent.array(),
+    assertEquals("Accept-Ranges not set correctly", "bytes",
+        restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    byte[] expectedContentArray = expectedContent.array();
+    if (range != null) {
+      long blobSize = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
+      ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
+      assertEquals("Content-Range does not match expected", RestUtils.buildContentRangeHeader(resolvedRange, blobSize),
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+      expectedContentArray = Arrays.copyOfRange(expectedContentArray, (int) resolvedRange.getStartOffset(),
+          (int) resolvedRange.getEndOffset() + 1);
+    } else {
+      assertNull("Content-Range header should not be set",
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+    }
+    assertArrayEquals("GET content does not match original content", expectedContentArray,
         restResponseChannel.getResponseBody());
   }
 
@@ -712,6 +765,9 @@ public class AmbryBlobStorageServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertEquals("No content expected as blob is not modified", 0, restResponseChannel.getResponseBody().length);
+    assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    assertNull("Content-Range header should not be set",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
   }
 
   /**
@@ -729,6 +785,9 @@ public class AmbryBlobStorageServiceTest {
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    assertNull("Content-Range header should not be set",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
   }
 
@@ -747,6 +806,9 @@ public class AmbryBlobStorageServiceTest {
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    assertNull("Content-Range header should not be set",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     verifyBlobProperties(expectedHeaders, restResponseChannel);
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
   }
@@ -754,22 +816,35 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param range the optional {@link ByteRange} for the request.
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getHeadAndVerify(String blobId, JSONObject expectedHeaders)
+  private void getHeadAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders)
       throws Exception {
-    RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
+    RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, createRequestHeaders(range), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
-    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match " + RestUtils.Headers.BLOB_SIZE,
-        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
         expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Accept-Ranges not set correctly", "bytes",
+        restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    long contentLength = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
+    if (range != null) {
+      ByteRange resolvedRange = range.toResolvedByteRange(contentLength);
+      assertEquals("Content-Range does not match expected",
+          RestUtils.buildContentRangeHeader(resolvedRange, contentLength),
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+      contentLength = resolvedRange.getRangeSize();
+    } else {
+      assertNull("Content-Range header should not be set",
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+    }
+    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match expected", Long.toString(contentLength),
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     verifyBlobProperties(expectedHeaders, restResponseChannel);
   }
 
@@ -1028,6 +1103,22 @@ public class AmbryBlobStorageServiceTest {
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
       restRequest.close();
     }
+  }
+
+  /**
+   * Generate a {@link JSONObject} with a range header from a {@link ByteRange}
+   * @param range the {@link ByteRange} to include in the headers.
+   * @return the {@link JSONObject} with a range header, or null if {@code range} is null.
+   * @throws Exception
+   */
+  private JSONObject createRequestHeaders(ByteRange range)
+      throws Exception {
+    if (range == null) {
+      return null;
+    }
+    JSONObject requestHeaders = new JSONObject();
+    requestHeaders.put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+    return requestHeaders;
   }
 }
 

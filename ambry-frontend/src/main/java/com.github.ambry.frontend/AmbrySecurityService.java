@@ -24,8 +24,10 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.SecurityService;
+import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Date;
@@ -107,7 +109,8 @@ class AmbrySecurityService implements SecurityService {
             responseChannel.setStatus(ResponseStatus.Ok);
             responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-            setHeadResponseHeaders(blobInfo, responseChannel);
+            setHeadResponseHeaders(blobInfo, RestUtils.buildGetBlobOptions(restRequest.getArgs(), null),
+                responseChannel);
             break;
           case GET:
             responseChannel.setStatus(ResponseStatus.Ok);
@@ -120,9 +123,13 @@ class AmbrySecurityService implements SecurityService {
                 responseChannel.setStatus(ResponseStatus.NotModified);
                 responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
               } else {
+                GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null);
+                if (options.getRange() != null) {
+                  responseChannel.setStatus(ResponseStatus.PartialContent);
+                }
                 responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                     new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-                setGetBlobResponseHeaders(responseChannel, blobInfo);
+                setGetBlobResponseHeaders(blobInfo, options, responseChannel);
               }
             } else {
               responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
@@ -174,29 +181,45 @@ class AmbrySecurityService implements SecurityService {
   /**
    * Sets the required headers in the HEAD response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
+   * @param options the {@link GetBlobOptions} associated with the request.
+   * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setHeadResponseHeaders(BlobInfo blobInfo, RestResponseChannel restResponseChannel)
+  private void setHeadResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
+      RestResponseChannel restResponseChannel)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
-    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
     }
+    restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
+    long contentLength = blobProperties.getBlobSize();
+    if (options.getRange() != null) {
+      contentLength = setContentRangeHeader(options.getRange(), blobProperties.getBlobSize(), restResponseChannel);
+    }
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     setBlobPropertiesHeaders(blobProperties, restResponseChannel);
   }
 
   /**
    * Sets the required headers in the response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
+   * @param options the {@link GetBlobOptions} associated with the request.
+   * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setGetBlobResponseHeaders(RestResponseChannel restResponseChannel, BlobInfo blobInfo)
+  private void setGetBlobResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
+      RestResponseChannel restResponseChannel)
       throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
-    if (blobProperties.getBlobSize() < frontendConfig.frontendChunkedGetResponseThresholdInBytes) {
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());
+    restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
+    long contentLength = blobProperties.getBlobSize();
+    if (options.getRange() != null) {
+      contentLength = setContentRangeHeader(options.getRange(), blobProperties.getBlobSize(), restResponseChannel);
+    }
+    if (contentLength < frontendConfig.frontendChunkedGetResponseThresholdInBytes) {
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     }
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
@@ -215,6 +238,27 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel
           .setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.frontendCacheValiditySeconds);
     }
+  }
+
+  /**
+   * Set the Content-Range header in the response to reflect the given {@link ByteRange} and blob size.
+   * @param range the {@link ByteRange} for the request.
+   * @param blobSize the total size of the blob, in bytes.
+   * @param restResponseChannel the {@link RestResponseChannel} to set the header on.
+   * @return the total size of the requested range, in bytes.
+   * @throws RestServiceException if the range could not be resolved with the given blob size, or the header could not
+   *                              be set.
+   */
+  private long setContentRangeHeader(ByteRange range, long blobSize, RestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    try {
+      range = range.toResolvedByteRange(blobSize);
+    } catch (IllegalArgumentException e) {
+      throw new RestServiceException("Range provided was not satisfiable.", e,
+          RestServiceErrorCode.RangeNotSatisfiable);
+    }
+    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, RestUtils.buildContentRangeHeader(range, blobSize));
+    return range.getRangeSize();
   }
 
   /**

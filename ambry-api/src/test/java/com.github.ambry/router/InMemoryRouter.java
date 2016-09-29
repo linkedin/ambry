@@ -99,8 +99,33 @@ public class InMemoryRouter implements Router {
       return userMetadata;
     }
 
+    /**
+     * @return the entire blob as a {@link ByteBuffer}
+     */
     public ByteBuffer getBlob() {
       return ByteBuffer.wrap(blob.array());
+    }
+
+    /**
+     * @param range the {@link ByteRange} for the blob, or null.
+     * @return the blob content within the provided range, or the entire blob, if the range is null.
+     * @throws RouterException if the range was non-null, but could not be resolved.
+     */
+    public ByteBuffer getBlob(ByteRange range)
+        throws RouterException {
+      ByteBuffer buf;
+      if (range == null) {
+        buf = getBlob();
+      } else {
+        ByteRange resolvedRange;
+        try {
+          resolvedRange = range.toResolvedByteRange(blob.array().length);
+        } catch (IllegalArgumentException e) {
+          throw new RouterException("Invalid range for blob", e, RouterErrorCode.RangeNotSatisfiable);
+        }
+        buf = ByteBuffer.wrap(blob.array(), (int) resolvedRange.getStartOffset(), (int) resolvedRange.getRangeSize());
+      }
+      return buf;
     }
   }
 
@@ -129,17 +154,19 @@ public class InMemoryRouter implements Router {
           InMemoryBlob blob = blobs.get(blobId);
           switch (options.getOperationType()) {
             case Data:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob());
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
               break;
             case BlobInfo:
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
             case All:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob());
+              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
               blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
               break;
           }
         }
+      } catch (RouterException e) {
+        exception = e;
       } catch (Exception e) {
         exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
       } finally {

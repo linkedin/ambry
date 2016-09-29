@@ -331,9 +331,7 @@ public class GetManagerTest {
     // If a range is set, compare the result against the specified byte range.
     if (options.getRange() != null) {
       ByteRange range = options.getRange().toResolvedByteRange(putContent.length);
-      int startOffset = (int) range.getStartOffset();
-      int endOffset = (int) range.getEndOffset();
-      putContentBuf = ByteBuffer.wrap(putContent, startOffset, endOffset - startOffset + 1);
+      putContentBuf = ByteBuffer.wrap(putContent, (int) range.getStartOffset(), (int) range.getRangeSize());
     }
     ByteBufferAsyncWritableChannel getChannel = new ByteBufferAsyncWritableChannel();
     Future<Long> readIntoFuture = readableStreamChannel.readInto(getChannel, null);

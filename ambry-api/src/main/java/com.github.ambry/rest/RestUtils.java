@@ -14,6 +14,8 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
@@ -70,6 +72,18 @@ public class RestUtils {
      * {@code "Pragma"}
      */
     public static final String PRAGMA = "Pragma";
+    /**
+     * {@code "Accept-Ranges"}
+     */
+    public static final String ACCEPT_RANGES = "Accept-Ranges";
+    /**
+     * {@code "Content-Range"}
+     */
+    public static final String CONTENT_RANGE = "Content-Range";
+    /**
+     * {@code "Range"}
+     */
+    public static final String RANGE = "Range";
 
     // ambry specific headers
     /**
@@ -126,10 +140,12 @@ public class RestUtils {
      * User metadata and BlobProperties i.e., blob properties returned in headers and user metadata as content/headers.
      */
     BlobInfo,
+
     /**
      * User metadata on its own i.e., no "blob properties" headers returned with response.
      */
     UserMetadata,
+
     /**
      * All the replicas of the blob ID returned as content (Admin only).
      * <p/>
@@ -144,10 +160,11 @@ public class RestUtils {
     public final static String USER_METADATA_PART = "UserMetadata";
   }
 
+  public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
+  public static final String BYTE_RANGE_UNITS = "bytes";
   private static final int CRC_SIZE = 8;
   private static final short USER_METADATA_VERSION_V1 = 1;
-  public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
-
+  private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
   /**
@@ -344,32 +361,36 @@ public class RestUtils {
   }
 
   /**
-   * Gets the value of the header {@code header} in {@code args}.
-   * @param args a map of arguments to be used to look for {@code header}.
-   * @param header the name of the header.
-   * @param required if {@code true}, {@link IllegalArgumentException} will be thrown if {@code header} is not present
-   *                 in {@code args}.
-   * @return the value of {@code header} in {@code args} if it exists. If it does not exist and {@code required} is
-   *          {@code false}, then returns null.
-   * @throws RestServiceException if {@code required} is {@code true} and {@code header} does not exist in
-   *                                    {@code args} or if there is more than one value for {@code header} in
-   *                                    {@code args}.
+   * Build a {@link GetBlobOptions} object from an argument map for a certain sub-resource.
+   * @param args the arguments associated with the request. This is typically a map of header names and query string
+   *             arguments to values.
+   * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
+   * @return a populated {@link GetBlobOptions} object.
+   * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
    */
-  private static String getHeader(Map<String, Object> args, String header, boolean required)
+  public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource)
       throws RestServiceException {
-    String value = null;
-    if (args.containsKey(header)) {
-      Object valueObj = args.get(header);
-      value = valueObj != null ? valueObj.toString() : null;
-      if (value == null && required) {
-        throw new RestServiceException("Request has null value for header: " + header,
-            RestServiceErrorCode.InvalidArgs);
-      }
-    } else if (required) {
-      throw new RestServiceException("Request does not have required header: " + header,
-          RestServiceErrorCode.MissingArgs);
+    String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
+    if (subResource != null && rangeHeaderValue != null) {
+      throw new RestServiceException("Ranges not supported for sub-resources.", RestServiceErrorCode.InvalidArgs);
     }
-    return value;
+    return new GetBlobOptions(
+        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo,
+        rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null);
+  }
+
+  /**
+   * Build the value for the Content-Range header that corresponds to the provided range and blob size. The returned
+   * Content-Range header value will be in the following format: {@code {a}-{b}/{c}}, where {@code {a}} is the inclusive
+   * start byte offset of the returned range, {@code {b}} is the inclusive end byte offset of the returned range, and
+   * {@code {c}} is the total size of the blob in bytes.
+   * @param resolvedByteRange a {@link ByteRange} with a defined start and end offset.
+   * @param blobSize the total size of the associated blob in bytes.
+   * @return the content range header value.
+   */
+  public static String buildContentRangeHeader(ByteRange resolvedByteRange, long blobSize) {
+    return BYTE_RANGE_UNITS + " " + resolvedByteRange.getStartOffset() + "-" + resolvedByteRange.getEndOffset() + "/"
+        + blobSize;
   }
 
   /**
@@ -456,5 +477,74 @@ public class RestUtils {
    */
   public static long toSecondsPrecisionInMs(long ms) {
     return ms - (ms % 1000);
+  }
+
+  /**
+   * Gets the value of the header {@code header} in {@code args}.
+   * @param args a map of arguments to be used to look for {@code header}.
+   * @param header the name of the header.
+   * @param required if {@code true}, {@link IllegalArgumentException} will be thrown if {@code header} is not present
+   *                 in {@code args}.
+   * @return the value of {@code header} in {@code args} if it exists. If it does not exist and {@code required} is
+   *          {@code false}, then returns null.
+   * @throws RestServiceException if {@code required} is {@code true} and {@code header} does not exist in
+   *                                    {@code args} or if there is more than one value for {@code header} in
+   *                                    {@code args}.
+   */
+  private static String getHeader(Map<String, Object> args, String header, boolean required)
+      throws RestServiceException {
+    String value = null;
+    if (args.containsKey(header)) {
+      Object valueObj = args.get(header);
+      value = valueObj != null ? valueObj.toString() : null;
+      if (value == null && required) {
+        throw new RestServiceException("Request has null value for header: " + header,
+            RestServiceErrorCode.InvalidArgs);
+      }
+    } else if (required) {
+      throw new RestServiceException("Request does not have required header: " + header,
+          RestServiceErrorCode.MissingArgs);
+    }
+    return value;
+  }
+
+  /**
+   * Build a {@link ByteRange} given a Range header value. This method can parse the following Range
+   * header syntax:
+   * {@code Range:bytes=byte_range} where {@code bytes=byte_range} supports the following range syntax:
+   * <ul>
+   *   <li>For bytes {@code {a}} through {@code {b}} inclusive: {@code bytes={a}-{b}}</li>
+   *   <li>For all bytes including and after {@code {a}}: {@code bytes={a}-}</li>
+   *   <li>For the last {@code {b}} bytes of a file: {@code bytes=-{b}}</li>
+   * </ul>
+   * @param rangeHeaderValue the value of the Range header.
+   * @return The {@link ByteRange} parsed from the arguments.
+   * @throws RestServiceException if no range header was found, or if a valid range could not be parsed from the header
+   *                              value,
+   */
+  private static ByteRange buildByteRange(String rangeHeaderValue)
+      throws RestServiceException {
+    if (!rangeHeaderValue.startsWith(BYTE_RANGE_PREFIX)) {
+      throw new RestServiceException("Invalid byte range syntax; does not start with '" + BYTE_RANGE_PREFIX + "'",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    ByteRange range;
+    try {
+      int hyphenIndex = rangeHeaderValue.indexOf('-', BYTE_RANGE_PREFIX.length());
+      String startOffsetStr = rangeHeaderValue.substring(BYTE_RANGE_PREFIX.length(), hyphenIndex);
+      String endOffsetStr = rangeHeaderValue.substring(hyphenIndex + 1);
+      if (startOffsetStr.isEmpty()) {
+        range = ByteRange.fromLastNBytes(Long.parseLong(endOffsetStr));
+      } else if (endOffsetStr.isEmpty()) {
+        range = ByteRange.fromStartOffset(Long.parseLong(startOffsetStr));
+      } else {
+        range = ByteRange.fromOffsetRange(Long.parseLong(startOffsetStr), Long.parseLong(endOffsetStr));
+      }
+    } catch (Exception e) {
+      throw new RestServiceException(
+          "Valid byte range could not be parsed from Range header value: " + rangeHeaderValue,
+          RestServiceErrorCode.InvalidArgs);
+    }
+    return range;
   }
 }

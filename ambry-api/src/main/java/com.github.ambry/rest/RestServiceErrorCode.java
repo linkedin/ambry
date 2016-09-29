@@ -85,6 +85,10 @@ public enum RestServiceErrorCode {
    * Client is requesting a HTTP method that is not supported.
    */
   UnsupportedHttpMethod,
+  /**
+   * Range request is not satisfiable (because the provided range is invalid or outside of the bounds of an object.)
+   */
+  RangeNotSatisfiable,
 
   /**
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
@@ -130,11 +134,14 @@ public enum RestServiceErrorCode {
         return Deleted;
       case BlobDoesNotExist:
         return NotFound;
+      case RangeNotSatisfiable:
+        return RangeNotSatisfiable;
       case AmbryUnavailable:
       case InsufficientCapacity:
       case OperationTimedOut:
       case RouterClosed:
       case UnexpectedInternalError:
+      case ChannelClosed:
       default:
         return InternalServerError;
     }
