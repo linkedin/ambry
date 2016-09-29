@@ -250,8 +250,8 @@ public class FrontendIntegrationTest {
    */
   private static VerifiableProperties buildFrontendVProps() {
     Properties properties = new Properties();
-    properties.put("rest.server.blob.storage.service.factory",
-        "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
+    properties
+        .put("rest.server.blob.storage.service.factory", "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
     properties.put("netty.server.port", Integer.toString(SERVER_PORT));
     // to test that backpressure does not impede correct operation.

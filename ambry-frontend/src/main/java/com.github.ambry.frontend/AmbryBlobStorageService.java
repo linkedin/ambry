@@ -32,7 +32,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
-import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;

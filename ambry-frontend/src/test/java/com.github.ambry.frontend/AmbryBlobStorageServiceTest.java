@@ -269,8 +269,8 @@ public class AmbryBlobStorageServiceTest {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null,
-          new RuntimeException(exceptionMsg));
+      ambryBlobStorageService
+          .submitResponse(restRequest, restResponseChannel, null, new RuntimeException(exceptionMsg));
       assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
       // there is no exception and exception thrown when the response is submitted.
@@ -1214,7 +1214,8 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     /**
      * Works in {@link SecurityService#processRequest(RestRequest, Callback)}.
      */
-    Request, /**
+    Request,
+    /**
      * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
      */
     Response
@@ -1414,7 +1415,9 @@ class FrontendTestRouter implements Router {
    * Enumerates the different operation types in the router.
    */
   enum OpType {
-    DeleteBlob, GetBlob, PutBlob
+    DeleteBlob,
+    GetBlob,
+    PutBlob
   }
 
   public OpType exceptionOpType = null;

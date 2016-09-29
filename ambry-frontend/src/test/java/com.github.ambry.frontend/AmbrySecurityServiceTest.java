@@ -372,8 +372,8 @@ public class AmbrySecurityServiceTest {
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
-      Assert.assertEquals("Not modified response expected", ResponseStatus.NotModified,
-          restResponseChannel.getStatus());
+      Assert
+          .assertEquals("Not modified response expected", ResponseStatus.NotModified, restResponseChannel.getStatus());
       verifyHeadersForGetBlobNotModified(restResponseChannel);
     } else {
       Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
@@ -472,8 +472,8 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response status should have been set", ResponseStatus.Created,
-        restResponseChannel.getStatus());
+    Assert
+        .assertEquals("Response status should have been set", ResponseStatus.Created, restResponseChannel.getStatus());
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Creation time should have been set correctly",
         RestUtils.toSecondsPrecisionInMs(DEFAULT_INFO.getBlobProperties().getCreationTimeInMs()),
@@ -610,8 +610,8 @@ public class AmbrySecurityServiceTest {
       Assert.assertEquals("Cache-Control value not as expected",
           "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
-      Assert.assertNull("Pragma value should not have been set",
-          restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
+      Assert
+          .assertNull("Pragma value should not have been set", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     }
   }
 
@@ -625,8 +625,8 @@ public class AmbrySecurityServiceTest {
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Content length should have been 0", "0",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
-    Assert.assertNull("Accept-Ranges should not be set",
-        restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
+    Assert
+        .assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     Assert.assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.LAST_MODIFIED, RestUtils.Headers.BLOB_SIZE,
