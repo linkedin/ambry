@@ -45,7 +45,7 @@ class JournalEntry {
 /**
  * An in memory journal used to track the most recent blobs for a store.
  */
-class InMemoryJournal implements Journal {
+class InMemoryJournal {
 
   private final ConcurrentSkipListMap<Long, StoreKey> journal;
   private final int maxEntriesToJournal;
@@ -74,7 +74,6 @@ class InMemoryJournal implements Journal {
    *               increasing.
    * @param key The key that the entry in the journal refers to.
    */
-  @Override
   public void addEntry(long offset, StoreKey key) {
     if (key == null || offset < 0) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
@@ -97,7 +96,6 @@ class InMemoryJournal implements Journal {
    * @return The entries in the journal starting from offset. If the offset is outside the range of the journal,
    *         it returns null.
    */
-  @Override
   public List<JournalEntry> getEntriesSince(long offset, boolean inclusive) {
     // To prevent synchronizing the addEntry method, we first get all the entries from the journal that are greater
     // than offset. Once we have all the required entries, we finally check if the offset is actually present
@@ -138,13 +136,11 @@ class InMemoryJournal implements Journal {
     return journalEntries;
   }
 
-  @Override
   public long getFirstOffset() {
     Map.Entry<Long, StoreKey> first = journal.firstEntry();
     return first == null ? -1 : first.getKey();
   }
 
-  @Override
   public long getLastOffset() {
     Map.Entry<Long, StoreKey> last = journal.lastEntry();
     return last == null ? -1 : last.getKey();

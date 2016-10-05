@@ -124,10 +124,11 @@ class IndexSegment {
    * @param factory The store key factory used to create new store keys
    * @param config The store config used to initialize the index segment
    * @param metrics The store metrics used to track metrics
+   * @param journal The journal to use
    * @throws StoreException
    */
   public IndexSegment(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config,
-      StoreMetrics metrics, Journal journal)
+      StoreMetrics metrics, InMemoryJournal journal)
       throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
@@ -559,10 +560,11 @@ class IndexSegment {
   /**
    * Reads the index segment from file into an in memory representation
    * @param fileToRead The file to read the index segment from
+   * @param journal The journal to use.
    * @throws StoreException
    * @throws IOException
    */
-  private void readFromFile(File fileToRead, Journal journal)
+  private void readFromFile(File fileToRead, InMemoryJournal journal)
       throws StoreException, IOException {
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
