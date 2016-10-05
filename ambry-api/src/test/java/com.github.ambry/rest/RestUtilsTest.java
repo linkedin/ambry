@@ -31,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.TimeZone;
+import javafx.util.Pair;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -556,23 +557,30 @@ public class RestUtilsTest {
     doBuildGetBlobOptionsTest("bytes=-8", ByteRange.fromLastNBytes(8), true, false);
     doBuildGetBlobOptionsTest("bytes=-123456789", ByteRange.fromLastNBytes(123456789), true, false);
     // bad ranges
-    String[] badRanges = {"bytes=0-abcd", "bytes=0as23-44444444",
-        "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53", "bytes=223-34", "bytes=-34ab",
-        "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345", "bytes=3.14-22",
-        "bytes=3-6.2", "bytes=", "bytes=-", "bytes= -"};
+    String[] badRanges =
+        {"bytes=0-abcd", "bytes=0as23-44444444", "bytes=22-7777777777777777777777777777777777777777777", "bytes=22--53", "bytes=223-34", "bytes=-34ab", "bytes=--12", "bytes=-12-", "bytes=12ab-", "bytes=---", "btes=3-5", "bytes=345", "bytes=3.14-22", "bytes=3-6.2", "bytes=", "bytes=-", "bytes= -"};
     for (String badRange : badRanges) {
       doBuildGetBlobOptionsTest(badRange, null, false, false);
     }
   }
 
   /**
-   * Test {@link RestUtils#buildContentRangeHeader(ByteRange, long)}.
+   * Test {@link RestUtils#buildContentRangeAndLength(ByteRange, long)}.
    */
   @Test
-  public void buildContentRangeHeaderTest() {
-    assertEquals("bytes 4-8/12", RestUtils.buildContentRangeHeader(ByteRange.fromOffsetRange(4, 8), 12));
-    assertEquals("bytes 10-789/144", RestUtils.buildContentRangeHeader(ByteRange.fromOffsetRange(10, 789), 144));
-    assertEquals("bytes 0-0/0", RestUtils.buildContentRangeHeader(ByteRange.fromOffsetRange(0, 0), 0));
+  public void buildContentRangeAndLengthTest()
+      throws RestServiceException {
+    // good cases
+    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 8), 12, "bytes 4-8/12", 5, true);
+    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(14), 17, "bytes 14-16/17", 3, true);
+    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(12), 17, "bytes 5-16/17", 12, true);
+    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(17), 17, "bytes 0-16/17", 17, true);
+    // bad cases
+    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 12), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 15), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(12), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(15), 12, null, -1, false);
+    doBuildContentRangeAndLengthTest(ByteRange.fromLastNBytes(13), 12, null, -1, false);
   }
 
   // helpers.
@@ -782,6 +790,33 @@ public class RestUtilsTest {
         fail("buildGetBlobOptions should not have succeeded with args=" + args + "and subResource=" + subResource);
       } catch (RestServiceException expected) {
         assertEquals("Unexpected error code.", RestServiceErrorCode.InvalidArgs, expected.getErrorCode());
+      }
+    }
+  }
+
+  /**
+   * Test {@link RestUtils#buildContentRangeAndLength(ByteRange, long)} for a specific {@link ByteRange} and total blob
+   * size.
+   * @param range the {@link ByteRange} to test for.
+   * @param blobSize the total blob size in bytes to test for.
+   * @param expectedContentRange the expected Content-Range header string.
+   * @param expectedContentLength the expected Content-Length in bytes.
+   * @param shouldSucceed {@code true} if the call should succeed, {@code false} if an error is expected.
+   * @throws RestServiceException
+   */
+  private void doBuildContentRangeAndLengthTest(ByteRange range, long blobSize, String expectedContentRange,
+      long expectedContentLength, boolean shouldSucceed)
+      throws RestServiceException {
+    if (shouldSucceed) {
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, blobSize);
+      assertEquals(expectedContentRange, rangeAndLength.getKey());
+      assertEquals(expectedContentLength, (long) rangeAndLength.getValue());
+    } else {
+      try {
+        RestUtils.buildContentRangeAndLength(range, blobSize);
+        fail("Should have encountered exception when building Content-Range");
+      } catch (RestServiceException e) {
+        assertEquals("Unexpected error code.", RestServiceErrorCode.RangeNotSatisfiable, e.getErrorCode());
       }
     }
   }

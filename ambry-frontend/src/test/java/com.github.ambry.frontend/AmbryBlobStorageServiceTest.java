@@ -71,6 +71,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import javafx.util.Pair;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
@@ -729,9 +730,10 @@ public class AmbryBlobStorageServiceTest {
     byte[] expectedContentArray = expectedContent.array();
     if (range != null) {
       long blobSize = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
-      ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
-      assertEquals("Content-Range does not match expected", RestUtils.buildContentRangeHeader(resolvedRange, blobSize),
+      assertEquals("Content-Range does not match expected",
+          RestUtils.buildContentRangeAndLength(range, blobSize).getKey(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+      ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
       expectedContentArray = Arrays.copyOfRange(expectedContentArray, (int) resolvedRange.getStartOffset(),
           (int) resolvedRange.getEndOffset() + 1);
     } else {
@@ -825,7 +827,8 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, createRequestHeaders(range), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("Unexpected response status", range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent,
+        restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
         expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
@@ -834,11 +837,10 @@ public class AmbryBlobStorageServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     long contentLength = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
     if (range != null) {
-      ByteRange resolvedRange = range.toResolvedByteRange(contentLength);
-      assertEquals("Content-Range does not match expected",
-          RestUtils.buildContentRangeHeader(resolvedRange, contentLength),
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      assertEquals("Content-Range does not match expected", rangeAndLength.getKey(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
-      contentLength = resolvedRange.getRangeSize();
+      contentLength = rangeAndLength.getValue();
     } else {
       assertNull("Content-Range header should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));

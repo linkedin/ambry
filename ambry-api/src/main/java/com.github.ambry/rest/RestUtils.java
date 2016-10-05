@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import javafx.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -383,14 +384,21 @@ public class RestUtils {
    * Build the value for the Content-Range header that corresponds to the provided range and blob size. The returned
    * Content-Range header value will be in the following format: {@code {a}-{b}/{c}}, where {@code {a}} is the inclusive
    * start byte offset of the returned range, {@code {b}} is the inclusive end byte offset of the returned range, and
-   * {@code {c}} is the total size of the blob in bytes.
-   * @param resolvedByteRange a {@link ByteRange} with a defined start and end offset.
+   * {@code {c}} is the total size of the blob in bytes. This function also generates the range length in bytes.
+   * @param range a {@link ByteRange} used to generate the Content-Range header.
    * @param blobSize the total size of the associated blob in bytes.
-   * @return the content range header value.
+   * @return a {@link Pair} containing the content range header value and the content length in bytes.
    */
-  public static String buildContentRangeHeader(ByteRange resolvedByteRange, long blobSize) {
-    return BYTE_RANGE_UNITS + " " + resolvedByteRange.getStartOffset() + "-" + resolvedByteRange.getEndOffset() + "/"
-        + blobSize;
+  public static Pair<String, Long> buildContentRangeAndLength(ByteRange range, long blobSize)
+      throws RestServiceException {
+    try {
+      range = range.toResolvedByteRange(blobSize);
+    } catch (IllegalArgumentException e) {
+      throw new RestServiceException("Range provided was not satisfiable.", e,
+          RestServiceErrorCode.RangeNotSatisfiable);
+    }
+    return new Pair<>(BYTE_RANGE_UNITS + " " + range.getStartOffset() + "-" + range.getEndOffset() + "/" + blobSize,
+        range.getRangeSize());
   }
 
   /**
