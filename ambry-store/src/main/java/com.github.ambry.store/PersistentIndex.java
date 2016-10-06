@@ -69,7 +69,7 @@ public class PersistentIndex {
 
   protected Scheduler scheduler;
   protected ConcurrentSkipListMap<Long, IndexSegment> indexes = new ConcurrentSkipListMap<Long, IndexSegment>();
-  protected InMemoryJournal journal;
+  protected Journal journal;
 
   private long maxInMemoryIndexSizeInBytes;
   private int maxInMemoryNumElements;
@@ -118,7 +118,7 @@ public class PersistentIndex {
     segment can hold.
     */
     this(datadir, scheduler, log, config, factory, recovery, hardDelete, metrics,
-        new InMemoryJournal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
+        new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
             config.storeMaxNumberOfEntriesToReturnFromJournal), time);
   }
 
@@ -137,7 +137,7 @@ public class PersistentIndex {
    * @throws StoreException
    */
   protected PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics, InMemoryJournal journal,
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics, Journal journal,
       Time time)
       throws StoreException {
     try {

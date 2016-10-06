@@ -45,7 +45,7 @@ class JournalEntry {
 /**
  * An in memory journal used to track the most recent blobs for a store.
  */
-class InMemoryJournal {
+class Journal {
 
   private final ConcurrentSkipListMap<Long, StoreKey> journal;
   private final int maxEntriesToJournal;
@@ -60,7 +60,7 @@ class InMemoryJournal {
    *                            the journal after the size is reached.
    * @param maxEntriesToReturn The max number of entries to return from the journal when queried for entries.
    */
-  public InMemoryJournal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
+  public Journal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
     journal = new ConcurrentSkipListMap<Long, StoreKey>();
     this.maxEntriesToJournal = maxEntriesToJournal;
     this.maxEntriesToReturn = maxEntriesToReturn;

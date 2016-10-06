@@ -77,7 +77,7 @@ public class PersistentIndexTest {
     }
 
     public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-        InMemoryJournal journal)
+        Journal journal)
         throws StoreException {
       super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
           new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()), journal,
@@ -132,7 +132,7 @@ public class PersistentIndexTest {
       return indexes.size() == 0;
     }
 
-    public InMemoryJournal getJournal() {
+    public Journal getJournal() {
       return super.journal;
     }
 
@@ -215,7 +215,7 @@ public class PersistentIndexTest {
 
       info.writeIndexToFile(9000);
       StoreMetrics metrics = new StoreMetrics(info.getFile().getAbsolutePath(), new MetricRegistry());
-      InMemoryJournal journal = new InMemoryJournal("test", 5, 5);
+      Journal journal = new Journal("test", 5, 5);
       IndexSegment infonew = new IndexSegment(info.getFile(), false, factory, config, metrics, journal);
       Assert.assertEquals(infonew.find(blobId1).getSize(), 1000);
       Assert.assertEquals(infonew.find(blobId1).getOffset(), 0);

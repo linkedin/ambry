@@ -19,11 +19,11 @@ import org.junit.Test;
 import java.util.List;
 
 
-public class InMemoryJournalTest {
+public class JournalTest {
 
   @Test
   public void testJournalOperation() {
-    InMemoryJournal journal = new InMemoryJournal("test", 10, 5);
+    Journal journal = new Journal("test", 10, 5);
     journal.addEntry(0, new MockId("id1"));
     journal.addEntry(1000, new MockId("id2"));
     journal.addEntry(2000, new MockId("id3"));
