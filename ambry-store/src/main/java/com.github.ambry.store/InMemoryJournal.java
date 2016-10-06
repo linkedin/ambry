@@ -136,11 +136,17 @@ class InMemoryJournal {
     return journalEntries;
   }
 
+  /**
+   * @return the first/smallest offset in the journal or -1 if no such entry exists.
+   */
   public long getFirstOffset() {
     Map.Entry<Long, StoreKey> first = journal.firstEntry();
     return first == null ? -1 : first.getKey();
   }
 
+  /**
+   * @return the last/greatest offset in the journal or -1 if no such entry exists.
+   */
   public long getLastOffset() {
     Map.Entry<Long, StoreKey> last = journal.lastEntry();
     return last == null ? -1 : last.getKey();

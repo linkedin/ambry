@@ -49,7 +49,8 @@ class Offset implements Comparable<Offset> {
   /**
    * Constructs an Offset from a stream.
    * @param stream the {@link DataInputStream} that will contain the serialized form of this object.
-   * @throws IllegalArgumentException if {@code name} is {@code null} or empty or {@code offset} < 0.
+   * @throws IllegalArgumentException if {@code name} is {@code null} or empty or {@code offset} < 0 or if the version
+   * of the record is not recognized.
    * @throws IOException if there are I/O problems reading from the stream.
    */
   static Offset fromBytes(DataInputStream stream)
@@ -69,14 +70,15 @@ class Offset implements Comparable<Offset> {
   }
 
   /**
-   * @return the name of the log segment for which the offset provided by {@link #getOffset()} is valid.
+   * @return the name of the log segment for which the offset provided by {@link #getOffset()} is valid. Guaranteed to
+   * be non-null and non-empty.
    */
   String getName() {
     return name;
   }
 
   /**
-   * @return the offset in the log segment with name provided by {@link #getName()}.
+   * @return the offset in the log segment with name provided by {@link #getName()}. Guaranteed to be >= 0.
    */
   long getOffset() {
     return offset;
@@ -123,5 +125,10 @@ class Offset implements Comparable<Offset> {
     int result = name.hashCode();
     result = 31 * result + (int) (offset ^ (offset >>> 32));
     return result;
+  }
+
+  @Override
+  public String toString() {
+    return "Name = [" + name + "] Offset = [" + offset + "]";
   }
 }
