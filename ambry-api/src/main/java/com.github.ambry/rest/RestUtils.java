@@ -17,6 +17,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +27,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import javafx.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
