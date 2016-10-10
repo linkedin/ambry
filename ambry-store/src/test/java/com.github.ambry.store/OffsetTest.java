@@ -111,12 +111,10 @@ public class OffsetTest {
     assertEquals("Hashcode mismatch", o1.hashCode(), o2.hashCode());
 
     assertFalse("Offsets should be declared unequal", o1.equals(o3));
-    assertTrue("Hashcode should be declared unequal", o1.hashCode() != o3.hashCode());
 
     // TODO (Log Segmentation): Uncomment when compareTo() can handle different offset names.
     /*
     assertFalse("Offsets should be declared unequal", o1.equals(o4));
-    assertTrue("Hashcode should be declared unequal", o1.hashCode() != o4.hashCode());
     */
   }
 
