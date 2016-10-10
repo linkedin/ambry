@@ -45,10 +45,6 @@ public class PairTest {
     assertFalse("pairOne and pairFour should not be equal", pairOne.equals(pairFour));
     assertFalse("pairOne and pairFive should not be equal", pairOne.equals(pairFive));
     assertEquals("Hashcodes should be the same", pairOne.hashCode(), pairTwo.hashCode());
-    assertFalse("Hashcodes should not be the same for pairOne and pairThree",
-        pairOne.hashCode() == pairThree.hashCode());
-    assertFalse("Hashcodes should not be the same for pairOne and pairFour", pairOne.hashCode() == pairFour.hashCode());
-    assertFalse("Hashcodes should not be the same for pairOne and pairFive", pairOne.hashCode() == pairFive.hashCode());
     assertEquals("Pair{first=" + first + ", second=" + second + "}", pairOne.toString());
   }
 }
