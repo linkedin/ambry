@@ -46,10 +46,10 @@ public class OffsetTest {
     byte[] serialized = logOffset.toBytes();
     Offset deserializedOffset =
         Offset.fromBytes(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(serialized))));
-    assertEquals("Original offset 'name' does not match with the deserialized offset", logOffset.getName(),
+    assertEquals("Original offset 'name' does not match with the deserialized offset", name,
         deserializedOffset.getName());
-    assertEquals("Original offset 'offset' does not match with the deserialized offset", logOffset.getName(),
-        deserializedOffset.getName());
+    assertEquals("Original offset 'offset' does not match with the deserialized offset", offset,
+        deserializedOffset.getOffset());
     // equals test
     assertEquals("Original offset does not match with the deserialized offset", logOffset, deserializedOffset);
     // hashcode test
@@ -111,9 +111,9 @@ public class OffsetTest {
     assertEquals("Hashcode mismatch", o1.hashCode(), o2.hashCode());
 
     assertFalse("Offsets should be declared unequal", o1.equals(o3));
-    assertFalse("Hashcode should be declared unequal", o1.equals(o3));
+    assertTrue("Hashcode should be declared unequal", o1.hashCode() != o3.hashCode());
     assertFalse("Offsets should be declared unequal", o1.equals(o4));
-    assertFalse("Hashcode should be declared unequal", o1.equals(o4));
+    assertTrue("Hashcode should be declared unequal", o1.hashCode() != o4.hashCode());
   }
 
   // helpers
@@ -124,7 +124,7 @@ public class OffsetTest {
    * @param name the name to use.
    * @param offset the offset to use.
    */
-  void doBadOffsetInputTest(String name, long offset) {
+  private void doBadOffsetInputTest(String name, long offset) {
     try {
       new Offset(name, offset);
       fail("Should have thrown because one of the inputs is invalid");
