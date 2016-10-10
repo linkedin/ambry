@@ -16,10 +16,17 @@ package com.github.ambry.utils;
 
 import org.junit.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 
+/**
+ * Test the {@link Pair} utility class.
+ */
 public class PairTest {
+  /**
+   * Test the {@link Pair} class for correctness.
+   */
   @Test
   public void testPair() {
     String first = "abcdef";
@@ -28,14 +35,20 @@ public class PairTest {
     Pair<String, Long> pairOne = new Pair<>(first, second);
     Pair<String, Long> pairTwo = new Pair<>(first, second);
     Pair<String, Long> pairThree = new Pair<>(first, second + 1);
-    Pair<Long, String> pairFour = new Pair<>(second, first);
+    Pair<String, Long> pairFour = new Pair<>(first + "extra", second);
+    Pair<Long, String> pairFive = new Pair<>(second, first);
 
     assertEquals("Invalid first item.", first, pairOne.getFirst());
     assertEquals("Invalid second item.", second, pairOne.getSecond());
     assertEquals("These pairs should be equivalent", pairTwo, pairOne);
     assertFalse("pairOne and pairThree should not be equal", pairOne.equals(pairThree));
     assertFalse("pairOne and pairFour should not be equal", pairOne.equals(pairFour));
+    assertFalse("pairOne and pairFive should not be equal", pairOne.equals(pairFive));
     assertEquals("Hashcodes should be the same", pairOne.hashCode(), pairTwo.hashCode());
+    assertFalse("Hashcodes should not be the same for pairOne and pairThree",
+        pairOne.hashCode() == pairThree.hashCode());
+    assertFalse("Hashcodes should not be the same for pairOne and pairFour", pairOne.hashCode() == pairFour.hashCode());
+    assertFalse("Hashcodes should not be the same for pairOne and pairFive", pairOne.hashCode() == pairFive.hashCode());
     assertEquals("Pair{first=" + first + ", second=" + second + "}", pairOne.toString());
   }
 }
