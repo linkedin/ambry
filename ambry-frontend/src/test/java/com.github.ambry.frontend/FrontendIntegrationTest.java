@@ -400,7 +400,7 @@ public class FrontendIntegrationTest {
     assertEquals("Accept-Ranges not set correctly", "bytes", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
     byte[] expectedContentArray = expectedContent.array();
     if (range != null) {
-      long blobSize = expectedContent.remaining();
+      long blobSize = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
       assertEquals("Content-Range header not set correctly",
           RestUtils.buildContentRangeAndLength(range, blobSize).getKey(),
           response.headers().get(RestUtils.Headers.CONTENT_RANGE));
@@ -513,7 +513,7 @@ public class FrontendIntegrationTest {
       assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
     }
     assertEquals("Accept-Ranges not set correctly", "bytes", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
-    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match " + RestUtils.Headers.BLOB_SIZE, contentLength,
+    assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match expected", contentLength,
         HttpHeaders.getContentLength(response));
     assertEquals(RestUtils.Headers.CONTENT_TYPE + " does not match " + RestUtils.Headers.AMBRY_CONTENT_TYPE,
         expectedHeaders.get(RestUtils.Headers.AMBRY_CONTENT_TYPE),
