@@ -75,11 +75,10 @@ public class UtilsTest {
     String outputString = Utils.readShortString(new DataInputStream(new ByteBufferInputStream(buffer)));
     Assert.assertEquals(s, outputString);
     // 0-length
-    buffer.flip();
-    buffer.putShort((short) 0);
     buffer.rewind();
+    buffer.putShort(0, (short) 0);
     outputString = Utils.readShortString(new DataInputStream(new ByteBufferInputStream(buffer)));
-    Assert.assertEquals("", outputString);
+    Assert.assertTrue(outputString.isEmpty());
 
     // failed case
     buffer.rewind();
@@ -92,9 +91,8 @@ public class UtilsTest {
     } catch (IllegalArgumentException e) {
       Assert.assertTrue(true);
     }
-    buffer.flip();
-    buffer.putShort((short) -1);
-    buffer.flip();
+    buffer.rewind();
+    buffer.putShort(0, (short) -1);
     try {
       outputString = Utils.readShortString(new DataInputStream(new ByteBufferInputStream(buffer)));
       Assert.fail("Should have encountered exception with negative length.");
@@ -110,11 +108,10 @@ public class UtilsTest {
     outputString = Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)));
     Assert.assertEquals(s, outputString);
     // 0-length
-    buffer.flip();
-    buffer.putInt(0);
     buffer.rewind();
+    buffer.putInt(0, 0);
     outputString = Utils.readShortString(new DataInputStream(new ByteBufferInputStream(buffer)));
-    Assert.assertEquals("", outputString);
+    Assert.assertTrue(outputString.isEmpty());
 
     // failed case
     buffer.rewind();
@@ -127,9 +124,8 @@ public class UtilsTest {
     } catch (IllegalArgumentException e) {
       Assert.assertTrue(true);
     }
-    buffer.flip();
-    buffer.putInt(-1);
-    buffer.flip();
+    buffer.rewind();
+    buffer.putInt(0, -1);
     try {
       Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)));
       Assert.fail("Should have encountered exception with negative length.");
