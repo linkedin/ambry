@@ -26,6 +26,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
@@ -83,6 +84,18 @@ public class Utils {
    */
   public static String readIntString(DataInputStream input)
       throws IOException {
+    return readIntString(input, StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Reads a String whose length is an int from the given input stream
+   * @param input The input stream from which to read the String from
+   * @param charset the charset to use.
+   * @return The String read from the stream
+   * @throws IOException
+   */
+  public static String readIntString(DataInputStream input, Charset charset)
+      throws IOException {
     int size = input.readInt();
     if (size < 0) {
       throw new IllegalArgumentException("readIntString : the size cannot be negative");
@@ -99,7 +112,7 @@ public class Utils {
     if (read != size) {
       throw new IllegalArgumentException("readIntString : the size of the input does not match the actual data size");
     }
-    return new String(bytes, "UTF-8");
+    return new String(bytes, charset);
   }
 
   /**

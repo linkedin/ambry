@@ -82,7 +82,6 @@ public class PersistentIndex {
   private MessageStoreHardDelete hardDelete;
   private StoreKeyFactory factory;
   private StoreConfig config;
-  private JournalFactory storeJournalFactory;
   private UUID sessionId;
   private boolean cleanShutdown;
   private long logEndOffsetOnStartup;
@@ -104,10 +103,42 @@ public class PersistentIndex {
    * @param config The store configs for this index
    * @param factory The factory used to create store keys
    * @param recovery The recovery handle to perform recovery on startup
+   * @param hardDelete  The hard delete handle used to perform hard deletes
+   * @param metrics the metrics object
+   * @param time the time instance to use
    * @throws StoreException
    */
   public PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics, Time time)
+      throws StoreException {
+    /*
+    If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
+    whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
+    elements held by the latest segment, the journal needs to be able to hold twice the max number of elements a
+    segment can hold.
+    */
+    this(datadir, scheduler, log, config, factory, recovery, hardDelete, metrics,
+        new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
+            config.storeMaxNumberOfEntriesToReturnFromJournal), time);
+  }
+
+  /**
+   * Creates a new persistent index
+   * @param datadir The directory to use to store the index files
+   * @param scheduler The scheduler that runs regular background tasks
+   * @param log The log that is represented by this index
+   * @param config The store configs for this index
+   * @param factory The factory used to create store keys
+   * @param recovery The recovery handle to perform recovery on startup
+   * @param hardDelete  The hard delete handle used to perform hard deletes
+   * @param metrics the metrics object
+   * @param journal the journal to use
+   * @param time the time instance to use
+   * @throws StoreException
+   */
+  protected PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics, Journal journal,
+      Time time)
       throws StoreException {
     try {
       this.time = time;
@@ -121,13 +152,7 @@ public class PersistentIndex {
       persistor = new IndexPersistor();
       hardDeleter = new HardDeleteThread();
       this.hardDelete = hardDelete;
-      storeJournalFactory = Utils.getObj(config.storeJournalFactory);
-      /* If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
-      whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
-      elements held by the latest segment, the journal needs to be able to hold twice the max number of elements a
-      segment can hold. */
-      journal = storeJournalFactory.getJournal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
-          config.storeMaxNumberOfEntriesToReturnFromJournal);
+      this.journal = journal;
       Arrays.sort(indexFiles, new Comparator<File>() {
         @Override
         public int compare(File o1, File o2) {
@@ -261,7 +286,7 @@ public class PersistentIndex {
         if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
           // key already has a deleted entry in the index!
           logger.error("Index: {} recovered msg {} is for a key that is already deleted in the index: "
-              + "index offset {} Original Offset {}", dataDir, info, value.getOffset(),
+                  + "index offset {} Original Offset {}", dataDir, info, value.getOffset(),
               value.getOriginalMessageOffset());
           throw new StoreException("Encountered a duplicate record for key", StoreErrorCodes.Initialization_Error);
         } else if (info.isDeleted()) {
@@ -494,7 +519,7 @@ public class PersistentIndex {
     return new BlobReadOptions(value.getOffset(), value.getSize(), value.getTimeToLiveInMs(), id);
   }
 
-  private boolean isExpired(IndexValue value){
+  private boolean isExpired(IndexValue value) {
     return value.getTimeToLiveInMs() != Utils.Infinite_Time && time.milliseconds() > value.getTimeToLiveInMs();
   }
 
@@ -896,7 +921,7 @@ public class PersistentIndex {
   private void validateFileSpan(FileSpan fileSpan) {
     if (getCurrentEndOffset() > fileSpan.getStartOffset() || fileSpan.getStartOffset() > fileSpan.getEndOffset()) {
       logger.error("File span offsets provided to the index does not meet constraints "
-          + "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}", getCurrentEndOffset(),
+              + "logEndOffset {} inputFileStartOffset {} inputFileEndOffset {}", getCurrentEndOffset(),
           fileSpan.getStartOffset(), fileSpan.getEndOffset());
       throw new IllegalArgumentException("File span offsets provided to the index " + dataDir +
           " does not meet constraints" +

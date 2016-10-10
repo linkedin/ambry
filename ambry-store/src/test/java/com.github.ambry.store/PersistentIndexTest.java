@@ -76,6 +76,14 @@ public class PersistentIndexTest {
       this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance());
     }
 
+    public MockIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+        Journal journal)
+        throws StoreException {
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(),
+          new DummyMessageStoreHardDelete(), new StoreMetrics(datadir, new MetricRegistry()), journal,
+          SystemTime.getInstance());
+    }
+
     public void setHardDeleteRunningStatus(boolean status) {
       super.hardDeleter.running.set(status);
     }
@@ -207,7 +215,7 @@ public class PersistentIndexTest {
 
       info.writeIndexToFile(9000);
       StoreMetrics metrics = new StoreMetrics(info.getFile().getAbsolutePath(), new MetricRegistry());
-      InMemoryJournal journal = new InMemoryJournal("test", 5, 5);
+      Journal journal = new Journal("test", 5, 5);
       IndexSegment infonew = new IndexSegment(info.getFile(), false, factory, config, metrics, journal);
       Assert.assertEquals(infonew.find(blobId1).getSize(), 1000);
       Assert.assertEquals(infonew.find(blobId1).getOffset(), 0);
@@ -1163,11 +1171,12 @@ public class PersistentIndexTest {
       Properties props = new Properties();
       props.put("store.index.max.number.of.inmem.elements", "5");
       props.put("store.max.number.of.entries.to.return.for.find", "12");
-      props.put("store.journal.factory", "com.github.ambry.store.MockJournalFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory,
+          new MockJournal(logFile, 2 * config.storeIndexMaxNumberOfInmemElements,
+              config.storeMaxNumberOfEntriesToReturnFromJournal));
       MockJournal journal = (MockJournal) index.getJournal();
 
       MockId blobId1 = new MockId("id01");

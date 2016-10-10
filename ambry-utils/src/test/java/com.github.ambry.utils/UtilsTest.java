@@ -25,6 +25,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -105,7 +106,7 @@ public class UtilsTest {
     s = getRandomString(40000);
     buffer.put(s.getBytes());
     buffer.flip();
-    outputString = Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)));
+    outputString = Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)), StandardCharsets.UTF_8);
     Assert.assertEquals(s, outputString);
     // 0-length
     buffer.rewind();
@@ -119,17 +120,20 @@ public class UtilsTest {
     buffer.put(s.getBytes());
     buffer.flip();
     try {
-      outputString = Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)));
-      Assert.assertTrue(false);
+      outputString =
+          Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)), StandardCharsets.UTF_8);
+      fail("Should have failed");
     } catch (IllegalArgumentException e) {
-      Assert.assertTrue(true);
+      // expected.
     }
+
     buffer.rewind();
     buffer.putInt(0, -1);
     try {
-      Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)));
+      Utils.readIntString(new DataInputStream(new ByteBufferInputStream(buffer)), StandardCharsets.UTF_8);
       Assert.fail("Should have encountered exception with negative length.");
     } catch (IllegalArgumentException e) {
+      // expected.
     }
   }
 
