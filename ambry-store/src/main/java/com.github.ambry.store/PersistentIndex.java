@@ -1707,7 +1707,7 @@ class StoreFindToken implements FindToken {
     // read sessionId
     String sessionId = Utils.readIntString(stream);
     UUID sessionIdUUID = null;
-    if (sessionId != null) {
+    if (!sessionId.isEmpty()) {
       sessionIdUUID = UUID.fromString(sessionId);
     }
     // read offset

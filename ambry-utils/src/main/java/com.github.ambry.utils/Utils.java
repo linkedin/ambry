@@ -57,8 +57,8 @@ public class Utils {
   public static String readShortString(DataInputStream input)
       throws IOException {
     Short size = input.readShort();
-    if (size <= 0) {
-      return null;
+    if (size < 0) {
+      throw new IllegalArgumentException("readShortString : the size cannot be negative");
     }
     byte[] bytes = new byte[size];
     int read = 0;
@@ -84,8 +84,8 @@ public class Utils {
   public static String readIntString(DataInputStream input)
       throws IOException {
     int size = input.readInt();
-    if (size <= 0) {
-      return null;
+    if (size < 0) {
+      throw new IllegalArgumentException("readIntString : the size cannot be negative");
     }
     byte[] bytes = new byte[size];
     int read = 0;
@@ -112,7 +112,7 @@ public class Utils {
       throws IOException {
     int size = input.readInt();
     if (size < 0) {
-      return null;
+      throw new IllegalArgumentException("readIntBuffer : the size cannot be negative");
     }
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = 0;
@@ -139,7 +139,7 @@ public class Utils {
       throws IOException {
     short size = input.readShort();
     if (size < 0) {
-      return null;
+      throw new IllegalArgumentException("readShortBuffer : the size cannot be negative");
     }
     ByteBuffer buffer = ByteBuffer.allocate(size);
     int read = 0;

@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -42,6 +41,9 @@ public class BlobId extends StoreKey {
    * @param partitionId of Partition in which blob is to be stored.
    */
   public BlobId(PartitionId partitionId) {
+    if (partitionId == null) {
+      throw new IllegalArgumentException("Partition ID cannot be null");
+    }
     this.partitionId = partitionId;
     this.uuid = UUID.randomUUID().toString();
   }
@@ -55,7 +57,7 @@ public class BlobId extends StoreKey {
    */
   public BlobId(String id, ClusterMap clusterMap)
       throws IOException {
-    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap);
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap, true);
   }
 
   /**
@@ -67,10 +69,31 @@ public class BlobId extends StoreKey {
    */
   public BlobId(DataInputStream stream, ClusterMap clusterMap)
       throws IOException {
+    this(stream, clusterMap, false);
+  }
+
+  /**
+   * Re-constructs existing blobId by deserializing from data input stream. This constructor includes an optional check
+   * that the stream has no more available bytes after reading.
+   *
+   * @param stream from which to deserialize the blobid
+   * @param clusterMap of the cluster that the blob id belongs to
+   * @param ensureFullyRead {@code true} if the stream should have no more available bytes after deserializing the blob
+   *                        ID.
+   * @throws IOException
+   */
+  private BlobId(DataInputStream stream, ClusterMap clusterMap, boolean ensureFullyRead)
+      throws IOException {
     this.version = stream.readShort();
     if (version == 1) {
-      this.partitionId = clusterMap.getPartitionIdFromStream(stream);
+      partitionId = clusterMap.getPartitionIdFromStream(stream);
+      if (partitionId == null) {
+        throw new IllegalArgumentException("Partition ID cannot be null");
+      }
       uuid = Utils.readIntString(stream);
+      if (ensureFullyRead && stream.read() != -1) {
+        throw new IllegalArgumentException("Stream should have no more available bytes to read");
+      }
     } else {
       throw new IllegalArgumentException("version " + version + " not supported for blob id");
     }
