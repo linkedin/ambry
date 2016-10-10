@@ -47,6 +47,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javafx.util.Pair;
 import junit.framework.Assert;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -427,7 +428,8 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response status should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
+    Assert.assertEquals("Response status should have been set",
+        range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForHead(blobInfo.getBlobProperties(), range, restResponseChannel);
   }
 
@@ -529,10 +531,9 @@ public class AmbrySecurityServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     long contentLength = blobProperties.getBlobSize();
     if (range != null) {
-      ByteRange resolvedByteRange = range.toResolvedByteRange(blobProperties.getBlobSize());
-      contentLength = resolvedByteRange.getRangeSize();
-      Assert.assertEquals("Content range header not set correctly for range " + range,
-          RestUtils.buildContentRangeHeader(resolvedByteRange, blobProperties.getBlobSize()),
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      contentLength = rangeAndLength.getValue();
+      Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getKey(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     } else {
       Assert.assertNull("Content range header should not be set",
@@ -578,10 +579,9 @@ public class AmbrySecurityServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     long contentLength = blobProperties.getBlobSize();
     if (range != null) {
-      ByteRange resolvedByteRange = range.toResolvedByteRange(blobProperties.getBlobSize());
-      contentLength = resolvedByteRange.getRangeSize();
-      Assert.assertEquals("Content range header not set correctly for range " + range,
-          RestUtils.buildContentRangeHeader(resolvedByteRange, blobProperties.getBlobSize()),
+      Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
+      contentLength = rangeAndLength.getValue();
+      Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getKey(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
     } else {
       Assert.assertNull("Content range header should not be set",
