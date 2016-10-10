@@ -117,14 +117,13 @@ class Offset implements Comparable<Offset> {
     }
 
     Offset other = (Offset) o;
-    return name.equals(other.name) && offset == other.offset;
+    return compareTo(other) == 0;
   }
 
   @Override
   public int hashCode() {
-    int result = name.hashCode();
-    result = 31 * result + (int) (offset ^ (offset >>> 32));
-    return result;
+    // TODO (Log Segmentation):  Include name in the hash code once compareTo() can handle names.
+    return (int) (offset ^ (offset >>> 32));
   }
 
   @Override
