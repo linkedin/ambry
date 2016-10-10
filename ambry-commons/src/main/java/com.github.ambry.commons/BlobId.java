@@ -91,10 +91,7 @@ public class BlobId extends StoreKey {
         throw new IllegalArgumentException("Partition ID cannot be null");
       }
       uuid = Utils.readIntString(stream);
-      if (uuid == null) {
-        throw new IllegalArgumentException("Could not parse uuid");
-      }
-      if (ensureFullyRead && stream.available() > 0) {
+      if (ensureFullyRead && stream.read() != -1) {
         throw new IllegalArgumentException("Stream should have no more available bytes to read");
       }
     } else {
