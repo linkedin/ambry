@@ -47,6 +47,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
@@ -71,7 +72,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import javafx.util.Pair;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
@@ -731,7 +731,7 @@ public class AmbryBlobStorageServiceTest {
     if (range != null) {
       long blobSize = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
       assertEquals("Content-Range does not match expected",
-          RestUtils.buildContentRangeAndLength(range, blobSize).getKey(),
+          RestUtils.buildContentRangeAndLength(range, blobSize).getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
       ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
       expectedContentArray = Arrays.copyOfRange(expectedContentArray, (int) resolvedRange.getStartOffset(),
@@ -838,9 +838,9 @@ public class AmbryBlobStorageServiceTest {
     long contentLength = expectedHeaders.getLong(RestUtils.Headers.BLOB_SIZE);
     if (range != null) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
-      assertEquals("Content-Range does not match expected", rangeAndLength.getKey(),
+      assertEquals("Content-Range does not match expected", rangeAndLength.getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
-      contentLength = rangeAndLength.getValue();
+      contentLength = rangeAndLength.getSecond();
     } else {
       assertNull("Content-Range header should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));

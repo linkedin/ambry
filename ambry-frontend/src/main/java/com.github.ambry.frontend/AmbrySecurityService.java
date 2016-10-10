@@ -27,12 +27,12 @@ import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.concurrent.Future;
-import javafx.util.Pair;
 
 
 /**
@@ -197,8 +197,8 @@ class AmbrySecurityService implements SecurityService {
     long contentLength = blobProperties.getBlobSize();
     if (options.getRange() != null) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(options.getRange(), contentLength);
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getKey());
-      contentLength = rangeAndLength.getValue();
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getFirst());
+      contentLength = rangeAndLength.getSecond();
     }
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     setBlobPropertiesHeaders(blobProperties, restResponseChannel);
@@ -220,8 +220,8 @@ class AmbrySecurityService implements SecurityService {
     long contentLength = blobProperties.getBlobSize();
     if (options.getRange() != null) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(options.getRange(), contentLength);
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getKey());
-      contentLength = rangeAndLength.getValue();
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_RANGE, rangeAndLength.getFirst());
+      contentLength = rangeAndLength.getSecond();
     }
     if (contentLength < frontendConfig.frontendChunkedGetResponseThresholdInBytes) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);

@@ -25,6 +25,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
@@ -58,7 +59,6 @@ import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
-import javafx.util.Pair;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -402,7 +402,7 @@ public class FrontendIntegrationTest {
     if (range != null) {
       long blobSize = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
       assertEquals("Content-Range header not set correctly",
-          RestUtils.buildContentRangeAndLength(range, blobSize).getKey(),
+          RestUtils.buildContentRangeAndLength(range, blobSize).getFirst(),
           response.headers().get(RestUtils.Headers.CONTENT_RANGE));
       ByteRange resolvedRange = range.toResolvedByteRange(blobSize);
       expectedContentArray = Arrays.copyOfRange(expectedContentArray, (int) resolvedRange.getStartOffset(),
@@ -506,9 +506,9 @@ public class FrontendIntegrationTest {
     long contentLength = Long.parseLong(expectedHeaders.get(RestUtils.Headers.BLOB_SIZE));
     if (range != null) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
-      assertEquals("Content-Range header not set correctly", rangeAndLength.getKey(),
+      assertEquals("Content-Range header not set correctly", rangeAndLength.getFirst(),
           response.headers().get(RestUtils.Headers.CONTENT_RANGE));
-      contentLength = rangeAndLength.getValue();
+      contentLength = rangeAndLength.getSecond();
     } else {
       assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
     }

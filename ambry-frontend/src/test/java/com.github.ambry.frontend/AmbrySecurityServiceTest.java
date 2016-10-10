@@ -31,6 +31,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -47,7 +48,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javafx.util.Pair;
 import junit.framework.Assert;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -532,9 +532,9 @@ public class AmbrySecurityServiceTest {
     long contentLength = blobProperties.getBlobSize();
     if (range != null) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
-      contentLength = rangeAndLength.getValue();
-      Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getKey(),
+      Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+      contentLength = rangeAndLength.getSecond();
     } else {
       Assert.assertNull("Content range header should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
@@ -580,9 +580,9 @@ public class AmbrySecurityServiceTest {
     long contentLength = blobProperties.getBlobSize();
     if (range != null) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, contentLength);
-      contentLength = rangeAndLength.getValue();
-      Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getKey(),
+      Assert.assertEquals("Content range header not set correctly for range " + range, rangeAndLength.getFirst(),
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
+      contentLength = rangeAndLength.getSecond();
     } else {
       Assert.assertNull("Content range header should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));

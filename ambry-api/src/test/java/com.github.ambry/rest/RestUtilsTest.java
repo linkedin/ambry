@@ -17,6 +17,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
@@ -31,7 +32,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.TimeZone;
-import javafx.util.Pair;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -809,8 +809,8 @@ public class RestUtilsTest {
       throws RestServiceException {
     if (shouldSucceed) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, blobSize);
-      assertEquals(expectedContentRange, rangeAndLength.getKey());
-      assertEquals(expectedContentLength, (long) rangeAndLength.getValue());
+      assertEquals(expectedContentRange, rangeAndLength.getFirst());
+      assertEquals(expectedContentLength, (long) rangeAndLength.getSecond());
     } else {
       try {
         RestUtils.buildContentRangeAndLength(range, blobSize);
