@@ -73,9 +73,7 @@ public class MockCluster {
         }
         initializeServer(dataNodeId, sslProps, enableHardDeletes, time);
       }
-    } catch (InstantiationException e)
-
-    {
+    } catch (InstantiationException e) {
       // clean up other servers which was started already
       cleanup();
       throw e;

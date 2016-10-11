@@ -105,19 +105,6 @@ public class MockDataNodeId extends DataNodeId {
   }
 
   @Override
-  @Deprecated
-  public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
-    if (sslEnabledDataCenters.contains(datacenter)) {
-      if (ports.containsKey(PortType.SSL)) {
-        return ports.get(PortType.SSL);
-      } else {
-        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
-      }
-    }
-    return new Port(portNum, PortType.PLAINTEXT);
-  }
-
-  @Override
   public Port getPortToConnectTo() {
     if (sslEnabledDataCenters.contains(datacenter)) {
       if (ports.containsKey(PortType.SSL)) {

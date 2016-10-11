@@ -21,11 +21,9 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
@@ -305,7 +303,7 @@ public final class ReplicationManager {
                 new RemoteReplicaInfo(remoteReplica, replicaId, storeManager.getStore(replicaId.getPartitionId()),
                     factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
                     SystemTime.MsPerSec * Replication_Delay_Multiplier, SystemTime.getInstance(),
-                    getPortForReplica(remoteReplica, sslEnabledDatacenters));
+                    remoteReplica.getDataNodeId().getPortToConnectTo());
             replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
             replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
             remoteReplicas.add(remoteReplicaInfo);
@@ -363,22 +361,6 @@ public final class ReplicationManager {
           replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
     } catch (IOException e) {
       logger.error("IO error while starting replication");
-    }
-  }
-
-  /**
-   * Returns the port to be contacted for the remote replica according to the configs.
-   * @param replicaId Replica against which connection has to be establised
-   * @param sslEnabledDatacenters List of datacenters upon which SSL encryption should be enabled
-   * @return
-   */
-  public Port getPortForReplica(ReplicaId replicaId, ArrayList<String> sslEnabledDatacenters) {
-    if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      Port toReturn = new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
-      logger.trace("Assigning ssl for remote replica " + replicaId);
-      return toReturn;
-    } else {
-      return new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
     }
   }
 

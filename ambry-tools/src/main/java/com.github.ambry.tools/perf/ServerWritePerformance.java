@@ -174,14 +174,12 @@ public class ServerWritePerformance {
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(sslProperties)));
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       blobIdsWriter = new FileWriter(logFile);
       File performanceFile = new File(System.getProperty("user.dir"), "writeperfresult");
       performanceWriter = new FileWriter(performanceFile);
-
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
 
       final CountDownLatch latch = new CountDownLatch(numberOfWriters);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -215,7 +213,7 @@ public class ServerWritePerformance {
         threadIndexPerf[i] = new Thread(
             new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, blobIdsWriter,
                 performanceWriter, totalTimeTaken, totalWrites, measurementIntervalNs, enableVerboseLogging, map,
-                connectionPool, sslEnabledDatacentersList));
+                connectionPool));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -261,12 +259,11 @@ public class ServerWritePerformance {
     private boolean enableVerboseLogging;
     private int threadIndex;
     private ConnectionPool connectionPool;
-    private ArrayList<String> sslEnabledDatacenters;
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
         int minBlobSize, int maxBlobSize, FileWriter blobIdWriter, FileWriter performanceWriter,
         AtomicLong totalTimeTaken, AtomicLong totalWrites, long measurementIntervalNs, boolean enableVerboseLogging,
-        ClusterMap clusterMap, ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacenters) {
+        ClusterMap clusterMap, ConnectionPool connectionPool) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
@@ -281,7 +278,6 @@ public class ServerWritePerformance {
       this.measurementIntervalNs = measurementIntervalNs;
       this.enableVerboseLogging = enableVerboseLogging;
       this.connectionPool = connectionPool;
-      this.sslEnabledDatacenters = sslEnabledDatacenters;
     }
 
     public void run() {
@@ -310,7 +306,7 @@ public class ServerWritePerformance {
                 new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
                     props.getBlobSize(), BlobType.DataBlob);
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
-            Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacenters);
+            Port port = replicaId.getDataNodeId().getPortToConnectTo();
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);

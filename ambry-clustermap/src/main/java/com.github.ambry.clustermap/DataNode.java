@@ -156,29 +156,6 @@ public class DataNode extends DataNodeId {
   }
 
   /**
-   * Returns the {@link Port} to connect to based on the whether the {@link DataNodeId} belongs to the list of ssl-enabled
-   * Datacenters.
-   * @param sslEnabledDataCenters List of ssl enabled Datacenters.
-   * @return {@link Port} to which the caller can connect to.
-   * @throws IllegalStateException Thrown if the list dictates that an SSL port must be used, but the {@link DataNodeId}
-   * does not have an SSL port.
-   * @deprecated This method is obsolete. Please use {@link #getPortToConnectTo()} instead.
-   */
-  @Override
-  @Deprecated
-  public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
-    if (sslEnabledDataCenters.contains(datacenter.getName())) {
-      if (ports.containsKey(PortType.SSL)) {
-        return ports.get(PortType.SSL);
-      } else {
-        throw new IllegalStateException(
-            "An SSL port is needed but does not exist at data node " + hostname + ":" + portNum);
-      }
-    }
-    return ports.get(PortType.PLAINTEXT);
-  }
-
-  /**
    * Returns the {@link Port} of this node to connect to. A {@link Port} will be automatically selected based on if
    * there is a need of establishing an SSL connection.
    *
