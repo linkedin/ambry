@@ -39,7 +39,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
-import com.github.ambry.store.PersistentIndex;
+import com.github.ambry.store.HardDeleter;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
@@ -140,7 +140,7 @@ public class ServerHardDeleteTest {
         DataInputStream stream = new DataInputStream(crcStream);
         try {
           short version = stream.readShort();
-          Assert.assertEquals(version, PersistentIndex.Cleanup_Token_Version_V1);
+          Assert.assertEquals(version, HardDeleter.Cleanup_Token_Version_V1);
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", mockClusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
