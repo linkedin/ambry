@@ -21,9 +21,8 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.utils.ByteBufferOutputStream;
-import com.github.ambry.utils.Scheduler;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -36,6 +35,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -79,8 +79,7 @@ public class BlobStoreTest {
       throws IOException {
     MockClusterMap map = null;
     try {
-      Scheduler scheduler = new Scheduler(4, "thread", false);
-      scheduler.startup();
+      ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
       Properties props = new Properties();
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
@@ -91,9 +90,9 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+          replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
+          new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -154,8 +153,7 @@ public class BlobStoreTest {
       throws IOException {
     MockClusterMap map = null;
     try {
-      Scheduler scheduler = new Scheduler(4, "thread", false);
-      scheduler.startup();
+      ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
       File tempFile = tempFile();
       Properties props = new Properties();
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
@@ -167,9 +165,9 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+          replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
+          new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -216,8 +214,7 @@ public class BlobStoreTest {
       throws IOException {
     MockClusterMap map = null;
     try {
-      Scheduler scheduler = new Scheduler(4, "thread", false);
-      scheduler.startup();
+      ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
       File tempFile = tempFile();
       Properties props = new Properties();
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
@@ -229,9 +226,9 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+          replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
+          new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -299,8 +296,7 @@ public class BlobStoreTest {
       throws IOException {
     MockClusterMap map = null;
     try {
-      Scheduler scheduler = new Scheduler(4, "thread", false);
-      scheduler.startup();
+      ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
       File tempFile = tempFile();
       Properties props = new Properties();
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
@@ -338,9 +334,9 @@ public class BlobStoreTest {
       dummyMap.put(new Long(4000), info5);
 
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore("storeId", config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(dummyMap), SystemTime.getInstance());
+      Store store = new BlobStore("storeId", config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+          replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
+          new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(dummyMap), SystemTime.getInstance());
       store.start();
 
       // put blobs
@@ -442,8 +438,7 @@ public class BlobStoreTest {
       throws IOException {
     MockClusterMap map = null;
     try {
-      Scheduler scheduler = new Scheduler(4, "thread", false);
-      scheduler.startup();
+      ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
       Properties props = new Properties();
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
@@ -454,9 +449,9 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+          replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
+          new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
       byte[] bufToWrite = new byte[2000];
       new Random().nextBytes(bufToWrite);
@@ -507,8 +502,7 @@ public class BlobStoreTest {
       throws Exception {
     MockClusterMap map = null;
     try {
-      Scheduler scheduler = new Scheduler(4, "thread", false);
-      scheduler.startup();
+      ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
       Properties props = new Properties();
       VerifiableProperties verifyProperty = new VerifiableProperties(props);
       verifyProperty.verify();
@@ -519,9 +513,9 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(dataNodeId1);
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new MetricRegistry(), replicaIds.get(0).getReplicaPath(),
-          replicaIds.get(0).getCapacityInBytes(), factory, new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), mockTime);
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+          replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
+          new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), mockTime);
       store.start();
       byte[] bufToWrite = new byte[1000];
       new Random().nextBytes(bufToWrite);

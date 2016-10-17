@@ -280,28 +280,29 @@ public class AmbryRequests implements RequestAPI {
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (StoreException e) {
             if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
-                  "for partition " + partitionRequestInfo.getPartition(), e);
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
             } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
-                  "for partition " + partitionRequestInfo.getPartition(), e);
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.ttlExpiredError.inc();
             } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
-                  "for partition " + partitionRequestInfo.getPartition(), e);
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.idDeletedError.inc();
             } else {
-              logger.error("Store exception on a get with error code " + e.getErrorCode() +
-                  " for partition " + partitionRequestInfo.getPartition(), e);
+              logger.error("Store exception on a get with error code " + e.getErrorCode() + " for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.unExpectedStoreGetError.inc();
             }
             PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (MessageFormatException e) {
-            logger.error("Message format exception on a get with error code " + e.getErrorCode() +
-                " for partitionRequestInfo " + partitionRequestInfo, e);
+            logger.error(
+                "Message format exception on a get with error code " + e.getErrorCode() + " for partitionRequestInfo "
+                    + partitionRequestInfo, e);
             if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
               metrics.dataCorruptError.inc();
             } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
@@ -372,20 +373,24 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger
+            .trace("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
+                e);
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger
+            .trace("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
+                e);
         metrics.ttlExpiredError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger
+            .trace("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
+                e);
         metrics.idDeletedError.inc();
       } else {
-        logger.error("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger
+            .error("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
+                e);
         metrics.unExpectedStoreDeleteError.inc();
       }
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
@@ -464,8 +469,9 @@ public class AmbryRequests implements RequestAPI {
                     remoteReplicaLagInBytes);
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           } catch (StoreException e) {
-            logger.error("Store exception on a replica metadata request with error code " + e.getErrorCode() +
-                " for partition " + partitionId, e);
+            logger.error(
+                "Store exception on a replica metadata request with error code " + e.getErrorCode() + " for partition "
+                    + partitionId, e);
             if (e.getErrorCode() == StoreErrorCodes.IOError) {
               metrics.storeIOError.inc();
             } else {
@@ -584,10 +590,17 @@ public class AmbryRequests implements RequestAPI {
   }
 
   private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
-    // 1. check if partition exist on this node
-    if (storeManager.getStore(partition) == null) {
-      metrics.partitionUnknownError.inc();
-      return ServerErrorCode.Partition_Unknown;
+    // 1. check if partition exists on this node and that the store for this partition has been started
+    try {
+      storeManager.getStore(partition);
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.Store_Not_Started) {
+        metrics.diskUnavailableError.inc();
+        return ServerErrorCode.Disk_Unavailable;
+      } else if (e.getErrorCode() == StoreErrorCodes.Partition_Not_Found) {
+        metrics.partitionUnknownError.inc();
+        return ServerErrorCode.Partition_Unknown;
+      }
     }
     // 2. ensure the disk for the partition/replica is available
     List<ReplicaId> replicaIds = partition.getReplicaIds();

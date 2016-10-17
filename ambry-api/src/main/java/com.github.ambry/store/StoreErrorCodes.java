@@ -26,6 +26,7 @@ public enum StoreErrorCodes {
   Store_Not_Started,
   Store_Already_Started,
   Store_Shutting_Down,
+  Partition_Not_Found,
   Illegal_Index_Operation,
   Illegal_Index_State,
   Index_Creation_Failure,

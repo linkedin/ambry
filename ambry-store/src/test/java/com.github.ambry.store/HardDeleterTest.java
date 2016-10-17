@@ -18,7 +18,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -33,6 +32,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -146,8 +146,7 @@ public class HardDeleterTest {
       for (File c : indexFile.listFiles()) {
         c.delete();
       }
-      Scheduler scheduler = new Scheduler(1, false);
-      scheduler.startup();
+      ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
       Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       Properties props = new Properties();
       // the test will set the tokens, so disable the index persistor.

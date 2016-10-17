@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -36,6 +35,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -54,7 +54,7 @@ class PersistentIndex {
   private static final String Clean_Shutdown_Filename = "cleanshutdown";
   public static final short version = 0;
 
-  protected Scheduler scheduler;
+  protected ScheduledExecutorService scheduler;
   protected ConcurrentSkipListMap<Long, IndexSegment> indexes = new ConcurrentSkipListMap<Long, IndexSegment>();
   protected Journal journal;
 
@@ -95,8 +95,9 @@ class PersistentIndex {
    * @param time the time instance to use
    * @throws StoreException
    */
-  public PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics, Time time)
+  public PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
+      Time time)
       throws StoreException {
     /*
     If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
@@ -123,9 +124,9 @@ class PersistentIndex {
    * @param time the time instance to use
    * @throws StoreException
    */
-  protected PersistentIndex(String datadir, Scheduler scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics, Journal journal,
-      Time time)
+  protected PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
+      Journal journal, Time time)
       throws StoreException {
     try {
       this.time = time;
@@ -213,9 +214,9 @@ class PersistentIndex {
 
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
-      this.scheduler.schedule("index persistor", persistor,
-          config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
-          config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+      this.scheduler
+          .scheduleAtFixedRate(persistor, config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
+              config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
 
       if (config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");

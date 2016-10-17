@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
-import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
@@ -27,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +39,8 @@ class BlobStore implements Store {
   private Log log;
   private PersistentIndex index;
   private final String dataDir;
-  private final Scheduler scheduler;
+  private final ScheduledExecutorService scheduler;
+  private final DiskIOScheduler diskIOScheduler;
   private Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
   private Object lock = new Object();
@@ -54,12 +55,13 @@ class BlobStore implements Store {
   private StoreMetrics metrics;
   private Time time;
 
-  public BlobStore(String storeId, StoreConfig config, Scheduler scheduler, MetricRegistry registry, String dataDir,
-      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      Time time) {
+  public BlobStore(String storeId, StoreConfig config, ScheduledExecutorService scheduler,
+      DiskIOScheduler diskIOScheduler, MetricRegistry registry, String dataDir, long capacityInBytes,
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = new StoreMetrics(storeId, registry);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
+    this.diskIOScheduler = diskIOScheduler;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
     this.factory = factory;
@@ -95,8 +97,9 @@ class BlobStore implements Store {
         // lock the directory
         fileLock = new FileLock(new File(dataDir, LockFile));
         if (!fileLock.tryLock()) {
-          throw new StoreException("Failed to acquire lock on file " + dataDir +
-              ". Another process or thread is using this directory.", StoreErrorCodes.Initialization_Error);
+          throw new StoreException(
+              "Failed to acquire lock on file " + dataDir + ". Another process or thread is using this directory.",
+              StoreErrorCodes.Initialization_Error);
         }
         log = new Log(dataDir, capacityInBytes, metrics);
         index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, hardDelete, metrics, time);
@@ -326,6 +329,13 @@ class BlobStore implements Store {
         }
       }
     }
+  }
+
+  /**
+   * @return {@code true} if this store has been started successfully.
+   */
+  boolean isStarted() {
+    return started;
   }
 
   private void checkStarted()

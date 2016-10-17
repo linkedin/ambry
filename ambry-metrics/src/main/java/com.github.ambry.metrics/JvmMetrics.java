@@ -13,10 +13,7 @@
  */
 package com.github.ambry.metrics;
 
-import com.github.ambry.utils.Scheduler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.github.ambry.utils.Utils;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -24,9 +21,12 @@ import java.lang.management.MemoryUsage;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.util.HashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -58,7 +58,7 @@ public class JvmMetrics extends MetricsHelper implements Runnable {
   private List<GarbageCollectorMXBean> gcBeans = ManagementFactory.getGarbageCollectorMXBeans();
   private ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
   private Map<String, CounterTuple> gcBeanCounters = new HashMap<String, CounterTuple>();
-  private Scheduler executor = new Scheduler(1, true);
+  private ScheduledExecutorService executor = Utils.newScheduler(1, true);
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   // jvm metrics
@@ -80,24 +80,34 @@ public class JvmMetrics extends MetricsHelper implements Runnable {
   }
 
   public void start() {
-    executor.startup();
-    executor.schedule("jvmmetrics", this, 0, 5, TimeUnit.SECONDS);
+    executor.scheduleAtFixedRate(this, 0, 5, TimeUnit.SECONDS);
   }
 
   public void run() {
-    logger.debug("updating jvm metrics");
+    try {
+      logger.debug("updating jvm metrics");
 
-    updateMemoryUsage();
-    updateGcUsage();
-    updateThreadUsage();
+      updateMemoryUsage();
+      updateGcUsage();
+      updateThreadUsage();
 
-    logger.debug("updated metrics to: [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}]", gMemNonHeapUsedM,
-        gMemNonHeapCommittedM, gMemHeapUsedM, gMemHeapCommittedM, gThreadsNew, gThreadsRunnable, gThreadsBlocked,
-        gThreadsWaiting, gThreadsTimedWaiting, gThreadsTerminated, cGcCount, cGcTimeMillis);
+      logger.debug("updated metrics to: [{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}]", gMemNonHeapUsedM,
+          gMemNonHeapCommittedM, gMemHeapUsedM, gMemHeapCommittedM, gThreadsNew, gThreadsRunnable, gThreadsBlocked,
+          gThreadsWaiting, gThreadsTimedWaiting, gThreadsTerminated, cGcCount, cGcTimeMillis);
+    } catch (Exception e) {
+      logger.error("Encountered exception while updating jvm metrics.", e);
+    }
   }
 
   public void stop() {
-    executor.shutdown();
+    try {
+      executor.shutdown();
+      if (!executor.awaitTermination(1, TimeUnit.DAYS)) {
+         logger.error("Failed to terminate all tasks for executor {}", executor);
+      }
+    } catch (Exception e) {
+      logger.error("Encountered error while shutting down executor " + executor, e);
+    }
   }
 
   private void updateMemoryUsage() {
