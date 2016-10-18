@@ -306,7 +306,7 @@ public class HardDeleter implements Runnable {
    * Returns true if the hard delete is currently running.
    * @return true if running, false otherwise.
    */
-  public boolean hardDeleteThreadRunning() {
+  public boolean isRunning() {
     return shutdownLatch.getCount() != 0;
   }
 

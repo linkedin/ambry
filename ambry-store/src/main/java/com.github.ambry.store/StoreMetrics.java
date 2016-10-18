@@ -131,7 +131,7 @@ public class StoreMetrics {
     hardDeleteThreadRunning = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return hardDeleter.hardDeleteThreadRunning() ? 1L : 0L;
+        return hardDeleter.isRunning() ? 1L : 0L;
       }
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteThreadRunning"),
