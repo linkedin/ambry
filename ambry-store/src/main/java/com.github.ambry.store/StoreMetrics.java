@@ -109,11 +109,11 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, name + "PercentageUsedCapacity"), percentageUsedCapacity);
   }
 
-  public void initializeHardDeleteMetric(final PersistentIndex index, final Log log) {
+  public void initializeHardDeleteMetric(final HardDeleter hardDeleter, final Log log) {
     currentHardDeleteProgress = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return index.getHardDeleteProgress();
+        return hardDeleter.getProgress();
       }
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "CurrentHardDeleteProgress"),
@@ -122,7 +122,7 @@ public class StoreMetrics {
     percentageHardDeleteCompleted = new Gauge<Double>() {
       @Override
       public Double getValue() {
-        return ((double) index.getHardDeleteProgress() / log.getLogEndOffset()) * 100;
+        return ((double) hardDeleter.getProgress() / log.getLogEndOffset()) * 100;
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "PercentageHardDeleteCompleted"),
@@ -131,7 +131,7 @@ public class StoreMetrics {
     hardDeleteThreadRunning = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return index.hardDeleteThreadRunning() ? 1L : 0L;
+        return hardDeleter.isRunning() ? 1L : 0L;
       }
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteThreadRunning"),
@@ -140,7 +140,7 @@ public class StoreMetrics {
     hardDeleteCaughtUp = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return index.hardDeleteCaughtUp() ? 1L : 0L;
+        return hardDeleter.isCaughtUp() ? 1L : 0L;
       }
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteCaughtUp"), hardDeleteCaughtUp);
