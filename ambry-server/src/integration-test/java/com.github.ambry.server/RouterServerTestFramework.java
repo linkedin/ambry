@@ -21,6 +21,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.Selector;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
@@ -62,6 +63,12 @@ class RouterServerTestFramework {
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
   private final Router router;
+
+  public static String sslSendBytesMetricName = Selector.class.getName() + "SslSendBytesRate";
+  public static String sslReceiveBytesMetricName = Selector.class.getName() + "SslReceiveBytesRate";
+  public static String plaintextSendBytesMetricName = Selector.class.getName() + "PlaintextSendBytesRate";
+  public static String plaintextReceiveBytesMetricName = Selector.class.getName() + "PlaintextReceiveBytesRate";
+
 
   /**
    * Instantiate a framework for testing router-server interaction. Creates a non-blocking router to interact with the

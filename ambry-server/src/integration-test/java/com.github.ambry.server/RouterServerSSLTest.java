@@ -13,9 +13,13 @@
  */
 package com.github.ambry.server;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.network.SSLFactory;
+import com.github.ambry.network.Selector;
 import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.server.RouterServerTestFramework.OperationChain;
 import com.github.ambry.server.RouterServerTestFramework.OperationType;
@@ -25,6 +29,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Random;
@@ -36,12 +41,18 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.server.RouterServerTestFramework.getRouterProperties;
+import static com.github.ambry.server.RouterServerTestFramework.plaintextReceiveBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.plaintextSendBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.sslReceiveBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.sslSendBytesMetricName;
 
 
 public class RouterServerSSLTest {
   private static MockCluster sslCluster;
   private static RouterServerTestFramework testFramework;
-  private static MockClusterMap clusterMap;
+  private static MetricRegistry routerMetricRegistry;
+  private static long sslSendBytesCountBeforeTest;
+  private static long sslReceiveBytesCountBeforeTest;
 
   @BeforeClass
   public static void initializeTests()
@@ -57,25 +68,13 @@ public class RouterServerSSLTest {
     MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
     sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
-    clusterMap = sslCluster.getClusterMap();
-    testFramework = new RouterServerTestFramework(routerProps, clusterMap, notificationSystem);
-  }
-
-  @Before
-  public void before() {
-    for (MockDataNodeId m : clusterMap.getDataNodes()) {
-      m.setSslPortRequestedStatus(false);
-    }
-  }
-
-  @After
-  public void after() {
-    for (MockDataNodeId m : clusterMap.getDataNodes()) {
-      if (m.sslPortWasRequested()) {
-        return;
-      }
-    }
-    Assert.fail("Router did not communicate over SSL");
+    MockClusterMap routerClusterMap = sslCluster.getClusterMap();
+    // MockClusterMap returns a new registry by default. This is to ensure that each node (server, router and so on,
+    // get a different registry. But at this point all server nodes have been initialized, and we want the router and
+    // its components, which are going to be created, to use the same registry.
+    routerClusterMap.createAndSetPermanentMetricRegistry();
+    testFramework = new RouterServerTestFramework(routerProps, routerClusterMap, notificationSystem);
+    routerMetricRegistry = routerClusterMap.getMetricRegistry();
   }
 
   @AfterClass
@@ -88,6 +87,26 @@ public class RouterServerSSLTest {
       sslCluster.cleanup();
     }
     System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+  }
+
+  @Before
+  public void before() {
+    Map<String, Meter> meters = routerMetricRegistry.getMeters();
+    sslSendBytesCountBeforeTest = meters.get(sslSendBytesMetricName).getCount();
+    sslReceiveBytesCountBeforeTest = meters.get(sslReceiveBytesMetricName).getCount();
+  }
+
+  @After
+  public void after() {
+    Map<String, Meter> meters = routerMetricRegistry.getMeters();
+    Assert.assertTrue("Router should have sent over SSL",
+        meters.get(sslSendBytesMetricName).getCount() != sslSendBytesCountBeforeTest);
+    Assert.assertTrue("Router should have received over SSL",
+        meters.get(sslReceiveBytesMetricName).getCount() != sslReceiveBytesCountBeforeTest);
+    Assert.assertTrue("Router should not have sent over Plain Text",
+        meters.get(plaintextSendBytesMetricName).getCount() == 0);
+    Assert.assertTrue("Router should not have received over Plain Text",
+        meters.get(plaintextReceiveBytesMetricName).getCount() == 0);
   }
 
   /**

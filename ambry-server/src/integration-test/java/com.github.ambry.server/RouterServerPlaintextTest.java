@@ -13,6 +13,8 @@
  */
 package com.github.ambry.server;
 
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.server.RouterServerTestFramework.OperationChain;
 import com.github.ambry.server.RouterServerTestFramework.OperationType;
@@ -22,18 +24,29 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
+import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.server.RouterServerTestFramework.getRouterProperties;
+import static com.github.ambry.server.RouterServerTestFramework.plaintextReceiveBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.plaintextSendBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.sslReceiveBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.sslSendBytesMetricName;
 
 
 public class RouterServerPlaintextTest {
   private static MockCluster plaintextCluster;
   private static RouterServerTestFramework testFramework;
+  private static MetricRegistry routerMetricRegistry;
+  private static long plainTextSendBytesCountBeforeTest;
+  private static long plainTextReceiveBytesCountBeforeTest;
 
   @BeforeClass
   public static void initializeTests()
@@ -42,7 +55,12 @@ public class RouterServerPlaintextTest {
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
     MockClusterMap routerClusterMap = plaintextCluster.getClusterMap();
+    // MockClusterMap returns a new registry by default. This is to ensure that each node (server, router and so on,
+    // get a different registry. But at this point all server nodes have been initialized, and we want the router and
+    // its components, which are going to be created, to use the same registry.
+    routerClusterMap.createAndSetPermanentMetricRegistry();
     testFramework = new RouterServerTestFramework(getRouterProperties("DC1"), routerClusterMap, notificationSystem);
+    routerMetricRegistry = routerClusterMap.getMetricRegistry();
   }
 
   @AfterClass
@@ -55,6 +73,25 @@ public class RouterServerPlaintextTest {
       plaintextCluster.cleanup();
     }
     System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+  }
+
+  @Before
+  public void before() {
+    Map<String, Meter> meters = routerMetricRegistry.getMeters();
+    plainTextSendBytesCountBeforeTest = meters.get(plaintextSendBytesMetricName).getCount();
+    plainTextReceiveBytesCountBeforeTest = meters.get(plaintextReceiveBytesMetricName).getCount();
+  }
+
+  @After
+  public void after() {
+    Map<String, Meter> meters = routerMetricRegistry.getMeters();
+    Assert.assertTrue("Router should have sent over Plain Text",
+        meters.get(plaintextSendBytesMetricName).getCount() != plainTextSendBytesCountBeforeTest);
+    Assert.assertTrue("Router should have received over Plain Text",
+        meters.get(plaintextReceiveBytesMetricName).getCount() != plainTextReceiveBytesCountBeforeTest);
+    Assert.assertTrue("Router should not have sent over SSL", meters.get(sslSendBytesMetricName).getCount() == 0);
+    Assert
+        .assertTrue("Router should not have received over SSL", meters.get(sslReceiveBytesMetricName).getCount() == 0);
   }
 
   /**

@@ -205,12 +205,13 @@ public class TestSSLUtils {
   }
 
   /**
-   * Creates SSLConfig based on the values passed and few other pre-populated values
+   * Creates VerifiableProperties with SSL related configs based on the values passed and few other
+   * pre-populated values
    * @param sslEnabledDatacenters Comma separated list of datacenters against which ssl connections should be
    *                              established
    * @param mode Represents if the caller is a client or server
    * @param trustStoreFile File path of the truststore file
-   * @param certAlias alais used for the certificate
+   * @param certAlias alias used for the certificate
    * @return {@link VerifiableProperties} with all the required values populated
    * @throws IOException
    * @throws GeneralSecurityException
