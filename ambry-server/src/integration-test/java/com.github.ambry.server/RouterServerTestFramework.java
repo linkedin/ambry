@@ -64,10 +64,10 @@ class RouterServerTestFramework {
   private final MockNotificationSystem notificationSystem;
   private final Router router;
 
-  public static String sslSendBytesMetricName = Selector.class.getName() + "SslSendBytesRate";
-  public static String sslReceiveBytesMetricName = Selector.class.getName() + "SslReceiveBytesRate";
-  public static String plaintextSendBytesMetricName = Selector.class.getName() + "PlaintextSendBytesRate";
-  public static String plaintextReceiveBytesMetricName = Selector.class.getName() + "PlaintextReceiveBytesRate";
+  public static String sslSendBytesMetricName = Selector.class.getName() + ".SslSendBytesRate";
+  public static String sslReceiveBytesMetricName = Selector.class.getName() + ".SslReceiveBytesRate";
+  public static String plaintextSendBytesMetricName = Selector.class.getName() + ".PlaintextSendBytesRate";
+  public static String plaintextReceiveBytesMetricName = Selector.class.getName() + ".PlaintextReceiveBytesRate";
 
 
   /**
