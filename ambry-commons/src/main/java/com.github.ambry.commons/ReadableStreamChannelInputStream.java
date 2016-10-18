@@ -40,7 +40,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
    */
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
     this.readableStreamChannel = readableStreamChannel;
-    bytesAvailable = readableStreamChannel.getSize();
+    bytesAvailable = readableStreamChannel.getSize() < 0 ? 0 : readableStreamChannel.getSize();
     readableStreamChannel.readInto(asyncWritableChannel, callback);
   }
 
@@ -55,7 +55,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
     int data = -1;
     if (loadData()) {
       data = currentChunk.get() & 0xFF;
-      bytesAvailable--;
+      reportBytesRead(1);
     }
     return data;
   }
@@ -77,7 +77,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
       currentChunk.get(b, off, toRead);
       len -= toRead;
       off += toRead;
-      bytesAvailable -= toRead;
+      reportBytesRead(toRead);
     }
 
     int bytesRead = off - startOff;
@@ -124,6 +124,16 @@ public class ReadableStreamChannelInputStream extends InputStream {
       }
     }
     return currentChunk != null;
+  }
+
+  /**
+   * Keeps track of the bytes read.
+   * @param count the number of bytes read in this read.
+   */
+  private void reportBytesRead(int count) {
+    if (bytesAvailable - count >= 0) {
+      bytesAvailable -= count;
+    }
   }
 
   /**

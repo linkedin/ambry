@@ -36,6 +36,10 @@ import static org.junit.Assert.assertEquals;
  */
 public class ReadableStreamChannelInputStreamTest {
 
+  /**
+   * Tests the common cases i.e reading byte by byte, reading by parts and reading all at once.
+   * @throws IOException
+   */
   @Test
   public void commonCaseTest()
       throws IOException {
@@ -46,6 +50,10 @@ public class ReadableStreamChannelInputStreamTest {
     readAllAtOnceTest(in);
   }
 
+  /**
+   * Tests cases where read() methods get incorrect input.
+   * @throws IOException
+   */
   @Test
   public void readErrorCasesTest()
       throws IOException {
@@ -81,25 +89,25 @@ public class ReadableStreamChannelInputStreamTest {
     assertEquals("Bytes read should have been 0 because passed len was 0", 0, dstInputStream.read(out, 0, 0));
   }
 
+  /**
+   * Tests correctness of {@link ReadableStreamChannelInputStream#available()}.
+   * @throws IOException
+   */
   @Test
   public void availableTest()
       throws IOException {
     byte[] in = new byte[1024];
     new Random().nextBytes(in);
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
 
-    byte[] out = new byte[in.length / 5];
-    int totalBytesRead = 0;
-    for (int i = 0; totalBytesRead < in.length; i++) {
-      int sourceStart = out.length * i;
-      assertEquals("Available differs from expected", in.length - sourceStart, dstInputStream.available());
-      int bytesRead = dstInputStream.read(out);
-      assertArrayEquals("Byte array obtained from InputStream did not match source",
-          Arrays.copyOfRange(in, sourceStart, sourceStart + bytesRead), Arrays.copyOfRange(out, 0, bytesRead));
-      totalBytesRead += bytesRead;
-    }
-    assertEquals("Available should be 0", 0, dstInputStream.available());
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
+    InputStream stream = new ReadableStreamChannelInputStream(channel);
+    doAvailableTest(stream, in, true);
+    stream.close();
+
+    channel = new NoSizeRSC(ByteBuffer.wrap(in));
+    stream = new ReadableStreamChannelInputStream(channel);
+    doAvailableTest(stream, in, false);
+    stream.close();
   }
 
   /**
@@ -136,40 +144,131 @@ public class ReadableStreamChannelInputStreamTest {
 
   // helpers
   // commonCaseTest() helpers
+
+  /**
+   * Tests reading {@link ReadableStreamChannelInputStream} byte by byte.
+   * @param in the data that the {@link ReadableStreamChannelInputStream} should contain.
+   * @throws IOException
+   */
   private void readByteByByteTest(byte[] in)
       throws IOException {
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
-    for (int i = 0; i < in.length; i++) {
-      assertEquals("Byte [" + i + "] does not match expected", in[i], (byte) dstInputStream.read());
-    }
-    assertEquals("Did not receive expected EOF", -1, dstInputStream.read());
+    InputStream stream = new ReadableStreamChannelInputStream(channel);
+    doReadByteByByteTest(stream, in);
+    stream.close();
+
+    channel = new NoSizeRSC(ByteBuffer.wrap(in));
+    stream = new ReadableStreamChannelInputStream(channel);
+    doReadByteByByteTest(stream, in);
+    stream.close();
   }
 
+  /**
+   * Tests reading {@link ReadableStreamChannelInputStream} part by part.
+   * @param in the data that the {@link ReadableStreamChannelInputStream} should contain.
+   * @throws IOException
+   */
   private void readPartByPartTest(byte[] in)
       throws IOException {
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
+    InputStream stream = new ReadableStreamChannelInputStream(channel);
+    doReadPartByPartTest(stream, in);
+    stream.close();
+
+    channel = new NoSizeRSC(ByteBuffer.wrap(in));
+    stream = new ReadableStreamChannelInputStream(channel);
+    doReadPartByPartTest(stream, in);
+    stream.close();
+  }
+
+  /**
+   * Tests reading {@link ReadableStreamChannelInputStream} all at once.
+   * @param in the data that the {@link ReadableStreamChannelInputStream} should contain.
+   * @throws IOException
+   */
+  private void readAllAtOnceTest(byte[] in)
+      throws IOException {
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
+    InputStream stream = new ReadableStreamChannelInputStream(channel);
+    doReadAllAtOnceTest(stream, in);
+    stream.close();
+
+    channel = new NoSizeRSC(ByteBuffer.wrap(in));
+    stream = new ReadableStreamChannelInputStream(channel);
+    doReadAllAtOnceTest(stream, in);
+    stream.close();
+  }
+
+  /**
+   * Tests reading {@link InputStream} byte by byte.
+   * @param stream the {@link InputStream} to test.
+   * @param in the original data that is inside {@code stream}.
+   * @throws IOException
+   */
+  private void doReadByteByByteTest(InputStream stream, byte[] in)
+      throws IOException {
+    for (int i = 0; i < in.length; i++) {
+      assertEquals("Byte [" + i + "] does not match expected", in[i], (byte) stream.read());
+    }
+    assertEquals("Did not receive expected EOF", -1, stream.read());
+  }
+
+  /**
+   * Tests reading {@link InputStream} part by part.
+   * @param stream the {@link InputStream} to test.
+   * @param in the original data that is inside {@code stream}.
+   * @throws IOException
+   */
+  private void doReadPartByPartTest(InputStream stream, byte[] in)
+      throws IOException {
     byte[] out = new byte[in.length];
     for (int start = 0; start < in.length; ) {
       int end = Math.min(start + in.length / 4, in.length);
       int len = end - start;
-      assertEquals("Bytes read did not match what was requested", len, dstInputStream.read(out, start, len));
+      assertEquals("Bytes read did not match what was requested", len, stream.read(out, start, len));
       assertArrayEquals("Byte array obtained from InputStream did not match source", Arrays.copyOfRange(in, start, end),
           Arrays.copyOfRange(out, start, end));
       start = end;
     }
-    assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out, 0, out.length));
+    assertEquals("Did not receive expected EOF", -1, stream.read(out, 0, out.length));
   }
 
-  private void readAllAtOnceTest(byte[] in)
+  /**
+   * Tests reading {@link InputStream} all at once.
+   * @param stream the {@link InputStream} to test.
+   * @param in the original data that is inside {@code stream}.
+   * @throws IOException
+   */
+  private void doReadAllAtOnceTest(InputStream stream, byte[] in)
       throws IOException {
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-    InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     byte[] out = new byte[in.length];
-    assertEquals("Bytes read did not match size of source array", in.length, dstInputStream.read(out));
+    assertEquals("Bytes read did not match size of source array", in.length, stream.read(out));
     assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
-    assertEquals("Did not receive expected EOF", -1, dstInputStream.read(out));
+    assertEquals("Did not receive expected EOF", -1, stream.read(out));
+  }
+
+  /**
+   * Tests correctness of {@link ReadableStreamChannelInputStream#available()}.
+   * @param stream the {@link InputStream} to read from.
+   * @param in the original data that is inside {@code stream}.
+   * @param validAvailable {@code true} if {@link InputStream#available()} has the right number. If {@code false}, it is
+   *                                   assumed that it is always 0.
+   * @throws IOException
+   */
+  private void doAvailableTest(InputStream stream, byte[] in, boolean validAvailable)
+      throws IOException {
+    byte[] out = new byte[in.length / 5];
+    int totalBytesRead = 0;
+    for (int i = 0; totalBytesRead < in.length; i++) {
+      int sourceStart = out.length * i;
+      int expectedAvailable = validAvailable ? in.length - sourceStart : 0;
+      assertEquals("Available differs from expected", expectedAvailable, stream.available());
+      int bytesRead = stream.read(out);
+      assertArrayEquals("Byte array obtained from InputStream did not match source",
+          Arrays.copyOfRange(in, sourceStart, sourceStart + bytesRead), Arrays.copyOfRange(out, 0, bytesRead));
+      totalBytesRead += bytesRead;
+    }
+    assertEquals("Available should be 0", 0, stream.available());
   }
 }
 
@@ -199,7 +298,7 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
    * @param asyncWritableChannel the {@link AsyncWritableChannel} to read the data into.
    * @param callback the {@link Callback} that will be invoked either when all the data in the channel has been emptied
    *                 into the {@code asyncWritableChannel} or if there is an exception in doing so. This can be null.
-   * @return
+   * @return a {@link Future} that will eventually contain the result of the operation.
    */
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
@@ -226,5 +325,23 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
   public void close()
       throws IOException {
     channelOpen.set(false);
+  }
+}
+
+/**
+ * Implementation of {@link ReadableStreamChannel} that doesn't export the size.
+ */
+class NoSizeRSC extends ByteBufferReadableStreamChannel {
+
+  NoSizeRSC(ByteBuffer buffer) {
+    super(buffer);
+  }
+
+  /**
+   * @return -1
+   */
+  @Override
+  public long getSize() {
+    return -1;
   }
 }
