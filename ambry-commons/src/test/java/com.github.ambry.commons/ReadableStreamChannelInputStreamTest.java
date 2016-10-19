@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
@@ -21,7 +22,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -29,6 +32,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 
@@ -36,19 +40,25 @@ import static org.junit.Assert.fail;
  * Tests functionality of {@link ReadableStreamChannelInputStream}.
  */
 public class ReadableStreamChannelInputStreamTest {
+  private static final int CONTENT_SPLIT_PART_COUNT = 5;
+  // intentionally unequal
+  private static final int READ_PART_COUNT = 4;
 
   /**
    * Tests the common cases i.e reading byte by byte, reading by parts and reading all at once.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void commonCaseTest()
-      throws IOException {
-    byte[] in = new byte[1024];
-    new Random().nextBytes(in);
-    readByteByByteTest(in);
-    readPartByPartTest(in);
-    readAllAtOnceTest(in);
+      throws Exception {
+    int[] sizes = {0, 1024 * CONTENT_SPLIT_PART_COUNT};
+    for (int size : sizes) {
+      byte[] in = new byte[size];
+      new Random().nextBytes(in);
+      readByteByByteTest(in);
+      readPartByPartTest(in);
+      readAllAtOnceTest(in);
+    }
   }
 
   /**
@@ -96,23 +106,38 @@ public class ReadableStreamChannelInputStreamTest {
 
   /**
    * Tests correctness of {@link ReadableStreamChannelInputStream#available()}.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
   public void availableTest()
-      throws IOException {
-    byte[] in = new byte[1024];
-    new Random().nextBytes(in);
+      throws Exception {
+    int[] sizes = {0, 1024 * CONTENT_SPLIT_PART_COUNT};
+    for (int size : sizes) {
+      byte[] in = new byte[size];
+      new Random().nextBytes(in);
 
-    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
-    InputStream stream = new ReadableStreamChannelInputStream(channel);
-    doAvailableTest(stream, in);
-    stream.close();
+      // channel with size and one piece of content.
+      ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
+      InputStream stream = new ReadableStreamChannelInputStream(channel);
+      doAvailableTest(stream, in, in.length);
+      stream.close();
 
-    channel = new NoSizeRSC(ByteBuffer.wrap(in));
-    stream = new ReadableStreamChannelInputStream(channel);
-    doAvailableTest(stream, in);
-    stream.close();
+      // channel with no size and multiple pieces of content.
+      channel = new NoSizeRSC(ByteBuffer.wrap(in));
+      stream = new ReadableStreamChannelInputStream(channel);
+      doAvailableTest(stream, in, in.length);
+      stream.close();
+
+      // channel with no size and multiple pieces of content.
+      List<ByteBuffer> contents = splitContent(in, CONTENT_SPLIT_PART_COUNT);
+      contents.add(null);
+      // assuming all parts are the same length.
+      int partLength = contents.get(0).remaining();
+      channel = new MockRestRequest(MockRestRequest.DUMMY_DATA, contents);
+      stream = new ReadableStreamChannelInputStream(channel);
+      doAvailableTest(stream, in, partLength);
+      stream.close();
+    }
   }
 
   /**
@@ -155,16 +180,26 @@ public class ReadableStreamChannelInputStreamTest {
   /**
    * Tests reading {@link ReadableStreamChannelInputStream} byte by byte.
    * @param in the data that the {@link ReadableStreamChannelInputStream} should contain.
-   * @throws IOException
+   * @throws Exception
    */
   private void readByteByByteTest(byte[] in)
-      throws IOException {
+      throws Exception {
+    // channel with size and one piece of content.
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream stream = new ReadableStreamChannelInputStream(channel);
     doReadByteByByteTest(stream, in);
     stream.close();
 
+    // channel with no size but one piece of content.
     channel = new NoSizeRSC(ByteBuffer.wrap(in));
+    stream = new ReadableStreamChannelInputStream(channel);
+    doReadByteByByteTest(stream, in);
+    stream.close();
+
+    // channel with no size and multiple pieces of content.
+    List<ByteBuffer> contents = splitContent(in, CONTENT_SPLIT_PART_COUNT);
+    contents.add(null);
+    channel = new MockRestRequest(MockRestRequest.DUMMY_DATA, contents);
     stream = new ReadableStreamChannelInputStream(channel);
     doReadByteByByteTest(stream, in);
     stream.close();
@@ -173,16 +208,26 @@ public class ReadableStreamChannelInputStreamTest {
   /**
    * Tests reading {@link ReadableStreamChannelInputStream} part by part.
    * @param in the data that the {@link ReadableStreamChannelInputStream} should contain.
-   * @throws IOException
+   * @throws Exception
    */
   private void readPartByPartTest(byte[] in)
-      throws IOException {
+      throws Exception {
+    // channel with size and one piece of content.
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream stream = new ReadableStreamChannelInputStream(channel);
     doReadPartByPartTest(stream, in);
     stream.close();
 
+    // channel with no size but one piece of content.
     channel = new NoSizeRSC(ByteBuffer.wrap(in));
+    stream = new ReadableStreamChannelInputStream(channel);
+    doReadPartByPartTest(stream, in);
+    stream.close();
+
+    // channel with no size and multiple pieces of content.
+    List<ByteBuffer> contents = splitContent(in, CONTENT_SPLIT_PART_COUNT);
+    contents.add(null);
+    channel = new MockRestRequest(MockRestRequest.DUMMY_DATA, contents);
     stream = new ReadableStreamChannelInputStream(channel);
     doReadPartByPartTest(stream, in);
     stream.close();
@@ -191,16 +236,26 @@ public class ReadableStreamChannelInputStreamTest {
   /**
    * Tests reading {@link ReadableStreamChannelInputStream} all at once.
    * @param in the data that the {@link ReadableStreamChannelInputStream} should contain.
-   * @throws IOException
+   * @throws Exception
    */
   private void readAllAtOnceTest(byte[] in)
-      throws IOException {
+      throws Exception {
+    // channel with size and one piece of content.
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream stream = new ReadableStreamChannelInputStream(channel);
     doReadAllAtOnceTest(stream, in);
     stream.close();
 
+    // channel with no size but one piece of content.
     channel = new NoSizeRSC(ByteBuffer.wrap(in));
+    stream = new ReadableStreamChannelInputStream(channel);
+    doReadAllAtOnceTest(stream, in);
+    stream.close();
+
+    // channel with no size and multiple pieces of content.
+    List<ByteBuffer> contents = splitContent(in, CONTENT_SPLIT_PART_COUNT);
+    contents.add(null);
+    channel = new MockRestRequest(MockRestRequest.DUMMY_DATA, contents);
     stream = new ReadableStreamChannelInputStream(channel);
     doReadAllAtOnceTest(stream, in);
     stream.close();
@@ -230,14 +285,17 @@ public class ReadableStreamChannelInputStreamTest {
       throws IOException {
     byte[] out = new byte[in.length];
     for (int start = 0; start < in.length; ) {
-      int end = Math.min(start + in.length / 4, in.length);
+      int end = Math.min(start + in.length / READ_PART_COUNT, in.length);
       int len = end - start;
       assertEquals("Bytes read did not match what was requested", len, stream.read(out, start, len));
       assertArrayEquals("Byte array obtained from InputStream did not match source", Arrays.copyOfRange(in, start, end),
           Arrays.copyOfRange(out, start, end));
       start = end;
     }
-    assertEquals("Did not receive expected EOF", -1, stream.read(out, 0, out.length));
+    if (out.length > 0) {
+      assertEquals("Did not receive expected EOF", -1, stream.read(out, 0, out.length));
+    }
+    assertEquals("Did not receive expected EOF", -1, stream.read());
   }
 
   /**
@@ -251,7 +309,10 @@ public class ReadableStreamChannelInputStreamTest {
     byte[] out = new byte[in.length];
     assertEquals("Bytes read did not match size of source array", in.length, stream.read(out));
     assertArrayEquals("Byte array obtained from InputStream did not match source", in, out);
-    assertEquals("Did not receive expected EOF", -1, stream.read(out));
+    if (out.length > 0) {
+      assertEquals("Did not receive expected EOF", -1, stream.read(out));
+    }
+    assertEquals("Did not receive expected EOF", -1, stream.read());
   }
 
   /**
@@ -260,14 +321,14 @@ public class ReadableStreamChannelInputStreamTest {
    * @param in the original data that is inside {@code stream}.
    * @throws IOException
    */
-  private void doAvailableTest(InputStream stream, byte[] in)
+  private void doAvailableTest(InputStream stream, byte[] in, int partLength)
       throws IOException {
-    byte[] out = new byte[in.length / 5];
+    byte[] out = new byte[in.length / READ_PART_COUNT];
     int totalBytesRead = 0;
     for (int i = 0; totalBytesRead < in.length; i++) {
       int sourceStart = out.length * i;
       // available will be 0 when no chunks have been read.
-      int expectedAvailable = sourceStart == 0 ? 0 :in.length - sourceStart;
+      int expectedAvailable = sourceStart == 0 ? 0 : partLength - (sourceStart % partLength);
       assertEquals("Available differs from expected", expectedAvailable, stream.available());
       int bytesRead = stream.read(out);
       assertArrayEquals("Byte array obtained from InputStream did not match source",
@@ -275,6 +336,25 @@ public class ReadableStreamChannelInputStreamTest {
       totalBytesRead += bytesRead;
     }
     assertEquals("Available should be 0", 0, stream.available());
+  }
+
+  /**
+   * Splits {@code in} into {@code numParts} {@link ByteBuffer} instances. The ByteBuffer instances wrap {@code in}.
+   * Assumption is that the length of in is perfectly divisible by {@code numParts}.
+   * @param in the byte array to split.
+   * @param numParts the number of parts to split {@code in} into.
+   * @return a list of {@link ByteBuffer} instances of size {@code numParts} that share the content of {@code in} (in
+   * order).
+   */
+  private List<ByteBuffer> splitContent(byte[] in, int numParts) {
+    assertTrue("This function works only when length of input is exactly divisible by number of parts required",
+        in.length % numParts == 0);
+    List<ByteBuffer> contents = new ArrayList<>(numParts);
+    int individualPartSize = in.length / numParts;
+    for (int addedContentCount = 0; addedContentCount < numParts; addedContentCount++) {
+      contents.add(ByteBuffer.wrap(in, addedContentCount * individualPartSize, individualPartSize));
+    }
+    return contents;
   }
 }
 

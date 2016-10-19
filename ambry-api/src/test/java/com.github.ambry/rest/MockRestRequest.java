@@ -192,7 +192,7 @@ public class MockRestRequest implements RestRequest {
     } else {
       contentLength =
           args.get(CONTENT_LENGTH_HEADER_KEY) != null ? Long.parseLong(args.get(CONTENT_LENGTH_HEADER_KEY).toString())
-              : 0;
+              : -1;
     }
     onEventComplete(Event.GetSize);
     return contentLength;

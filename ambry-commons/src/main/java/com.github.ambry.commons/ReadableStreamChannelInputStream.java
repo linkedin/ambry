@@ -107,7 +107,14 @@ public class ReadableStreamChannelInputStream extends InputStream {
         asyncWritableChannel.resolveOldestChunk(null);
       }
       try {
-        currentChunk = asyncWritableChannel.getNextChunk();
+        while (true) {
+          currentChunk = asyncWritableChannel.getNextChunk();
+          if (currentChunk != null && !currentChunk.hasRemaining()) {
+            asyncWritableChannel.resolveOldestChunk(null);
+          } else {
+            break;
+          }
+        }
       } catch (InterruptedException e) {
         throw new IllegalStateException(e);
       }
