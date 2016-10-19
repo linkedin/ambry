@@ -14,10 +14,10 @@
                     ],
                     "hardwareState": "AVAILABLE",
                     "hostname": "localhost",
-                    "port": 15088
+                    "port": 6667
                 }
             ],
-            "name": "Data-Center"
+            "name": "DataCenter"
         }
     ]
 }

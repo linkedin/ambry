@@ -29,6 +29,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -63,6 +64,7 @@ public class ReadableStreamChannelInputStreamTest {
     InputStream dstInputStream = new ReadableStreamChannelInputStream(channel);
     try {
       dstInputStream.read(null, 0, in.length);
+      fail("The read should have failed");
     } catch (NullPointerException e) {
       // expected. nothing to do.
     }
@@ -70,18 +72,21 @@ public class ReadableStreamChannelInputStreamTest {
     byte[] out = new byte[in.length];
     try {
       dstInputStream.read(out, -1, out.length);
+      fail("The read should have failed");
     } catch (IndexOutOfBoundsException e) {
       // expected. nothing to do.
     }
 
     try {
       dstInputStream.read(out, 0, -1);
+      fail("The read should have failed");
     } catch (IndexOutOfBoundsException e) {
       // expected. nothing to do.
     }
 
     try {
       dstInputStream.read(out, 0, out.length + 1);
+      fail("The read should have failed");
     } catch (IndexOutOfBoundsException e) {
       // expected. nothing to do.
     }
@@ -101,12 +106,12 @@ public class ReadableStreamChannelInputStreamTest {
 
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
     InputStream stream = new ReadableStreamChannelInputStream(channel);
-    doAvailableTest(stream, in, true);
+    doAvailableTest(stream, in);
     stream.close();
 
     channel = new NoSizeRSC(ByteBuffer.wrap(in));
     stream = new ReadableStreamChannelInputStream(channel);
-    doAvailableTest(stream, in, false);
+    doAvailableTest(stream, in);
     stream.close();
   }
 
@@ -125,6 +130,7 @@ public class ReadableStreamChannelInputStreamTest {
     InputStream inputStream = new ReadableStreamChannelInputStream(channel);
     try {
       inputStream.read();
+      fail("The read should have failed");
     } catch (Exception e) {
       while (e.getCause() != null) {
         e = (Exception) e.getCause();
@@ -137,6 +143,7 @@ public class ReadableStreamChannelInputStreamTest {
     inputStream = new ReadableStreamChannelInputStream(channel);
     try {
       inputStream.read();
+      fail("The read should have failed");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
     }
@@ -251,17 +258,16 @@ public class ReadableStreamChannelInputStreamTest {
    * Tests correctness of {@link ReadableStreamChannelInputStream#available()}.
    * @param stream the {@link InputStream} to read from.
    * @param in the original data that is inside {@code stream}.
-   * @param validAvailable {@code true} if {@link InputStream#available()} has the right number. If {@code false}, it is
-   *                                   assumed that it is always 0.
    * @throws IOException
    */
-  private void doAvailableTest(InputStream stream, byte[] in, boolean validAvailable)
+  private void doAvailableTest(InputStream stream, byte[] in)
       throws IOException {
     byte[] out = new byte[in.length / 5];
     int totalBytesRead = 0;
     for (int i = 0; totalBytesRead < in.length; i++) {
       int sourceStart = out.length * i;
-      int expectedAvailable = validAvailable ? in.length - sourceStart : 0;
+      // available will be 0 when no chunks have been read.
+      int expectedAvailable = sourceStart == 0 ? 0 :in.length - sourceStart;
       assertEquals("Available differs from expected", expectedAvailable, stream.available());
       int bytesRead = stream.read(out);
       assertArrayEquals("Byte array obtained from InputStream did not match source",
@@ -302,7 +308,7 @@ class IncompleteReadReadableStreamChannel implements ReadableStreamChannel {
    */
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
-    Exception exception = null;
+    Exception exception;
     if (!channelOpen.get()) {
       exception = new ClosedChannelException();
     } else {
