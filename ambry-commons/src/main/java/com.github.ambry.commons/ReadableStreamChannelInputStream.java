@@ -21,7 +21,7 @@ import java.nio.ByteBuffer;
 
 
 /**
- *  Class that converts a (possibly non-blocking) {@link ReadableStreamChannel} into a blocking {@link InputStream}.
+ *  Class that converts a {@link ReadableStreamChannel} into a blocking {@link InputStream}.
  *  <p/>
  *  This class is not thread-safe and will result in undefined behaviour if accesses to the stream are not synchronized.
  */
@@ -40,13 +40,13 @@ public class ReadableStreamChannelInputStream extends InputStream {
    */
   public ReadableStreamChannelInputStream(ReadableStreamChannel readableStreamChannel) {
     this.readableStreamChannel = readableStreamChannel;
-    bytesAvailable = readableStreamChannel.getSize();
+    bytesAvailable = readableStreamChannel.getSize() < 0 ? 0 : readableStreamChannel.getSize();
     readableStreamChannel.readInto(asyncWritableChannel, callback);
   }
 
   @Override
   public int available() {
-    return bytesAvailable < Integer.MAX_VALUE ? (int) bytesAvailable : Integer.MAX_VALUE;
+    return currentChunk == null ? 0 : currentChunk.remaining();
   }
 
   @Override
@@ -55,7 +55,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
     int data = -1;
     if (loadData()) {
       data = currentChunk.get() & 0xFF;
-      bytesAvailable--;
+      reportBytesRead(1);
     }
     return data;
   }
@@ -77,7 +77,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
       currentChunk.get(b, off, toRead);
       len -= toRead;
       off += toRead;
-      bytesAvailable -= toRead;
+      reportBytesRead(toRead);
     }
 
     int bytesRead = off - startOff;
@@ -107,7 +107,14 @@ public class ReadableStreamChannelInputStream extends InputStream {
         asyncWritableChannel.resolveOldestChunk(null);
       }
       try {
-        currentChunk = asyncWritableChannel.getNextChunk();
+        while (true) {
+          currentChunk = asyncWritableChannel.getNextChunk();
+          if (currentChunk != null && !currentChunk.hasRemaining()) {
+            asyncWritableChannel.resolveOldestChunk(null);
+          } else {
+            break;
+          }
+        }
       } catch (InterruptedException e) {
         throw new IllegalStateException(e);
       }
@@ -124,6 +131,16 @@ public class ReadableStreamChannelInputStream extends InputStream {
       }
     }
     return currentChunk != null;
+  }
+
+  /**
+   * Keeps track of the bytes read.
+   * @param count the number of bytes read in this read.
+   */
+  private void reportBytesRead(int count) {
+    if (bytesAvailable >= count) {
+      bytesAvailable -= count;
+    }
   }
 
   /**
