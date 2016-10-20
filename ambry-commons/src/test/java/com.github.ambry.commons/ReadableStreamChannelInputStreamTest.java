@@ -319,6 +319,8 @@ public class ReadableStreamChannelInputStreamTest {
    * Tests correctness of {@link ReadableStreamChannelInputStream#available()}.
    * @param stream the {@link InputStream} to read from.
    * @param in the original data that is inside {@code stream}.
+   * @param partLength the length of each chunk that is inside the {@link ReadableStreamChannel} backing the
+   * {@code stream}
    * @throws IOException
    */
   private void doAvailableTest(InputStream stream, byte[] in, int partLength)
