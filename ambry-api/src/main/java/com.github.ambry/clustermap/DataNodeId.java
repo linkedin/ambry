@@ -51,16 +51,6 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
   public abstract boolean hasSSLPort();
 
   /**
-   * Returns the {@link Port} to connect to based on the whether the {@link DataNodeId} belongs to the list of ssl-enabled
-   * Datacenters.
-   * @param sslEnabledDataCenters List of ssl enabled Datacenters.
-   * @return {@link Port} to which the caller can connect to.
-   * @deprecated This method is obsolete. Please use {@link #getPortToConnectTo()} instead.
-   */
-  @Deprecated
-  public abstract Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters);
-
-  /**
    * Returns the {@link Port} of this node to connect to.
    *
    * @return {@link Port} to which the caller can connect to.

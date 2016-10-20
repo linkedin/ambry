@@ -27,7 +27,6 @@ public class MockDataNodeId extends DataNodeId {
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
-  long rackId = -1;
   ArrayList<String> sslEnabledDataCenters = new ArrayList<String>();
 
   public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
@@ -35,11 +34,6 @@ public class MockDataNodeId extends DataNodeId {
     this.datacenter = dataCenter;
     this.ports = new HashMap<PortType, Port>();
     populatePorts(ports);
-  }
-
-  public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter, int rackId) {
-    this(ports, mountPaths, dataCenter);
-    this.rackId = rackId;
   }
 
   private void populatePorts(ArrayList<Port> ports) {
@@ -54,6 +48,16 @@ public class MockDataNodeId extends DataNodeId {
     if (!plainTextPortFound) {
       throw new IllegalArgumentException("No Plain Text port found");
     }
+  }
+
+  /**
+   * Set the datacenters to which ssl is enabled. If the datacenter on which this datanode resides is
+   * part of the datacenters to which ssl is enabled, then this datanode will always return an SSL port in
+   * {@link #getPortToConnectTo()}
+   * @param sslEnabledDataCenters list of datacenters to which ssl is enabled.
+   */
+  public void setSslEnabledDataCenters(ArrayList<String> sslEnabledDataCenters) {
+    this.sslEnabledDataCenters = sslEnabledDataCenters;
   }
 
   @Override
@@ -84,19 +88,6 @@ public class MockDataNodeId extends DataNodeId {
   }
 
   @Override
-  @Deprecated
-  public Port getPortToConnectTo(ArrayList<String> sslEnabledDataCenters) {
-    if (sslEnabledDataCenters.contains(datacenter)) {
-      if (ports.containsKey(PortType.SSL)) {
-        return ports.get(PortType.SSL);
-      } else {
-        throw new IllegalArgumentException("No SSL Port exists for the data node " + hostname + ":" + portNum);
-      }
-    }
-    return new Port(portNum, PortType.PLAINTEXT);
-  }
-
-  @Override
   public Port getPortToConnectTo() {
     if (sslEnabledDataCenters.contains(datacenter)) {
       if (ports.containsKey(PortType.SSL)) {
@@ -120,7 +111,7 @@ public class MockDataNodeId extends DataNodeId {
 
   @Override
   public long getRackId() {
-    return rackId;
+    return -1;
   }
 
   public List<String> getMountPaths() {

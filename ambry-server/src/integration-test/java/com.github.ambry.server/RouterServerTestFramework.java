@@ -21,6 +21,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.Selector;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
@@ -63,17 +64,24 @@ class RouterServerTestFramework {
   private final MockNotificationSystem notificationSystem;
   private final Router router;
 
+  public static String sslSendBytesMetricName = Selector.class.getName() + ".SslSendBytesRate";
+  public static String sslReceiveBytesMetricName = Selector.class.getName() + ".SslReceiveBytesRate";
+  public static String plaintextSendBytesMetricName = Selector.class.getName() + ".PlaintextSendBytesRate";
+  public static String plaintextReceiveBytesMetricName = Selector.class.getName() + ".PlaintextReceiveBytesRate";
+
+
   /**
    * Instantiate a framework for testing router-server interaction. Creates a non-blocking router to interact with the
    * passed-in {@link MockCluster}.
    * @param routerProps All of the properties to be used when instantiating the router.
-   * @param cluster A {@link MockCluster} that contains the servers to be used in the tests.
+   * @param clusterMap A {@link MockClusterMap} to be used in the tests.
    * @param notificationSystem A {@link MockNotificationSystem} that is used to determine if
    * @throws Exception
    */
-  RouterServerTestFramework(Properties routerProps, MockCluster cluster, MockNotificationSystem notificationSystem)
+  RouterServerTestFramework(Properties routerProps, MockClusterMap clusterMap,
+      MockNotificationSystem notificationSystem)
       throws Exception {
-    clusterMap = cluster.getClusterMap();
+    this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
 
     VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProps);
@@ -123,7 +131,7 @@ class RouterServerTestFramework {
       double blobBalanceThreshold = BALANCE_FACTOR * Math.ceil(blobsPut / numPartitions);
       for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
         Assert.assertTrue("Number of blobs is " + entry.getValue() + " on partition: " + entry.getKey()
-                + ", which is greater than the threshold of " + blobBalanceThreshold,
+            + ", which is greater than the threshold of " + blobBalanceThreshold,
             entry.getValue() <= blobBalanceThreshold);
       }
     }

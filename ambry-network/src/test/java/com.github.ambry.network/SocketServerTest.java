@@ -17,14 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.io.File;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
@@ -32,6 +26,12 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 
 public class SocketServerTest {
@@ -48,8 +48,10 @@ public class SocketServerTest {
   public static void initializeTests()
       throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
-    serverSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
-    clientSSLConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    serverSSLConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
+    clientSSLConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
     clientSSLFactory = new SSLFactory(clientSSLConfig);
     SSLContext sslContext = clientSSLFactory.getSSLContext();
     clientSSLSocketFactory = sslContext.getSocketFactory();

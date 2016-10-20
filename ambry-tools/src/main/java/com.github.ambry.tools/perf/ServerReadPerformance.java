@@ -41,7 +41,6 @@ import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -168,9 +167,8 @@ public class ServerReadPerformance {
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(sslProperties)));
 
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -194,8 +192,11 @@ public class ServerReadPerformance {
       String line;
       ConnectedChannel channel = null;
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
+      SSLConfig sslConfig = new SSLConfig(vProps);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+      connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
       ArrayList<Long> latenciesForGetBlobs = new ArrayList<Long>();
@@ -217,7 +218,7 @@ public class ServerReadPerformance {
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequest =
                 new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
-            Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+            Port port = replicaId.getDataNodeId().getPortToConnectTo();
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);

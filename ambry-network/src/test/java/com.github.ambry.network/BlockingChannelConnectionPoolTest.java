@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
@@ -46,6 +47,8 @@ public class BlockingChannelConnectionPoolTest {
   private static File trustStoreFile = null;
   private static SSLFactory sslFactory;
   private static SSLConfig sslConfig;
+  private static ClusterMapConfig plainTextClusterMapConfig;
+  private static ClusterMapConfig sslEnabledClusterMapConfig;
   private static SSLConfig serverSSLConfig1;
   private static SSLConfig serverSSLConfig2;
   private static SSLConfig serverSSLConfig3;
@@ -58,10 +61,17 @@ public class BlockingChannelConnectionPoolTest {
   public static void initializeTests()
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    serverSSLConfig1 = TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server1");
-    serverSSLConfig2 = TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server2");
-    serverSSLConfig3 = TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.SERVER, trustStoreFile, "server3");
-    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    serverSSLConfig1 =
+        new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server1"));
+    serverSSLConfig2 =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server2"));
+    serverSSLConfig3 =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2", SSLFactory.Mode.SERVER, trustStoreFile, "server3"));
+    VerifiableProperties sslClientProps =
+        TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    sslConfig = new SSLConfig(sslClientProps);
+    sslEnabledClusterMapConfig = new ClusterMapConfig(sslClientProps);
+    plainTextClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
@@ -377,7 +387,7 @@ public class BlockingChannelConnectionPoolTest {
     props.put("connectionpool.max.connections.per.port.ssl", "5");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
-            new MetricRegistry());
+            plainTextClusterMapConfig, new MetricRegistry());
     connectionPool.start();
 
     CountDownLatch shouldRelease = new CountDownLatch(1);
@@ -422,7 +432,7 @@ public class BlockingChannelConnectionPoolTest {
     props.put("connectionpool.max.connections.per.port.ssl", "5");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
-            new MetricRegistry());
+            sslEnabledClusterMapConfig, new MetricRegistry());
     connectionPool.start();
 
     CountDownLatch shouldRelease = new CountDownLatch(1);

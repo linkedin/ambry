@@ -43,9 +43,10 @@ public class SSLSelectorTest {
   public void setup()
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    SSLConfig sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    SSLConfig sslConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
     SSLConfig clientSSLConfig =
-        TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
     SSLFactory serverSSLFactory = new SSLFactory(sslConfig);
     SSLFactory clientSSLFactory = new SSLFactory(clientSSLConfig);
     server = new EchoServer(serverSSLFactory, 18383);

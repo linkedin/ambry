@@ -13,16 +13,15 @@
  */
 package com.github.ambry.network;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.io.InputStream;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.SocketException;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.SocketChannel;
 
 
 /**
@@ -53,7 +52,7 @@ public class BlockingChannel implements ConnectedChannel {
   }
 
   public void connect()
-      throws SocketException, IOException {
+      throws IOException {
     synchronized (lock) {
       if (!connected) {
         channel = SocketChannel.open();

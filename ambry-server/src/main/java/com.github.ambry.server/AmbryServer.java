@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -103,6 +104,7 @@ public class AmbryServer {
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -122,12 +124,12 @@ public class AmbryServer {
               new BlobStoreRecovery(), new BlobStoreHardDelete(), time);
       storeManager.start();
 
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, registry);
+      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       connectionPool.start();
 
       replicationManager =
-          new ReplicationManager(replicationConfig, sslConfig, storeConfig, storeManager, storeKeyFactory, clusterMap,
-              scheduler, nodeId, connectionPool, registry, notificationSystem);
+          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory,
+              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();

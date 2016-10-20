@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -750,10 +751,11 @@ public final class ServerTestUtil {
     assertEquals("Did not put expected number of blobs", numberOfRequestsToSend, payloadQueue.size());
     Properties sslProps = new Properties();
     sslProps.putAll(routerProps);
-    sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
+    sslProps.setProperty("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
+    VerifiableProperties vProps = new VerifiableProperties(sslProps);
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(new Properties())),
-            new SSLConfig(new VerifiableProperties(sslProps)), new MetricRegistry());
+            new SSLConfig(vProps), new ClusterMapConfig(vProps), new MetricRegistry());
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSend);
     AtomicInteger verifiedRequests = new AtomicInteger(0);

@@ -66,12 +66,10 @@ import joptsimple.OptionSpec;
  */
 public class BlobValidator {
   private final ConnectionPool connectionPool;
-  private final ArrayList<String> sslEnabledDatacentersList;
   private final Map<String, Exception> invalidBlobs;
 
-  public BlobValidator(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
+  public BlobValidator(ConnectionPool connectionPool) {
     this.connectionPool = connectionPool;
-    this.sslEnabledDatacentersList = sslEnabledDatacentersList;
     invalidBlobs = new HashMap<String, Exception>();
   }
 
@@ -178,10 +176,13 @@ public class BlobValidator {
         sslProperties = new Properties();
       }
       Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
+      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
+      SSLConfig sslConfig = new SSLConfig(vProps);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
 
       boolean verbose = Boolean.parseBoolean(options.valueOf(verboseOpt));
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
@@ -189,8 +190,7 @@ public class BlobValidator {
       if (verbose) {
         System.out.println("Hardware layout and partition layout parsed");
       }
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
 
       String blobIdListStr = options.valueOf(ambryBlobIdListOpt);
       ArrayList<String> blobList = new ArrayList<String>();
@@ -225,8 +225,7 @@ public class BlobValidator {
         System.out.println("ReplicPort " + replicaPort);
       }
 
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
-      BlobValidator blobValidator = new BlobValidator(connectionPool, sslEnabledDatacentersList);
+      BlobValidator blobValidator = new BlobValidator(connectionPool);
 
       ArrayList<BlobId> blobIdList = blobValidator.generateBlobId(blobList, map);
       if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_REPLICA")) {
@@ -395,7 +394,7 @@ public class BlobValidator {
       ReplicaId targetReplicaId = null;
       for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
         if (replicaId.getDataNodeId().getHostname().equals(replicaHost)) {
-          Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+          Port port = replicaId.getDataNodeId().getPortToConnectTo();
           if (port.getPort() == replicaPort) {
             targetReplicaId = replicaId;
             break;
@@ -445,7 +444,7 @@ public class BlobValidator {
     GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
 
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest =

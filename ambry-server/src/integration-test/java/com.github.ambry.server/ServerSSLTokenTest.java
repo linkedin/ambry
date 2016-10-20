@@ -49,14 +49,14 @@ public class ServerSSLTokenTest {
   public void initializeTests()
       throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    clientSSLConfig = TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1");
+    clientSSLConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1"));
     serverSSLProps = new Properties();
     TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     routerProps = new Properties();
-    TestSSLUtils.addSSLProperties(routerProps, "", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
+    TestSSLUtils.addSSLProperties(routerProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
     notificationSystem = new MockNotificationSystem(9);
-    sslCluster =
-        new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
     sslFactory = new SSLFactory(clientSSLConfig);

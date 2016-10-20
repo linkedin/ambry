@@ -36,6 +36,8 @@ public class MockClusterMap implements ClusterMap {
   private final int numMountPointsPerNode;
   private final HashSet<String> dataCentersInClusterMap = new HashSet<>();
   private boolean partitionsUnavailable = false;
+  private boolean createNewRegistry = true;
+  private MetricRegistry metricRegistry;
 
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 partitions/replicas per
@@ -212,7 +214,18 @@ public class MockClusterMap implements ClusterMap {
   @Override
   public MetricRegistry getMetricRegistry() {
     // Each server that calls this mocked interface needs its own metric registry.
-    return new MetricRegistry();
+    if (createNewRegistry) {
+      metricRegistry = new MetricRegistry();
+    }
+    return metricRegistry;
+  }
+
+  /**
+   * Create a {@link MetricRegistry} and ensure that this is the one that is returned by {@link #getMetricRegistry()}
+   */
+  public void createAndSetPermanentMetricRegistry() {
+    metricRegistry = new MetricRegistry();
+    createNewRegistry = false;
   }
 
   public void cleanup()

@@ -58,11 +58,9 @@ import joptsimple.OptionSpec;
  */
 public class AdminTool {
   private final ConnectionPool connectionPool;
-  private final ArrayList<String> sslEnabledDatacentersList;
 
-  public AdminTool(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
+  public AdminTool(ConnectionPool connectionPool) {
     this.connectionPool = connectionPool;
-    this.sslEnabledDatacentersList = sslEnabledDatacentersList;
   }
 
   public static void main(String args[]) {
@@ -151,18 +149,19 @@ public class AdminTool {
         sslProperties = new Properties();
       }
       Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
+      SSLConfig sslConfig = new SSLConfig(vProps);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+      connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
 
       String blobIdStr = options.valueOf(ambryBlobIdOpt);
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
-      AdminTool adminTool = new AdminTool(connectionPool, sslEnabledDatacentersList);
+      AdminTool adminTool = new AdminTool(connectionPool);
       BlobId blobId = new BlobId(blobIdStr, map);
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       boolean includeExpiredBlobs = Boolean.parseBoolean(options.valueOf(includeExpiredBlobsOpt));
@@ -224,7 +223,7 @@ public class AdminTool {
     GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
 
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest =
@@ -309,7 +308,7 @@ public class AdminTool {
     GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
 
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.Blob,
@@ -386,7 +385,7 @@ public class AdminTool {
     GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
 
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest =
