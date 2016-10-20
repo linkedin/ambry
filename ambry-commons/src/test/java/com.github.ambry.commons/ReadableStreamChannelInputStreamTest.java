@@ -349,7 +349,7 @@ public class ReadableStreamChannelInputStreamTest {
   private List<ByteBuffer> splitContent(byte[] in, int numParts) {
     assertTrue("This function works only when length of input is exactly divisible by number of parts required",
         in.length % numParts == 0);
-    List<ByteBuffer> contents = new ArrayList<>(numParts);
+    List<ByteBuffer> contents = new ArrayList<>();
     int individualPartSize = in.length / numParts;
     for (int addedContentCount = 0; addedContentCount < numParts; addedContentCount++) {
       contents.add(ByteBuffer.wrap(in, addedContentCount * individualPartSize, individualPartSize));
