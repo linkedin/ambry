@@ -296,7 +296,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
       for (File indexFile : indexFiles) {
         keysProcessedforReplica += dumpData
             .dumpIndex(indexFile, rootDirectory.getName(), replicaList, new ArrayList<String>(), blobIdToStatusMap,
-                indexStats, true);
+                indexStats, true, true);
       }
       logOutput("Total keys processed for " + rootDirectory.getName() + " " + keysProcessedforReplica);
       totalKeysProcessed.addAndGet(keysProcessedforReplica);
