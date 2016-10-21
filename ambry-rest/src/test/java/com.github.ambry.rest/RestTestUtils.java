@@ -62,7 +62,9 @@ public class RestTestUtils {
    * Gets a byte array of length {@code size} with random bytes.
    * @param size the required length of the random byte array.
    * @return a byte array of length {@code size} with random bytes.
+   * @deprecated use {@link com.github.ambry.utils.TestUtils#getRandomBytes(int)} instead.
    */
+  @Deprecated
   public static byte[] getRandomBytes(int size) {
     byte[] bytes = new byte[size];
     new Random().nextBytes(bytes);
@@ -72,7 +74,7 @@ public class RestTestUtils {
   /**
    * Build the range header value from a {@link ByteRange}
    * @param range the {@link ByteRange} representing the range
-   * @return
+   * @return the range header value corresponding to {@code range}.
    */
   public static String getRangeHeaderString(ByteRange range) {
     switch (range.getType()) {
