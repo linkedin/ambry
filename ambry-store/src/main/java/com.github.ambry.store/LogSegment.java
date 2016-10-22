@@ -65,19 +65,18 @@ class LogSegment implements Read, Write {
 
   /**
    * Creates a LogSegment abstraction.
-   * @param dataDir the directory to look in for the file named {@code name}
-   * @param name the name of the backing file. The file is allocated with size {@code capacityInBytes} if it does not
-   *             exist
+   * @param name the desired name of the segment.
+   * @param file the backing file for this segment.
    * @param capacityInBytes the intended capacity of the segment
    * @param metrics the {@link StoreMetrics} instance to use.
    * @throws IOException if the file cannot be read or created
    */
-  LogSegment(String dataDir, String name, long capacityInBytes, StoreMetrics metrics)
+  LogSegment(String name, File file, long capacityInBytes, StoreMetrics metrics)
       throws IOException {
-    file = new File(dataDir, name);
     if (!file.exists() || !file.isFile()) {
-      throw new IllegalArgumentException("No file with name [" + name + "] exists in directory [" + dataDir + "]");
+      throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
     }
+    this.file = file;
     this.name = name;
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;

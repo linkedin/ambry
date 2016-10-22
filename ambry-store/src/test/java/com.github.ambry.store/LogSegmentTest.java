@@ -101,7 +101,7 @@ public class LogSegmentTest {
       segment.flush();
       // close and reopen segment and ensure persistence.
       segment.close();
-      segment = new LogSegment(tempDirName, segmentName, STANDARD_SEGMENT_SIZE, metrics);
+      segment = new LogSegment(segmentName, new File(tempDirName, segmentName), STANDARD_SEGMENT_SIZE, metrics);
       segment.state = LogSegment.State.ACTIVE;
       segment.setEndOffset(buf.length);
       readAndEnsureMatch(segment, 0, buf);
@@ -456,7 +456,7 @@ public class LogSegmentTest {
       throws IOException {
     // try to construct with a file that does not exist.
     try {
-      new LogSegment(tempDirName, "log_non_existent", STANDARD_SEGMENT_SIZE, metrics);
+      new LogSegment("log_non_existent", new File(tempDirName, "log_non_existent"), STANDARD_SEGMENT_SIZE, metrics);
       fail("Construction should have failed because the backing file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -466,7 +466,8 @@ public class LogSegmentTest {
     File tempDir = Files.createTempDirectory("temp_dir").toFile();
     tempDir.deleteOnExit();
     try {
-      new LogSegment(tempDir.getParent(), tempDir.getName(), STANDARD_SEGMENT_SIZE, metrics);
+      new LogSegment(tempDir.getName(), new File(tempDir.getParent(), tempDir.getName()), STANDARD_SEGMENT_SIZE,
+          metrics);
       fail("Construction should have failed because the backing file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -488,13 +489,14 @@ public class LogSegmentTest {
    */
   private LogSegment getSegment(String segmentName, long capacityInBytes)
       throws IOException {
+    File file = new File(tempDirName, segmentName);
+    assertTrue("Segment file could not be created", file.createNewFile());
+    file.deleteOnExit();
     try (RandomAccessFile raf = new RandomAccessFile(tempDirName + File.separator + segmentName, "rw")) {
       raf.setLength(capacityInBytes);
-      LogSegment segment = new LogSegment(tempDirName, segmentName, capacityInBytes, metrics);
+      LogSegment segment = new LogSegment(segmentName, file, capacityInBytes, metrics);
       segment.setEndOffset(0);
       return segment;
-    } finally {
-      new File(tempDirName, segmentName).deleteOnExit();
     }
   }
 
