@@ -493,7 +493,10 @@ public class LogSegmentTest {
   private LogSegment getSegment(String segmentName, long capacityInBytes)
       throws IOException {
     File file = new File(tempDirName, segmentName);
-    assertTrue("Segment file could not be created", file.createNewFile());
+    if (file.exists()) {
+      assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
+    }
+    assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
     file.deleteOnExit();
     try (RandomAccessFile raf = new RandomAccessFile(tempDirName + File.separator + segmentName, "rw")) {
       raf.setLength(capacityInBytes);
