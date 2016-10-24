@@ -81,19 +81,22 @@ public class LogSegmentTest {
       int written = segment.appendFrom(ByteBuffer.wrap(buf, 0, writeSize));
       assertEquals("Size written did not match size of buffer provided", writeSize, written);
       assertEquals("End offset is not equal to the cumulative bytes written", writeSize, segment.getEndOffset());
+      readAndEnsureMatch(segment, 0, Arrays.copyOfRange(buf, 0, writeSize));
 
       // append with channel
       segment.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(buf, writeSize, writeSize))),
           writeSize);
       assertEquals("End offset is not equal to the cumulative bytes written", 2 * writeSize, segment.getEndOffset());
+      readAndEnsureMatch(segment, writeSize, Arrays.copyOfRange(buf, writeSize, 2 * writeSize));
 
       // use writeFrom
       segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(buf, 2 * writeSize, writeSize))),
           segment.getEndOffset(), writeSize);
       assertEquals("End offset is not equal to the cumulative bytes written", 3 * writeSize, segment.getEndOffset());
+      readAndEnsureMatch(segment, 2 * writeSize, Arrays.copyOfRange(buf, 2 * writeSize, buf.length));
 
       readAndEnsureMatch(segment, 0, buf);
-      // test that file size and end offset
+      // check file size and end offset (they will not match)
       assertEquals("End offset is not equal to the cumulative bytes written", 3 * writeSize, segment.getEndOffset());
       assertEquals("Size in bytes is not equal to size of the file", STANDARD_SEGMENT_SIZE, segment.sizeInBytes());
 

@@ -36,8 +36,17 @@ class LogSegment implements Read, Write {
    * Used to describe the state of the LogSegment.
    */
   enum State {
+    /**
+     * The LogSegment is completely free and no writes have been accommodated in the segment.
+     */
     FREE,
+    /**
+     * The LogSegment is currently being written to. It still has capacity remaining for more writes.
+     */
     ACTIVE,
+    /**
+     * The LogSegment is full and is accepting no more writes.
+     */
     SEALED
   }
 
@@ -92,7 +101,7 @@ class LogSegment implements Read, Write {
    * {@inheritDoc}
    * <p/>
    * Guarantees that the {@code buffer} is either written in its entirety in this segment or is transparently forwarded
-   * to the next segment (if one exists). A write is not started if it cannot be completed.
+   * to the next segment (if one exists).
    * <p/>
    * Can cause state change from {@link State#FREE} -> {@link State#ACTIVE} if this is the first write to the segment.
    * Can cause state change from {@link State#ACTIVE} -> {@link State#SEALED} if this write cannot be accommodated in
@@ -113,9 +122,10 @@ class LogSegment implements Read, Write {
     } else if (endOffset.get() + buffer.remaining() > capacityInBytes) {
       // maintain the invariant that there are no "partial" writes. A log segment should write the data that it receives
       // completely and the data that was provided in a single call cannot be written across multiple segments.
-      logger.info("{} : Writing data of size {} from a buffer. Current end offset is {} and capacity is {}",
-          file.getAbsolutePath(), buffer.remaining(), getEndOffset(), capacityInBytes);
       ensureNext(metrics.overflowWriteError);
+      logger.info("{} : Rolling over writes to {} on write of data of size {} from a buffer. "
+              + "Current end offset is {} and capacity is {}", file.getAbsolutePath(), next.getName(),
+          buffer.remaining(), getEndOffset(), capacityInBytes);
       state = State.SEALED;
       bytesWritten = next.appendFrom(buffer);
     } else {
@@ -132,7 +142,7 @@ class LogSegment implements Read, Write {
    * {@inheritDoc}
    * <p/>
    * Guarantees that the {@code buffer} is either written in its entirety in this segment or is transparently forwarded
-   * to the next segment (if one exists). A write is not started if it cannot be completed.
+   * to the next segment (if one exists).
    * <p/>
    * Can cause state change from {@link State#FREE} -> {@link State#ACTIVE} if this is the first write to the segment.
    * Can cause state change from {@link State#ACTIVE} -> {@link State#SEALED} if this write cannot be accommodated in
@@ -152,9 +162,10 @@ class LogSegment implements Read, Write {
     } else if (endOffset.get() + size > capacityInBytes) {
       // maintain the invariant that there are no "partial" writes. A log segment should write the data that it receives
       // completely and the data that was provided in a single call cannot be written across multiple segments.
-      logger.info("{} : Writing data of size {} from a channel. Current end offset is {} and capacity is {}",
-          file.getAbsolutePath(), size, getEndOffset(), capacityInBytes);
       ensureNext(metrics.overflowWriteError);
+      logger.info("{} : Rolling over writes to {} on write of data of size {} from a channel. "
+              + "Current end offset is {} and capacity is {}", file.getAbsolutePath(), next.getName(), size,
+          getEndOffset(), capacityInBytes);
       state = State.SEALED;
       next.appendFrom(channel, size);
     } else {
@@ -172,7 +183,7 @@ class LogSegment implements Read, Write {
    * <p/>
    * If {@code offset} + {@code size} exceeds the capacity of the current segment, bytes are written starting from
    * {@code offset} until capacity is reached. The rest of the bytes upto {@code size} are forwarded to the next segment
-   * (if one exists). A write is not started if it cannot be completed.
+   * (if one exists).
    * <p/>
    * The assumption with this function is that the caller is sure of the arguments and understands the implications of
    * writing at particular offsets and of writing to specific log segment.
@@ -197,10 +208,10 @@ class LogSegment implements Read, Write {
               + "] with capacity [" + capacityInBytes + "]");
     }
     if (offset + size > capacityInBytes) {
-      logger
-          .info("{} : Writing data of size {} from offset {} from a channel and capacity is {}", file.getAbsolutePath(),
-              size, offset, capacityInBytes);
       ensureNext(metrics.overflowWriteError);
+      logger.info("{} : Write of data of size {} from offset {} from a channel will be rolled over "
+              + "to the next segment {} because capacity is {}", file.getAbsolutePath(), next.getName(), size, offset,
+          next.getName(), capacityInBytes);
     }
     long sizeToBeWritten = Math.min(size, capacityInBytes - offset);
     long sizeLeft = size - sizeToBeWritten;
@@ -221,7 +232,7 @@ class LogSegment implements Read, Write {
    * <p/>
    * If {@code position} + {@code buffer.remaining()} exceeds the capacity of the current segment, bytes are read
    * starting from {@code position} until capacity is reached. The rest of the bytes upto {@code buffer.remaining()} are
-   * read from the next segment (if one exists). A read is not started if it cannot be completed.
+   * read from the next segment (if one exists).
    * <p/>
    * Using this function does not cause any state changes
    * @param buffer The buffer into which the read needs to write to
@@ -240,9 +251,10 @@ class LogSegment implements Read, Write {
               + "] with end offset [" + getEndOffset() + "]");
     }
     if (position + buffer.remaining() > getEndOffset()) {
-      logger.info("{} : Trying to read from position {} into a buffer of size {} when end offset is {}",
-          file.getAbsolutePath(), position, buffer.remaining(), getEndOffset());
       ensureNext(metrics.overflowReadError);
+      logger.info("{} : Read from position {} into a buffer of size {} when end offset is {} will continue "
+              + "into the next segment {}", file.getAbsolutePath(), position, buffer.remaining(), getEndOffset(),
+          next.getName());
     }
     long sizeToBeRead = Math.min(buffer.remaining(), getEndOffset() - position);
     long sizeLeft = buffer.remaining() - sizeToBeRead;
@@ -271,7 +283,9 @@ class LogSegment implements Read, Write {
    */
   Pair<File, FileChannel> getView(long offset) {
     if (offset < 0 || offset > getEndOffset()) {
-      throw new IllegalArgumentException("Provided offset [" + offset + "] is out of segment range");
+      throw new IllegalArgumentException(
+          "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
+              + "] with end offset [" + getEndOffset() + "]");
     }
     refCount.incrementAndGet();
     return segmentView;
