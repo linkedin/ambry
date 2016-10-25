@@ -347,6 +347,13 @@ class LogSegment implements Read, Write {
   }
 
   /**
+   * @return the total capacity, in bytes, of this log segment.
+   */
+  long getCapacityInBytes() {
+    return capacityInBytes;
+  }
+
+  /**
    * Flushes the backing file to disk.
    * @throws IOException if there is an I/O error while flushing.
    */

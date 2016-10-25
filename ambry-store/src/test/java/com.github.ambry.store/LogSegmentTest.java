@@ -75,6 +75,8 @@ public class LogSegmentTest {
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
     try {
       assertEquals("Name of segment is inconsistent with what was provided", segmentName, segment.getName());
+      assertEquals("Capacity of segment is inconsistent with what was provided", STANDARD_SEGMENT_SIZE,
+          segment.getCapacityInBytes());
       int writeSize = 100;
       byte[] buf = TestUtils.getRandomBytes(3 * writeSize);
       // append with buffer
