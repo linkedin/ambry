@@ -333,7 +333,14 @@ class LogSegment implements Read, Write {
   }
 
   /**
-   * @return the end offset of this log segment.
+   * @return the offset in this log segment from which there is valid data.
+   */
+  long getStartOffset() {
+    return 0;
+  }
+
+  /**
+   * @return the offset in this log segment until which there is valid data.
    */
   long getEndOffset() {
     return endOffset.get();

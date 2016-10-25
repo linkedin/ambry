@@ -74,6 +74,7 @@ public class LogSegmentTest {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
     try {
+      assertEquals("Start offset is not as expected", 0, segment.getStartOffset());
       assertEquals("Name of segment is inconsistent with what was provided", segmentName, segment.getName());
       assertEquals("Capacity of segment is inconsistent with what was provided", STANDARD_SEGMENT_SIZE,
           segment.getCapacityInBytes());
