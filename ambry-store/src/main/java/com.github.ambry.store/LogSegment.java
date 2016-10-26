@@ -100,8 +100,8 @@ class LogSegment implements Read, Write {
   /**
    * {@inheritDoc}
    * <p/>
-   * Guarantees that the {@code buffer} is either written in its entirety in this segment or is transparently forwarded
-   * to the next segment (if one exists).
+   * Attempts to write the {@code buffer} in its entirety in this segment or transparently forwards the write to the
+   * next segment (if one exists). To guarantee that the write is persisted, {@link #flush()} has to be called.
    * <p/>
    * Can cause state change from {@link State#FREE} -> {@link State#ACTIVE} if this is the first write to the segment.
    * Can cause state change from {@link State#ACTIVE} -> {@link State#SEALED} if this write cannot be accommodated in
@@ -110,7 +110,6 @@ class LogSegment implements Read, Write {
    * @return the number of bytes written.
    * @throws IllegalArgumentException if there is not enough space for {@code buffer} and forwarding is not possible
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws UnsupportedOperationException if this LogSegment is intended to be swap space
    */
   @Override
   public int appendFrom(ByteBuffer buffer)
@@ -126,8 +125,8 @@ class LogSegment implements Read, Write {
       logger.info("{} : Rolling over writes to {} on write of data of size {} from a buffer. "
               + "Current end offset is {} and capacity is {}", file.getAbsolutePath(), next.getName(),
           buffer.remaining(), getEndOffset(), capacityInBytes);
-      state = State.SEALED;
       bytesWritten = next.appendFrom(buffer);
+      state = State.SEALED;
     } else {
       state = State.ACTIVE;
       while (buffer.hasRemaining()) {
@@ -141,8 +140,8 @@ class LogSegment implements Read, Write {
   /**
    * {@inheritDoc}
    * <p/>
-   * Guarantees that the {@code buffer} is either written in its entirety in this segment or is transparently forwarded
-   * to the next segment (if one exists).
+   * Attempts to write the {@code channel} in its entirety in this segment or transparently forwards the write to the
+   * next segment (if one exists). To guarantee that the write is persisted, {@link #flush()} has to be called.
    * <p/>
    * Can cause state change from {@link State#FREE} -> {@link State#ACTIVE} if this is the first write to the segment.
    * Can cause state change from {@link State#ACTIVE} -> {@link State#SEALED} if this write cannot be accommodated in
@@ -151,7 +150,6 @@ class LogSegment implements Read, Write {
    * @param size The amount of data in bytes to be written from the channel
    * @throws IllegalArgumentException if there is not enough space for {@code size} data and forwarding is not possible
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws UnsupportedOperationException if this LogSegment is intended to be swap space
    */
   @Override
   public void appendFrom(ReadableByteChannel channel, long size)
@@ -166,8 +164,8 @@ class LogSegment implements Read, Write {
       logger.info("{} : Rolling over writes to {} on write of data of size {} from a channel. "
               + "Current end offset is {} and capacity is {}", file.getAbsolutePath(), next.getName(), size,
           getEndOffset(), capacityInBytes);
-      state = State.SEALED;
       next.appendFrom(channel, size);
+      state = State.SEALED;
     } else {
       state = State.ACTIVE;
       long bytesWritten = 0;
@@ -196,7 +194,6 @@ class LogSegment implements Read, Write {
    * @throws IllegalArgumentException if {@code offset} < 0 or if there is not enough space for {@code offset } +
    * {@code size} data and forwarding is not possible
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws UnsupportedOperationException if this LogSegment is intended to be swap space or if it is supposed to free
    *
    */
   @Override
@@ -237,10 +234,9 @@ class LogSegment implements Read, Write {
    * Using this function does not cause any state changes
    * @param buffer The buffer into which the read needs to write to
    * @param position The position to start the read from
-   * @throws IllegalArgumentException if {@code position} < 0 or if {@code buffer} size is greater than the data
-   * available for read.
+   * @throws IllegalArgumentException if {@code position} < 0 or > {@link #getEndOffset()} or if {@code buffer} size is
+   * greater than the data available for read.
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws UnsupportedOperationException if this LogSegment is intended to be swap space or if it is supposed to free
    */
   @Override
   public void readInto(ByteBuffer buffer, long position)
