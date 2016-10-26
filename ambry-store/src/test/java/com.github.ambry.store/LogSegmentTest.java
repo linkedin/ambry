@@ -45,7 +45,7 @@ public class LogSegmentTest {
   private final StoreMetrics metrics;
 
   /**
-   * Sets up a temporary file and directory that can be used.
+   * Sets up a temporary directory that can be used.
    * @throws IOException
    */
   public LogSegmentTest()
@@ -56,7 +56,7 @@ public class LogSegmentTest {
   }
 
   /**
-   * Deletes the temporary file that was created.
+   * Deletes the temporary directory that was created.
    */
   @After
   public void cleanup() {
