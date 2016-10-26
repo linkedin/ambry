@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -40,8 +41,7 @@ import static org.junit.Assert.*;
 public class LogSegmentTest {
   private static final int STANDARD_SEGMENT_SIZE = 1024;
 
-  private final String tempDirName;
-  private final File tempFile;
+  private final File tempDir;
   private final StoreMetrics metrics;
 
   /**
@@ -50,10 +50,9 @@ public class LogSegmentTest {
    */
   public LogSegmentTest()
       throws IOException {
-    tempFile = File.createTempFile("ambry", ".tmp");
-    tempFile.deleteOnExit();
-    tempDirName = tempFile.getParent();
-    metrics = new StoreMetrics(tempDirName, new MetricRegistry());
+    tempDir = Files.createTempDirectory("logSegmentDir-" + UtilsTest.getRandomString(10)).toFile();
+    tempDir.deleteOnExit();
+    metrics = new StoreMetrics(tempDir.getName(), new MetricRegistry());
   }
 
   /**
@@ -61,7 +60,13 @@ public class LogSegmentTest {
    */
   @After
   public void cleanup() {
-    assertTrue("The temporary file [" + tempFile.getAbsolutePath() + "] could not be deleted", tempFile.delete());
+    File[] files = tempDir.listFiles();
+    if (files != null) {
+      for (File file : files) {
+        assertTrue("The file [" + file.getAbsolutePath() + "] could not be deleted", file.delete());
+      }
+    }
+    assertTrue("The directory [" + tempDir.getAbsolutePath() + "] could not be deleted", tempDir.delete());
   }
 
   /**
@@ -107,7 +112,7 @@ public class LogSegmentTest {
       segment.flush();
       // close and reopen segment and ensure persistence.
       segment.close();
-      segment = new LogSegment(segmentName, new File(tempDirName, segmentName), STANDARD_SEGMENT_SIZE, metrics);
+      segment = new LogSegment(segmentName, new File(tempDir, segmentName), STANDARD_SEGMENT_SIZE, metrics);
       segment.state = LogSegment.State.ACTIVE;
       segment.setEndOffset(buf.length);
       readAndEnsureMatch(segment, 0, buf);
@@ -462,23 +467,19 @@ public class LogSegmentTest {
       throws IOException {
     // try to construct with a file that does not exist.
     try {
-      new LogSegment("log_non_existent", new File(tempDirName, "log_non_existent"), STANDARD_SEGMENT_SIZE, metrics);
+      new LogSegment("log_non_existent", new File(tempDir, "log_non_existent"), STANDARD_SEGMENT_SIZE, metrics);
       fail("Construction should have failed because the backing file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // try to construct with a file that is a directory
-    File tempDir = Files.createTempDirectory("temp_dir").toFile();
-    tempDir.deleteOnExit();
     try {
       new LogSegment(tempDir.getName(), new File(tempDir.getParent(), tempDir.getName()), STANDARD_SEGMENT_SIZE,
           metrics);
       fail("Construction should have failed because the backing file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
-    } finally {
-      assertTrue("The temp directory [" + tempDir.getAbsolutePath() + "] could not be deleted", tempDir.delete());
     }
   }
 
@@ -495,13 +496,13 @@ public class LogSegmentTest {
    */
   private LogSegment getSegment(String segmentName, long capacityInBytes)
       throws IOException {
-    File file = new File(tempDirName, segmentName);
+    File file = new File(tempDir, segmentName);
     if (file.exists()) {
       assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
     }
     assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
     file.deleteOnExit();
-    try (RandomAccessFile raf = new RandomAccessFile(tempDirName + File.separator + segmentName, "rw")) {
+    try (RandomAccessFile raf = new RandomAccessFile(tempDir + File.separator + segmentName, "rw")) {
       raf.setLength(capacityInBytes);
       LogSegment segment = new LogSegment(segmentName, file, capacityInBytes, metrics);
       segment.setEndOffset(0);
@@ -545,7 +546,7 @@ public class LogSegmentTest {
   private void closeSegmentAndDeleteFile(LogSegment segment)
       throws IOException {
     segment.close();
-    File segmentFile = new File(tempDirName, segment.getName());
+    File segmentFile = new File(tempDir, segment.getName());
     assertTrue("The segment file [" + segmentFile.getAbsolutePath() + "] could not be deleted", segmentFile.delete());
   }
 
