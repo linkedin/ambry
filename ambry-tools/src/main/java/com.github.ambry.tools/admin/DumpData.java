@@ -53,7 +53,7 @@ import joptsimple.OptionSpec;
  * 6. Dump Log
  * 7. Dump Replica Metadata token
  * 8. Compare Index entries to Log entries
- * 9. Compare Replica Indices entries to Log entries
+ * 9. Compare all entries in all indexes in a replica to Log entries
  * 10. Compare Log entries to index entries
  */
 public class DumpData {

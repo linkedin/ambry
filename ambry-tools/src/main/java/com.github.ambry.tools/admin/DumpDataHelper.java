@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.store.FindToken;
@@ -175,106 +176,164 @@ public class DumpDataHelper {
     logOutput("Starting dumping from offset " + currentOffset);
     while (currentOffset < endOffset) {
       long tempCurrentOffset = currentOffset;
-      String messageheader = null;
-      String blobId = null;
-      String blobProperty = null;
-      String usermetadata = null;
-      String blobDataOutput = null;
-      String deleteMsg = null;
+
       try {
-        short version = randomAccessFile.readShort();
-        if (version == 1) {
-          ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-          buffer.putShort(version);
-          randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
-          buffer.clear();
-          MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
-          messageheader = " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
-              " currentOffset " + currentOffset +
-              " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset() +
-              " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
-              " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
-              " crc " + header.getCrc();
-          // read blob id
-          InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
-          BlobId id = new BlobId(new DataInputStream(streamlog), _clusterMap);
-          blobId = "Id - " + id.getID();
-          boolean isDeleted = false;
-          boolean isExpired = false;
-          if (header.getBlobPropertiesRecordRelativeOffset()
-              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-            isExpired = isExpired(props.getTimeToLiveInSeconds());
-            blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
-                " serviceId " + props.getServiceId() + ", isExpired " + isExpired;
-            ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-            usermetadata = " Metadata - size " + metadata.capacity();
-            BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
-            blobDataOutput = "Blob - size " + blobData.getSize();
-          } else {
-            boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
-            isDeleted = true;
-            deleteMsg = "delete change " + deleteFlag;
-          }
-          lastBlobFailed = false;
-          if (!isDeleted) {
-            if (filter) {
-              if (blobs.contains(id.getID())) {
-                logOutput(
-                    messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobDataOutput);
-                updateBlobIdToLogRecordMap(blobIdToLogRecord, id.getID(), currentOffset, !isDeleted, isExpired);
-              }
-            } else {
-              logOutput(
-                  messageheader + "\n " + blobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobDataOutput);
-              updateBlobIdToLogRecordMap(blobIdToLogRecord, id.getID(), currentOffset, !isDeleted, isExpired);
-            }
-          } else {
-            if (filter) {
-              if (blobs.contains(id.getID())) {
-                logOutput(messageheader + "\n " + blobId + "\n" + deleteMsg);
-                updateBlobIdToLogRecordMap(blobIdToLogRecord, id.getID(), currentOffset, !isDeleted, isExpired);
-              }
-            } else {
-              logOutput(messageheader + "\n " + blobId + "\n" + deleteMsg);
-              updateBlobIdToLogRecordMap(blobIdToLogRecord, id.getID(), currentOffset, !isDeleted, isExpired);
-            }
-          }
-          currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
-        } else {
-          if (!lastBlobFailed) {
-            logOutput("Header Version not supported. Thrown at reading a msg starting at " + tempCurrentOffset);
-            lastBlobFailed = true;
-          }
-          randomAccessFile.seek(++tempCurrentOffset);
-          currentOffset = tempCurrentOffset;
+        BlobRecordInfo blobRecordInfo = readSingleRecordFromLog(randomAccessFile, currentOffset);
+        if (lastBlobFailed) {
+          logOutput("Successful record found at " + currentOffset + " after some failures ");
         }
+        lastBlobFailed = false;
+        if (!blobRecordInfo.isDeleted) {
+          if (filter) {
+            if (blobs.contains(blobRecordInfo.blobId.getID())) {
+              logOutput(
+                  blobRecordInfo.messageheader + "\n " + blobRecordInfo.blobId + "\n" + blobRecordInfo.blobProperty
+                      + "\n" + blobRecordInfo.usermetadata + "\n" + blobRecordInfo.blobDataOutput);
+              updateBlobIdToLogRecordMap(blobIdToLogRecord, blobRecordInfo.blobId.getID(), currentOffset,
+                  !blobRecordInfo.isDeleted, blobRecordInfo.isExpired);
+            }
+          } else {
+            logOutput(
+                blobRecordInfo.messageheader + "\n " + blobRecordInfo.blobId + "\n" + blobRecordInfo.blobProperty + "\n"
+                    + blobRecordInfo.usermetadata + "\n" + blobRecordInfo.blobDataOutput);
+            updateBlobIdToLogRecordMap(blobIdToLogRecord, blobRecordInfo.blobId.getID(), currentOffset,
+                !blobRecordInfo.isDeleted, blobRecordInfo.isExpired);
+          }
+        } else {
+          if (filter) {
+            if (blobs.contains(blobRecordInfo.blobId.getID())) {
+              logOutput(blobRecordInfo.messageheader + "\n " + blobRecordInfo.blobId + "\n" + blobRecordInfo.deleteMsg);
+              updateBlobIdToLogRecordMap(blobIdToLogRecord, blobRecordInfo.blobId.getID(), currentOffset,
+                  !blobRecordInfo.isDeleted, blobRecordInfo.isExpired);
+            }
+          } else {
+            logOutput(blobRecordInfo.messageheader + "\n " + blobRecordInfo.blobId + "\n" + blobRecordInfo.deleteMsg);
+            updateBlobIdToLogRecordMap(blobIdToLogRecord, blobRecordInfo.blobId.getID(), currentOffset,
+                !blobRecordInfo.isDeleted, blobRecordInfo.isExpired);
+          }
+        }
+        currentOffset += (blobRecordInfo.totalRecordSize);
       } catch (IllegalArgumentException e) {
-        logOutput("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
-            "while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
-            + blobProperty + usermetadata + blobDataOutput + " exception: " + e);
+        if (!lastBlobFailed) {
+          logOutput("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
+              "while reading blob starting at offset " + tempCurrentOffset + "with exception: " + e);
+        }
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
+        lastBlobFailed = true;
       } catch (MessageFormatException e) {
-        logOutput("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
-            " while reading blob starting at offset " + tempCurrentOffset + " with " + messageheader + blobId
-            + blobProperty + usermetadata + blobDataOutput + " exception: " + e);
+        if (!lastBlobFailed) {
+          logOutput("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
+              " while reading blob starting at offset " + tempCurrentOffset + " with exception: " + e);
+        }
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
+        lastBlobFailed = true;
       } catch (EOFException e) {
         e.printStackTrace();
         logOutput("EOFException thrown at " + randomAccessFile.getChannel().position() + ", Cause :" + e.getCause()
             + ", Msg :" + e.getMessage());
         throw (e);
       } catch (Exception e) {
-        e.printStackTrace();
-        logOutput("Unknown exception thrown " + e.getMessage() + "\nTrying from next offset " + (tempCurrentOffset + 1)
-            + ", Cause " + e.getCause() + ", Msg :" + e.getMessage());
+        if (!lastBlobFailed) {
+          e.printStackTrace();
+          logOutput(
+              "Unknown exception thrown " + e.getMessage() + "\nTrying from next offset " + (tempCurrentOffset + 1)
+                  + ", Cause " + e.getCause() + ", Msg :" + e.getMessage());
+        }
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
+        lastBlobFailed = true;
       }
     }
     logOutput("Dumped until offset " + currentOffset);
+  }
+
+  /**
+   * Holds information about a blob record in the log
+   */
+  class BlobRecordInfo {
+    String messageheader = null;
+    BlobId blobId = null;
+    String blobProperty = null;
+    String usermetadata = null;
+    String blobDataOutput = null;
+    String deleteMsg = null;
+    boolean isDeleted;
+    boolean isExpired;
+    int totalRecordSize;
+
+    public BlobRecordInfo(String messageheader, BlobId blobId, String blobProperty, String usermetadata,
+        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, int totalRecordSize) {
+      this.messageheader = messageheader;
+      this.blobId = blobId;
+      this.blobProperty = blobProperty;
+      this.usermetadata = usermetadata;
+      this.blobDataOutput = blobDataOutput;
+      this.deleteMsg = deleteMsg;
+      this.isDeleted = isDeleted;
+      this.isExpired = isExpired;
+      this.totalRecordSize = totalRecordSize;
+    }
+  }
+
+  /**
+   * Fetches one blob record from the log
+   * @param randomAccessFile {@link RandomAccessFile} referring to the log file
+   * @param currentOffset the offset at which to read the record from
+   * @return the {@link BlobRecordInfo} containing the blob record info
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  private BlobRecordInfo readSingleRecordFromLog(RandomAccessFile randomAccessFile, long currentOffset)
+      throws IOException, MessageFormatException {
+    String messageheader = null;
+    BlobId blobId = null;
+    String blobProperty = null;
+    String usermetadata = null;
+    String blobDataOutput = null;
+    String deleteMsg = null;
+    boolean isDeleted = false;
+    boolean isExpired = false;
+    int totalRecordSize = 0;
+    short version = randomAccessFile.readShort();
+    if (version == 1) {
+      ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+      buffer.putShort(version);
+      randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
+      buffer.clear();
+      MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
+      messageheader = " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
+          " currentOffset " + currentOffset +
+          " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset() +
+          " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
+          " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
+          " crc " + header.getCrc();
+      totalRecordSize += header.getMessageSize() + buffer.capacity();
+      // read blob id
+      InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
+      blobId = new BlobId(new DataInputStream(streamlog), _clusterMap);
+      totalRecordSize += blobId.sizeInBytes();
+      if (header.getBlobPropertiesRecordRelativeOffset()
+          != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+        BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
+        isExpired = isExpired(props.getTimeToLiveInSeconds());
+        blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
+            " serviceId " + props.getServiceId() + ", isExpired " + isExpired;
+        ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
+        usermetadata = " Metadata - size " + metadata.capacity();
+        BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+        blobDataOutput = "Blob - size " + blobData.getSize();
+      } else {
+        boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
+        isDeleted = true;
+        deleteMsg = "delete change " + deleteFlag;
+      }
+    } else {
+      throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
+    }
+    return new BlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg, isDeleted,
+        isExpired, totalRecordSize);
   }
 
   /**
@@ -325,73 +384,30 @@ public class DumpDataHelper {
    */
   public boolean readFromLog(RandomAccessFile randomAccessFile, long offset, String blobId, boolean avoidMiscLogging)
       throws Exception {
-    String messageheader = null;
-    String parsedBlobId = null;
-    String blobProperty = null;
-    String usermetadata = null;
-    String blobOutput = null;
-    String deleteMsg = null;
     try {
       randomAccessFile.seek(offset);
-      short version = randomAccessFile.readShort();
-      if (version == 1) {
-        ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-        buffer.putShort(version);
-        randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
-        buffer.clear();
-        MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
-        messageheader = " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
-            " currentOffset " + offset +
-            " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset() +
-            " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
-            " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
-            " crc " + header.getCrc();
-        // read blob id
-        InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
-        BlobId id = new BlobId(new DataInputStream(streamlog), _clusterMap);
-        if (id.getID().compareTo(blobId) != 0) {
-          logOutput(
-              "BlobId did not match the index value. BlodId from index " + blobId + ", blobid in log " + id.getID());
-        }
-        parsedBlobId = "Id - " + id.getID();
-        boolean isDeleted = false;
-        boolean isExpired = false;
-        if (header.getBlobPropertiesRecordRelativeOffset()
-            != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-          isExpired = isExpired(props.getTimeToLiveInSeconds());
-          blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
-              " serviceId " + props.getServiceId() + ", isExpired " + isExpired;
-          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-          usermetadata = " Metadata - size " + metadata.capacity();
-          BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
-          blobOutput = "Blob - size " + blobData.getSize();
-        } else {
-          boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
-          isDeleted = true;
-          deleteMsg = "delete change " + deleteFlag;
-        }
-        if (!avoidMiscLogging) {
-          if (!isDeleted) {
-            logOutput(
-                messageheader + "\n " + parsedBlobId + "\n" + blobProperty + "\n" + usermetadata + "\n" + blobOutput);
-          } else {
-            logOutput(messageheader + "\n " + parsedBlobId + "\n" + deleteMsg);
-          }
-        }
-        return true;
-      } else {
-        logOutput("Failed to parse log for blob " + blobId
-            + " : Header Version not supported. Thrown at reading a msg starting at " + offset);
+      BlobRecordInfo blobRecordInfo = readSingleRecordFromLog(randomAccessFile, offset);
+      if (blobRecordInfo.blobId.getID().compareTo(blobId) != 0) {
+        logOutput("BlobId did not match the index value. BlodId from index " + blobId + ", blobid in log "
+            + blobRecordInfo.blobId.getID());
       }
+      if (!avoidMiscLogging) {
+        if (!blobRecordInfo.isDeleted) {
+          logOutput(
+              blobRecordInfo.messageheader + "\n " + blobRecordInfo.blobId.getID() + "\n" + blobRecordInfo.blobProperty
+                  + "\n" + blobRecordInfo.usermetadata + "\n" + blobRecordInfo.blobDataOutput);
+        } else {
+          logOutput(
+              blobRecordInfo.messageheader + "\n " + blobRecordInfo.blobId.getID() + "\n" + blobRecordInfo.deleteMsg);
+        }
+      }
+      return true;
     } catch (IllegalArgumentException e) {
       logOutput("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
-          "while reading blob starting at offset " + offset + " with " + messageheader + parsedBlobId + blobProperty
-          + usermetadata + blobOutput + " exception: " + e);
+          "while reading blob starting at offset " + offset + " with exception: " + e);
     } catch (MessageFormatException e) {
       logOutput("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
-          " while reading blob starting at offset " + offset + " with " + messageheader + parsedBlobId + blobProperty
-          + usermetadata + blobOutput + " exception: " + e);
+          " while reading blob starting at offset " + offset + " with exception: " + e);
     } catch (EOFException e) {
       e.printStackTrace();
       logOutput("EOFException thrown at " + randomAccessFile.getChannel().position());

@@ -12,7 +12,7 @@ you can execute the following commands from the same directory.
 
 ## DumpData
 This tool is used to dump the data parsing the storage files.
- 
+
 #### Operations supported
 * Dumping log file
 * Dumping index file
@@ -20,7 +20,7 @@ This tool is used to dump the data parsing the storage files.
 * Compare index entries to log contents
 
 ## BlobValidator
-This tool is used to perform read operations for a blob directly from the server. 
+This tool is used to perform read operations for a blob directly from the server.
 
 #### Operations supported:
 * Get blob(deserialize blob) for a given blob id for all its replicas
@@ -40,13 +40,40 @@ This tool exposes some admin APIs to get more information for debugging purposes
 #### Dump Index
 ```java
 java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]
- --partitionLayout [PartitionLayoutFile] --typeOfFile index --fileToRead [indexFile]
+ --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile]
 ```
 
 #### Dump index filtering for a list of blobs
 ```java
-java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile]
---typeOfFile index --fileToRead [indexFile] --listOfBlobs [blobid1,blobid2,blobid3]
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
+[PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile] --listOfBlobs [blobid1,blobid2,blobid3]
+```
+
+#### Dump all indexes in a replica
+```java
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
+[PartitionLayoutFile] --typeOfOperation DumpIndexesForReplica --replicaRootDirectory [replicaRootDirecotry]
+--avoidTraceLogging true
+```
+
+#### Dump Active blobs in an index
+```java
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
+[PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile] --activeBlobsOnly true
+```
+
+#### Dump all active blobs in a replica
+```java
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
+[PartitionLayoutFile] --typeOfOperation DumpIndexesForReplica --replicaRootDirectory [replicaRootDirecotry]
+--activeBlobsOnly true --avoidTraceLogging true
+```
+
+#### Dump N Random active blobs for a given replica
+```java
+java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
+[PartitionLayoutFile] --typeOfOperation DumpNRandomActiveBlobsForReplica --replicaRootDirectory [replicaRootDirecotry]
+--activeBlobsCount 10000 --avoidTraceLogging true
 ```
 
 ### Dumping Log
@@ -54,30 +81,43 @@ java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLay
 #### Dump log file
 ```java
 java -cp "*" com.github.ambry.tools.admin.DumpData --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfFile index --fileToRead [logFile]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog --fileToRead [logFile]
 ```
 
-#### Dump log ending at offset x
+#### Dump log starting at offset x and ending at offset y
 ```java
 java -cp "*" com.github.ambry.tools.admin.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfFile index
---fileToRead [logFile] --endOffset x
+--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog
+--fileToRead [logFile] --startOffset x --endOffset y
 ```
 
-#### Dump log starting at x offset and ending at y filtered with a set of blobs
+#### Dump log filtering with a set of blobs
 ```java
 java -cp "*" com.github.ambry.tools.admin.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfFile index
---fileToRead [logFile] --startOffset x --endOffset y --listOfBlobs [blobid1,blobid2,blobid3]
+--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog
+--fileToRead [logFile] --listOfBlobs [blobid1,blobid2,blobid3]
 ```
 
-### Comparing index entries to log entries(or in other words, trying to read a log record based on index info for every entry in the index)
+### Comparing index entries to log entries(or in other words, trying to read a log record based on index info for
+every entry in the index)
 ```java
 java -cp "*" com.github.ambry.tools.admin.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --fileToRead [indexFile]
---logFileToDump [logFile]
+--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation CompareIndexToLog
+--fileToRead [indexFile] --logFileToDump [logFile]
+```
+### Comparing all index entries for a replica to log entries
+```java
+java -cp "*" com.github.ambry.tools.admin.DumpData
+--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation
+CompareReplicaIndexesToLog --replicaRootDirectory [replicaRootDirectory] --logFileToDump [logFile]
 ```
 
+### Compare Log Entries to Indexes
+```java
+java -cp "*" com.github.ambry.tools.admin.DumpData
+--hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation
+CompareLogToIndex --replicaRootDirectory [replicaRootDirectory] --logFileToDump [logFile]
+```
 
 ### BlobValidator
 
