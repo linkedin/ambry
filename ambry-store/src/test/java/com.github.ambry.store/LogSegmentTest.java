@@ -546,6 +546,7 @@ public class LogSegmentTest {
   private void closeSegmentAndDeleteFile(LogSegment segment)
       throws IOException {
     segment.close();
+    assertFalse("File channel is not closed", segment.getView(0).getSecond().isOpen());
     File segmentFile = new File(tempDir, segment.getName());
     assertTrue("The segment file [" + segmentFile.getAbsolutePath() + "] could not be deleted", segmentFile.delete());
   }
