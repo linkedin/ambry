@@ -163,7 +163,7 @@ class LogSegment implements Read, Write {
    * {@inheritDoc}
    * <p/>
    * The read is not started if it cannot be completed.
-   * @param buffer The buffer into which the read needs to write to
+   * @param buffer The buffer into which the data needs to be written
    * @param position The position to start the read from
    * @throws IllegalArgumentException if {@code position} < 0 or > {@link #getEndOffset()} or if {@code buffer} size is
    * greater than the data available for read.
@@ -196,7 +196,7 @@ class LogSegment implements Read, Write {
    * <p/>
    * The write is not started if it cannot be completed.
    * @param channel The channel from which data needs to be written from.
-   * @param offset The offset in the segment at which tho start writing.
+   * @param offset The offset in the segment at which to start writing.
    * @param size The amount of data in bytes to be written from the channel.
    * @throws IllegalArgumentException if {@code offset} < 0 or if there is not enough space for {@code offset } +
    * {@code size} data.
@@ -333,7 +333,7 @@ class LogSegment implements Read, Write {
    */
   private void ensureActive() {
     if (!state.equals(State.ACTIVE)) {
-      throw new IllegalStateException("Segment is not in ACTIVE state");
+      throw new IllegalStateException("Segment is not in an ACTIVE state");
     }
   }
 }
