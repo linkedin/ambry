@@ -35,7 +35,7 @@ public class DiskIOSchedulerTest {
   public void basicTest()
       throws Exception {
     final int numJobTypes = 5;
-    Map<String, MockThrottler> throttlers = new HashMap<>();
+    Map<String, Throttler> throttlers = new HashMap<>();
     for (int i = 0; i < numJobTypes; i++) {
       String jobType = Integer.toString(i);
       throttlers.put(jobType, new MockThrottler());
@@ -48,25 +48,26 @@ public class DiskIOSchedulerTest {
       Long usedSinceLastCall = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
       assertEquals("Unexpected i/o slice availability returned", Long.MAX_VALUE,
           scheduler.getSlice(jobType, "job", usedSinceLastCall));
-      assertTrue("maybeThrottle should have been called for this jobType", throttlers.get(jobType).called);
+      MockThrottler throttler = (MockThrottler) throttlers.get(jobType);
+      assertTrue("maybeThrottle should have been called for this jobType", throttler.called);
       assertEquals("observed units passed to throttler not as expected", usedSinceLastCall,
-          throttlers.get(jobType).observedUnits, 0.0);
+          throttler.observedUnits, 0.0);
     }
-    for (MockThrottler throttler : throttlers.values()) {
-      throttler.reset();
+    for (Throttler throttler : throttlers.values()) {
+      ((MockThrottler) throttler).reset();
     }
 
     // unrecognized job type
     String jobType = Integer.toString(numJobTypes);
     assertEquals("Unexpected i/o slice availability returned", Long.MAX_VALUE, scheduler.getSlice(jobType, "job", 0));
-    for (MockThrottler throttler : throttlers.values()) {
-      assertFalse("maybeThrottle should not have been called for this jobType", throttler.called);
+    for (Throttler throttler : throttlers.values()) {
+      assertFalse("maybeThrottle should not have been called for this jobType", ((MockThrottler) throttler).called);
     }
 
     // closing scheduler
     scheduler.close();
-    for (MockThrottler throttler : throttlers.values()) {
-      assertTrue("Throttler should be closed.", throttler.closed);
+    for (Throttler throttler : throttlers.values()) {
+      assertTrue("Throttler should be closed.", ((MockThrottler) throttler).closed);
     }
   }
 
@@ -119,4 +120,3 @@ public class DiskIOSchedulerTest {
     }
   }
 }
-

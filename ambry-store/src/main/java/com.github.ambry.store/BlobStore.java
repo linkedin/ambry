@@ -16,6 +16,8 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.store.StoreMetrics.DiskLevelMetrics;
+import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
 import java.io.File;
@@ -52,13 +54,13 @@ class BlobStore implements Store {
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
   private MessageStoreHardDelete hardDelete;
-  private StoreMetrics metrics;
+  private StoreLevelMetrics metrics;
   private Time time;
 
   public BlobStore(String storeId, StoreConfig config, ScheduledExecutorService scheduler,
-      DiskIOScheduler diskIOScheduler, MetricRegistry registry, String dataDir, long capacityInBytes,
+      DiskIOScheduler diskIOScheduler, DiskLevelMetrics diskLevelMetrics, String dataDir, long capacityInBytes,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
-    this.metrics = new StoreMetrics(storeId, registry);
+    this.metrics = diskLevelMetrics.createStoreLevelMetrics(storeId);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
     this.diskIOScheduler = diskIOScheduler;
@@ -108,6 +110,7 @@ class BlobStore implements Store {
         metrics.initializeCapacityUsedMetric(log, capacityInBytes);
         started = true;
       } catch (Exception e) {
+        metrics.storeStartFailure.inc();
         throw new StoreException("Error while starting store for dir " + dataDir, e,
             StoreErrorCodes.Initialization_Error);
       } finally {

@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
+import com.github.ambry.store.StoreMetrics.DiskLevelMetrics;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
@@ -90,7 +91,8 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+      DiskLevelMetrics metrics = new DiskLevelMetrics("", new MetricRegistry());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), metrics,
           replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
           new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
@@ -165,7 +167,8 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+      DiskLevelMetrics metrics = new DiskLevelMetrics("", new MetricRegistry());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), metrics,
           replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
           new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
@@ -226,7 +229,8 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+      DiskLevelMetrics metrics = new DiskLevelMetrics("", new MetricRegistry());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), metrics,
           replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
           new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
@@ -334,7 +338,8 @@ public class BlobStoreTest {
       dummyMap.put(new Long(4000), info5);
 
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore("storeId", config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+      DiskLevelMetrics metrics = new DiskLevelMetrics("", new MetricRegistry());
+      Store store = new BlobStore("storeId", config, scheduler, new DiskIOScheduler(null), metrics,
           replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
           new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(dummyMap), SystemTime.getInstance());
       store.start();
@@ -449,7 +454,8 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(map.getDataNodeId("localhost", dataNodeId1.getPort()));
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+      DiskLevelMetrics metrics = new DiskLevelMetrics("", new MetricRegistry());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), metrics,
           replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
           new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       store.start();
@@ -513,7 +519,8 @@ public class BlobStoreTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       List<ReplicaId> replicaIds = map.getReplicaIds(dataNodeId1);
       String storeId = replicaIds.get(0).getPartitionId().toString();
-      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), new MetricRegistry(),
+      DiskLevelMetrics metrics = new DiskLevelMetrics("", new MetricRegistry());
+      Store store = new BlobStore(storeId, config, scheduler, new DiskIOScheduler(null), metrics,
           replicaIds.get(0).getReplicaPath(), replicaIds.get(0).getCapacityInBytes(), factory,
           new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), mockTime);
       store.start();

@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Throttler;
@@ -47,7 +48,7 @@ public class HardDeleter implements Runnable {
 
   final AtomicBoolean running = new AtomicBoolean(true);
 
-  private final StoreMetrics metrics;
+  private final StoreLevelMetrics metrics;
   private final String dataDir;
   private final Log log;
   private final PersistentIndex index;
@@ -90,7 +91,7 @@ public class HardDeleter implements Runnable {
   private Throttler throttler;
   boolean isCaughtUp = false;
 
-  HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
+  HardDeleter(StoreConfig config, StoreLevelMetrics metrics, String dataDir, Log log, PersistentIndex index,
       MessageStoreHardDelete hardDelete, StoreKeyFactory factory, Time time) {
     this.metrics = metrics;
     this.dataDir = dataDir;

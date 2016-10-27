@@ -36,9 +36,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 
 public class StoreManagerTest {
@@ -80,14 +79,10 @@ public class StoreManagerTest {
     StoreManager storeManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
       if (replica.getMountPath().equals(mountPathToDelete)) {
-        try {
-          storeManager.getStore(replica.getPartitionId());
-          fail("Should not have been able to get store for partition with deleted mount path");
-        } catch (StoreException e) {
-          assertEquals("Unexpected error code", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
-        }
+        assertNull(storeManager.getStore(replica.getPartitionId()));
       } else {
-        storeManager.getStore(replica.getPartitionId());
+        Store store = storeManager.getStore(replica.getPartitionId());
+        assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
     shutdownAndAssertStoresInaccessible(storeManager, replicas);
@@ -111,14 +106,39 @@ public class StoreManagerTest {
     for (int i = 0; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
       if (badReplicaIndexes.contains(i)) {
-        try {
-          storeManager.getStore(replica.getPartitionId());
-          fail("Should not have been able to get store for partition with non readable path");
-        } catch (StoreException e) {
-          assertEquals("Unexpected error code", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
-        }
+        assertNull(storeManager.getStore(replica.getPartitionId()));
       } else {
-        storeManager.getStore(replica.getPartitionId());
+        Store store = storeManager.getStore(replica.getPartitionId());
+        assertTrue("Store should be started", ((BlobStore) store).isStarted());
+      }
+    }
+    shutdownAndAssertStoresInaccessible(storeManager, replicas);
+  }
+
+  /**
+   * Tests that {@link StoreManager} can start when all of the stores on one disk fail to start. Checks that these
+   * stores are not accessible. We can make the replica path non-readable to induce a store starting failure.
+   * @throws Exception
+   */
+  @Test
+  public void storeStartFailureOnOneDiskTest()
+      throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<String> mountPaths = dataNode.getMountPaths();
+    String badDiskMountPath = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
+    for (ReplicaId replica : replicas) {
+      if (replica.getMountPath().equals(badDiskMountPath)) {
+        new File(replica.getReplicaPath()).setReadable(false);
+      }
+    }
+    StoreManager storeManager = createAndStartStoreManager(replicas);
+    for (ReplicaId replica : replicas) {
+      if (replica.getMountPath().equals(badDiskMountPath)) {
+        assertNull(storeManager.getStore(replica.getPartitionId()));
+      } else {
+        Store store = storeManager.getStore(replica.getPartitionId());
+        assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
     shutdownAndAssertStoresInaccessible(storeManager, replicas);
@@ -140,12 +160,7 @@ public class StoreManagerTest {
       assertTrue("Store should be started", ((BlobStore) store).isStarted());
     }
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
-    try {
-      storeManager.getStore(invalidPartition);
-      fail("Should not have been able to get store for a partition that isn't present on this node");
-    } catch (StoreException e) {
-      assertEquals("Unexpected error code", StoreErrorCodes.Partition_Not_Found, e.getErrorCode());
-    }
+    assertNull(storeManager.getStore(invalidPartition));
     shutdownAndAssertStoresInaccessible(storeManager, replicas);
   }
 
@@ -156,7 +171,7 @@ public class StoreManagerTest {
    * @throws StoreException
    */
   private static StoreManager createAndStartStoreManager(List<ReplicaId> replicas)
-      throws StoreException {
+      throws StoreException, InterruptedException {
     StoreManager storeManager =
         new StoreManager(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
             new MetricRegistry(), replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
@@ -175,12 +190,7 @@ public class StoreManagerTest {
       throws StoreException {
     storeManager.shutdown();
     for (ReplicaId replica : replicas) {
-      try {
-        storeManager.getStore(replica.getPartitionId());
-        fail("Should not have been able to get store for partition with non readable path");
-      } catch (StoreException e) {
-        assertEquals("Unexpected error code", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
-      }
+      assertNull(storeManager.getStore(replica.getPartitionId()));
     }
   }
 

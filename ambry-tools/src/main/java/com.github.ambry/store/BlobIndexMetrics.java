@@ -28,6 +28,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreMetrics;
 
+import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.SystemTime;
 import java.io.FileWriter;
 import java.util.ArrayList;
@@ -52,7 +53,7 @@ class BlobIndexMetrics extends PersistentIndex {
       StoreKeyFactory factory)
       throws StoreException {
     super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
-        new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
+        new StoreLevelMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
     this.enableVerboseLogging = enableVerboseLogging;
     this.lastOffsetUsed = new AtomicLong(0);
     this.totalWrites = totalWrites;

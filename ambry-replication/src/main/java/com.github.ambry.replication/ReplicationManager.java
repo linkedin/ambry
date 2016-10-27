@@ -28,7 +28,6 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreManager;
 import com.github.ambry.utils.CrcInputStream;
@@ -294,12 +293,7 @@ public final class ReplicationManager {
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
         PartitionId partition = replicaId.getPartitionId();
-        Store store = null;
-        try {
-          store = storeManager.getStore(partition);
-        } catch (StoreException e) {
-          logger.error("Not replicating to partition " + partition + " because of error finding store", e);
-        }
+        Store store = storeManager.getStore(partition);
         if (store != null) {
           List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
           if (peerReplicas != null) {
@@ -326,6 +320,9 @@ public final class ReplicationManager {
             partitionInfos.add(partitionInfo);
             partitionGroupedByMountPath.put(replicaId.getMountPath(), partitionInfos);
           }
+        } else {
+          logger
+              .error("Not replicating to partition " + partition + " because an initialized store could not be found");
         }
       }
       replicationMetrics.populatePerColoMetrics(numberOfReplicaThreads.keySet());

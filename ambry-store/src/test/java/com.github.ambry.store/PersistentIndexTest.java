@@ -19,6 +19,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.metrics.MetricsRegistryMap;
 import com.github.ambry.metrics.ReadableMetricsRegistry;
+import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -76,7 +77,8 @@ public class PersistentIndexTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       IndexSegment info = new IndexSegment(tempFile().getParent(), 0, factory, blobId1.sizeInBytes(),
-          IndexValue.Index_Value_Size_In_Bytes, config, new StoreMetrics(tempFile().getParent(), new MetricRegistry()));
+          IndexValue.Index_Value_Size_In_Bytes, config,
+          new StoreLevelMetrics(tempFile().getParent(), new MetricRegistry()));
       IndexValue value = new IndexValue(1000, 0, (byte) 0);
       info.addEntry(new IndexEntry(blobId1, value), 1000);
       value = new IndexValue(1000, 1000, (byte) 0);
@@ -129,7 +131,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
 
       info.writeIndexToFile(9000);
-      StoreMetrics metrics = new StoreMetrics(info.getFile().getAbsolutePath(), new MetricRegistry());
+      StoreLevelMetrics metrics = new StoreLevelMetrics(info.getFile().getAbsolutePath(), new MetricRegistry());
       Journal journal = new Journal("test", 5, 5);
       IndexSegment infonew = new IndexSegment(info.getFile(), false, factory, config, metrics, journal);
       Assert.assertEquals(infonew.find(blobId1).getSize(), 1000);
@@ -205,7 +207,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 10000, new StoreLevelMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -251,7 +253,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 10000, new StoreLevelMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -461,7 +463,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 10000, new StoreLevelMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -516,7 +518,7 @@ public class PersistentIndexTest {
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 10000, new StoreLevelMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -596,7 +598,7 @@ public class PersistentIndexTest {
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
       ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 10000, new StoreLevelMetrics(logFile, new MetricRegistry()));
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
@@ -642,7 +644,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 6900, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 6900, new StoreLevelMetrics(logFile, new MetricRegistry()));
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");
@@ -776,7 +778,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 2700, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 2700, new StoreLevelMetrics(logFile, new MetricRegistry()));
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "200");
       props.setProperty("store.data.flush.interval.seconds", "1");
@@ -921,7 +923,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      StoreMetrics metrics = new StoreMetrics(tempFile().getParent(), new MetricRegistry());
+      StoreLevelMetrics metrics = new StoreLevelMetrics(tempFile().getParent(), new MetricRegistry());
       Log log = new Log(logFile, 10000, metrics);
       Properties props = new Properties();
       props.put("store.index.max.number.of.inmem.elements", "5");
@@ -1075,7 +1077,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      StoreMetrics metrics = new StoreMetrics(tempFile().getParent(), new MetricRegistry());
+      StoreLevelMetrics metrics = new StoreLevelMetrics(tempFile().getParent(), new MetricRegistry());
       Log log = new Log(logFile, 10000, metrics);
       Properties props = new Properties();
       props.put("store.index.max.number.of.inmem.elements", "5");
@@ -1437,7 +1439,7 @@ public class PersistentIndexTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      StoreMetrics metrics = new StoreMetrics(tempFile().getParent(), new MetricRegistry());
+      StoreLevelMetrics metrics = new StoreLevelMetrics(tempFile().getParent(), new MetricRegistry());
       Log log = new Log(logFile, 10000, metrics);
       Properties props = new Properties();
       props.put("store.index.max.number.of.inmem.elements", "5");
@@ -1693,7 +1695,7 @@ class MockIndex extends PersistentIndex {
       StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time)
       throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
-        new StoreMetrics(datadir, new MetricRegistry()), time);
+        new StoreLevelMetrics(datadir, new MetricRegistry()), time);
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
@@ -1706,7 +1708,7 @@ class MockIndex extends PersistentIndex {
       StoreKeyFactory factory, Journal journal)
       throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-        new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance());
+        new StoreLevelMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance());
   }
 
   public void setHardDeleteRunningStatus(boolean status) {
@@ -1736,8 +1738,8 @@ class MockIndex extends PersistentIndex {
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup)
       throws StoreException {
-    super(datadir, scheduler, log, config, factory, recovery, cleanup, new StoreMetrics(datadir, new MetricRegistry()),
-        SystemTime.getInstance());
+    super(datadir, scheduler, log, config, factory, recovery, cleanup,
+        new StoreLevelMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
   }
 
   IndexValue getValue(StoreKey key)

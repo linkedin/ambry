@@ -1,10 +1,24 @@
+/**
+ * Copyright 2016 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Throttler;
 import java.io.Closeable;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 
 /**
@@ -13,17 +27,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * 1. Application reads/writes from/to the log.
  * 2. Hard delete
  * 3. Compaction
- * The initial implementation simply returns MAX_VALUE for the application and use the throttler for the other 2.
+ * The initial implementation simply returns MAX_VALUE for the application and uses the throttler for the other 2.
  * In the future this will have functions to submit feedback so that more intelligent decisions can be made.
  */
 class DiskIOScheduler implements Closeable {
-  private final Map<String, Throttler> throttlers = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Throttler> throttlers = new ConcurrentHashMap<>();
 
   /**
    * Create a {@link DiskIOScheduler}.
    * @param throttlers the {@link Throttler}s to use for each job type.
    */
-  DiskIOScheduler(Map<String, ? extends Throttler> throttlers) {
+  DiskIOScheduler(Map<String, Throttler> throttlers) {
     if (throttlers != null) {
       this.throttlers.putAll(throttlers);
     }
@@ -35,13 +49,15 @@ class DiskIOScheduler implements Closeable {
    * @param jobId the ID of the job requesting an I/O slice.
    * @param usedSinceLastCall the amount of capacity used since the last call to this function.
    * @return the I/O slice available for use.
-   * @throws InterruptedException
    */
-  long getSlice(String jobType, String jobId, long usedSinceLastCall)
-      throws InterruptedException {
+  long getSlice(String jobType, String jobId, long usedSinceLastCall) {
     Throttler throttler = throttlers.get(jobType);
     if (throttler != null) {
-      throttler.maybeThrottle(usedSinceLastCall);
+      try {
+        throttler.maybeThrottle(usedSinceLastCall);
+      } catch (InterruptedException e) {
+        throw new IllegalStateException("Throttler call interrupted", e);
+      }
     }
     return Long.MAX_VALUE;
   }

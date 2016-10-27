@@ -13,10 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -24,6 +22,8 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -40,9 +40,9 @@ class Log implements Read, Write {
   private final long capacityInBytes;
   private static final String Log_File_Name = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private final StoreMetrics metrics;
+  private final StoreLevelMetrics metrics;
 
-  public Log(String dataDir, long capacityInBytes, StoreMetrics metrics)
+  public Log(String dataDir, long capacityInBytes, StoreLevelMetrics metrics)
       throws IOException {
     file = new File(dataDir, Log_File_Name);
     if (!file.exists()) {
@@ -72,8 +72,8 @@ class Log implements Read, Write {
       throws IOException {
     long fileSize = fileChannel.size();
     if (endOffset < 0 || endOffset > fileSize) {
-      throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " endOffset " + endOffset +
-          " outside the file size " + fileSize);
+      throw new IllegalArgumentException(
+          "Log : " + file.getAbsolutePath() + " endOffset " + endOffset + " outside the file size " + fileSize);
     }
     fileChannel.position(endOffset);
     logger.trace("Log : {} setting log end offset {}", file.getAbsolutePath(), endOffset);
@@ -90,8 +90,8 @@ class Log implements Read, Write {
     if (currentWriteOffset.get() + buffer.remaining() > capacityInBytes) {
       metrics.overflowWriteError.inc(1);
       throw new IllegalArgumentException(
-          "Log : " + file.getAbsolutePath() + " error trying to append to log from buffer since new data size " +
-              buffer.remaining() + " exceeds total log size " + capacityInBytes);
+          "Log : " + file.getAbsolutePath() + " error trying to append to log from buffer since new data size " + buffer
+              .remaining() + " exceeds total log size " + capacityInBytes);
     }
     int bytesWritten = fileChannel.write(buffer, currentWriteOffset.get());
     currentWriteOffset.addAndGet(bytesWritten);
@@ -107,8 +107,9 @@ class Log implements Read, Write {
         currentWriteOffset, capacityInBytes, size);
     if (currentWriteOffset.get() + size > capacityInBytes) {
       metrics.overflowWriteError.inc(1);
-      throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to append to log " +
-          "from channel since new data size " + size + "exceeds total log size " + capacityInBytes);
+      throw new IllegalArgumentException(
+          "Log : " + file.getAbsolutePath() + " error trying to append to log " + "from channel since new data size "
+              + size + "exceeds total log size " + capacityInBytes);
     }
     long bytesWritten = 0;
     while (bytesWritten < size) {
@@ -133,8 +134,9 @@ class Log implements Read, Write {
         file.getAbsolutePath(), currentWriteOffset, capacityInBytes, size, offset);
     if (offset < 0 || offset + size > currentWriteOffset.get()) {
       metrics.overflowWriteError.inc(1);
-      throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to write to log " +
-          "from channel since new data size " + size + "exceeds log end offset " + currentWriteOffset.get());
+      throw new IllegalArgumentException(
+          "Log : " + file.getAbsolutePath() + " error trying to write to log " + "from channel since new data size "
+              + size + "exceeds log end offset " + currentWriteOffset.get());
     }
     long bytesWritten = 0;
     while (bytesWritten < size) {
@@ -164,8 +166,9 @@ class Log implements Read, Write {
       metrics.overflowReadError.inc(1);
       logger.error("Log: {} Error trying to read outside the log range. log end position {} input buffer size {}",
           file.getAbsolutePath(), sizeInBytes(), buffer.remaining());
-      throw new IllegalArgumentException("Log : " + file.getAbsolutePath() + " error trying to read outside " +
-          "the log range. log end position " + sizeInBytes() + " input buffer size " + buffer.remaining());
+      throw new IllegalArgumentException(
+          "Log : " + file.getAbsolutePath() + " error trying to read outside " + "the log range. log end position "
+              + sizeInBytes() + " input buffer size " + buffer.remaining());
     }
     fileChannel.read(buffer, position);
   }

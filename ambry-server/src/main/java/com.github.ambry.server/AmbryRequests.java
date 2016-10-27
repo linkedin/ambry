@@ -591,16 +591,20 @@ public class AmbryRequests implements RequestAPI {
 
   private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
     // 1. check if partition exists on this node and that the store for this partition has been started
-    try {
-      storeManager.getStore(partition);
-    } catch (StoreException e) {
-      if (e.getErrorCode() == StoreErrorCodes.Store_Not_Started) {
-        metrics.diskUnavailableError.inc();
-        return ServerErrorCode.Disk_Unavailable;
-      } else if (e.getErrorCode() == StoreErrorCodes.Partition_Not_Found) {
-        metrics.partitionUnknownError.inc();
-        return ServerErrorCode.Partition_Unknown;
+    boolean partitionFound = false;
+    for (ReplicaId replica : partition.getReplicaIds()) {
+      if (replica.getDataNodeId().equals(currentNode)) {
+        partitionFound = true;
+        break;
       }
+    }
+    if (!partitionFound) {
+      metrics.partitionUnknownError.inc();
+      return ServerErrorCode.Partition_Unknown;
+    }
+    if (storeManager.getStore(partition) == null) {
+      metrics.diskUnavailableError.inc();
+      return ServerErrorCode.Disk_Unavailable;
     }
     // 2. ensure the disk for the partition/replica is available
     List<ReplicaId> replicaIds = partition.getReplicaIds();
