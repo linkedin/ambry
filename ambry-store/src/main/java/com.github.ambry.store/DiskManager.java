@@ -160,7 +160,7 @@ class DiskManager {
     public void run() {
       try {
         store.start();
-      } catch (Exception e) {
+      } catch (StoreException e) {
         exception = e;
       }
     }
