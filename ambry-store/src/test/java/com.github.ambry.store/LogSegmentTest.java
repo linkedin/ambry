@@ -577,18 +577,19 @@ public class LogSegmentTest {
       closeSegmentAndDeleteFile(segment);
     }
   }
+
+  /**
+   * Interface for abstracting append operations.
+   */
+  private interface Appender {
+    /**
+     * Appends the data of {@code buffer} to {@code segment}.
+     * @param segment the {@link LogSegment} to append {@code buffer} to.
+     * @param buffer the data to append to {@code segment}.
+     * @throws IOException
+     */
+    void append(LogSegment segment, ByteBuffer buffer)
+        throws IOException;
+  }
 }
 
-/**
- * Interface for abstracting append operations.
- */
-interface Appender {
-  /**
-   * Appends the data of {@code buffer} to {@code segment}.
-   * @param segment the {@link LogSegment} to append {@code buffer} to.
-   * @param buffer the data to append to {@code segment}.
-   * @throws IOException
-   */
-  void append(LogSegment segment, ByteBuffer buffer)
-      throws IOException;
-}
