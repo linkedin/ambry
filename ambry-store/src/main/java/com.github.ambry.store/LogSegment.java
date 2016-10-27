@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.codahale.metrics.Counter;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -63,8 +62,8 @@ class LogSegment implements Read, Write {
   /**
    * The state of the segment.
    * <p/>
-   * A LogSegment once instantiated can only go from FREE -> ACTIVE -> SEALED in the natural course of operations, never
-   * backward. However it can be externally manipulated to move in any direction.
+   * The natural state transition of a LogSegment is FREE -> ACTIVE -> SEALED but it can be externally manipulated to
+   * move in any direction.
    */
   State state;
   /**
@@ -100,35 +99,27 @@ class LogSegment implements Read, Write {
   /**
    * {@inheritDoc}
    * <p/>
-   * Attempts to write the {@code buffer} in its entirety in this segment or transparently forwards the write to the
-   * next segment (if one exists). To guarantee that the write is persisted, {@link #flush()} has to be called.
+   * Attempts to write the {@code buffer} in its entirety in this segment. To guarantee that the write is persisted,
+   * {@link #flush()} has to be called.
    * <p/>
-   * Can cause state change from {@link State#FREE} -> {@link State#ACTIVE} if this is the first write to the segment.
-   * Can cause state change from {@link State#ACTIVE} -> {@link State#SEALED} if this write cannot be accommodated in
-   * the segment.
+   * The write is not started if it cannot be completed.
    * @param buffer The buffer from which data needs to be written from
    * @return the number of bytes written.
-   * @throws IllegalArgumentException if there is not enough space for {@code buffer} and forwarding is not possible
+   * @throws IllegalArgumentException if there is not enough space for {@code buffer}
+   * @throws IllegalStateException if the segment is not {@link State#ACTIVE}.
    * @throws IOException if data could not be written to the file because of I/O errors
    */
   @Override
   public int appendFrom(ByteBuffer buffer)
       throws IOException {
     int bytesWritten = 0;
-    if (state.equals(State.SEALED)) {
-      ensureNext(metrics.overflowWriteError);
-      bytesWritten = next.appendFrom(buffer);
-    } else if (endOffset.get() + buffer.remaining() > capacityInBytes) {
-      // maintain the invariant that there are no "partial" writes. A log segment should write the data that it receives
-      // completely and the data that was provided in a single call cannot be written across multiple segments.
-      ensureNext(metrics.overflowWriteError);
-      logger.info("{} : Rolling over writes to {} on write of data of size {} from a buffer. "
-              + "Current end offset is {} and capacity is {}", file.getAbsolutePath(), next.getName(),
-          buffer.remaining(), getEndOffset(), capacityInBytes);
-      bytesWritten = next.appendFrom(buffer);
-      state = State.SEALED;
+    ensureActive();
+    if (endOffset.get() + buffer.remaining() > capacityInBytes) {
+      metrics.overflowWriteError.inc();
+      throw new IllegalArgumentException(
+          "Buffer cannot be written to segment [" + file.getAbsolutePath() + "] because " + "it exceeds the capacity ["
+              + capacityInBytes + "]");
     } else {
-      state = State.ACTIVE;
       while (buffer.hasRemaining()) {
         bytesWritten += fileChannel.write(buffer, endOffset.get());
       }
@@ -140,34 +131,26 @@ class LogSegment implements Read, Write {
   /**
    * {@inheritDoc}
    * <p/>
-   * Attempts to write the {@code channel} in its entirety in this segment or transparently forwards the write to the
-   * next segment (if one exists). To guarantee that the write is persisted, {@link #flush()} has to be called.
+   * Attempts to write the {@code channel} in its entirety in this segment. To guarantee that the write is persisted,
+   * {@link #flush()} has to be called.
    * <p/>
-   * Can cause state change from {@link State#FREE} -> {@link State#ACTIVE} if this is the first write to the segment.
-   * Can cause state change from {@link State#ACTIVE} -> {@link State#SEALED} if this write cannot be accommodated in
-   * the segment.
+   * The write is not started if it cannot be completed.
    * @param channel The channel from which data needs to be written from
    * @param size The amount of data in bytes to be written from the channel
-   * @throws IllegalArgumentException if there is not enough space for {@code size} data and forwarding is not possible
+   * @throws IllegalArgumentException if there is not enough space for data of size {@code size}.
+   * @throws IllegalStateException if the segment is not {@link State#ACTIVE}.
    * @throws IOException if data could not be written to the file because of I/O errors
    */
   @Override
   public void appendFrom(ReadableByteChannel channel, long size)
       throws IOException {
-    if (state.equals(State.SEALED)) {
-      ensureNext(metrics.overflowWriteError);
-      next.appendFrom(channel, size);
-    } else if (endOffset.get() + size > capacityInBytes) {
-      // maintain the invariant that there are no "partial" writes. A log segment should write the data that it receives
-      // completely and the data that was provided in a single call cannot be written across multiple segments.
-      ensureNext(metrics.overflowWriteError);
-      logger.info("{} : Rolling over writes to {} on write of data of size {} from a channel. "
-              + "Current end offset is {} and capacity is {}", file.getAbsolutePath(), next.getName(), size,
-          getEndOffset(), capacityInBytes);
-      next.appendFrom(channel, size);
-      state = State.SEALED;
+    ensureActive();
+    if (endOffset.get() + size > capacityInBytes) {
+      metrics.overflowWriteError.inc();
+      throw new IllegalArgumentException(
+          "Channel cannot be written to segment [" + file.getAbsolutePath() + "] because" + " it exceeds the capacity ["
+              + capacityInBytes + "]");
     } else {
-      state = State.ACTIVE;
       long bytesWritten = 0;
       while (bytesWritten < size) {
         bytesWritten += fileChannel.transferFrom(channel, endOffset.get() + bytesWritten, size - bytesWritten);
@@ -179,59 +162,7 @@ class LogSegment implements Read, Write {
   /**
    * {@inheritDoc}
    * <p/>
-   * If {@code offset} + {@code size} exceeds the capacity of the current segment, bytes are written starting from
-   * {@code offset} until capacity is reached. The rest of the bytes upto {@code size} are forwarded to the next segment
-   * (if one exists).
-   * <p/>
-   * The assumption with this function is that the caller is sure of the arguments and understands the implications of
-   * writing at particular offsets and of writing to specific log segment.
-   * <p/>
-   * Using this function does not cause any state changes i.e. this function is expected to be used mostly for
-   * overwriting and not for appending the log.
-   * @param channel The channel from which data needs to be written from.
-   * @param offset The offset at which to write in the underlying write interface.
-   * @param size The amount of data in bytes to be written from the channel.
-   * @throws IllegalArgumentException if {@code offset} < 0 or if there is not enough space for {@code offset } +
-   * {@code size} data and forwarding is not possible
-   * @throws IOException if data could not be written to the file because of I/O errors
-   *
-   */
-  @Override
-  public void writeFrom(ReadableByteChannel channel, long offset, long size)
-      throws IOException {
-    if (offset < 0 || offset > capacityInBytes) {
-      throw new IllegalArgumentException(
-          "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
-              + "] with capacity [" + capacityInBytes + "]");
-    }
-    if (offset + size > capacityInBytes) {
-      ensureNext(metrics.overflowWriteError);
-      logger.info("{} : Write of data of size {} from offset {} from a channel will be rolled over "
-              + "to the next segment {} because capacity is {}", file.getAbsolutePath(), next.getName(), size, offset,
-          next.getName(), capacityInBytes);
-    }
-    long sizeToBeWritten = Math.min(size, capacityInBytes - offset);
-    long sizeLeft = size - sizeToBeWritten;
-    long bytesWritten = 0;
-    while (bytesWritten < sizeToBeWritten) {
-      bytesWritten += fileChannel.transferFrom(channel, offset + bytesWritten, sizeToBeWritten - bytesWritten);
-    }
-    if (offset + sizeToBeWritten > endOffset.get()) {
-      endOffset.set(offset + sizeToBeWritten);
-    }
-    if (sizeLeft > 0) {
-      next.writeFrom(channel, 0, sizeLeft);
-    }
-  }
-
-  /**
-   * {@inheritDoc}
-   * <p/>
-   * If {@code position} + {@code buffer.remaining()} exceeds the capacity of the current segment, bytes are read
-   * starting from {@code position} until capacity is reached. The rest of the bytes upto {@code buffer.remaining()} are
-   * read from the next segment (if one exists).
-   * <p/>
-   * Using this function does not cause any state changes
+   * The read is not started if it cannot be completed.
    * @param buffer The buffer into which the read needs to write to
    * @param position The position to start the read from
    * @throws IllegalArgumentException if {@code position} < 0 or > {@link #getEndOffset()} or if {@code buffer} size is
@@ -247,25 +178,49 @@ class LogSegment implements Read, Write {
               + "] with end offset [" + getEndOffset() + "]");
     }
     if (position + buffer.remaining() > getEndOffset()) {
-      ensureNext(metrics.overflowReadError);
-      logger.info("{} : Read from position {} into a buffer of size {} when end offset is {} will continue "
-              + "into the next segment {}", file.getAbsolutePath(), position, buffer.remaining(), getEndOffset(),
-          next.getName());
+      metrics.overflowReadError.inc();
+      throw new IllegalArgumentException("Cannot read from segment [" + file.getAbsolutePath() + "] from position [" +
+          position + "] for size [" + buffer.remaining() + "] because it exceeds the end offset [" + endOffset + "]");
     }
-    long sizeToBeRead = Math.min(buffer.remaining(), getEndOffset() - position);
-    long sizeLeft = buffer.remaining() - sizeToBeRead;
     long bytesRead = 0;
-    int savedLimit = buffer.limit();
-    buffer.limit(buffer.position() + (int) sizeToBeRead);
-    try {
-      while (bytesRead < sizeToBeRead) {
-        bytesRead += fileChannel.read(buffer, position + bytesRead);
-      }
-    } finally {
-      buffer.limit(savedLimit);
+    int size = buffer.remaining();
+    while (bytesRead < size) {
+      bytesRead += fileChannel.read(buffer, position + bytesRead);
     }
-    if (sizeLeft > 0) {
-      next.readInto(buffer, 0);
+  }
+
+  /**
+   * Writes {@code size} number of bytes from the channel {@code channel} into the segment at {@code offset}.
+   * <p/>
+   * There is no state checking done for this function and the assumption is that the caller knows what is being done.
+   * <p/>
+   * The write is not started if it cannot be completed.
+   * @param channel The channel from which data needs to be written from.
+   * @param offset The offset in the segment at which tho start writing.
+   * @param size The amount of data in bytes to be written from the channel.
+   * @throws IllegalArgumentException if {@code offset} < 0 or if there is not enough space for {@code offset } +
+   * {@code size} data.
+   * @throws IOException if data could not be written to the file because of I/O errors
+   *
+   */
+  void writeFrom(ReadableByteChannel channel, long offset, long size)
+      throws IOException {
+    if (offset < 0 || offset > capacityInBytes) {
+      throw new IllegalArgumentException(
+          "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
+              + "] with capacity [" + capacityInBytes + "]");
+    }
+    if (offset + size > capacityInBytes) {
+      metrics.overflowWriteError.inc();
+      throw new IllegalArgumentException("Cannot write to segment [" + file.getAbsolutePath() + "] from offset [" +
+          offset + "] for size [" + size + "] because it exceeds the capacity [" + capacityInBytes + "]");
+    }
+    long bytesWritten = 0;
+    while (bytesWritten < size) {
+      bytesWritten += fileChannel.transferFrom(channel, offset + bytesWritten, size - bytesWritten);
+    }
+    if (offset + size > endOffset.get()) {
+      endOffset.set(offset + size);
     }
   }
 
@@ -374,14 +329,11 @@ class LogSegment implements Read, Write {
   }
 
   /**
-   * Checks to make sure that {@link #next} is not {@code null}
-   * @param errorCounter the error counter to increment if {@link #next} is {@code null}.
-   * @throws IllegalStateException if {@link #next} is {@code null}
+   * @throws IllegalStateException if the segment is not ACTIVE.
    */
-  private void ensureNext(Counter errorCounter) {
-    if (next == null) {
-      errorCounter.inc();
-      throw new IllegalStateException(file.getAbsolutePath() + ": Cannot perform operation beyond total capacity");
+  private void ensureActive() {
+    if (!state.equals(State.ACTIVE)) {
+      throw new IllegalStateException("Segment is not in ACTIVE state");
     }
   }
 }

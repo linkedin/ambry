@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
@@ -78,6 +79,7 @@ public class LogSegmentTest {
       throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
+    segment.state = LogSegment.State.ACTIVE;
     try {
       assertEquals("Start offset is not as expected", 0, segment.getStartOffset());
       assertEquals("Name of segment is inconsistent with what was provided", segmentName, segment.getName());
@@ -130,6 +132,7 @@ public class LogSegmentTest {
       throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
+    segment.state = LogSegment.State.ACTIVE;
     try {
       int readSize = 100;
       int viewCount = 5;
@@ -174,6 +177,7 @@ public class LogSegmentTest {
       throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
+    segment.state = LogSegment.State.ACTIVE;
     try {
       int segmentSize = 500;
       appendRandomData(segment, segmentSize);
@@ -241,43 +245,28 @@ public class LogSegmentTest {
   public void readTest()
       throws IOException {
     Random random = new Random();
-    String currSegmentName = "log_current";
-    String nextSegmentName = "log_next";
-    LogSegment currSegment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
-    LogSegment nextSegment = getSegment(nextSegmentName, STANDARD_SEGMENT_SIZE);
+    String segmentName = "log_current";
+    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
     try {
-      // setup the segments by writing some data and connecting them logically.
-      byte[] currData = appendRandomData(currSegment, 2 * STANDARD_SEGMENT_SIZE / 3);
-      byte[] nextData = appendRandomData(nextSegment, STANDARD_SEGMENT_SIZE / 2);
-      byte[] combined = new byte[currData.length + nextData.length];
-      System.arraycopy(currData, 0, combined, 0, currData.length);
-      System.arraycopy(nextData, 0, combined, currData.length, nextData.length);
-      currSegment.state = LogSegment.State.SEALED;
-      currSegment.next = nextSegment;
-
-      // read data in current segment only
-      readAndEnsureMatch(currSegment, 0, currData);
-      // read data across both segments
-      readAndEnsureMatch(currSegment, 0, combined);
-      // read at end offset of current segment (edge case)
-      readAndEnsureMatch(currSegment, currSegment.getEndOffset(), nextData);
-
-      int readCount = 10;
-      for (int i = 0; i < readCount; i++) {
-        int position = random.nextInt(currData.length);
-        int size = random.nextInt(currData.length - position);
-        // read randomly within current segment
-        readAndEnsureMatch(currSegment, position, Arrays.copyOfRange(currData, position, position + size));
-        // read randomly across both the current segment and next segment
-        readAndEnsureMatch(currSegment, position,
-            Arrays.copyOfRange(combined, position, position + size + nextData.length));
+      segment.state = LogSegment.State.ACTIVE;
+      byte[] data = appendRandomData(segment, 2 * STANDARD_SEGMENT_SIZE / 3);
+      LogSegment.State[] statesToCheck = {LogSegment.State.ACTIVE, LogSegment.State.SEALED};
+      for (LogSegment.State state : statesToCheck) {
+        segment.state = state;
+        readAndEnsureMatch(segment, 0, data);
+        int readCount = 10;
+        for (int i = 0; i < readCount; i++) {
+          int position = random.nextInt(data.length);
+          int size = random.nextInt(data.length - position);
+          readAndEnsureMatch(segment, position, Arrays.copyOfRange(data, position, position + size));
+        }
       }
 
       // error scenarios
-      ByteBuffer readBuf = ByteBuffer.wrap(new byte[combined.length]);
+      ByteBuffer readBuf = ByteBuffer.wrap(new byte[data.length]);
       // read position < 0
       try {
-        currSegment.readInto(readBuf, -1);
+        segment.readInto(readBuf, -1);
         fail("Should have failed to read because position provided < 0");
       } catch (IllegalArgumentException e) {
         assertEquals("Position of buffer has changed", 0, readBuf.position());
@@ -285,39 +274,36 @@ public class LogSegmentTest {
 
       // read position > endOffset
       try {
-        currSegment.readInto(readBuf, currSegment.getEndOffset() + 1);
+        segment.readInto(readBuf, segment.getEndOffset() + 1);
         fail("Should have failed to read because position provided > end offset");
       } catch (IllegalArgumentException e) {
         assertEquals("Position of buffer has changed", 0, readBuf.position());
       }
 
-      currSegment.next = null;
-      // try to read more than what is available in the current segment
+      // position + buffer.remaining() > endOffset.
       long readOverFlowCount = metrics.overflowReadError.getCount();
       try {
-        currSegment.readInto(readBuf, 0);
-        fail("Should have failed to read because buffer size is more than current segment size");
-      } catch (IllegalStateException e) {
+        segment.readInto(readBuf, 1);
+        fail("Should have failed to read because position + buffer.remaining() > endOffset");
+      } catch (IllegalArgumentException e) {
         assertEquals("Read overflow should have been reported", readOverFlowCount + 1,
             metrics.overflowReadError.getCount());
         assertEquals("Position of buffer has changed", 0, readBuf.position());
       }
 
-      currSegment.close();
+      segment.close();
       // read after close
       ByteBuffer buffer = ByteBuffer.allocate(1);
       try {
-        currSegment.readInto(buffer, 0);
+        segment.readInto(buffer, 0);
         fail("Should have failed to read because segment is closed");
       } catch (ClosedChannelException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
     } finally {
       // no state changes should have occurred.
-      assertEquals("Current segment should be in SEALED state", LogSegment.State.SEALED, currSegment.state);
-      assertEquals("Next segment should be in ACTIVE state", LogSegment.State.ACTIVE, nextSegment.state);
-      closeSegmentAndDeleteFile(currSegment);
-      closeSegmentAndDeleteFile(nextSegment);
+      assertEquals("Current segment should be in SEALED state", LogSegment.State.SEALED, segment.state);
+      closeSegmentAndDeleteFile(segment);
     }
   }
 
@@ -329,66 +315,52 @@ public class LogSegmentTest {
   public void writeFromTest()
       throws IOException {
     String currSegmentName = "log_current";
-    String nextSegmentName = "log_next";
-    LogSegment currSegment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
-    LogSegment nextSegment = getSegment(nextSegmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
     try {
-      byte[] fullBuf =
-          TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2 + STANDARD_SEGMENT_SIZE / 3 + STANDARD_SEGMENT_SIZE / 2);
+      byte[] bufOne = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 3);
+      byte[] bufTwo = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2);
 
-      // first write will fit into current segment.
-      int firstWriteSize = STANDARD_SEGMENT_SIZE / 2;
-      ByteBuffer firstBuf = ByteBuffer.wrap(fullBuf, 0, firstWriteSize);
-      // second write will fit into current segment.
-      int secondWriteSize = STANDARD_SEGMENT_SIZE / 3;
-      ByteBuffer secondBuf = ByteBuffer.wrap(fullBuf, firstWriteSize, secondWriteSize);
-      // third write will not fit into current segment and will need to be written across current and next
-      int thirdWriteSize = STANDARD_SEGMENT_SIZE / 2;
-      ByteBuffer thirdBuf = ByteBuffer.wrap(fullBuf, firstWriteSize + secondWriteSize, thirdWriteSize);
+      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), 0, bufOne.length);
+      assertEquals("End offset in current segment is not as expected", bufOne.length, segment.getEndOffset());
+      readAndEnsureMatch(segment, 0, bufOne);
 
-      // do the first write. Fits in current segment
-      currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(firstBuf)), currSegment.getEndOffset(),
-          firstWriteSize);
-      assertEquals("End offset in current segment is not equal to the cumulative bytes written", firstWriteSize,
-          currSegment.getEndOffset());
+      // overwrite using bufTwo
+      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufTwo))), 0, bufTwo.length);
+      assertEquals("End offset in current segment is not as expected", bufTwo.length, segment.getEndOffset());
+      readAndEnsureMatch(segment, 0, bufTwo);
 
-      // do the second write. Fits in current segment
-      currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(secondBuf)), currSegment.getEndOffset(),
-          secondWriteSize);
-      assertEquals("End offset in current segment is not equal to the cumulative bytes written",
-          firstWriteSize + secondWriteSize, currSegment.getEndOffset());
+      // overwrite using bufOne
+      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), 0, bufOne.length);
+      // end offset should not have changed
+      assertEquals("End offset in current segment is not as expected", bufTwo.length, segment.getEndOffset());
+      readAndEnsureMatch(segment, 0, bufOne);
+      readAndEnsureMatch(segment, bufOne.length, Arrays.copyOfRange(bufTwo, bufOne.length, bufTwo.length));
 
-      // try to do the third write on the current segment. Should fail because the data won't fit and there is no next
-      long writeOverFlowCount = metrics.overflowWriteError.getCount();
-      try {
-        currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(thirdBuf)), currSegment.getEndOffset(),
-            thirdWriteSize);
-        fail("WriteFrom should have failed because data won't fit in the current segment and there is no next");
-      } catch (IllegalStateException e) {
-        assertEquals("Write overflow should have been reported", writeOverFlowCount + 1,
-            metrics.overflowWriteError.getCount());
-        assertEquals("Position of buffer has changed", firstWriteSize + secondWriteSize, thirdBuf.position());
+      // write at random locations
+      for (int i = 0; i < 10; i++) {
+        long offset = Utils.getRandomLong(TestUtils.RANDOM, segment.getCapacityInBytes() - bufOne.length);
+        segment
+            .writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), offset, bufOne.length);
+        readAndEnsureMatch(segment, offset, bufOne);
       }
 
-      // now add a next so that writes can be transparently forwarded
-      currSegment.next = nextSegment;
-      currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(thirdBuf)), currSegment.getEndOffset(),
-          thirdWriteSize);
-
-      // the write would have fit partially in the current segment. The rest go into the next segment
-      assertEquals("End offset of current segment is incorrect", STANDARD_SEGMENT_SIZE, currSegment.getEndOffset());
-      assertEquals("End offset of next segment is incorrect", fullBuf.length - STANDARD_SEGMENT_SIZE,
-          nextSegment.getEndOffset());
-
-      // read and ensure data matches
-      readAndEnsureMatch(currSegment, 0, Arrays.copyOfRange(fullBuf, 0, STANDARD_SEGMENT_SIZE));
-      readAndEnsureMatch(nextSegment, 0, Arrays.copyOfRange(fullBuf, STANDARD_SEGMENT_SIZE, fullBuf.length));
+      // try to overwrite using a channel that won't fit
+      ByteBuffer failBuf = ByteBuffer.wrap(TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE + 1));
+      long writeOverFlowCount = metrics.overflowWriteError.getCount();
+      try {
+        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(failBuf)), 0, failBuf.remaining());
+        fail("WriteFrom should have failed because data won't fit");
+      } catch (IllegalArgumentException e) {
+        assertEquals("Write overflow should have been reported", writeOverFlowCount + 1,
+            metrics.overflowWriteError.getCount());
+        assertEquals("Position of buffer has changed", 0, failBuf.position());
+      }
 
       // data cannot be written at invalid offsets.
-      // <0
+      // < 0
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
       try {
-        currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), -1, buffer.remaining());
+        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), -1, buffer.remaining());
         fail("WriteFrom should have failed because offset provided for write < 0");
       } catch (IllegalArgumentException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
@@ -396,65 +368,25 @@ public class LogSegmentTest {
 
       // > capacity
       try {
-        currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), STANDARD_SEGMENT_SIZE + 1,
+        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), STANDARD_SEGMENT_SIZE + 1,
             buffer.remaining());
         fail("WriteFrom should have failed because offset provided was greater than capacity");
       } catch (IllegalArgumentException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
 
-      // overwrite and check
-      byte[] overwriteBuf = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2);
-      ByteBuffer overwriteBuffer = ByteBuffer.wrap(overwriteBuf);
-      int offsetToWrite = STANDARD_SEGMENT_SIZE / 3;
-      // write isolated to single segment
-      currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(overwriteBuffer)), offsetToWrite,
-          overwriteBuffer.remaining());
-      assertEquals("End offset in current segment should not have changed", STANDARD_SEGMENT_SIZE,
-          currSegment.getEndOffset());
-      assertEquals("End offset of next segment should not have changed", fullBuf.length - STANDARD_SEGMENT_SIZE,
-          nextSegment.getEndOffset());
-      readAndEnsureMatch(currSegment, offsetToWrite, overwriteBuf);
-
-      // write is across segments
-      overwriteBuffer.rewind();
-      // move end offset to make sure that end offset is updated correctly when writeFroms happen.
-      offsetToWrite = 2 * STANDARD_SEGMENT_SIZE / 3;
-      currSegment.setEndOffset(STANDARD_SEGMENT_SIZE - 1);
-      currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(overwriteBuffer)), offsetToWrite,
-          overwriteBuffer.remaining());
-      assertEquals("End offset in current segment is incorrect", STANDARD_SEGMENT_SIZE, currSegment.getEndOffset());
-      assertEquals("End offset of next segment should not have changed", fullBuf.length - STANDARD_SEGMENT_SIZE,
-          nextSegment.getEndOffset());
-      readAndEnsureMatch(currSegment, offsetToWrite,
-          Arrays.copyOfRange(overwriteBuf, 0, STANDARD_SEGMENT_SIZE - offsetToWrite));
-      readAndEnsureMatch(nextSegment, 0,
-          Arrays.copyOfRange(overwriteBuf, STANDARD_SEGMENT_SIZE - offsetToWrite, overwriteBuf.length));
-
-      // write is at capacity of current segment (edge case)
-      overwriteBuffer.rewind();
-      currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(overwriteBuffer)), STANDARD_SEGMENT_SIZE,
-          overwriteBuffer.remaining());
-      assertEquals("End offset in current segment should not have changed", STANDARD_SEGMENT_SIZE,
-          currSegment.getEndOffset());
-      assertEquals("End offset of next segment should be equal to cumulative data written", overwriteBuf.length,
-          nextSegment.getEndOffset());
-      readAndEnsureMatch(nextSegment, 0, overwriteBuf);
-
-      currSegment.close();
+      segment.close();
       // ensure that writeFrom fails.
       try {
-        currSegment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), 0, buffer.remaining());
+        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), 0, buffer.remaining());
         fail("WriteFrom should have failed because segments are closed");
       } catch (ClosedChannelException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
     } finally {
       // no state changes should have occurred.
-      assertEquals("Current segment should be in FREE state", LogSegment.State.FREE, currSegment.state);
-      assertEquals("Next segment should be in FREE state", LogSegment.State.FREE, nextSegment.state);
-      closeSegmentAndDeleteFile(currSegment);
-      closeSegmentAndDeleteFile(nextSegment);
+      assertEquals("Segment should be in FREE state", LogSegment.State.FREE, segment.state);
+      closeSegmentAndDeleteFile(segment);
     }
   }
 
@@ -588,126 +520,75 @@ public class LogSegmentTest {
   private void doAppendTest(Appender appender)
       throws IOException {
     String currSegmentName = "log_current";
-    String nextSegmentName = "log_next";
-    LogSegment currSegment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
-    LogSegment nextSegment = getSegment(nextSegmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
+    segment.state = LogSegment.State.ACTIVE;
     try {
-      byte[] fullBuf =
-          TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2 + STANDARD_SEGMENT_SIZE / 3 + STANDARD_SEGMENT_SIZE - 1);
+      byte[] bufOne = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2);
+      byte[] bufTwo = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 3);
 
-      // first write will fit into current segment. Will cause state transition for current segment (FREE -> ACTIVE).
-      int firstWriteSize = STANDARD_SEGMENT_SIZE / 2;
-      ByteBuffer firstBuf = ByteBuffer.wrap(fullBuf, 0, firstWriteSize);
-      // second write will fit into current segment. Will not cause any state transitions.
-      int secondWriteSize = STANDARD_SEGMENT_SIZE / 3;
-      ByteBuffer secondBuf = ByteBuffer.wrap(fullBuf, firstWriteSize, secondWriteSize);
-      // third write will not fit into current segment and will need to forwarded. Will cause state transition for
-      // current segment (ACTIVE -> SEALED), for next segment (FREE -> ACTIVE).
-      int thirdWriteSize = STANDARD_SEGMENT_SIZE / 2;
-      ByteBuffer thirdBuf = ByteBuffer.wrap(fullBuf, firstWriteSize + secondWriteSize, thirdWriteSize);
-      // fourth write will be forwarded to the next segment (where it will fit). Will not cause any state transitions.
-      int fourthWriteSize = fullBuf.length - thirdWriteSize - secondWriteSize - firstWriteSize;
-      ByteBuffer fourthBuf = ByteBuffer.wrap(fullBuf, fullBuf.length - fourthWriteSize, fourthWriteSize);
+      appender.append(segment, ByteBuffer.wrap(bufOne));
+      assertEquals("End offset in current segment is not equal to the cumulative bytes written", bufOne.length,
+          segment.getEndOffset());
 
-      // do the first write. Fits in current segment
-      appender.append(currSegment, firstBuf);
-      assertEquals("End offset in current segment is not equal to the cumulative bytes written", firstWriteSize,
-          currSegment.getEndOffset());
-      assertEquals("Current segment should be in ACTIVE state", LogSegment.State.ACTIVE, currSegment.state);
-
-      // do the second write. Fits in current segment
-      appender.append(currSegment, secondBuf);
+      appender.append(segment, ByteBuffer.wrap(bufTwo));
       assertEquals("End offset in current segment is not equal to the cumulative bytes written",
-          firstWriteSize + secondWriteSize, currSegment.getEndOffset());
-      assertEquals("Current segment should be in ACTIVE state", LogSegment.State.ACTIVE, currSegment.state);
+          bufOne.length + bufTwo.length, segment.getEndOffset());
 
-      // try to do the third write on the current segment. Should fail because the data won't fit and there is no next
+      // try to do a write that won't fit
+      ByteBuffer failBuf = ByteBuffer.wrap(TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE + 1));
       long writeOverFlowCount = metrics.overflowWriteError.getCount();
       try {
-        appender.append(currSegment, thirdBuf);
-        fail("Append should have failed because data won't fit in the current segment and there is no next");
-      } catch (IllegalStateException e) {
+        appender.append(segment, failBuf);
+        fail("Append should have failed because data won't fit in the segment");
+      } catch (IllegalArgumentException e) {
         assertEquals("Write overflow should have been reported", writeOverFlowCount + 1,
             metrics.overflowWriteError.getCount());
-        assertEquals("Position of buffer has changed", firstWriteSize + secondWriteSize, thirdBuf.position());
+        assertEquals("Position of buffer has changed", 0, failBuf.position());
       }
 
-      // currSegment should be still ACTIVE
-      assertEquals("Current segment should be in ACTIVE state", LogSegment.State.ACTIVE, currSegment.state);
-      // now add a next so that writes can be transparently forwarded
-      currSegment.next = nextSegment;
-      appender.append(currSegment, thirdBuf);
-      assertEquals("Current segment should be in SEALED state", LogSegment.State.SEALED, currSegment.state);
-      assertEquals("Next segment should be in ACTIVE state", LogSegment.State.ACTIVE, nextSegment.state);
-
-      // the whole write should have gone to the next segment i.e. no partial writes
-      assertEquals("End offset of current segment is incorrect", firstWriteSize + secondWriteSize,
-          currSegment.getEndOffset());
-      assertEquals("End offset of next segment is incorrect", thirdWriteSize, nextSegment.getEndOffset());
-
-      // remove next again to check that writes to segments that are sealed fail
-      currSegment.next = null;
-      // current segment is sealed, so the write will fail.
-      writeOverFlowCount = metrics.overflowWriteError.getCount();
-      try {
-        appender.append(currSegment, fourthBuf);
-        fail("Append should have failed because current segment is sealed and there is no next");
-      } catch (IllegalStateException e) {
-        assertEquals("Write overflow should have been reported", writeOverFlowCount + 1,
-            metrics.overflowWriteError.getCount());
-        assertEquals("Position of buffer has changed", fullBuf.length - fourthWriteSize, fourthBuf.position());
+      // Writes to segments that are SEALED/FREE fail
+      LogSegment.State[] failureStates = {LogSegment.State.SEALED, LogSegment.State.FREE};
+      failBuf = ByteBuffer.allocate(1);
+      for (LogSegment.State state : failureStates) {
+        segment.state = state;
+        try {
+          appender.append(segment, failBuf);
+          fail("Append should have failed because segment is in [" + state + "]");
+        } catch (IllegalStateException e) {
+          assertEquals("Position of buffer has changed", 0, failBuf.position());
+        }
       }
-      // currSegment should be still SEALED
-      assertEquals("Current segment should be in SEALED state", LogSegment.State.SEALED, currSegment.state);
-
-      // add next back again so that writes are forwarded.
-      currSegment.next = nextSegment;
-      appender.append(currSegment, fourthBuf);
-      assertEquals("Current segment should be in SEALED state", LogSegment.State.SEALED, currSegment.state);
-      assertEquals("Next segment should be in ACTIVE state", LogSegment.State.ACTIVE, nextSegment.state);
-
-      // the whole write should have gone to the next segment i.e. no partial writes
-      assertEquals("End offset of current segment is incorrect", firstWriteSize + secondWriteSize,
-          currSegment.getEndOffset());
-      assertEquals("End offset of next segment is incorrect", thirdWriteSize + fourthWriteSize,
-          nextSegment.getEndOffset());
 
       // read and ensure data matches
-      readAndEnsureMatch(currSegment, 0, Arrays.copyOfRange(fullBuf, 0, firstWriteSize));
-      readAndEnsureMatch(currSegment, firstWriteSize,
-          Arrays.copyOfRange(fullBuf, firstWriteSize, firstWriteSize + secondWriteSize));
-      readAndEnsureMatch(nextSegment, 0,
-          Arrays.copyOfRange(fullBuf, firstWriteSize + secondWriteSize, fullBuf.length - fourthWriteSize));
-      readAndEnsureMatch(nextSegment, thirdWriteSize,
-          Arrays.copyOfRange(fullBuf, fullBuf.length - fourthWriteSize, fullBuf.length));
+      readAndEnsureMatch(segment, 0, bufOne);
+      readAndEnsureMatch(segment, bufOne.length, bufTwo);
 
-      currSegment.close();
-      nextSegment.close();
+      segment.state = LogSegment.State.ACTIVE;
+      segment.close();
       // ensure that append fails.
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
       try {
-        appender.append(currSegment, buffer);
+        appender.append(segment, buffer);
         fail("Append should have failed because segments are closed");
       } catch (ClosedChannelException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
     } finally {
-      closeSegmentAndDeleteFile(currSegment);
-      closeSegmentAndDeleteFile(nextSegment);
+      closeSegmentAndDeleteFile(segment);
     }
   }
+}
 
+/**
+ * Interface for abstracting append operations.
+ */
+interface Appender {
   /**
-   * Interface for abstracting append operations.
+   * Appends the data of {@code buffer} to {@code segment}.
+   * @param segment the {@link LogSegment} to append {@code buffer} to.
+   * @param buffer the data to append to {@code segment}.
+   * @throws IOException
    */
-  private interface Appender {
-    /**
-     * Appends the data of {@code buffer} to {@code segment}.
-     * @param segment the {@link LogSegment} to append {@code buffer} to.
-     * @param buffer the data to append to {@code segment}.
-     * @throws IOException
-     */
-    void append(LogSegment segment, ByteBuffer buffer)
-        throws IOException;
-  }
+  void append(LogSegment segment, ByteBuffer buffer)
+      throws IOException;
 }

@@ -119,8 +119,7 @@ public class Log implements Read, Write {
         bytesWritten);
   }
 
-  @Override
-  public void writeFrom(ReadableByteChannel channel, long offset, long size)
+  void writeFrom(ReadableByteChannel channel, long offset, long size)
       throws IOException {
     logger.trace("Log : {} currentWriteOffset {} capacityInBytes {} sizeToAppend {} offset to append at {}",
         file.getAbsolutePath(), currentWriteOffset, capacityInBytes, size, offset);
