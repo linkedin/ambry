@@ -49,7 +49,7 @@ class LogSegment implements Read, Write {
   /**
    * Creates a LogSegment abstraction.
    * @param name the desired name of the segment.
-   * @param file the backing file for this segment.
+   * @param file the backing {@link File} for this segment.
    * @param capacityInBytes the intended capacity of the segment
    * @param metrics the {@link StoreMetrics} instance to use.
    * @throws IOException if the file cannot be read or created
@@ -135,21 +135,21 @@ class LogSegment implements Read, Write {
    * The read is not started if it cannot be completed.
    * @param buffer The buffer into which the data needs to be written
    * @param position The position to start the read from
-   * @throws IllegalArgumentException if {@code position} < 0 or > {@link #getEndOffset()} or if {@code buffer} size is
-   * greater than the data available for read.
    * @throws IOException if data could not be written to the file because of I/O errors
+   * @throws IndexOutOfBoundsException if {@code position} < 0 or >= {@link #getEndOffset()} or if {@code buffer} size is
+   * greater than the data available for read.
    */
   @Override
   public void readInto(ByteBuffer buffer, long position)
       throws IOException {
-    if (position < 0 || position > getEndOffset()) {
-      throw new IllegalArgumentException(
+    if (position < 0 || position >= getEndOffset()) {
+      throw new IndexOutOfBoundsException(
           "Provided position [" + position + "] is out of bounds for the segment [" + file.getAbsolutePath()
               + "] with end offset [" + getEndOffset() + "]");
     }
     if (position + buffer.remaining() > getEndOffset()) {
       metrics.overflowReadError.inc();
-      throw new IllegalArgumentException("Cannot read from segment [" + file.getAbsolutePath() + "] from position [" +
+      throw new IndexOutOfBoundsException("Cannot read from segment [" + file.getAbsolutePath() + "] from position [" +
           position + "] for size [" + buffer.remaining() + "] because it exceeds the end offset [" + endOffset + "]");
     }
     long bytesRead = 0;
@@ -166,21 +166,21 @@ class LogSegment implements Read, Write {
    * @param channel The channel from which data needs to be written from.
    * @param offset The offset in the segment at which to start writing.
    * @param size The amount of data in bytes to be written from the channel.
-   * @throws IllegalArgumentException if {@code offset} < 0 or if there is not enough space for {@code offset } +
-   * {@code size} data.
    * @throws IOException if data could not be written to the file because of I/O errors
+   * @throws IndexOutOfBoundsException if {@code offset} < 0 or if there is not enough space for {@code offset } +
+   * {@code size} data.
    *
    */
   void writeFrom(ReadableByteChannel channel, long offset, long size)
       throws IOException {
-    if (offset < 0 || offset > capacityInBytes) {
-      throw new IllegalArgumentException(
+    if (offset < 0 || offset >= capacityInBytes) {
+      throw new IndexOutOfBoundsException(
           "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
               + "] with capacity [" + capacityInBytes + "]");
     }
     if (offset + size > capacityInBytes) {
       metrics.overflowWriteError.inc();
-      throw new IllegalArgumentException("Cannot write to segment [" + file.getAbsolutePath() + "] from offset [" +
+      throw new IndexOutOfBoundsException("Cannot write to segment [" + file.getAbsolutePath() + "] from offset [" +
           offset + "] for size [" + size + "] because it exceeds the capacity [" + capacityInBytes + "]");
     }
     long bytesWritten = 0;
@@ -196,13 +196,17 @@ class LogSegment implements Read, Write {
    * Gets the {@link File} and {@link FileChannel} backing this log segment. Also increments a ref count.
    * <p/>
    * The expectation is that a matching {@link #closeView()} will be called eventually to decrement the ref count.
-   * @param offset the offset that will used to start the read operation from.
+   * <p/>
+   * The {@code offset} is intended only for validation in order to fail early. It is up to to the caller to ensure that
+   * the eventual read operation on the {@link FileChannel} occurs at the same offset.
+   * @param offset the offset that will used to start the eventual read operation from the {@link FileChannel} obtained
+   *               from the view.
    * @return the {@link File} and {@link FileChannel} backing this log segment.
-   * @throws IllegalArgumentException if {@code offset} < 0 or is > {@link #getEndOffset()}.
+   * @throws IndexOutOfBoundsException if {@code offset} < 0 or is >= {@link #getEndOffset()}.
    */
   Pair<File, FileChannel> getView(long offset) {
-    if (offset < 0 || offset > getEndOffset()) {
-      throw new IllegalArgumentException(
+    if (offset < 0 || offset >= getEndOffset()) {
+      throw new IndexOutOfBoundsException(
           "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
               + "] with end offset [" + getEndOffset() + "]");
     }
@@ -235,7 +239,8 @@ class LogSegment implements Read, Write {
 
   /**
    * Sets the end offset of this segment. This can be lesser than the actual size of the file and represents the offset
-   * until which data that is readable is stored.
+   * until which data that is readable is stored (exclusive) and the offset (inclusive) from which the next append will
+   * begin.
    * @param endOffset the end offset of this log.
    * @throws IllegalArgumentException if {@code endOffset} < 0 or {@code endOffset} > the size of the file.
    * @throws IOException if there is any I/O error.

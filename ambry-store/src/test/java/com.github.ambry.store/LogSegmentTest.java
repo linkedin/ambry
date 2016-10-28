@@ -144,19 +144,13 @@ public class LogSegmentTest {
         assertEquals("Ref count is not as expected", viewCount - i - 1, segment.refCount());
       }
 
-      // test boundary offsets
-      getAndVerifyView(segment, 0, data, 1);
-      segment.closeView();
-      getAndVerifyView(segment, (int) segment.getEndOffset(), data, 1);
-      segment.closeView();
-
       // cannot open views at invalid offsets
-      int[] invalidOffsets = {-1, (int) (segment.getEndOffset() + 1)};
+      int[] invalidOffsets = {-1, (int) (segment.getEndOffset()), (int) (segment.getEndOffset() + 1)};
       for (int offset : invalidOffsets) {
         try {
           segment.getView(offset);
           fail("Getting a view at an invalid offset [" + offset + "] should have failed");
-        } catch (IllegalArgumentException e) {
+        } catch (IndexOutOfBoundsException e) {
           // expected. Nothing to do.
         }
       }
@@ -179,8 +173,8 @@ public class LogSegmentTest {
       appendRandomData(segment, segmentSize);
       assertEquals("End offset is not equal to the cumulative bytes written", segmentSize, segment.getEndOffset());
 
-      // should be able to set end offset to something >= 0 and < file size
-      int[] offsetsToSet = {0, segmentSize / 2, segmentSize};
+      // should be able to set end offset to something > 0 and < file size
+      int[] offsetsToSet = {1, segmentSize / 2, segmentSize};
       for (int offset : offsetsToSet) {
         segment.setEndOffset(offset);
         assertEquals("End offset is not equal to what was set", offset, segment.getEndOffset());
@@ -252,22 +246,19 @@ public class LogSegmentTest {
         int size = random.nextInt(data.length - position);
         readAndEnsureMatch(segment, position, Arrays.copyOfRange(data, position, position + size));
       }
+
       // error scenarios
       ByteBuffer readBuf = ByteBuffer.wrap(new byte[data.length]);
-      // read position < 0
-      try {
-        segment.readInto(readBuf, -1);
-        fail("Should have failed to read because position provided < 0");
-      } catch (IllegalArgumentException e) {
-        assertEquals("Position of buffer has changed", 0, readBuf.position());
-      }
-
-      // read position > endOffset
-      try {
-        segment.readInto(readBuf, segment.getEndOffset() + 1);
-        fail("Should have failed to read because position provided > end offset");
-      } catch (IllegalArgumentException e) {
-        assertEquals("Position of buffer has changed", 0, readBuf.position());
+      // data cannot be read at invalid offsets.
+      long[] invalidOffsets = {-1, segment.getEndOffset(), segment.getEndOffset() + 1};
+      ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
+      for (long invalidOffset : invalidOffsets) {
+        try {
+          segment.readInto(readBuf, invalidOffset);
+          fail("Should have failed to read because position provided is invalid");
+        } catch (IndexOutOfBoundsException e) {
+          assertEquals("Position of buffer has changed", 0, buffer.position());
+        }
       }
 
       // position + buffer.remaining() > endOffset.
@@ -275,7 +266,7 @@ public class LogSegmentTest {
       try {
         segment.readInto(readBuf, 1);
         fail("Should have failed to read because position + buffer.remaining() > endOffset");
-      } catch (IllegalArgumentException e) {
+      } catch (IndexOutOfBoundsException e) {
         assertEquals("Read overflow should have been reported", readOverFlowCount + 1,
             metrics.overflowReadError.getCount());
         assertEquals("Position of buffer has changed", 0, readBuf.position());
@@ -283,7 +274,7 @@ public class LogSegmentTest {
 
       segment.close();
       // read after close
-      ByteBuffer buffer = ByteBuffer.allocate(1);
+      buffer = ByteBuffer.allocate(1);
       try {
         segment.readInto(buffer, 0);
         fail("Should have failed to read because segment is closed");
@@ -338,29 +329,22 @@ public class LogSegmentTest {
       try {
         segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(failBuf)), 0, failBuf.remaining());
         fail("WriteFrom should have failed because data won't fit");
-      } catch (IllegalArgumentException e) {
+      } catch (IndexOutOfBoundsException e) {
         assertEquals("Write overflow should have been reported", writeOverFlowCount + 1,
             metrics.overflowWriteError.getCount());
         assertEquals("Position of buffer has changed", 0, failBuf.position());
       }
 
       // data cannot be written at invalid offsets.
-      // < 0
+      long[] invalidOffsets = {-1, STANDARD_SEGMENT_SIZE, STANDARD_SEGMENT_SIZE + 1};
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
-      try {
-        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), -1, buffer.remaining());
-        fail("WriteFrom should have failed because offset provided for write < 0");
-      } catch (IllegalArgumentException e) {
-        assertEquals("Position of buffer has changed", 0, buffer.position());
-      }
-
-      // > capacity
-      try {
-        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), STANDARD_SEGMENT_SIZE + 1,
-            buffer.remaining());
-        fail("WriteFrom should have failed because offset provided was greater than capacity");
-      } catch (IllegalArgumentException e) {
-        assertEquals("Position of buffer has changed", 0, buffer.position());
+      for (long invalidOffset : invalidOffsets) {
+        try {
+          segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), invalidOffset, buffer.remaining());
+          fail("WriteFrom should have failed because offset provided for write is invalid");
+        } catch (IndexOutOfBoundsException e) {
+          assertEquals("Position of buffer has changed", 0, buffer.position());
+        }
       }
 
       segment.close();
@@ -464,7 +448,10 @@ public class LogSegmentTest {
   private void closeSegmentAndDeleteFile(LogSegment segment)
       throws IOException {
     segment.close();
-    assertFalse("File channel is not closed", segment.getView(0).getSecond().isOpen());
+    if (segment.getEndOffset() > 0) {
+      // can only verify if some data has been written due the validations in getView()
+      assertFalse("File channel is not closed", segment.getView(0).getSecond().isOpen());
+    }
     File segmentFile = new File(tempDir, segment.getName());
     assertTrue("The segment file [" + segmentFile.getAbsolutePath() + "] could not be deleted", segmentFile.delete());
   }
