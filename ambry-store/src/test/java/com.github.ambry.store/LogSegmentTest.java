@@ -79,7 +79,6 @@ public class LogSegmentTest {
       throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
-    segment.state = LogSegment.State.ACTIVE;
     try {
       assertEquals("Start offset is not as expected", 0, segment.getStartOffset());
       assertEquals("Name of segment is inconsistent with what was provided", segmentName, segment.getName());
@@ -115,7 +114,6 @@ public class LogSegmentTest {
       // close and reopen segment and ensure persistence.
       segment.close();
       segment = new LogSegment(segmentName, new File(tempDir, segmentName), STANDARD_SEGMENT_SIZE, metrics);
-      segment.state = LogSegment.State.ACTIVE;
       segment.setEndOffset(buf.length);
       readAndEnsureMatch(segment, 0, buf);
     } finally {
@@ -132,7 +130,6 @@ public class LogSegmentTest {
       throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
-    segment.state = LogSegment.State.ACTIVE;
     try {
       int readSize = 100;
       int viewCount = 5;
@@ -177,7 +174,6 @@ public class LogSegmentTest {
       throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
-    segment.state = LogSegment.State.ACTIVE;
     try {
       int segmentSize = 500;
       appendRandomData(segment, segmentSize);
@@ -208,7 +204,7 @@ public class LogSegmentTest {
 
   /**
    * Tests {@link LogSegment#appendFrom(ByteBuffer)} and {@link LogSegment#appendFrom(ReadableByteChannel, long)} for
-   * various cases and state changes.
+   * various cases.
    * @throws IOException
    */
   @Test
@@ -248,20 +244,14 @@ public class LogSegmentTest {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
     try {
-      segment.state = LogSegment.State.ACTIVE;
       byte[] data = appendRandomData(segment, 2 * STANDARD_SEGMENT_SIZE / 3);
-      LogSegment.State[] statesToCheck = {LogSegment.State.ACTIVE, LogSegment.State.SEALED};
-      for (LogSegment.State state : statesToCheck) {
-        segment.state = state;
-        readAndEnsureMatch(segment, 0, data);
-        int readCount = 10;
-        for (int i = 0; i < readCount; i++) {
-          int position = random.nextInt(data.length);
-          int size = random.nextInt(data.length - position);
-          readAndEnsureMatch(segment, position, Arrays.copyOfRange(data, position, position + size));
-        }
+      readAndEnsureMatch(segment, 0, data);
+      int readCount = 10;
+      for (int i = 0; i < readCount; i++) {
+        int position = random.nextInt(data.length);
+        int size = random.nextInt(data.length - position);
+        readAndEnsureMatch(segment, position, Arrays.copyOfRange(data, position, position + size));
       }
-
       // error scenarios
       ByteBuffer readBuf = ByteBuffer.wrap(new byte[data.length]);
       // read position < 0
@@ -301,8 +291,6 @@ public class LogSegmentTest {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
     } finally {
-      // no state changes should have occurred.
-      assertEquals("Current segment should be in SEALED state", LogSegment.State.SEALED, segment.state);
       closeSegmentAndDeleteFile(segment);
     }
   }
@@ -384,8 +372,6 @@ public class LogSegmentTest {
         assertEquals("Position of buffer has changed", 0, buffer.position());
       }
     } finally {
-      // no state changes should have occurred.
-      assertEquals("Segment should be in FREE state", LogSegment.State.FREE, segment.state);
       closeSegmentAndDeleteFile(segment);
     }
   }
@@ -513,7 +499,7 @@ public class LogSegmentTest {
 
   /**
    * Using the given {@code appender}'s {@link Appender#append(LogSegment, ByteBuffer)} function, tests for various
-   * state changes and cases for append operations.
+   * cases for append operations.
    * @param appender the {@link Appender} to use
    * @throws IOException
    */
@@ -521,7 +507,6 @@ public class LogSegmentTest {
       throws IOException {
     String currSegmentName = "log_current";
     LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
-    segment.state = LogSegment.State.ACTIVE;
     try {
       byte[] bufOne = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2);
       byte[] bufTwo = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 3);
@@ -546,24 +531,10 @@ public class LogSegmentTest {
         assertEquals("Position of buffer has changed", 0, failBuf.position());
       }
 
-      // Writes to segments that are SEALED/FREE fail
-      LogSegment.State[] failureStates = {LogSegment.State.SEALED, LogSegment.State.FREE};
-      failBuf = ByteBuffer.allocate(1);
-      for (LogSegment.State state : failureStates) {
-        segment.state = state;
-        try {
-          appender.append(segment, failBuf);
-          fail("Append should have failed because segment is in [" + state + "]");
-        } catch (IllegalStateException e) {
-          assertEquals("Position of buffer has changed", 0, failBuf.position());
-        }
-      }
-
       // read and ensure data matches
       readAndEnsureMatch(segment, 0, bufOne);
       readAndEnsureMatch(segment, bufOne.length, bufTwo);
 
-      segment.state = LogSegment.State.ACTIVE;
       segment.close();
       // ensure that append fails.
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));

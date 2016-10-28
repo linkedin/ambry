@@ -28,27 +28,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Represents a segment of a log. The segment is represented by its relative position in the log and the generation
  * number of the segment. Each segment knows the segment that "follows" it logically (if such a segment exists) and can
- * transparently redirect operations if required. A segment can be in one of the states represented by {@link State}.
+ * transparently redirect operations if required.
  */
 class LogSegment implements Read, Write {
-  /**
-   * Used to describe the state of the LogSegment.
-   */
-  enum State {
-    /**
-     * The LogSegment is completely free and no writes have been accommodated in the segment.
-     */
-    FREE,
-    /**
-     * The LogSegment is currently being written to. It still has capacity remaining for more writes.
-     */
-    ACTIVE,
-    /**
-     * The LogSegment is full and is accepting no more writes.
-     */
-    SEALED
-  }
-
   private final FileChannel fileChannel;
   private final File file;
   private final long capacityInBytes;
@@ -59,13 +41,6 @@ class LogSegment implements Read, Write {
   private final AtomicLong refCount = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  /**
-   * The state of the segment.
-   * <p/>
-   * The natural state transition of a LogSegment is FREE -> ACTIVE -> SEALED but it can be externally manipulated to
-   * move in any direction.
-   */
-  State state;
   /**
    * Reference to the segment that logically "follows" this segment.
    */
@@ -90,9 +65,8 @@ class LogSegment implements Read, Write {
     this.metrics = metrics;
     fileChannel = Utils.openChannel(file, true);
     segmentView = new Pair<>(file, fileChannel);
-    // state is always initialized to FREE and the end offset is always initialized to 0.
-    // externals will set the correct values for these two variables
-    state = State.FREE;
+    // the end offset is always initialized to 0.
+    // externals will set the correct value
     endOffset = new AtomicLong(0);
   }
 
@@ -106,14 +80,12 @@ class LogSegment implements Read, Write {
    * @param buffer The buffer from which data needs to be written from
    * @return the number of bytes written.
    * @throws IllegalArgumentException if there is not enough space for {@code buffer}
-   * @throws IllegalStateException if the segment is not {@link State#ACTIVE}.
    * @throws IOException if data could not be written to the file because of I/O errors
    */
   @Override
   public int appendFrom(ByteBuffer buffer)
       throws IOException {
     int bytesWritten = 0;
-    ensureActive();
     if (endOffset.get() + buffer.remaining() > capacityInBytes) {
       metrics.overflowWriteError.inc();
       throw new IllegalArgumentException(
@@ -138,13 +110,11 @@ class LogSegment implements Read, Write {
    * @param channel The channel from which data needs to be written from
    * @param size The amount of data in bytes to be written from the channel
    * @throws IllegalArgumentException if there is not enough space for data of size {@code size}.
-   * @throws IllegalStateException if the segment is not {@link State#ACTIVE}.
    * @throws IOException if data could not be written to the file because of I/O errors
    */
   @Override
   public void appendFrom(ReadableByteChannel channel, long size)
       throws IOException {
-    ensureActive();
     if (endOffset.get() + size > capacityInBytes) {
       metrics.overflowWriteError.inc();
       throw new IllegalArgumentException(
@@ -191,8 +161,6 @@ class LogSegment implements Read, Write {
 
   /**
    * Writes {@code size} number of bytes from the channel {@code channel} into the segment at {@code offset}.
-   * <p/>
-   * There is no state checking done for this function and the assumption is that the caller knows what is being done.
    * <p/>
    * The write is not started if it cannot be completed.
    * @param channel The channel from which data needs to be written from.
@@ -326,14 +294,5 @@ class LogSegment implements Read, Write {
   void close()
       throws IOException {
     fileChannel.close();
-  }
-
-  /**
-   * @throws IllegalStateException if the segment is not ACTIVE.
-   */
-  private void ensureActive() {
-    if (!state.equals(State.ACTIVE)) {
-      throw new IllegalStateException("Segment is not in an ACTIVE state");
-    }
   }
 }
