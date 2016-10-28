@@ -21,8 +21,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.atomic.AtomicLong;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -39,16 +37,11 @@ class LogSegment implements Read, Write {
   private final StoreMetrics metrics;
   private final AtomicLong endOffset;
   private final AtomicLong refCount = new AtomicLong(0);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
-
-  /**
-   * Reference to the segment that logically "follows" this segment.
-   */
-  LogSegment next = null;
 
   /**
    * Creates a LogSegment abstraction.
-   * @param name the desired name of the segment.
+   * @param name the desired name of the segment. The name signifies the handle/ID of the LogSegment and may be
+   *             different from the filename of the {@code file}.
    * @param file the backing {@link File} for this segment.
    * @param capacityInBytes the intended capacity of the segment
    * @param metrics the {@link StoreMetrics} instance to use.
