@@ -155,12 +155,6 @@ public class ReplicationTest {
         }
         // @TODO: Is this doing the right thing?
       }
-
-      @Override
-      public void writeFrom(ReadableByteChannel channel, long offset, long size)
-          throws IOException {
-        throw new IllegalArgumentException("Not implemented");
-      }
     }
 
     DummyLog log;
