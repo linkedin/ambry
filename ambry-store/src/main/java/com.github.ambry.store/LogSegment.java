@@ -189,20 +189,9 @@ class LogSegment implements Read, Write {
    * Gets the {@link File} and {@link FileChannel} backing this log segment. Also increments a ref count.
    * <p/>
    * The expectation is that a matching {@link #closeView()} will be called eventually to decrement the ref count.
-   * <p/>
-   * The {@code offset} is intended only for validation in order to fail early. It is up to to the caller to ensure that
-   * the eventual read operation on the {@link FileChannel} occurs at the same offset.
-   * @param offset the offset that will used to start the eventual read operation from the {@link FileChannel} obtained
-   *               from the view.
    * @return the {@link File} and {@link FileChannel} backing this log segment.
-   * @throws IndexOutOfBoundsException if {@code offset} < 0 or is >= {@link #getEndOffset()}.
    */
-  Pair<File, FileChannel> getView(long offset) {
-    if (offset < 0 || offset >= getEndOffset()) {
-      throw new IndexOutOfBoundsException(
-          "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
-              + "] with end offset [" + getEndOffset() + "]");
-    }
+  Pair<File, FileChannel> getView() {
     refCount.incrementAndGet();
     return segmentView;
   }

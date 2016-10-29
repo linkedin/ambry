@@ -143,17 +143,6 @@ public class LogSegmentTest {
         segment.closeView();
         assertEquals("Ref count is not as expected", viewCount - i - 1, segment.refCount());
       }
-
-      // cannot open views at invalid offsets
-      int[] invalidOffsets = {-1, (int) (segment.getEndOffset()), (int) (segment.getEndOffset() + 1)};
-      for (int offset : invalidOffsets) {
-        try {
-          segment.getView(offset);
-          fail("Getting a view at an invalid offset [" + offset + "] should have failed");
-        } catch (IndexOutOfBoundsException e) {
-          // expected. Nothing to do.
-        }
-      }
     } finally {
       closeSegmentAndDeleteFile(segment);
     }
@@ -178,7 +167,7 @@ public class LogSegmentTest {
       for (int offset : offsetsToSet) {
         segment.setEndOffset(offset);
         assertEquals("End offset is not equal to what was set", offset, segment.getEndOffset());
-        assertEquals("File channel positioning is incorrect", offset, segment.getView(0).getSecond().position());
+        assertEquals("File channel positioning is incorrect", offset, segment.getView().getSecond().position());
       }
 
       // cannot set end offset to illegal values (< 0 or > file size)
@@ -448,10 +437,7 @@ public class LogSegmentTest {
   private void closeSegmentAndDeleteFile(LogSegment segment)
       throws IOException {
     segment.close();
-    if (segment.getEndOffset() > 0) {
-      // can only verify if some data has been written due the validations in getView()
-      assertFalse("File channel is not closed", segment.getView(0).getSecond().isOpen());
-    }
+    assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
     File segmentFile = new File(tempDir, segment.getName());
     assertTrue("The segment file [" + segmentFile.getAbsolutePath() + "] could not be deleted", segmentFile.delete());
   }
@@ -471,7 +457,7 @@ public class LogSegmentTest {
   private void getAndVerifyView(LogSegment segment, int offset, byte[] dataInSegment, long expectedRefCount)
       throws IOException {
     Random random = new Random();
-    Pair<File, FileChannel> view = segment.getView(offset);
+    Pair<File, FileChannel> view = segment.getView();
     assertNotNull("File object received in view is null", view.getFirst());
     assertNotNull("FileChannel object received in view is null", view.getSecond());
     assertEquals("Ref count is not as expected", expectedRefCount, segment.refCount());
