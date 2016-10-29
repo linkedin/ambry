@@ -36,11 +36,11 @@ class Offset implements Comparable<Offset> {
    * Construct an Offset that refers to a position in Log.
    * @param name the name of segment being referred to.
    * @param offset the offset within the segment.
-   * @throws IllegalArgumentException if {@code name} is {@code null} or empty or {@code offset} < 0.
+   * @throws IllegalArgumentException if {@code name} is {@code null} or {@code offset} < 0.
    */
   Offset(String name, long offset) {
-    if (name == null || name.isEmpty() || offset < 0) {
-      throw new IllegalArgumentException("Name [" + name + "] is null/empty or offset [" + offset + "] < 0");
+    if (name == null || offset < 0) {
+      throw new IllegalArgumentException("Name [" + name + "] is null or offset [" + offset + "] < 0");
     }
     this.name = name;
     this.offset = offset;
@@ -49,7 +49,7 @@ class Offset implements Comparable<Offset> {
   /**
    * Constructs an Offset from a stream.
    * @param stream the {@link DataInputStream} that will contain the serialized form of this object.
-   * @throws IllegalArgumentException if {@code name} is {@code null} or empty or {@code offset} < 0 or if the version
+   * @throws IllegalArgumentException if {@code name} is {@code null} or {@code offset} < 0 or if the version
    * of the record is not recognized.
    * @throws IOException if there are I/O problems reading from the stream.
    */
@@ -102,9 +102,8 @@ class Offset implements Comparable<Offset> {
 
   @Override
   public int compareTo(Offset o) {
-    // TODO (Log Segmentation): once LogSegment is coded and can resolve the relative position of a log segment based
-    // TODO (Log Segmentation): on its name, compare names also.
-    return Long.compare(offset, o.getOffset());
+    int compare = LogSegmentNameHelper.COMPARATOR.compare(name, o.name);
+    return compare == 0 ? Long.compare(offset, o.offset) : compare;
   }
 
   @Override
@@ -122,8 +121,9 @@ class Offset implements Comparable<Offset> {
 
   @Override
   public int hashCode() {
-    // TODO (Log Segmentation):  Include name in the hash code once compareTo() can handle names.
-    return (int) (offset ^ (offset >>> 32));
+    int result = LogSegmentNameHelper.hashcode(name);
+    result = 31 * result + (int) (offset ^ (offset >>> 32));
+    return result;
   }
 
   @Override

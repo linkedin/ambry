@@ -133,8 +133,8 @@ public class IndexReadPerformance {
       final HashMap<String, IndexPayload> hashes = new HashMap<String, IndexPayload>();
       String line;
       StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
-      Log log = new Log(System.getProperty("user.dir"), 1000, metrics);
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
+      Log log = new Log(System.getProperty("user.dir"), 1000, 1000, metrics);
 
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "1048576");

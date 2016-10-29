@@ -147,7 +147,7 @@ public class HardDeleterTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 10000, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       Properties props = new Properties();
       // the test will set the tokens, so disable the index persistor.
       props.setProperty("store.data.flush.interval.seconds", "3600");
