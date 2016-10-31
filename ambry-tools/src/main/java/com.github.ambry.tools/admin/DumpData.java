@@ -81,7 +81,7 @@ public class DumpData {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> fileToReadOpt = parser.accepts("fileToRead",
           "The file that needs to be dumped. Index file incase of \"DumpIndex\", "
-              + ", \"CompareIndexToLog\" log file incase of \"DumpLog\", replicatoken file incase "
+              + ", \"CompareIndexToLog\" log file incase of \"DumpLog\", replicatoken file in case "
               + "of \"DumpReplicatoken\"").withRequiredArg().describedAs("file_to_read").ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
@@ -98,7 +98,7 @@ public class DumpData {
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
           "The type of operation to be performed - DumpLog or DumpIndex or DumpIndexesForReplica or " +
-              "or DumpNRandomActiveBlobsForReplica or DumpReplicatoken or CompareIndexToLog or "
+              "or DumpNRandomActiveBlobsForReplica or DumpReplicaToken or CompareIndexToLog or "
               + "CompareReplicaIndexesToLog or CompareLogToIndex")
           .withRequiredArg()
           .describedAs("The type of Operation to be " + "performed")
@@ -122,11 +122,11 @@ public class DumpData {
               .describedAs("endOffset")
               .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> logFileToCompareOpt = parser.accepts("logFileToDump",
+      ArgumentAcceptingOptionSpec<String> logFileOpt = parser.accepts("logFile",
           "Log file that needs to be dumped for comparison operations like \"CompareIndexToLog\" "
               + "\"CompareReplicaIndexesToLog\" and \"CompareLogToIndex\"")
           .withRequiredArg()
-          .describedAs("log_file_to_dump")
+          .describedAs("log_file")
           .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> outFileOpt =
@@ -190,7 +190,7 @@ public class DumpData {
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       String startOffsetStr = options.valueOf(startOffsetOpt);
       String endOffsetStr = options.valueOf(endOffsetOpt);
-      String logFileToDump = options.valueOf(logFileToCompareOpt);
+      String logFile = options.valueOf(logFileOpt);
       String outFile = options.valueOf(outFileOpt);
       String activeBlobsCountStr = options.valueOf(activeBlobsCountOpt);
       int activeBlobsCount = (activeBlobsCountStr == null || activeBlobsCountStr.equalsIgnoreCase("")) ? -1
@@ -251,21 +251,21 @@ public class DumpData {
         case "DumpLog":
           dumpData.dumpLog(new File(fileToRead), startOffset, endOffset, blobs, filter, avoidTraceLogging);
           break;
-        case "DumpReplicatoken":
+        case "DumpReplicaToken":
           dumpData.dumpDataHelper.dumpReplicaToken(new File(fileToRead));
           break;
         case "CompareIndexToLog":
-          dumpData.compareIndexEntriestoLogContent(fileToRead, logFileToDump, avoidTraceLogging);
+          dumpData.compareIndexEntriestoLogContentHelper(fileToRead, logFile, avoidTraceLogging);
           break;
         case "CompareReplicaIndexesToLog":
-          dumpData.compareReplicaIndexEntriestoLogContent(replicaRootDirectory, logFileToDump, avoidTraceLogging);
+          dumpData.compareReplicaIndexEntriestoLogContent(replicaRootDirectory, logFile, avoidTraceLogging);
           break;
         case "CompareLogToIndex":
-          dumpData.compareLogEntriestoIndex(logFileToDump, blobs, replicaRootDirectory, avoidTraceLogging, filter,
+          dumpData.compareLogEntriestoIndex(logFile, blobs, replicaRootDirectory, avoidTraceLogging, filter,
               logBlobStats);
           break;
         default:
-          System.out.println("Unknown typeOfOperation " + typeOfOperation);
+          dumpData.log("Unknown typeOfOperation " + typeOfOperation);
           break;
       }
       dumpData.shutdown();
@@ -602,44 +602,44 @@ public class DumpData {
    * Compares every entry in the every index of the replica with those in the log. Checks to see if each blob in index is successfully
    * deserializable from the log
    * @param replicaRootDirectory the root directory of the replica
-   * @param logFileToDump the log file that needs to be parsed
+   * @param logFile the log file that needs to be parsed
    * @param avoidTraceLogging {@code true} if miscellaneous logging need to be avoided, {@code false} otherwise
    * @throws Exception
    */
-  public void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory, String logFileToDump,
+  public void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory, String logFile,
       boolean avoidTraceLogging)
       throws Exception {
-    if (logFileToDump == null) {
-      System.out.println("logFileToDump needs to be set for compareIndexToLog");
+    if (logFile == null) {
+      log("logFile needs to be set for compareIndexToLog");
       System.exit(0);
     }
-    RandomAccessFile randomAccessFile = new RandomAccessFile(new File(logFileToDump), "r");
+    RandomAccessFile randomAccessFile = new RandomAccessFile(new File(logFile), "r");
     log("Comparing Index entries to Log ");
     File replicaDirectory = new File(replicaRootDirectory);
     for (File indexFile : replicaDirectory.listFiles(new IndexFileNameFilter())) {
-      compareIndexEntryToLogContent(indexFile, replicaDirectory, randomAccessFile, avoidTraceLogging);
+      compareIndexEntriesToLogContent(indexFile, replicaDirectory, randomAccessFile, avoidTraceLogging);
     }
   }
 
   /**
-   * Compares every entry in the index with those in the log. Checks to see if each blob in index is successfully
-   * deserializable from the log
+   * Helper to compares every entry in the index with those in the log. Checks to see if each blob in index is
+   * successfully deserializable from the log
    * @param indexFile the index file that needs to be checked for
-   * @param logFileToDump the log file that needs to be parsed
+   * @param logFile the log file that needs to be parsed
    * @param avoidTraceLogging {@code true} if miscellaneous logging need to be avoided, {@code false} otherwise
    * @throws Exception
    */
-  public void compareIndexEntriestoLogContent(String indexFile, String logFileToDump, boolean avoidTraceLogging)
+  public void compareIndexEntriestoLogContentHelper(String indexFile, String logFile, boolean avoidTraceLogging)
       throws Exception {
-    if (logFileToDump == null) {
-      log("logFileToDump needs to be set for compareIndexToLog");
+    if (logFile == null) {
+      log("logFile needs to be set for compareIndexToLog");
       System.exit(0);
     }
     RandomAccessFile randomAccessFile = null;
     try {
-      randomAccessFile = new RandomAccessFile(new File(logFileToDump), "r");
+      randomAccessFile = new RandomAccessFile(new File(logFile), "r");
       log("Comparing Index entries to Log ");
-      compareIndexEntryToLogContent(new File(indexFile), null, randomAccessFile, avoidTraceLogging);
+      compareIndexEntriesToLogContent(new File(indexFile), null, randomAccessFile, avoidTraceLogging);
     } finally {
       if (randomAccessFile != null) {
         randomAccessFile.close();
@@ -656,7 +656,7 @@ public class DumpData {
    * @param avoidTraceLogging {@code true} if miscellaneous logging need to be avoided, {@code false} otherwise
    * @throws Exception
    */
-  private void compareIndexEntryToLogContent(File indexFile, File replicaDirectory, RandomAccessFile randomAccessFile,
+  private void compareIndexEntriesToLogContent(File indexFile, File replicaDirectory, RandomAccessFile randomAccessFile,
       boolean avoidTraceLogging)
       throws Exception {
     log("Dumping index " + indexFile.getName() + " for " + ((replicaDirectory != null) ? replicaDirectory.getName()
@@ -688,13 +688,10 @@ public class DumpData {
           String msg = "key :" + key + ": value - offset " + blobValue.getOffset() + " size " +
               blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset() +
               " Flag " + blobValue.getFlags() + "\n";
-          boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
-          if (!isDeleted) {
-            boolean success =
-                dumpDataHelper.readFromLog(randomAccessFile, blobValue.getOffset(), key.getID(), avoidTraceLogging);
-            if (!success) {
-              log("Failed for Index Entry " + msg);
-            }
+          boolean success = dumpDataHelper.readFromLog(randomAccessFile, blobValue.getOffset(), key.getID(), blobValue,
+              avoidTraceLogging);
+          if (!success) {
+            log("Failed for Index Entry " + msg);
           }
         }
         if (!avoidTraceLogging) {
@@ -709,9 +706,9 @@ public class DumpData {
   }
 
   /**
-   * Compares every entry in the log to those in the index. Checks to see if the status of the blob is consistency with
+   * Compares every entry in the log to those in the index. Checks to see if the status of the blob is consistent with
    * each other
-   * @param logFileToDump the log file to be dumped
+   * @param logFile the log file to be dumped
    * @param blobList List of BlobIds to be filtered for, Can be {@code null}
    * @param replicaRootDirectory the root directory of the replica
    * @param avoidTraceLogging {@code true} if miscellaneous logging need to be avoided, {@code false} otherwise
@@ -720,17 +717,17 @@ public class DumpData {
    * @param filter {@code true} if needs to be filtered, {@code false} otherwise
    * @throws Exception
    */
-  public void compareLogEntriestoIndex(String logFileToDump, ArrayList<String> blobList, String replicaRootDirectory,
+  public void compareLogEntriestoIndex(String logFile, ArrayList<String> blobList, String replicaRootDirectory,
       boolean avoidTraceLogging, boolean filter, boolean generateBlobStatusReport)
       throws Exception {
-    if (logFileToDump == null || replicaRootDirectory == null) {
-      System.out.println("logFileToDump and replicaRootDirectory needs to be set for compareLogToIndex");
+    if (logFile == null || replicaRootDirectory == null) {
+      log("logFile and replicaRootDirectory needs to be set for compareLogToIndex");
       System.exit(0);
     }
     ConcurrentHashMap<String, BlobStatus> blobIdToBlobStatusMap =
         dumpIndexesForReplica(replicaRootDirectory, blobList, avoidTraceLogging, generateBlobStatusReport);
     ConcurrentHashMap<String, DumpDataHelper.LogBlobRecord> blobIdToLogRecordStats = new ConcurrentHashMap<>();
-    dumpDataHelper.dumpLog(new File(logFileToDump), 0, -1, blobList, filter, blobIdToLogRecordStats, avoidTraceLogging);
+    dumpDataHelper.dumpLog(new File(logFile), 0, -1, blobList, filter, blobIdToLogRecordStats, avoidTraceLogging);
     long totalInconsistentBlobs = 0;
 
     for (String blobId : blobIdToLogRecordStats.keySet()) {

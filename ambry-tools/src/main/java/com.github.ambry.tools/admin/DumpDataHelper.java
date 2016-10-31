@@ -379,18 +379,17 @@ public class DumpDataHelper {
    * @param offset the offset at which the record needs to be parsed for
    * @param blobId the blobId which that is expected to be matched for the record present at
    *               <code>offset</code>
+   * @param indexValue the {@link IndexValue} that needs to be compared against
    * @param avoidMiscLogging {@code true} if miscellaneous logging, {@code false} otherwise
    * @throws IOException
    */
-  public boolean readFromLog(RandomAccessFile randomAccessFile, long offset, String blobId, boolean avoidMiscLogging)
+  public boolean readFromLog(RandomAccessFile randomAccessFile, long offset, String blobId, IndexValue indexValue,
+      boolean avoidMiscLogging)
       throws Exception {
     try {
       randomAccessFile.seek(offset);
       BlobRecordInfo blobRecordInfo = readSingleRecordFromLog(randomAccessFile, offset);
-      if (blobRecordInfo.blobId.getID().compareTo(blobId) != 0) {
-        logOutput("BlobId did not match the index value. BlodId from index " + blobId + ", blobid in log "
-            + blobRecordInfo.blobId.getID());
-      }
+      compareIndexValueToLogEntry(blobId, indexValue, blobRecordInfo);
       if (!avoidMiscLogging) {
         if (!blobRecordInfo.isDeleted) {
           logOutput(
@@ -417,6 +416,27 @@ public class DumpDataHelper {
       logOutput("Unknown exception thrown " + e.getMessage());
     }
     return false;
+  }
+
+  /**
+   * Compares values from index to that in the Log
+   * @param blobId the blobId for which comparison is made
+   * @param indexValue the {@link IndexValue} to be used in comparison
+   * @param blobRecordInfo the {@link BlobRecordInfo} to be used in comparison
+   */
+  private void compareIndexValueToLogEntry(String blobId, IndexValue indexValue, BlobRecordInfo blobRecordInfo) {
+    boolean isDeleted = indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
+    boolean isExpired = isExpired(indexValue.getTimeToLiveInMs());
+    if (isDeleted != blobRecordInfo.isDeleted) {
+      logOutput("Deleted value mismatch for " + blobRecordInfo.blobId + " Index value " + isDeleted + ", Log value "
+          + blobRecordInfo.isDeleted);
+    } else if (isExpired != blobRecordInfo.isExpired) {
+      logOutput("Expiration value mismatch for " + blobRecordInfo.blobId + " Index value " + isExpired + ", Log value "
+          + blobRecordInfo.isExpired);
+    } else if (!blobId.equals(blobRecordInfo.blobId)) {
+      logOutput("BlobId value mismatch for " + blobRecordInfo.blobId + " Index value " + blobId + ", Log value "
+          + blobRecordInfo.blobId);
+    }
   }
 
   /**
