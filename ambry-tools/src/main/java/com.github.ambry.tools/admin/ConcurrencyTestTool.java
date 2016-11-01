@@ -20,8 +20,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.ConnectionPoolConfig;
-import com.github.ambry.config.SSLConfig;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
@@ -29,12 +28,12 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.BlockingChannelConnectionPool;
-import com.github.ambry.network.ConnectedChannel;
-import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.RequestInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOptions;
@@ -43,6 +42,9 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -51,7 +53,6 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.rmi.UnexpectedException;
 import java.util.ArrayList;
@@ -243,6 +244,9 @@ public class ConcurrencyTestTool {
     for (Thread deleteThread : deleteThreads) {
       deleteThread.join();
     }
+
+    // shutting down the PutGetHelper class to release any resources held up
+    putGetHelper.shutdown();
   }
 
   /**
@@ -347,7 +351,7 @@ public class ConcurrencyTestTool {
     public void run() {
       lock.lock();
       if (currentPutCount.get() < maxPutCount) {
-        Pair<String, byte[]> blob = producerJob.produce(currentPutCount.get());
+        Pair<String, byte[]> blob = producerJob.produce();
         if (enableVerboseLogging) {
           logOutput(threadName + " : Producing : " + blob.getFirst() + ", currentPutCount " + currentPutCount.get()
               + ", queue Size " + blobInfos.size());
@@ -422,10 +426,8 @@ public class ConcurrencyTestTool {
               if (enableVerboseLogging) {
                 logOutput(threadName + " fetching " + blobAccessInfo.blobId + " " + burstCount + " times ");
               }
-              int localRandom = threadLocalRandom.nextInt(1000000);
               for (int i = 0; i < burstCount; i++) {
-                getThreads.add(new Thread(
-                    new GetBlobThread(threadName + "_" + i, blobAccessInfo, getConsumerJob, localRandom + i)));
+                getThreads.add(new Thread(new GetBlobThread(blobAccessInfo, getConsumerJob)));
               }
               for (int i = 0; i < getThreads.size(); i++) {
                 getThreads.get(i).start();
@@ -439,9 +441,8 @@ public class ConcurrencyTestTool {
                   logOutput(threadName + " GetBlob Verification completed for " + blobAccessInfo.blobId
                       + ", hence issuing deletes ");
                 }
-                Thread deleteThread = new Thread(
-                    new DeleteBlobThread(threadName, blobAccessInfo, getConsumerJob, localRandom,
-                        enableVerboseLogging));
+                Thread deleteThread =
+                    new Thread(new DeleteBlobThread(threadName, blobAccessInfo, getConsumerJob, enableVerboseLogging));
                 deleteThread.start();
                 deleteThreads.add(deleteThread);
               }
@@ -464,20 +465,15 @@ public class ConcurrencyTestTool {
    */
   class GetBlobThread implements Runnable {
     private final BlobAccessInfo blobAccessInfo;
-    private final String threadName;
     private final PutGetHelper getConsumerJob;
-    private final int correlationId;
 
-    public GetBlobThread(String threadName, BlobAccessInfo blobAccessInfo, PutGetHelper getConsumerJob,
-        int correlationId) {
-      this.threadName = threadName;
+    public GetBlobThread(BlobAccessInfo blobAccessInfo, PutGetHelper getConsumerJob) {
       this.blobAccessInfo = blobAccessInfo;
       this.getConsumerJob = getConsumerJob;
-      this.correlationId = correlationId;
     }
 
     public void run() {
-      getConsumerJob.consumeAndValidate(blobAccessInfo.blobId, blobAccessInfo.blobContent, correlationId,
+      getConsumerJob.consumeAndValidate(blobAccessInfo.blobId, blobAccessInfo.blobContent,
           getConsumerJob.getErrorCodeForNoError());
     }
   }
@@ -490,15 +486,13 @@ public class ConcurrencyTestTool {
     private final String threadName;
     private final BlobAccessInfo blobAccessInfo;
     private final PutGetHelper deleteConsumerJob;
-    private final int correlationId;
     private final boolean enableVerboseLogging;
 
     public DeleteBlobThread(String threadName, BlobAccessInfo blobAccessInfo, PutGetHelper deleteConsumerJob,
-        int correlationId, boolean enableVerboseLogging) {
+        boolean enableVerboseLogging) {
       this.threadName = threadName;
       this.blobAccessInfo = blobAccessInfo;
       this.deleteConsumerJob = deleteConsumerJob;
-      this.correlationId = correlationId;
       this.enableVerboseLogging = enableVerboseLogging;
     }
 
@@ -506,8 +500,7 @@ public class ConcurrencyTestTool {
       if (enableVerboseLogging) {
         logOutput(threadName + " Deleting blob " + blobAccessInfo.blobId);
       }
-      deleteConsumerJob.deleteAndValidate(blobAccessInfo.blobId, correlationId,
-          deleteConsumerJob.getErrorCodeForNoError());
+      deleteConsumerJob.deleteAndValidate(blobAccessInfo.blobId, deleteConsumerJob.getErrorCodeForNoError());
     }
   }
 
@@ -517,40 +510,39 @@ public class ConcurrencyTestTool {
   interface PutGetHelper<T> {
     /**
      * Request to produce a blob
-     * @param correlationId that needs to be set in the request on blob upload
      * @return a {@link Pair<String, byte[]>} which contains the blobId and the content
      */
-    Pair<String, byte[]> produce(int correlationId);
+    Pair<String, byte[]> produce();
 
     /**
      * Request to fetch the blob pertaining to the {@code blobId} passed in and verify for its content
      * @param blobId the blobId the of that blob that needs to be fetched
      * @param blobContent the content of the blob that needs to be verified against
-     * @param correlationId the correlationId that needs to be used as part of the request while fetching
      * @param expectedErrorCode the expected error code for the Get call
      */
-    void consumeAndValidate(String blobId, byte[] blobContent, int correlationId, T expectedErrorCode);
+    void consumeAndValidate(String blobId, byte[] blobContent, T expectedErrorCode);
 
     /**
      * Deletes a blob from ambry pertaining to the {@code blobId} passed in and verifies that subsequent Get fails
      * @param blobId the blobId the of that blob that needs to be fetched
-     * @param correlationId the correlationId that needs to be used as part of the request while deleting
      * @param expectedErrorCode the expected error code for the Delete call
      */
-    void deleteAndValidate(String blobId, int correlationId, T expectedErrorCode);
+    void deleteAndValidate(String blobId, T expectedErrorCode);
 
     /**
      * Returns the default Error code that is expected for a Get or a Delete call
      * @return the default error code that is expected for a Get or a Delete call
      */
     T getErrorCodeForNoError();
+
+    void shutdown()
+        throws InterruptedException;
   }
 
   /**
    * An implementation of {@link PutGetHelper} for an Ambry Server
    */
   static class ServerPutGetHelper implements PutGetHelper<ServerErrorCode> {
-    private final ConnectionPool connectionPool;
     private final String hostName;
     private final int port;
     private final ClusterMap clusterMap;
@@ -558,14 +550,18 @@ public class ConcurrencyTestTool {
     private final int minBlobSize;
     private final boolean enableVerboseLogging;
     private final ThreadLocalRandom localRandom;
+    private final NetworkClientUtils _networkClientUtils;
+    private final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
 
     public ServerPutGetHelper(Properties properties, String hostName, int port, ClusterMap clusterMap, int maxBlobSize,
         int minBlobSize, Boolean enableVerboseLogging)
         throws Exception {
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(verifiableProperties);
-      this.connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, new SSLConfig(verifiableProperties),
-          new ClusterMapConfig(verifiableProperties), new MetricRegistry());
+      NetworkClientFactory networkClientFactory =
+          new NetworkClientFactory(new NetworkMetrics(new MetricRegistry()), new NetworkConfig(verifiableProperties),
+              null, 20, 20, 10000, SystemTime.getInstance());
+      NetworkClient networkClient = networkClientFactory.getNetworkClient();
+      this._networkClientUtils = new NetworkClientUtils(networkClient, 50, 100);
       this.hostName = hostName;
       this.port = port;
       this.clusterMap = clusterMap;
@@ -578,29 +574,35 @@ public class ConcurrencyTestTool {
     /**
      * {@inheritDoc}
      * Uploads a blob to the server directly and returns the blobId along with the content
-     * @param correlationId that needs to be set during uploading a blob
      * @return a {@link Pair<String, byte[]>} which contains the blobId and the content
      * @throws IOException
      */
     @Override
-    public Pair<String, byte[]> produce(int correlationId) {
+    public Pair<String, byte[]> produce() {
       int randomNum = localRandom.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
       byte[] blob = new byte[randomNum];
       byte[] usermetadata = new byte[new Random().nextInt(1024)];
       BlobProperties props = new BlobProperties(randomNum, "test");
-      ConnectedChannel channel = null;
+      int correlationId = -1;
       try {
         List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
         int index = (int) getRandomLong(localRandom, partitionIds.size());
         PartitionId partitionId = partitionIds.get(index);
         BlobId blobId = new BlobId(partitionId);
+        correlationId = correlationIdGenerator.incrementAndGet();
         PutRequest putRequest =
             new PutRequest(correlationId, "ConcurrencyTest", blobId, props, ByteBuffer.wrap(usermetadata),
                 ByteBuffer.wrap(blob), props.getBlobSize(), BlobType.DataBlob);
-        channel = connectionPool.checkOutConnection(hostName, new Port(port, PortType.PLAINTEXT), 10000);
         long startTime = SystemTime.getInstance().nanoseconds();
-        channel.send(putRequest);
-        PutResponse putResponse = PutResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));
+        List<RequestMetadata> requestMetadataList = new ArrayList<>();
+        RequestMetadata requestInfo = new RequestMetadata<>();
+        requestInfo._requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), putRequest);
+        requestInfo.futureResult = new FutureResult<ByteBuffer>();
+        requestInfo.correlationId = correlationId;
+        requestMetadataList.add(requestInfo);
+        _networkClientUtils.poll(requestMetadataList);
+        ByteBuffer response = (ByteBuffer) requestInfo.futureResult.get();
+        PutResponse putResponse = PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(response)));
         if (putResponse.getError() != ServerErrorCode.No_Error) {
           throw new UnexpectedException("error " + putResponse.getError());
         }
@@ -613,18 +615,8 @@ public class ConcurrencyTestTool {
         return new Pair(blobId.getID(), blob);
       } catch (InterruptedException e1) {
         logOutput(correlationId + " InterruptedException thrown when putting blob " + e1.getStackTrace());
-      } catch (ConnectionPoolTimeoutException e1) {
-        logOutput(correlationId + " ConnectionPoolTimeOutException thrown when putting blob " + e1.getStackTrace());
       } catch (Exception e) {
         logOutput(correlationId + " Unknown Exception thrown when putting blob " + e.getStackTrace());
-        if (channel != null) {
-          connectionPool.destroyConnection(channel);
-          channel = null;
-        }
-      } finally {
-        if (channel != null) {
-          connectionPool.checkInConnection(channel);
-        }
       }
       return null;
     }
@@ -635,16 +627,14 @@ public class ConcurrencyTestTool {
      * its content
      * @param blobIdStr the blobId the of that blob that needs to be fetched
      * @param blobContent the content of the blob that needs to be verified against
-     * @param correlationId the correlationId that needs to be used as part of the request while fetching
      * @param expectedErrorCode the expected error code for the Get call
      * @throws IOException
      */
     @Override
-    public void consumeAndValidate(String blobIdStr, byte[] blobContent, int correlationId,
-        ServerErrorCode expectedErrorCode) {
+    public void consumeAndValidate(String blobIdStr, byte[] blobContent, ServerErrorCode expectedErrorCode) {
       BlobData blobData = null;
-      ConnectedChannel channel = null;
       BlobId blobId = null;
+      int correlationId = -1;
       try {
         blobId = new BlobId(blobIdStr, clusterMap);
         ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
@@ -653,14 +643,21 @@ public class ConcurrencyTestTool {
         partitionRequestInfoList.clear();
         PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
         partitionRequestInfoList.add(partitionRequestInfo);
+        correlationId = correlationIdGenerator.incrementAndGet();
         GetRequest getRequest =
             new GetRequest(correlationId, "ConcurrencyTest", MessageFormatFlags.Blob, partitionRequestInfoList,
                 GetOptions.None);
-        channel = connectionPool.checkOutConnection(hostName, new Port(port, PortType.PLAINTEXT), 10000);
         Long startTimeGetBlob = SystemTime.getInstance().nanoseconds();
-        channel.send(getRequest);
-        InputStream receiveStream = channel.receive().getInputStream();
-        GetResponse getResponse = GetResponse.readFrom(new DataInputStream(receiveStream), clusterMap);
+        List<RequestMetadata> requestInfoList = new ArrayList<>();
+        RequestMetadata requestMetadata = new RequestMetadata<>();
+        requestMetadata._requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), getRequest);
+        requestMetadata.futureResult = new FutureResult<ByteBuffer>();
+        requestMetadata.correlationId = correlationId;
+        requestInfoList.add(requestMetadata);
+        _networkClientUtils.poll(requestInfoList);
+        ByteBuffer response = (ByteBuffer) requestMetadata.futureResult.get();
+        GetResponse getResponse =
+            GetResponse.readFrom(new DataInputStream(new ByteBufferInputStream(response)), clusterMap);
         long latencyPerBlob = -1;
         if (getResponse.getError() == ServerErrorCode.No_Error) {
           ServerErrorCode serverErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
@@ -715,19 +712,8 @@ public class ConcurrencyTestTool {
       } catch (MessageFormatException e) {
         logOutput(
             correlationId + " MessageFormatException thrown when getting blob " + blobId + ", " + e.getStackTrace());
-      } catch (ConnectionPoolTimeoutException e) {
-        logOutput(correlationId + " ConnectionTimeOutException thrown when getting blob " + blobId + ", "
-            + e.getStackTrace());
       } catch (Exception e) {
         logOutput(correlationId + " Unknown Exception thrown when getting blob " + blobId + ", " + e.getStackTrace());
-        if (channel != null) {
-          connectionPool.destroyConnection(channel);
-          channel = null;
-        }
-      } finally {
-        if (channel != null) {
-          connectionPool.checkInConnection(channel);
-        }
       }
     }
 
@@ -736,22 +722,27 @@ public class ConcurrencyTestTool {
      * Request to delete the blob from the server directly pertaining to the {@code blobId} passed in and verify that
      * the subsequent get fails with {@link ServerErrorCode#Blob_Deleted}
      * @param blobId the blobId the of that blob that needs to be fetched
-     * @param correlationId the correlationId that needs to be used as part of the request while fetching
      * @param expectedErrorCode the expected error code for the Delete call
      * @throws IOException
      */
     @Override
-    public void deleteAndValidate(String blobId, int correlationId, ServerErrorCode expectedErrorCode) {
-
-      ConnectedChannel channel = null;
+    public void deleteAndValidate(String blobId, ServerErrorCode expectedErrorCode) {
+      int correlationId = -1;
       try {
+        correlationId = correlationIdGenerator.incrementAndGet();
         DeleteRequest deleteRequest =
             new DeleteRequest(correlationId, "ConcurrencyTest", new BlobId(blobId, clusterMap));
-        channel = connectionPool.checkOutConnection(hostName, new Port(port, PortType.PLAINTEXT), 10000);
         Long startTimeGetBlob = SystemTime.getInstance().nanoseconds();
-        channel.send(deleteRequest);
-        InputStream receiveStream = channel.receive().getInputStream();
-        DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(receiveStream));
+        List<RequestMetadata> requestMetadataList = new ArrayList<>();
+        RequestMetadata requestInfo = new RequestMetadata<>();
+        requestInfo._requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), deleteRequest);
+        requestInfo.futureResult = new FutureResult<ByteBuffer>();
+        requestInfo.correlationId = correlationId;
+        requestMetadataList.add(requestInfo);
+        _networkClientUtils.poll(requestMetadataList);
+        ByteBuffer response = (ByteBuffer) requestInfo.futureResult.get();
+        DeleteResponse deleteResponse =
+            DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(response)));
         long latencyTime = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
         if (enableVerboseLogging) {
           logOutput(correlationId + " Delete of  " + blobId + " took " + latencyTime / SystemTime.NsPerMs + " ms");
@@ -763,23 +754,12 @@ public class ConcurrencyTestTool {
           if (enableVerboseLogging) {
             logOutput(correlationId + " Deletion of " + blobId + " succeeded ");
           }
-          consumeAndValidate(blobId, null, correlationId, ServerErrorCode.Blob_Deleted);
+          consumeAndValidate(blobId, null, ServerErrorCode.Blob_Deleted);
         }
       } catch (InterruptedException e) {
         logOutput(correlationId + " InterruptedException thrown when deleting " + blobId + ", " + e.getStackTrace());
-      } catch (ConnectionPoolTimeoutException e) {
-        logOutput(correlationId + " ConnectionPoolTimeoutException thrown when deleting " + blobId + ", "
-            + e.getStackTrace());
       } catch (Exception e) {
         logOutput(correlationId + " Unknown Exception thrown when deleting " + blobId + ", " + e.getStackTrace());
-        if (channel != null) {
-          connectionPool.destroyConnection(channel);
-          channel = null;
-        }
-      } finally {
-        if (channel != null) {
-          connectionPool.checkInConnection(channel);
-        }
       }
     }
 
@@ -792,6 +772,28 @@ public class ConcurrencyTestTool {
     public ServerErrorCode getErrorCodeForNoError() {
       return ServerErrorCode.No_Error;
     }
+
+    /**
+     * {@inheritDoc}
+     * Request to clean up resources used by this helper class, i.e. NetworkClient in this context
+     */
+    @Override
+    public void shutdown()
+        throws InterruptedException {
+      _networkClientUtils.close();
+    }
+  }
+
+  /**
+   * Holds metadata about {@link com.github.ambry.network.RequestInfo} like the associated correlationID and the
+   * {@link FutureResult}
+   * @param <T>
+   */
+  static class RequestMetadata<T> {
+    RequestInfo _requestInfo;
+    FutureResult<T> futureResult;
+    Callback<T> callback;
+    int correlationId;
   }
 
   static class InvocationOptions {
