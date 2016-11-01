@@ -22,6 +22,8 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,7 +43,7 @@ import org.slf4j.LoggerFactory;
 public class NetworkClientUtils {
   private final NetworkClient networkClient;
   private final int pollTimeMs;
-  private final Map<Integer, ConcurrencyTestTool.RequestMetadata> correlationIdToRequestMetadataMap;
+  private final Map<Integer, RequestMetadata> correlationIdToRequestMetadataMap;
   private final Lock lock;
   private final NetworkClientPoller _networkClientPoller;
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -59,11 +61,11 @@ public class NetworkClientUtils {
    * Polls the {@link NetworkClient} for the list of {@link RequestInfo} sent it
    * @param requestMetadataList
    */
-  void poll(List<ConcurrencyTestTool.RequestMetadata> requestMetadataList) {
+  void poll(List<RequestMetadata> requestMetadataList) {
     try {
       lock.lock();
       List<RequestInfo> requestInfoList = new ArrayList<>();
-      for (ConcurrencyTestTool.RequestMetadata requestMetadata : requestMetadataList) {
+      for (RequestMetadata requestMetadata : requestMetadataList) {
         requestInfoList.add(requestMetadata._requestInfo);
         int correlationId = requestMetadata.correlationId;
         if (!correlationIdToRequestMetadataMap.containsKey(correlationId)) {
@@ -88,6 +90,18 @@ public class NetworkClientUtils {
       throws InterruptedException {
     _networkClientPoller.shutdown();
     networkClient.close();
+  }
+
+  /**
+   * Holds metadata about {@link com.github.ambry.network.RequestInfo} like the associated correlationID and the
+   * {@link FutureResult}
+   * @param <T> the type of the response expected for the request
+   */
+  public static class RequestMetadata<T> {
+    RequestInfo _requestInfo;
+    FutureResult<T> futureResult;
+    Callback<T> callback;
+    int correlationId;
   }
 
   /**
@@ -148,7 +162,7 @@ public class NetworkClientUtils {
             logger.error("Unexpected response type: " + type + " received, discarding " + responseInfo);
         }
         if (correlationId != -1) {
-          ConcurrencyTestTool.RequestMetadata requestMetadata = correlationIdToRequestMetadataMap.remove(correlationId);
+          RequestMetadata requestMetadata = correlationIdToRequestMetadataMap.remove(correlationId);
           requestMetadata.futureResult.done(responseInfo.getResponse(),
               responseInfo.getError() != null ? new NetworkClientException("The Operation could not be completed.",
                   responseInfo.getError()) : null);

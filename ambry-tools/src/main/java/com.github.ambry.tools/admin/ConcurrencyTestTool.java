@@ -42,7 +42,6 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -594,8 +593,8 @@ public class ConcurrencyTestTool {
             new PutRequest(correlationId, "ConcurrencyTest", blobId, props, ByteBuffer.wrap(usermetadata),
                 ByteBuffer.wrap(blob), props.getBlobSize(), BlobType.DataBlob);
         long startTime = SystemTime.getInstance().nanoseconds();
-        List<RequestMetadata> requestMetadataList = new ArrayList<>();
-        RequestMetadata requestInfo = new RequestMetadata<>();
+        List<NetworkClientUtils.RequestMetadata> requestMetadataList = new ArrayList<>();
+        NetworkClientUtils.RequestMetadata requestInfo = new NetworkClientUtils.RequestMetadata<>();
         requestInfo._requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), putRequest);
         requestInfo.futureResult = new FutureResult<ByteBuffer>();
         requestInfo.correlationId = correlationId;
@@ -648,8 +647,8 @@ public class ConcurrencyTestTool {
             new GetRequest(correlationId, "ConcurrencyTest", MessageFormatFlags.Blob, partitionRequestInfoList,
                 GetOptions.None);
         Long startTimeGetBlob = SystemTime.getInstance().nanoseconds();
-        List<RequestMetadata> requestInfoList = new ArrayList<>();
-        RequestMetadata requestMetadata = new RequestMetadata<>();
+        List<NetworkClientUtils.RequestMetadata> requestInfoList = new ArrayList<>();
+        NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<>();
         requestMetadata._requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), getRequest);
         requestMetadata.futureResult = new FutureResult<ByteBuffer>();
         requestMetadata.correlationId = correlationId;
@@ -733,8 +732,8 @@ public class ConcurrencyTestTool {
         DeleteRequest deleteRequest =
             new DeleteRequest(correlationId, "ConcurrencyTest", new BlobId(blobId, clusterMap));
         Long startTimeGetBlob = SystemTime.getInstance().nanoseconds();
-        List<RequestMetadata> requestMetadataList = new ArrayList<>();
-        RequestMetadata requestInfo = new RequestMetadata<>();
+        List<NetworkClientUtils.RequestMetadata> requestMetadataList = new ArrayList<>();
+        NetworkClientUtils.RequestMetadata requestInfo = new NetworkClientUtils.RequestMetadata<>();
         requestInfo._requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), deleteRequest);
         requestInfo.futureResult = new FutureResult<ByteBuffer>();
         requestInfo.correlationId = correlationId;
@@ -782,18 +781,6 @@ public class ConcurrencyTestTool {
         throws InterruptedException {
       _networkClientUtils.close();
     }
-  }
-
-  /**
-   * Holds metadata about {@link com.github.ambry.network.RequestInfo} like the associated correlationID and the
-   * {@link FutureResult}
-   * @param <T>
-   */
-  static class RequestMetadata<T> {
-    RequestInfo _requestInfo;
-    FutureResult<T> futureResult;
-    Callback<T> callback;
-    int correlationId;
   }
 
   static class InvocationOptions {
