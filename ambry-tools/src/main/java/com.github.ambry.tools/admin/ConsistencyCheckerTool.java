@@ -205,7 +205,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
   private void doCheck(File[] replicas, ArrayList<String> replicasList,
       ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed)
       throws IOException, InterruptedException {
-    DumpData dumpData = new DumpData(outFile, fileWriter, map);
+    DumpData dumpData = new DumpData(outFile, fileWriter, map, true);
     CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
@@ -296,7 +296,7 @@ class BlobConsistencyCheckerTool extends ConsistencyCheckerTool {
       for (File indexFile : indexFiles) {
         keysProcessedforReplica += dumpData
             .dumpIndex(indexFile, rootDirectory.getName(), replicaList, new ArrayList<String>(), blobIdToStatusMap,
-                indexStats, true, true);
+                indexStats, true);
       }
       logOutput("Total keys processed for " + rootDirectory.getName() + " " + keysProcessedforReplica);
       totalKeysProcessed.addAndGet(keysProcessedforReplica);
