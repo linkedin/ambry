@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
@@ -84,7 +83,7 @@ class IndexSegment {
   private AtomicLong lastModifiedTimeSec; // an approximation of the last modified time.
   private AtomicInteger numberOfItems;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
-  private final StoreLevelMetrics metrics;
+  private final StoreMetrics metrics;
 
   /**
    * Creates a new segment
@@ -96,7 +95,7 @@ class IndexSegment {
    * @param config The store config used to initialize the index segment
    */
   public IndexSegment(String dataDir, long startOffset, StoreKeyFactory factory, int keySize, int valueSize,
-      StoreConfig config, StoreLevelMetrics metrics) {
+      StoreConfig config, StoreMetrics metrics) {
     // create a new file with the start offset
     indexFile = new File(dataDir, startOffset + "_" + PersistentIndex.Index_File_Name_Suffix);
     bloomFile = new File(dataDir, startOffset + "_" + PersistentIndex.Bloom_File_Name_Suffix);
@@ -128,7 +127,7 @@ class IndexSegment {
    * @throws StoreException
    */
   public IndexSegment(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config,
-      StoreLevelMetrics metrics, Journal journal)
+      StoreMetrics metrics, Journal journal)
       throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);

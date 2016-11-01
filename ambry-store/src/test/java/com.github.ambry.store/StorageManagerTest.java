@@ -40,7 +40,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 
-public class StoreManagerTest {
+public class StorageManagerTest {
   private static final Random RANDOM = new Random();
   private MockClusterMap clusterMap;
 
@@ -76,20 +76,20 @@ public class StoreManagerTest {
     List<String> mountPaths = dataNode.getMountPaths();
     String mountPathToDelete = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
     deleteDirectory(new File(mountPathToDelete));
-    StoreManager storeManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
       if (replica.getMountPath().equals(mountPathToDelete)) {
-        assertNull(storeManager.getStore(replica.getPartitionId()));
+        assertNull(storageManager.getStore(replica.getPartitionId()));
       } else {
-        Store store = storeManager.getStore(replica.getPartitionId());
+        Store store = storageManager.getStore(replica.getPartitionId());
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
-    shutdownAndAssertStoresInaccessible(storeManager, replicas);
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
   /**
-   * Tests that {@link StoreManager} can start even when certain stores cannot be started. Checks that these stores
+   * Tests that {@link StorageManager} can start even when certain stores cannot be started. Checks that these stores
    * are not accessible. We can make the replica path non-readable to induce a store starting failure.
    * @throws Exception
    */
@@ -102,21 +102,21 @@ public class StoreManagerTest {
     for (Integer badReplicaIndex : badReplicaIndexes) {
       new File(replicas.get(badReplicaIndex).getReplicaPath()).setReadable(false);
     }
-    StoreManager storeManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas);
     for (int i = 0; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
       if (badReplicaIndexes.contains(i)) {
-        assertNull(storeManager.getStore(replica.getPartitionId()));
+        assertNull(storageManager.getStore(replica.getPartitionId()));
       } else {
-        Store store = storeManager.getStore(replica.getPartitionId());
+        Store store = storageManager.getStore(replica.getPartitionId());
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
-    shutdownAndAssertStoresInaccessible(storeManager, replicas);
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
   /**
-   * Tests that {@link StoreManager} can start when all of the stores on one disk fail to start. Checks that these
+   * Tests that {@link StorageManager} can start when all of the stores on one disk fail to start. Checks that these
    * stores are not accessible. We can make the replica path non-readable to induce a store starting failure.
    * @throws Exception
    */
@@ -132,16 +132,16 @@ public class StoreManagerTest {
         new File(replica.getReplicaPath()).setReadable(false);
       }
     }
-    StoreManager storeManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
       if (replica.getMountPath().equals(badDiskMountPath)) {
-        assertNull(storeManager.getStore(replica.getPartitionId()));
+        assertNull(storageManager.getStore(replica.getPartitionId()));
       } else {
-        Store store = storeManager.getStore(replica.getPartitionId());
+        Store store = storageManager.getStore(replica.getPartitionId());
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
-    shutdownAndAssertStoresInaccessible(storeManager, replicas);
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
   /**
@@ -154,43 +154,43 @@ public class StoreManagerTest {
       throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    StoreManager storeManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
-      Store store = storeManager.getStore(replica.getPartitionId());
+      Store store = storageManager.getStore(replica.getPartitionId());
       assertTrue("Store should be started", ((BlobStore) store).isStarted());
     }
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
-    assertNull(storeManager.getStore(invalidPartition));
-    shutdownAndAssertStoresInaccessible(storeManager, replicas);
+    assertNull(storageManager.getStore(invalidPartition));
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
   /**
-   * Create a {@link StoreManager} and start stores for the passed in set of replicas.
-   * @param replicas the list of replicas for the {@link StoreManager} to use.
-   * @return a started {@link StoreManager}
+   * Create a {@link StorageManager} and start stores for the passed in set of replicas.
+   * @param replicas the list of replicas for the {@link StorageManager} to use.
+   * @return a started {@link StorageManager}
    * @throws StoreException
    */
-  private static StoreManager createAndStartStoreManager(List<ReplicaId> replicas)
+  private static StorageManager createAndStartStoreManager(List<ReplicaId> replicas)
       throws StoreException, InterruptedException {
-    StoreManager storeManager =
-        new StoreManager(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
+    StorageManager storageManager =
+        new StorageManager(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
             new MetricRegistry(), replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
             new DummyMessageStoreHardDelete(), SystemTime.getInstance());
-    storeManager.start();
-    return storeManager;
+    storageManager.start();
+    return storageManager;
   }
 
   /**
-   * Shutdown a {@link StoreManager} and assert that the stores cannot be accessed for the provided replicas.
-   * @param storeManager the {@link StoreManager} to shutdown.
+   * Shutdown a {@link StorageManager} and assert that the stores cannot be accessed for the provided replicas.
+   * @param storageManager the {@link StorageManager} to shutdown.
    * @param replicas the {@link ReplicaId}s to check for store inaccessibility.
    * @throws StoreException
    */
-  private static void shutdownAndAssertStoresInaccessible(StoreManager storeManager, List<ReplicaId> replicas)
+  private static void shutdownAndAssertStoresInaccessible(StorageManager storageManager, List<ReplicaId> replicas)
       throws StoreException {
-    storeManager.shutdown();
+    storageManager.shutdown();
     for (ReplicaId replica : replicas) {
-      assertNull(storeManager.getStore(replica.getPartitionId()));
+      assertNull(storageManager.getStore(replica.getPartitionId()));
     }
   }
 

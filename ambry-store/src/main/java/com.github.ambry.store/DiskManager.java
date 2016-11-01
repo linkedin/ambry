@@ -19,16 +19,16 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.store.StoreMetrics.DiskLevelMetrics;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +40,7 @@ class DiskManager {
   private final ConcurrentMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
   private final DiskId disk;
   private final StoreConfig config;
-  private final DiskLevelMetrics metrics;
+  private final StoreManagerMetrics metrics;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -50,18 +50,18 @@ class DiskManager {
    * @param replicas all the replicas on this disk.
    * @param config the settings for store configuration.
    * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
-   * @param storeMetrics the {@link StoreMetrics} object used for store-related metrics.
+   * @param metrics the {@link StoreManagerMetrics} object used for store-related metrics.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param time the {@link Time} instance to use.
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig config, ScheduledExecutorService scheduler,
-      StoreMetrics storeMetrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
+      StoreManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time) {
     this.disk = disk;
     this.config = config;
-    this.metrics = storeMetrics.createDiskLevelMetrics(disk.getMountPath());
+    this.metrics = metrics;
     DiskIOScheduler ioScheduler = new DiskIOScheduler(null);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
@@ -82,29 +82,34 @@ class DiskManager {
     try {
       File mountPath = new File(disk.getMountPath());
       if (mountPath.exists()) {
-        Map<StoreStarter, Thread> startupThreads = new HashMap<>();
+        List<Thread> startupThreads = new ArrayList<>();
+        final AtomicInteger numFailures = new AtomicInteger(0);
         for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
-          StoreStarter storeStarter = new StoreStarter(partitionAndStore.getKey(), partitionAndStore.getValue());
-          Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), storeStarter, false);
+          Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), new Runnable() {
+            @Override
+            public void run() {
+              try {
+                partitionAndStore.getValue().start();
+              } catch (Exception e) {
+                numFailures.incrementAndGet();
+                metrics.totalStoreStartFailures.inc();
+                logger.error("Exception while starting store for the partition" + partitionAndStore.getKey(), e);
+              }
+            }
+          }, false);
           thread.start();
-          startupThreads.put(storeStarter, thread);
+          startupThreads.add(thread);
         }
-        int numFailed = 0;
-        for (Map.Entry<StoreStarter, Thread> starterAndThread : startupThreads.entrySet()) {
-          starterAndThread.getValue().join();
-          Exception exception = starterAndThread.getKey().exception;
-          if (exception != null) {
-            numFailed++;
-            logger.error("Exception while starting store for the partition" + starterAndThread.getKey().partition,
-                exception);
-          }
+        for (Thread startupThread : startupThreads) {
+          startupThread.join();
         }
-        if (numFailed > 0) {
-          metrics.diskStartFailure.inc();
-          logger.error("Could not start " + numFailed + " out of " + stores.size() + " stores on the disk " + disk);
+        if (numFailures.get() > 0) {
+          logger.error(
+              "Could not start " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
         }
       } else {
-        metrics.diskStartFailure.inc();
+        metrics.diskMountPathFailures.inc();
+        metrics.totalStoreStartFailures.inc(stores.size());
         logger.error("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk");
       }
     } finally {
@@ -141,28 +146,5 @@ class DiskManager {
    */
   DiskId getDisk() {
     return disk;
-  }
-
-  /**
-   * A {@link Runnable} that starts a {@link Store} and saves a reference to an exception if starting failed.
-   */
-  private class StoreStarter implements Runnable {
-    final PartitionId partition;
-    final Store store;
-    volatile Exception exception = null;
-
-    public StoreStarter(PartitionId partition, Store store) {
-      this.partition = partition;
-      this.store = store;
-    }
-
-    @Override
-    public void run() {
-      try {
-        store.start();
-      } catch (StoreException e) {
-        exception = e;
-      }
-    }
   }
 }

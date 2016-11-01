@@ -13,11 +13,8 @@
  */
 package com.github.ambry.store;
 
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.store.StoreMetrics.DiskLevelMetrics;
-import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
 import java.io.File;
@@ -54,13 +51,13 @@ class BlobStore implements Store {
   private StoreKeyFactory factory;
   private MessageStoreRecovery recovery;
   private MessageStoreHardDelete hardDelete;
-  private StoreLevelMetrics metrics;
+  private StoreMetrics metrics;
   private Time time;
 
   public BlobStore(String storeId, StoreConfig config, ScheduledExecutorService scheduler,
-      DiskIOScheduler diskIOScheduler, DiskLevelMetrics diskLevelMetrics, String dataDir, long capacityInBytes,
+      DiskIOScheduler diskIOScheduler, StoreManagerMetrics storeManagerMetrics, String dataDir, long capacityInBytes,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
-    this.metrics = diskLevelMetrics.createStoreLevelMetrics(storeId);
+    this.metrics = storeManagerMetrics.createStoreMetrics(storeId);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
     this.diskIOScheduler = diskIOScheduler;

@@ -24,7 +24,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.BlobIndexMetrics;
 import com.github.ambry.store.Log;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
+import com.github.ambry.store.StoreMetrics;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
@@ -132,7 +132,7 @@ public class IndexReadPerformance {
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
       final HashMap<String, IndexPayload> hashes = new HashMap<String, IndexPayload>();
       String line;
-      StoreLevelMetrics metrics = new StoreLevelMetrics(System.getProperty("user.dir"), new MetricRegistry());
+      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
       Log log = new Log(System.getProperty("user.dir"), 1000, metrics);
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
 

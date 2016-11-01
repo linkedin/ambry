@@ -63,7 +63,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreManager;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -82,7 +82,7 @@ import org.slf4j.LoggerFactory;
 
 public class AmbryRequests implements RequestAPI {
 
-  private StoreManager storeManager;
+  private StorageManager storageManager;
   private final RequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
@@ -95,11 +95,11 @@ public class AmbryRequests implements RequestAPI {
   private final ReplicationManager replicationManager;
   private final StoreKeyFactory storeKeyFactory;
 
-  public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
+  public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
       DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
       NotificationSystem operationNotification, ReplicationManager replicationManager,
       StoreKeyFactory storeKeyFactory) {
-    this.storeManager = storeManager;
+    this.storageManager = storageManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
     this.currentNode = nodeId;
@@ -164,7 +164,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
-        Store storeToPut = storeManager.getStore(receivedRequest.getBlobId().getPartition());
+        Store storeToPut = storageManager.getStore(receivedRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
             ServerErrorCode.No_Error);
@@ -257,7 +257,7 @@ public class AmbryRequests implements RequestAPI {
           partitionResponseInfoList.add(partitionResponseInfo);
         } else {
           try {
-            Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
+            Store storeToGet = storageManager.getStore(partitionRequestInfo.getPartition());
             EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
             // Currently only one option is supported.
             if (getRequest.getGetOptions() == GetOptions.Include_Expired_Blobs) {
@@ -361,7 +361,7 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
-        Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
+        Store storeToDelete = storageManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(writeset);
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
@@ -444,7 +444,7 @@ public class AmbryRequests implements RequestAPI {
             FindToken findToken = replicaMetadataRequestInfo.getToken();
             String hostName = replicaMetadataRequestInfo.getHostName();
             String replicaPath = replicaMetadataRequestInfo.getReplicaPath();
-            Store store = storeManager.getStore(partitionId);
+            Store store = storageManager.getStore(partitionId);
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             FindInfo findInfo =
@@ -591,20 +591,21 @@ public class AmbryRequests implements RequestAPI {
 
   private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
     // 1. check if partition exists on this node and that the store for this partition has been started
-    boolean partitionFound = false;
-    for (ReplicaId replica : partition.getReplicaIds()) {
-      if (replica.getDataNodeId().equals(currentNode)) {
-        partitionFound = true;
-        break;
+    if (storageManager.getStore(partition) == null) {
+      boolean partitionPresent = false;
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        if (replica.getDataNodeId().equals(currentNode)) {
+          partitionPresent = true;
+          break;
+        }
       }
-    }
-    if (!partitionFound) {
-      metrics.partitionUnknownError.inc();
-      return ServerErrorCode.Partition_Unknown;
-    }
-    if (storeManager.getStore(partition) == null) {
-      metrics.diskUnavailableError.inc();
-      return ServerErrorCode.Disk_Unavailable;
+      if (partitionPresent) {
+        metrics.diskUnavailableError.inc();
+        return ServerErrorCode.Disk_Unavailable;
+      } else {
+        metrics.partitionUnknownError.inc();
+        return ServerErrorCode.Partition_Unknown;
+      }
     }
     // 2. ensure the disk for the partition/replica is available
     List<ReplicaId> replicaIds = partition.getReplicaIds();

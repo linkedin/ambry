@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -73,7 +72,7 @@ class PersistentIndex {
   private UUID sessionId;
   private boolean cleanShutdown;
   private long logEndOffsetOnStartup;
-  private final StoreLevelMetrics metrics;
+  private final StoreMetrics metrics;
   private Time time;
 
   private class IndexFilter implements FilenameFilter {
@@ -98,7 +97,7 @@ class PersistentIndex {
    */
   public PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      StoreLevelMetrics metrics, Time time)
+      StoreMetrics metrics, Time time)
       throws StoreException {
     /*
     If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
@@ -127,7 +126,7 @@ class PersistentIndex {
    */
   protected PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      StoreLevelMetrics metrics, Journal journal, Time time)
+      StoreMetrics metrics, Journal journal, Time time)
       throws StoreException {
     try {
       this.time = time;

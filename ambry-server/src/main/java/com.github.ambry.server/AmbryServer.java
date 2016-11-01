@@ -38,7 +38,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreManager;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -61,7 +61,7 @@ public class AmbryServer {
   private AmbryRequests requests = null;
   private RequestHandlerPool requestHandlerPool = null;
   private ScheduledExecutorService scheduler = null;
-  private StoreManager storeManager = null;
+  private StorageManager storageManager = null;
   private ReplicationManager replicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
@@ -119,16 +119,16 @@ public class AmbryServer {
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      storeManager =
-          new StoreManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
+      storageManager =
+          new StorageManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
               new BlobStoreRecovery(), new BlobStoreHardDelete(), time);
-      storeManager.start();
+      storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       connectionPool.start();
 
       replicationManager =
-          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory,
+          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
 
@@ -140,7 +140,7 @@ public class AmbryServer {
 
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
-          new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
+          new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
@@ -164,7 +164,7 @@ public class AmbryServer {
 
       if (scheduler != null) {
         scheduler.shutdown();
-        if (!scheduler.awaitTermination(1, TimeUnit.DAYS)) {
+        if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {
           logger.error("Could not terminate all tasks after scheduler shutdown");
         }
       }
@@ -177,8 +177,8 @@ public class AmbryServer {
       if (replicationManager != null) {
         replicationManager.shutdown();
       }
-      if (storeManager != null) {
-        storeManager.shutdown();
+      if (storageManager != null) {
+        storageManager.shutdown();
       }
       if (connectionPool != null) {
         connectionPool.shutdown();

@@ -26,7 +26,7 @@ import com.github.ambry.store.BlobIndexMetrics;
 import com.github.ambry.store.Log;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
+import com.github.ambry.store.StoreMetrics;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
@@ -113,7 +113,7 @@ public class IndexWritePerformance {
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
 
-      StoreLevelMetrics metrics = new StoreLevelMetrics(System.getProperty("user.dir"), new MetricRegistry());
+      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
       Log log = new Log(System.getProperty("user.dir"), 10, metrics);
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);

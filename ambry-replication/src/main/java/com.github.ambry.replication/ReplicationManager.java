@@ -29,7 +29,7 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreManager;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
@@ -264,7 +264,7 @@ public final class ReplicationManager {
   private static final short Replication_Delay_Multiplier = 5;
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
-      StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       MetricRegistry metricRegistry, NotificationSystem requestNotification)
       throws ReplicationException {
@@ -293,7 +293,7 @@ public final class ReplicationManager {
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
         PartitionId partition = replicaId.getPartitionId();
-        Store store = storeManager.getStore(partition);
+        Store store = storageManager.getStore(partition);
         if (store != null) {
           List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
           if (peerReplicas != null) {

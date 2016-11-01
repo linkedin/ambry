@@ -16,7 +16,6 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
@@ -148,7 +147,7 @@ public class HardDeleterTest {
         c.delete();
       }
       ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 10000, new StoreLevelMetrics(logFile, new MetricRegistry()));
+      Log log = new Log(logFile, 10000, new StoreMetrics(logFile, new MetricRegistry()));
       Properties props = new Properties();
       // the test will set the tokens, so disable the index persistor.
       props.setProperty("store.data.flush.interval.seconds", "3600");

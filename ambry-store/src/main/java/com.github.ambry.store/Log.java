@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.store.StoreMetrics.StoreLevelMetrics;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -40,9 +39,9 @@ class Log implements Read, Write {
   private final long capacityInBytes;
   private static final String Log_File_Name = "log_current";
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private final StoreLevelMetrics metrics;
+  private final StoreMetrics metrics;
 
-  public Log(String dataDir, long capacityInBytes, StoreLevelMetrics metrics)
+  public Log(String dataDir, long capacityInBytes, StoreMetrics metrics)
       throws IOException {
     file = new File(dataDir, Log_File_Name);
     if (!file.exists()) {

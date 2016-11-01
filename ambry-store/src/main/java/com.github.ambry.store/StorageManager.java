@@ -33,17 +33,17 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * The store manager that handles all the stores on this node. The stores on each disk are handled by a
+ * The storage manager that handles all the stores on this node. The stores on each disk are handled by a
  * {@link DiskManager}
  */
-public class StoreManager {
+public class StorageManager {
   private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
   private final List<DiskManager> diskManagers = new ArrayList<>();
-  private final StoreMetrics metrics;
-  private static final Logger logger = LoggerFactory.getLogger(StoreManager.class);
+  private final StoreManagerMetrics metrics;
+  private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
-   * Constructs a {@link StoreManager}
+   * Constructs a {@link StorageManager}
    * @param config the settings for store configuration.
    * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    * @param registry the {@link MetricRegistry} used for store-related metrics.
@@ -53,12 +53,12 @@ public class StoreManager {
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param time the {@link Time} instance to use.
    */
-  public StoreManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
+  public StorageManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
       List<ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time)
       throws StoreException {
     verifyConfigs(config);
-    metrics = new StoreMetrics(registry);
+    metrics = new StoreManagerMetrics(registry);
 
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
@@ -147,26 +147,5 @@ public class StoreManager {
       diskManager.shutdown();
     }
     logger.info("Shutting down store manager complete");
-  }
-
-  /**
-   * A {@link Runnable} that starts a {@link DiskManager} and saves a reference to an exception if starting failed.
-   */
-  private class DiskManagerStarter implements Runnable {
-    final DiskManager diskManager;
-    volatile Exception exception = null;
-
-    public DiskManagerStarter(DiskManager diskManager) {
-      this.diskManager = diskManager;
-    }
-
-    @Override
-    public void run() {
-      try {
-        diskManager.start();
-      } catch (Exception e) {
-        exception = e;
-      }
-    }
   }
 }

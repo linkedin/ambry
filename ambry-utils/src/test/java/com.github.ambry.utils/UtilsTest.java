@@ -19,6 +19,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -349,10 +353,11 @@ public class UtilsTest {
     }
   }
 
-  @Test
   /**
    * Tests {@link Utils#getRootCause(Throwable)}.
-   */ public void getRootCauseTest() {
+   */
+  @Test
+  public void getRootCauseTest() {
     int nestingLevel = 5;
     String innerExceptionMsg = "InnerException";
     String outerExceptionMsgBase = "OuterException";
@@ -363,6 +368,26 @@ public class UtilsTest {
     }
     assertEquals("Message should that of the innermost exception", innerExceptionMsg,
         Utils.getRootCause(outerException).getMessage());
+  }
+
+  /**
+   * Test {@link Utils#newScheduler(int, String, boolean)}
+   */
+  @Test
+  public void newSchedulerTest()
+      throws Exception {
+    ScheduledExecutorService scheduler = Utils.newScheduler(2, false);
+    Future<String> future = scheduler.schedule(new Callable<String>() {
+      @Override
+      public String call() {
+        return Thread.currentThread().getName();
+      }
+    }, 50, TimeUnit.MILLISECONDS);
+    String threadName = future.get(10, TimeUnit.SECONDS);
+    assertTrue("Unexpected thread name returned: " + threadName, threadName.startsWith("ambry-scheduler-"));
+    scheduler.shutdown();
+    assertTrue("All tasks should be finished.", scheduler.isTerminated());
+    assertTrue("Scheduler should be shutdown.", scheduler.isShutdown());
   }
 
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
