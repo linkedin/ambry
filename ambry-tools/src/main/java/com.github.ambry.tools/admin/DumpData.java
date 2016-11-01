@@ -20,6 +20,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.IndexValue;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
@@ -32,8 +33,11 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.NavigableSet;
 import java.util.Properties;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -616,8 +620,18 @@ public class DumpData {
     RandomAccessFile randomAccessFile = new RandomAccessFile(new File(logFile), "r");
     log("Comparing Index entries to Log ");
     File replicaDirectory = new File(replicaRootDirectory);
+    MergedIntervals coveredRangesInLog = new MergedIntervals();
     for (File indexFile : replicaDirectory.listFiles(new IndexFileNameFilter())) {
-      compareIndexEntriesToLogContent(indexFile, replicaDirectory, randomAccessFile, avoidTraceLogging);
+      compareIndexEntriesToLogContent(indexFile, replicaDirectory, randomAccessFile, avoidTraceLogging,
+          coveredRangesInLog, false);
+    }
+    printUnCoveredRanges(coveredRangesInLog);
+  }
+
+  private void printUnCoveredRanges(MergedIntervals coveredRangesInLog) {
+    for (Pair<Long, Long> range : coveredRangesInLog.getCoveredIntervals()) {
+      log("Cannot find entries in Index covering range from " + range.getFirst() + " to " + range.getSecond()
+          + " with a hole of " + (range.getSecond() - range.getFirst()) + " in the Log");
     }
   }
 
@@ -639,7 +653,9 @@ public class DumpData {
     try {
       randomAccessFile = new RandomAccessFile(new File(logFile), "r");
       log("Comparing Index entries to Log ");
-      compareIndexEntriesToLogContent(new File(indexFile), null, randomAccessFile, avoidTraceLogging);
+      MergedIntervals coveredRangesInLog = new MergedIntervals();
+      compareIndexEntriesToLogContent(new File(indexFile), null, randomAccessFile, avoidTraceLogging,
+          coveredRangesInLog, true);
     } finally {
       if (randomAccessFile != null) {
         randomAccessFile.close();
@@ -657,7 +673,7 @@ public class DumpData {
    * @throws Exception
    */
   private void compareIndexEntriesToLogContent(File indexFile, File replicaDirectory, RandomAccessFile randomAccessFile,
-      boolean avoidTraceLogging)
+      boolean avoidTraceLogging, MergedIntervals coveredRangesInLog, boolean printUnCoveredRanges)
       throws Exception {
     log("Dumping index " + indexFile.getName() + " for " + ((replicaDirectory != null) ? replicaDirectory.getName()
         : null));
@@ -689,13 +705,16 @@ public class DumpData {
               blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset() +
               " Flag " + blobValue.getFlags() + "\n";
           boolean success = dumpDataHelper.readFromLog(randomAccessFile, blobValue.getOffset(), key.getID(), blobValue,
-              avoidTraceLogging);
+              avoidTraceLogging, coveredRangesInLog);
           if (!success) {
             log("Failed for Index Entry " + msg);
           }
         }
         if (!avoidTraceLogging) {
           log("crc " + stream.readLong());
+        }
+        if (printUnCoveredRanges) {
+          printUnCoveredRanges(coveredRangesInLog);
         }
       }
     } finally {
@@ -747,6 +766,43 @@ public class DumpData {
       }
     }
     log("Total Inconsistent blobs count " + totalInconsistentBlobs);
+  }
+
+  class MergedIntervals {
+    NavigableSet<Pair<Long, Long>> coveredIntervals;
+
+    public MergedIntervals() {
+      coveredIntervals = new TreeSet<>(new Comparator<Pair<Long, Long>>() {
+        @Override
+        public int compare(Pair<Long, Long> o1, Pair<Long, Long> o2) {
+          return o1.getFirst().compareTo(o2.getFirst());
+        }
+      });
+    }
+
+    void addInterval(Pair<Long, Long> newInterval) {
+      Pair<Long, Long> ceiling = coveredIntervals.ceiling(newInterval);
+      Pair<Long, Long> floor = coveredIntervals.floor(newInterval);
+      boolean added = false;
+      if (floor != null && (floor.getSecond().compareTo(newInterval.getFirst()) == 0)) {
+        coveredIntervals.remove(floor);
+        newInterval = new Pair(floor.getFirst(), newInterval.getSecond());
+        coveredIntervals.add(newInterval);
+        added = true;
+      }
+      if (ceiling != null && (ceiling.getFirst().compareTo(newInterval.getSecond()) == 0)) {
+        coveredIntervals.remove(ceiling);
+        coveredIntervals.add(new Pair(newInterval.getFirst(), ceiling.getSecond()));
+        added = true;
+      }
+      if (!added) {
+        coveredIntervals.add(newInterval);
+      }
+    }
+
+    NavigableSet<Pair<Long, Long>> getCoveredIntervals() {
+      return coveredIntervals;
+    }
   }
 
   /**

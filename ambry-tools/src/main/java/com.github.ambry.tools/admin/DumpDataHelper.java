@@ -26,6 +26,7 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.IndexValue;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -42,6 +43,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -261,10 +263,12 @@ public class DumpDataHelper {
     String deleteMsg = null;
     boolean isDeleted;
     boolean isExpired;
+    long timeToLiveInSeconds;
     int totalRecordSize;
 
     public BlobRecordInfo(String messageheader, BlobId blobId, String blobProperty, String usermetadata,
-        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, int totalRecordSize) {
+        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long timeToLiveInSeconds,
+        int totalRecordSize) {
       this.messageheader = messageheader;
       this.blobId = blobId;
       this.blobProperty = blobProperty;
@@ -273,6 +277,7 @@ public class DumpDataHelper {
       this.deleteMsg = deleteMsg;
       this.isDeleted = isDeleted;
       this.isExpired = isExpired;
+      this.timeToLiveInSeconds = timeToLiveInSeconds;
       this.totalRecordSize = totalRecordSize;
     }
   }
@@ -295,6 +300,7 @@ public class DumpDataHelper {
     String deleteMsg = null;
     boolean isDeleted = false;
     boolean isExpired = false;
+    long timeToLiveInSeconds = -1;
     int totalRecordSize = 0;
     short version = randomAccessFile.readShort();
     if (version == 1) {
@@ -317,7 +323,8 @@ public class DumpDataHelper {
       if (header.getBlobPropertiesRecordRelativeOffset()
           != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
         BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-        isExpired = isExpired(props.getTimeToLiveInSeconds());
+        timeToLiveInSeconds = props.getTimeToLiveInSeconds();
+        isExpired = timeToLiveInSeconds != -1 ? isExpired(TimeUnit.SECONDS.toMillis(timeToLiveInSeconds)) : false;
         blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
             " serviceId " + props.getServiceId() + ", isExpired " + isExpired;
         ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
@@ -333,7 +340,7 @@ public class DumpDataHelper {
       throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
     }
     return new BlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg, isDeleted,
-        isExpired, totalRecordSize);
+        isExpired, timeToLiveInSeconds, totalRecordSize);
   }
 
   /**
@@ -384,11 +391,14 @@ public class DumpDataHelper {
    * @throws IOException
    */
   public boolean readFromLog(RandomAccessFile randomAccessFile, long offset, String blobId, IndexValue indexValue,
-      boolean avoidMiscLogging)
+      boolean avoidMiscLogging, DumpData.MergedIntervals coveredRangeInLog)
       throws Exception {
     try {
       randomAccessFile.seek(offset);
       BlobRecordInfo blobRecordInfo = readSingleRecordFromLog(randomAccessFile, offset);
+      if (coveredRangeInLog != null) {
+        coveredRangeInLog.addInterval(new Pair(offset, offset + blobRecordInfo.totalRecordSize));
+      }
       compareIndexValueToLogEntry(blobId, indexValue, blobRecordInfo);
       if (!avoidMiscLogging) {
         if (!blobRecordInfo.isDeleted) {
@@ -430,10 +440,12 @@ public class DumpDataHelper {
     if (isDeleted != blobRecordInfo.isDeleted) {
       logOutput("Deleted value mismatch for " + blobRecordInfo.blobId + " Index value " + isDeleted + ", Log value "
           + blobRecordInfo.isDeleted);
-    } else if (isExpired != blobRecordInfo.isExpired) {
+    } else if (!blobRecordInfo.isDeleted && isExpired != blobRecordInfo.isExpired) {
       logOutput("Expiration value mismatch for " + blobRecordInfo.blobId + " Index value " + isExpired + ", Log value "
-          + blobRecordInfo.isExpired);
-    } else if (!blobId.equals(blobRecordInfo.blobId)) {
+          + blobRecordInfo.isExpired + ", index TTL in ms " + indexValue.getTimeToLiveInMs()
+          + ", log Time to live in secs " + blobRecordInfo.timeToLiveInSeconds + ", in ms " + TimeUnit.SECONDS.toMillis(
+          blobRecordInfo.timeToLiveInSeconds));
+    } else if (!blobId.equals(blobRecordInfo.blobId.getID())) {
       logOutput("BlobId value mismatch for " + blobRecordInfo.blobId + " Index value " + blobId + ", Log value "
           + blobRecordInfo.blobId);
     }
@@ -464,7 +476,7 @@ public class DumpDataHelper {
 
   /**
    * Returns if the blob has been expired or not based on the time to live value
-   * @param timeToLive time in nano seconds refering to the time to live for the blob
+   * @param timeToLive time in milliseconds referring to the time to live for the blob
    * @return {@code true} if blob has expired, {@code false} otherwise
    */
   private boolean isExpired(Long timeToLive) {

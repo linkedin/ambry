@@ -117,7 +117,6 @@ public class SSLBlockingChannelTest {
       channel.connect();
       fail("should have thrown!");
     } catch (IOException e) {
-      assertTrue(e.getMessage().contains("Connection refused"));
     }
   }
 
