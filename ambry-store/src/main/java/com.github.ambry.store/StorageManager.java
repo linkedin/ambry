@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
 public class StorageManager {
   private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
   private final List<DiskManager> diskManagers = new ArrayList<>();
-  private final StoreManagerMetrics metrics;
+  private final StorageManagerMetrics metrics;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
@@ -58,7 +58,7 @@ public class StorageManager {
       MessageStoreHardDelete hardDelete, Time time)
       throws StoreException {
     verifyConfigs(config);
-    metrics = new StoreManagerMetrics(registry);
+    metrics = new StorageManagerMetrics(registry);
 
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {

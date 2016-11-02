@@ -40,7 +40,7 @@ class DiskManager {
   private final ConcurrentMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
   private final DiskId disk;
   private final StoreConfig config;
-  private final StoreManagerMetrics metrics;
+  private final StorageManagerMetrics metrics;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -50,14 +50,14 @@ class DiskManager {
    * @param replicas all the replicas on this disk.
    * @param config the settings for store configuration.
    * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
-   * @param metrics the {@link StoreManagerMetrics} object used for store-related metrics.
+   * @param metrics the {@link StorageManagerMetrics} object used for store-related metrics.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param time the {@link Time} instance to use.
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig config, ScheduledExecutorService scheduler,
-      StoreManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
+      StorageManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time) {
     this.disk = disk;
     this.config = config;

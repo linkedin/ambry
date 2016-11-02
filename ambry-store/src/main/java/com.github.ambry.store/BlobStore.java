@@ -55,9 +55,10 @@ class BlobStore implements Store {
   private Time time;
 
   public BlobStore(String storeId, StoreConfig config, ScheduledExecutorService scheduler,
-      DiskIOScheduler diskIOScheduler, StoreManagerMetrics storeManagerMetrics, String dataDir, long capacityInBytes,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
-    this.metrics = storeManagerMetrics.createStoreMetrics(storeId);
+      DiskIOScheduler diskIOScheduler, StorageManagerMetrics storageManagerMetrics, String dataDir,
+      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      Time time) {
+    this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.dataDir = dataDir;
     this.scheduler = scheduler;
     this.diskIOScheduler = diskIOScheduler;

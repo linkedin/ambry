@@ -23,7 +23,7 @@ import java.util.Map;
 /**
  * Metrics for all of the stores on a node.
  */
-public class StoreManagerMetrics {
+public class StorageManagerMetrics {
   private final Map<String, StoreMetrics> storeIdToStoreMetrics = new HashMap<>();
   private final MetricRegistry registry;
 
@@ -32,10 +32,10 @@ public class StoreManagerMetrics {
   public final Counter diskMountPathFailures;
 
   /**
-   * Create a {@link StoreManagerMetrics} object for handling metrics related to the stores on a node.
+   * Create a {@link StorageManagerMetrics} object for handling metrics related to the stores on a node.
    * @param registry the {@link MetricRegistry} to use.
    */
-  public StoreManagerMetrics(MetricRegistry registry) {
+  public StorageManagerMetrics(MetricRegistry registry) {
     this.registry = registry;
     diskStartTime = registry.timer(MetricRegistry.name(StorageManager.class, "DiskStartTime"));
     totalStoreStartFailures = registry.counter(MetricRegistry.name(StorageManager.class, "TotalStoreStartFailures"));
