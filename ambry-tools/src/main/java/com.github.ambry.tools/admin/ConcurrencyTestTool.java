@@ -50,8 +50,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.rmi.UnexpectedException;
@@ -111,8 +109,7 @@ import static com.github.ambry.utils.Utils.getRandomLong;
  */
 public class ConcurrencyTestTool {
 
-  static String outFile;
-  static FileWriter fileWriter;
+  private static final Logger logger = LoggerFactory.getLogger(ConcurrencyTestTool.class);
 
   public static void main(String args[])
       throws Exception {
@@ -124,58 +121,11 @@ public class ConcurrencyTestTool {
         Utils.getObj(options.putGetHelperFactoryStr, new Properties(), options.hostName, options.port, clusterMap,
             options.maxBlobSizeInBytes, options.minBlobSizeInBytes, options.enabledVerboseLogging);
 
-    ConcurrencyTestTool.setOutFile(options.outFile);
     PutGetHelper putGetHelper = putGetHelperFactory.getPutGetHelper();
     ConcurrencyTestTool concurrencyTestTool = new ConcurrencyTestTool();
     concurrencyTestTool.startTest(putGetHelper, options.maxParallelPutCount, options.parallelGetCount,
         options.totalPutBlobCount, options.maxGetCountPerBlob, options.burstCountForGet, options.deleteOnExit,
         options.enabledVerboseLogging, options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs);
-    concurrencyTestTool.shutdown();
-  }
-
-  /**
-   * Sets the output file to redirect the output to
-   * @param outFile
-   */
-  static void setOutFile(String outFile) {
-    try {
-      if (outFile != null) {
-        ConcurrencyTestTool.outFile = outFile;
-        ConcurrencyTestTool.fileWriter = new FileWriter(new File(outFile));
-      }
-    } catch (java.io.IOException IOException) {
-      System.out.println("IOException while trying to create File " + outFile);
-    }
-  }
-
-  /**
-   * Log a message to the standard out or to the file as per configs
-   * @param msg the message that needs to be logged
-   */
-  static synchronized void logOutput(String msg) {
-    try {
-      if (fileWriter == null) {
-        System.out.println(msg);
-      } else {
-        fileWriter.write(msg + "\n");
-      }
-    } catch (IOException e) {
-      System.out.println("IOException while trying to write to File");
-    }
-  }
-
-  /**
-   * Flushes and closes the outfile if need be
-   */
-  void shutdown() {
-    try {
-      if (fileWriter != null) {
-        fileWriter.flush();
-        fileWriter.close();
-      }
-    } catch (IOException IOException) {
-      System.out.println("IOException while trying to close File " + outFile);
-    }
   }
 
   /**
@@ -206,11 +156,13 @@ public class ConcurrencyTestTool {
 
     final ThreadLocalRandom threadLocalRandom = ThreadLocalRandom.current();
 
+    logger.trace("Initiating Producer thread ");
     // Creating PutThread
     Thread putThread = new Thread(
         new PutThread("Producer", putGetHelper, sharedQueue, maxPutCount, currentPutCount, maxParallelPutCount,
             sleepTimeBetweenBatchPutsInMs, enableVerboseLogging, threadLocalRandom));
 
+    logger.trace("Initiating Consumer thread ");
     // Creating Get thread
     Thread getThread = new Thread(
         new GetThread("Consumer", putGetHelper, sharedQueue, maxGetCountPerBlob, maxPutCount, getCompletedCount,
@@ -219,22 +171,27 @@ public class ConcurrencyTestTool {
 
     Thread deleteThread = null;
     if (deleteOnExit) {
+      logger.trace("Initiating Delete thread ");
       DeleteThread deleteBlobThread =
           new DeleteThread("DeleteThread", putGetHelper, maxPutCount, deletedBlobIds, enableVerboseLogging);
       deleteThread = new Thread(deleteBlobThread);
       deleteThread.start();
     }
 
+    logger.trace("Starting Producer thread ");
     putThread.start();
+    logger.trace("Starting Consumer thread ");
     getThread.start();
 
     putThread.join();
     getThread.join();
 
     if (deleteThread != null) {
+      logger.trace("Starting Delete thread ");
       deleteThread.join();
     }
 
+    logger.trace("Invoking shutdown after completing the test suite ");
     // shutting down the PutGetHelper class to release any resources held up
     putGetHelper.shutdown();
   }
@@ -272,9 +229,7 @@ public class ConcurrencyTestTool {
       while (currentPutCount.get() < maxPutCount) {
         try {
           int burstCount = threadLocalRandom.nextInt(maxParallelRequest) + 1;
-          if (enableVerboseLogging) {
-            logOutput(threadName + " Producing " + burstCount + " times ");
-          }
+          logger.trace(threadName + " Producing " + burstCount + " times ");
           CountDownLatch countDownLatch = new CountDownLatch(burstCount);
           for (int j = 0; j < burstCount; j++) {
             Callback callback = new Callback() {
@@ -296,10 +251,10 @@ public class ConcurrencyTestTool {
           countDownLatch.await();
           Thread.sleep(threadLocalRandom.nextLong(sleepTimeBetweenBatchPutsInMs));
         } catch (InterruptedException ex) {
-          logOutput("InterruptedException in " + threadName + " " + ex.getStackTrace());
+          logger.error("InterruptedException in " + threadName + " " + ex.getStackTrace());
         }
       }
-      logOutput("Exiting Producer " + threadName + ": current Put Count " + currentPutCount.get() + ", max Put Count "
+      logger.info("Exiting Producer " + threadName + ": current Put Count " + currentPutCount.get() + ", max Put Count "
           + maxPutCount);
     }
   }
@@ -386,9 +341,7 @@ public class ConcurrencyTestTool {
             for (Pair<BlobAccessInfo, Integer> blobAccessInfoBurstCountPair : blobInfoBurstCountPairList) {
               int burstCount = blobAccessInfoBurstCountPair.getSecond();
               BlobAccessInfo blobAccessInfo = blobAccessInfoBurstCountPair.getFirst();
-              if (enableVerboseLogging) {
-                logOutput(threadName + " fetching " + blobAccessInfo.blobId + " " + burstCount + " times ");
-              }
+              logger.trace(threadName + " fetching " + blobAccessInfo.blobId + " " + burstCount + " times ");
               CountDownLatch countDownLatch = new CountDownLatch(burstCount);
               for (int j = 0; j < burstCount; j++) {
                 Callback callback = new Callback() {
@@ -414,10 +367,10 @@ public class ConcurrencyTestTool {
           }
           Thread.sleep(threadLocalRandom.nextLong(sleepTimeBetweenBatchGetsInMs));
         } catch (InterruptedException ex) {
-          logOutput("InterruptedException in " + threadName + ex.getStackTrace());
+          logger.error("InterruptedException in " + threadName + ex.getStackTrace());
         }
       }
-      logOutput("Exiting GetConsumer " + threadName);
+      logger.info("Exiting GetConsumer " + threadName);
     }
   }
 
@@ -449,16 +402,12 @@ public class ConcurrencyTestTool {
           String blobIdStr = deleteBlobIds.poll(50, TimeUnit.MILLISECONDS);
           if (blobIdStr != null) {
             deletedCount.incrementAndGet();
-            if (enableVerboseLogging) {
-              logOutput(threadName + " Deleting blob " + blobIdStr);
-            }
+            logger.trace(threadName + " Deleting blob " + blobIdStr);
             FutureResult futureResult = new FutureResult();
             Callback callback = new Callback() {
               @Override
               public void onCompletion(Object result, Exception exception) {
-                if (enableVerboseLogging) {
-                  logOutput("Deletion completed for " + blobIdStr);
-                }
+                logger.trace("Deletion completed for " + blobIdStr);
                 countDownLatch.countDown();
               }
             };
@@ -466,13 +415,15 @@ public class ConcurrencyTestTool {
                 callback);
           }
         } catch (InterruptedException e) {
-          logOutput(" Interrupted Exception thrown in " + threadName + ", exception " + e.getStackTrace());
+          logger.error(" Interrupted Exception thrown in " + threadName + ", exception " + e.getStackTrace());
         }
       }
       try {
         countDownLatch.await();
       } catch (InterruptedException e) {
-        logOutput(" Interrupted Exception thrown in " + threadName + ", exception " + e.getStackTrace());
+        logger.error(
+            " Interrupted Exception thrown while waiting for deletion to complete " + threadName + ", exception "
+                + e.getStackTrace());
       }
     }
   }
@@ -577,10 +528,8 @@ public class ConcurrencyTestTool {
           @Override
           public void onCompletion(Object result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTime;
-            if (enableVerboseLogging) {
-              logOutput(requestMetadata.correlationId + " Time taken to put blob id " + blobId + " in ms "
-                  + latencyPerBlob / SystemTime.NsPerMs + " for blob of size " + blob.length);
-            }
+            logger.trace(requestMetadata.correlationId + " Time taken to put blob id " + blobId + " in ms "
+                + latencyPerBlob / SystemTime.NsPerMs + " for blob of size " + blob.length);
             Exception exceptionToReturn = null;
             Pair<String, byte[]> toReturn = null;
             if (result != null) {
@@ -608,7 +557,7 @@ public class ConcurrencyTestTool {
         networkClientUtils.poll(requestMetadataList);
         return requestMetadata.futureResult;
       } catch (Exception e) {
-        logOutput(correlationId + " Unknown Exception thrown when putting blob " + e.getStackTrace());
+        logger.error(correlationId + " Unknown Exception thrown when putting blob " + e.getStackTrace());
         futureResult.done(null, e);
         if (callback != null) {
           callback.onCompletion(null, e);
@@ -673,43 +622,31 @@ public class ConcurrencyTestTool {
                     }
                     boolean blobcontentMatched = Arrays.equals(blobContent, outputBuffer);
                     if (!blobcontentMatched) {
-                      logOutput(requestMetadata.correlationId + " Blob content mismatch for " + blobIdStr + " from "
+                      logger.error(requestMetadata.correlationId + " Blob content mismatch for " + blobIdStr + " from "
                           + hostName + ":" + port);
                     }
                   } else if (expectedErrorCode.equals(serverErrorCode)) {
-                    if (enableVerboseLogging) {
-                      logOutput(
-                          requestMetadata.correlationId + " Get of blob " + blobIdStr + " throws " + expectedErrorCode
-                              + " as expected ");
-                    }
+                    logger.trace(
+                        requestMetadata.correlationId + " Get of blob " + blobIdStr + " throws " + expectedErrorCode
+                            + " as expected ");
                   } else {
-                    logOutput(requestMetadata.correlationId + " Get of blob " + blobIdStr
+                    logger.error(requestMetadata.correlationId + " Get of blob " + blobIdStr
                         + " failed with unexpected Store level error code " + serverErrorCode + ", expected "
                         + expectedErrorCode);
-                    if (enableVerboseLogging) {
-                      logOutput(requestMetadata.correlationId + " Time taken to get blob id " + blobIdStr + " in ms "
-                          + latencyPerBlob / SystemTime.NsPerMs);
-                    }
                     exceptionToReturn = new IllegalStateException(
                         requestMetadata.correlationId + " Get of " + blobIdStr + " throws " + serverErrorCode
                             + " different from what is expected  " + expectedErrorCode);
                   }
                 } else {
-                  logOutput(requestMetadata.correlationId + " Get of blob " + blobIdStr
+                  logger.error(requestMetadata.correlationId + " Get of blob " + blobIdStr
                       + " failed with unexpected Server Level error code " + getResponse.getError() + ", expected "
                       + expectedErrorCode);
-                  if (enableVerboseLogging) {
-                    logOutput(requestMetadata.correlationId + " Time taken to get blob id " + blobIdStr + " in ms "
-                        + latencyPerBlob / SystemTime.NsPerMs);
-                  }
                   exceptionToReturn = new IllegalStateException(
                       requestMetadata.correlationId + " Get of " + blobIdStr + " throws " + getResponse.getError()
                           + " different from what is expected  " + expectedErrorCode);
                 }
-                if (enableVerboseLogging) {
-                  logOutput(requestMetadata.correlationId + " Time taken to get blob " + blobIdStr + " in ms "
-                      + latencyPerBlob / SystemTime.NsPerMs);
-                }
+                logger.trace(requestMetadata.correlationId + " Time taken to get blob " + blobIdStr + " in ms "
+                    + latencyPerBlob / SystemTime.NsPerMs);
               } catch (IOException e) {
                 exceptionToReturn = e;
               } catch (MessageFormatException e) {
@@ -727,7 +664,8 @@ public class ConcurrencyTestTool {
         requestInfoList.add(requestMetadata);
         networkClientUtils.poll(requestInfoList);
       } catch (Exception e) {
-        logOutput(correlationId + " Unknown Exception thrown when getting blob " + blobId + ", " + e.getStackTrace());
+        logger.error(
+            correlationId + " Unknown Exception thrown when getting blob " + blobId + ", " + e.getStackTrace());
         futureResult.done(null, e);
         if (callback != null) {
           callback.onCompletion(null, e);
@@ -761,12 +699,9 @@ public class ConcurrencyTestTool {
           @Override
           public void onCompletion(Object result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeDeleteBlob;
-            if (enableVerboseLogging) {
-              if (enableVerboseLogging) {
-                logOutput(requestMetadata.correlationId + " Delete of  " + blobId + " took "
-                    + latencyPerBlob / SystemTime.NsPerMs + " ms");
-              }
-            }
+            logger.trace(
+                requestMetadata.correlationId + " Delete of  " + blobId + " took " + latencyPerBlob / SystemTime.NsPerMs
+                    + " ms");
             Exception exceptionToReturn = null;
             if (result != null) {
               try {
@@ -774,15 +709,13 @@ public class ConcurrencyTestTool {
                 DeleteResponse deleteResponse =
                     DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(response)));
                 if (deleteResponse.getError() != ServerErrorCode.No_Error) {
-                  logOutput(requestMetadata.correlationId + " Deletion of " + blobId + " failed with an exception "
+                  logger.error(requestMetadata.correlationId + " Deletion of " + blobId + " failed with an exception "
                       + deleteResponse.getError());
                   exceptionToReturn = new IllegalStateException(
                       requestMetadata.correlationId + " Deletion of " + blobId + " failed with an exception "
                           + deleteResponse.getError());
                 } else {
-                  if (enableVerboseLogging) {
-                    logOutput(requestMetadata.correlationId + " Deletion of " + blobId + " succeeded ");
-                  }
+                  logger.trace(requestMetadata.correlationId + " Deletion of " + blobId + " succeeded ");
                   FutureResult futureResultForGet = new FutureResult();
                   Callback callbackForGet = new Callback() {
                     @Override
@@ -810,7 +743,7 @@ public class ConcurrencyTestTool {
         requestMetadataList.add(requestMetadata);
         networkClientUtils.poll(requestMetadataList);
       } catch (Exception e) {
-        logOutput(correlationId + " Unknown Exception thrown when deleting " + blobId + ", " + e.getStackTrace());
+        logger.error(correlationId + " Unknown Exception thrown when deleting " + blobId + ", " + e.getStackTrace());
         futureResult.done(null, e);
         if (callback != null) {
           callback.onCompletion(null, e);
@@ -857,7 +790,6 @@ public class ConcurrencyTestTool {
     public final String putGetHelperFactoryStr;
     public final boolean deleteOnExit;
     public final boolean enabledVerboseLogging;
-    public final String outFile;
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -957,11 +889,6 @@ public class ConcurrencyTestTool {
               .describedAs("deleteOnExit")
               .ofType(Boolean.class)
               .defaultsTo(true);
-      ArgumentAcceptingOptionSpec<String> outFileOpt =
-          parser.accepts("outFile", "Output file to redirect the output to")
-              .withOptionalArg()
-              .describedAs("outFile")
-              .ofType(String.class);
       ArgumentAcceptingOptionSpec<Boolean> enableVerboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging if set to true")
               .withOptionalArg()
@@ -997,7 +924,6 @@ public class ConcurrencyTestTool {
       this.putGetHelperFactoryStr = options.valueOf(putGetHelperFactoryOpt);
       this.deleteOnExit = options.valueOf(deleteOnExitOpt);
       this.enabledVerboseLogging = options.valueOf(enableVerboseLoggingOpt);
-      this.outFile = options.valueOf(outFileOpt);
     }
 
     /**
