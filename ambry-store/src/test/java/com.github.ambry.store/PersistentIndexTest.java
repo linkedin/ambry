@@ -331,7 +331,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(value7.getSize(), 1000);
       Assert.assertEquals(value7.getOffset(), 6000);
       Assert.assertEquals(value7.getTimeToLiveInMs(), 12657);
-      Assert.assertEquals(log.getLogEndOffset().getOffset(), 7000);
+      Assert.assertEquals(log.getEndOffset().getOffset(), 7000);
       indexNew.close();
 
       buffer = ByteBuffer.allocate(1000);

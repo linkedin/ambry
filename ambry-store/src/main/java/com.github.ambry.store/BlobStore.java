@@ -180,18 +180,19 @@ class BlobStore implements Store {
           }
         }
         // TODO (Index changes): Working under the assumption that there is only one log segment.
-        long writeStartOffset = log.getLogEndOffset().getOffset();
+        long currentLogEndOffset = log.getEndOffset().getOffset();
         messageSetToWrite.writeTo(log);
         logger.trace("Store : {} message set written to log", dataDir);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
         ArrayList<IndexEntry> indexEntries = new ArrayList<IndexEntry>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
-          IndexValue value = new IndexValue(info.getSize(), writeStartOffset, (byte) 0, info.getExpirationTimeInMs());
+          IndexValue value =
+              new IndexValue(info.getSize(), currentLogEndOffset, (byte) 0, info.getExpirationTimeInMs());
           IndexEntry entry = new IndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry);
-          writeStartOffset += info.getSize();
+          currentLogEndOffset += info.getSize();
         }
-        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), writeStartOffset);
+        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), currentLogEndOffset);
         index.addToIndex(indexEntries, fileSpan);
         logger.trace("Store : {} message set written to index ", dataDir);
       }
@@ -240,13 +241,13 @@ class BlobStore implements Store {
           }
         }
         // TODO (Index changes): Working under the assumption that there is only one log segment.
-        long writeStartOffset = log.getLogEndOffset().getOffset();
+        long currentLogEndOffset = log.getEndOffset().getOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
-          FileSpan fileSpan = new FileSpan(writeStartOffset, writeStartOffset + info.getSize());
+          FileSpan fileSpan = new FileSpan(currentLogEndOffset, currentLogEndOffset + info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          writeStartOffset += info.getSize();
+          currentLogEndOffset += info.getSize();
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }

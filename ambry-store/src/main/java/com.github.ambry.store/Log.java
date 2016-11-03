@@ -141,9 +141,17 @@ class Log implements Write {
   }
 
   /**
+   * @return the start offset of the log abstraction.
+   */
+  Offset getStartOffset() {
+    LogSegment segment = getSegmentIterator().next().getValue();
+    return new Offset(segment.getName(), segment.getStartOffset());
+  }
+
+  /**
    * @return the end offset of the log abstraction.
    */
-  Offset getLogEndOffset() {
+  Offset getEndOffset() {
     LogSegment segment = activeSegment;
     return new Offset(segment.getName(), segment.getEndOffset());
   }
@@ -265,6 +273,7 @@ class Log implements Write {
       logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
           nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
           activeSegment.getCapacityInBytes());
+      activeSegment.flush();
       activeSegment = nextActiveSegment;
     }
   }

@@ -194,7 +194,7 @@ public class LogTest {
       throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     try {
-      long writeStartOffset = log.getLogEndOffset().getOffset();
+      long writeStartOffset = log.getEndOffset().getOffset();
       long writeSize = (int) (SEGMENT_CAPACITY - writeStartOffset);
       byte[] buf = TestUtils.getRandomBytes((int) (writeSize));
       log.appendFrom(ByteBuffer.wrap(buf));
@@ -346,7 +346,7 @@ public class LogTest {
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segmentCapacity, metrics);
     try {
       // only preloaded segments should be in expectedSegmentNames.
-      checkLog(log, Math.min(logCapacity, segmentCapacity), expectedSegmentNames);
+      checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, expectedSegmentNames);
       String activeSegmentName = expectedSegmentNames.get(segmentIdxToMarkActive);
       log.setActiveSegment(activeSegmentName);
       List<String> allSegmentNames = getSegmentNames(numSegments, expectedSegmentNames);
@@ -354,7 +354,7 @@ public class LogTest {
           writeSize, allSegmentNames, segmentIdxToMarkActive, appender);
       // log full - so all segments should be there
       assertEquals("Unexpected number of segments", numSegments, allSegmentNames.size());
-      checkLog(log, Math.min(logCapacity, segmentCapacity), allSegmentNames);
+      checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, allSegmentNames);
       flushCloseAndValidate(log);
     } finally {
       log.close();
@@ -369,7 +369,7 @@ public class LogTest {
    * @param expectedSegmentNames the expected names of all segments that should have been created in the {@code log}.
    * @throws IOException
    */
-  private void checkLog(Log log, long expectedSegmentCapacity, List<String> expectedSegmentNames)
+  private void checkLog(Log log, long expectedSegmentCapacity, long numFinalSegments, List<String> expectedSegmentNames)
       throws IOException {
     // get all log segments from the log and validates them
     for (String segmentName : expectedSegmentNames) {
@@ -379,6 +379,9 @@ public class LogTest {
       assertEquals("Segment returned by getSegment() is incorrect", segment, log.getSegment(segment.getName()));
     }
     assertEquals("Log segments reported is wrong", expectedSegmentNames.size(), log.getSegmentCount());
+    long startOffsetInSegment = numFinalSegments > 1 ? LogSegment.HEADER_SIZE : 0;
+    Offset expectedStartOffset = new Offset(expectedSegmentNames.get(0), startOffsetInSegment);
+    assertEquals("Start offset is wrong", expectedStartOffset, log.getStartOffset());
   }
 
   /**
@@ -431,7 +434,7 @@ public class LogTest {
       assertEquals("Active segment end offset not as expected", currentSegmentWriteSize,
           expectedActiveSegment.getEndOffset());
       assertEquals("End offset not as expected", new Offset(expectedActiveSegment.getName(), currentSegmentWriteSize),
-          log.getLogEndOffset());
+          log.getEndOffset());
       assertEquals("Used capacity not as expected", expectedUsedCapacity, log.getUsedCapacity());
     }
     // try one more write that should fail

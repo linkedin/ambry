@@ -89,7 +89,7 @@ class LogSegmentNameHelper {
     if (name.isEmpty()) {
       throw new IllegalArgumentException("Name provided cannot be empty");
     }
-    return Long.parseLong(name.substring(name.indexOf(BlobStore.SEPARATOR) + 1, name.length()));
+    return Long.parseLong(name.substring(name.indexOf(BlobStore.SEPARATOR) + 1));
   }
 
   /**

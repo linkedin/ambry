@@ -62,7 +62,7 @@ public class StoreMessageReadSetTest {
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 3000);
       MessageReadSet readSet =
-          new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getLogEndOffset().getOffset());
+          new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getEndOffset().getOffset());
       Assert.assertEquals(readSet.count(), 3);
       Assert.assertEquals(readSet.sizeInBytes(0), 15);
       Assert.assertEquals(readSet.sizeInBytes(1), 100);
