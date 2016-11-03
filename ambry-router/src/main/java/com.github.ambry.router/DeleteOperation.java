@@ -262,18 +262,20 @@ class DeleteOperation {
    * {@code DeleteOperation} based on the {@link RouterErrorCode}, and the source {@link ReplicaId}
    * for which the {@link RouterErrorCode} is generated.
    * @param replica The replica for which the RouterErrorCode was generated.
-   * @param newError {@link RouterErrorCode} that indicates the error for the replica.
+   * @param error {@link RouterErrorCode} that indicates the error for the replica.
    */
-  private void updateOperationState(ReplicaId replica, RouterErrorCode newError) {
+  private void updateOperationState(ReplicaId replica, RouterErrorCode error) {
     if (resolvedRouterErrorCode == null) {
-      resolvedRouterErrorCode = newError;
+      resolvedRouterErrorCode = error;
     } else {
-      if (getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedRouterErrorCode)) {
-        resolvedRouterErrorCode = newError;
+      if (getPrecedenceLevel(error) < getPrecedenceLevel(resolvedRouterErrorCode)) {
+        resolvedRouterErrorCode = error;
       }
     }
     operationTracker.onResponse(replica, false);
-    routerMetrics.routerRequestErrorCount.inc();
+    if (error != RouterErrorCode.BlobDeleted && error != RouterErrorCode.BlobExpired) {
+      routerMetrics.routerRequestErrorCount.inc();
+    }
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestErrorCount.inc();
   }
 
