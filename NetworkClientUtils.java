@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -41,26 +40,26 @@ import org.slf4j.LoggerFactory;
  * sent to the network client. On receiving the response, the {@link NetworkClientUtils} sets the result/exception in
  * the future and calls the callback if not {@code null}
  */
-public class NetworkClientUtils implements Runnable {
+public class NetworkClientUtils {
   private final NetworkClient networkClient;
   private final int pollTimeMs;
   private final Map<Integer, RequestMetadata> correlationIdToRequestMetadataMap;
   private final Lock lock;
-  private boolean shutdown = false;
-  private CountDownLatch shutdownLatch = new CountDownLatch(1);
+  private final NetworkClientPoller _networkClientPoller;
   private volatile List<RequestInfo> requestInfoList = new ArrayList<>();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public NetworkClientUtils(NetworkClient networkClient, int pollTimeMs) {
+  public NetworkClientUtils(NetworkClient networkClient, int pollTimeMs, long intervalToPollNetworkClientInMs) {
     this.networkClient = networkClient;
     this.pollTimeMs = pollTimeMs;
     this.correlationIdToRequestMetadataMap = new HashMap<>();
     this.lock = new ReentrantLock();
-    new Thread(this).start();
+    this._networkClientPoller = new NetworkClientPoller(intervalToPollNetworkClientInMs);
+    new Thread(_networkClientPoller).start();
   }
 
   /**
-   * Adds the list of {@link RequestMetadata} which has the {@link RequestInfo} to be sent to the {@link NetworkClient}
+   * Polls the {@link NetworkClient} for the list of {@link RequestInfo} sent it
    * @param requestMetadataList
    */
   void poll(List<RequestMetadata> requestMetadataList) {
@@ -72,36 +71,24 @@ public class NetworkClientUtils implements Runnable {
         if (!correlationIdToRequestMetadataMap.containsKey(correlationId)) {
           correlationIdToRequestMetadataMap.put(correlationId, requestMetadata);
         } else {
-          logger.error("Ignoring duplicate request found for correlationId " + correlationId + ", requestMetadata "
+          logger.error("Duplicate request found for correlationId " + correlationId + ", requestMetadata "
               + requestMetadata.requestInfo);
         }
+       // List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfoList, pollTimeMs);
+        //onResponse(responseInfos);
       }
     } finally {
       lock.unlock();
     }
   }
 
-  public void run() {
-    while (!shutdown) {
-      lock.lock();
-      List<RequestInfo> requestInfoListToSend = new ArrayList<>();
-      requestInfoListToSend.addAll(requestInfoList);
-      requestInfoList.clear();
-      lock.unlock();
-      List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfoListToSend, pollTimeMs);
-      onResponse(responseInfos);
-    }
-    shutdownLatch.countDown();
-  }
-
   /**
-   * Shuts down the {@link NetworkClientUtils} and the {@link NetworkClient}
+   * Shuts down the {@link NetworkClientPoller} thread and the {@link NetworkClient}
    * @throws InterruptedException
    */
   void close()
       throws InterruptedException {
-    shutdown = true;
-    shutdownLatch.await();
+    _networkClientPoller.shutdown();
     networkClient.close();
   }
 
@@ -115,6 +102,43 @@ public class NetworkClientUtils implements Runnable {
     FutureResult<T> futureResult;
     Callback<T> callback;
     int correlationId;
+  }
+
+  /**
+   * Thread that polls the {@link NetworkClient} for new responses
+   */
+  class NetworkClientPoller implements Runnable {
+    private boolean shutdown = false;
+    private final long sleepTimeInMs;
+
+    public NetworkClientPoller(long sleepTimeInMs) {
+      this.sleepTimeInMs = sleepTimeInMs;
+    }
+
+    public void run() {
+      while (!shutdown) {
+        try {
+          lock.lock();
+          List<RequestInfo> requestInfoListToSend = requestInfoList;
+          requestInfoList.clear();
+          lock.unlock();
+          List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfoListToSend, pollTimeMs);
+          onResponse(responseInfos);
+        } finally {
+          //lock.unlock();
+        }
+       /* try {
+          Thread.sleep(sleepTimeInMs);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+          shutdown = true;
+        }*/
+      }
+    }
+
+    void shutdown() {
+      this.shutdown = true;
+    }
   }
 
   /**
