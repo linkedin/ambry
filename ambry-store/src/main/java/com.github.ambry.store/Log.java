@@ -24,7 +24,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,16 +37,16 @@ class Log implements Write {
   private final String dataDir;
   private final long capacityInBytes;
   private final StoreMetrics metrics;
-  private final AtomicLong remainingUnallocatedCapacity;
   private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
       new ConcurrentSkipListMap<>(LogSegmentNameHelper.COMPARATOR);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  private long remainingUnallocatedSegments;
   private LogSegment activeSegment;
 
   /**
    * Create a Log instance
-   * @param dataDir the directory where the segments of the log need to be created.
+   * @param dataDir the directory where the segments of the log need to be loaded from.
    * @param totalCapacityInBytes the total capacity of this log.
    * @param segmentCapacityInBytes the capacity of a single segment in the log.
    * @param metrics the {@link StoreMetrics} instance to use.
@@ -58,24 +57,22 @@ class Log implements Write {
    */
   public Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics)
       throws IOException {
-    if (totalCapacityInBytes <= 0 || segmentCapacityInBytes <= 0) {
-      throw new IllegalArgumentException(
-          "One of totalCapacityInBytes [" + totalCapacityInBytes + "] or " + "segmentCapacityInBytes ["
-              + segmentCapacityInBytes + "] is <=0");
-    }
-    long segmentCapacity = Math.min(totalCapacityInBytes, segmentCapacityInBytes);
-    // all segments should be the same size.
-    if (totalCapacityInBytes % segmentCapacity != 0) {
-      throw new IllegalArgumentException(
-          "Capacity of log [" + totalCapacityInBytes + "] should be a perfect multiple of segment capacity ["
-              + segmentCapacityInBytes + "]");
-    }
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.metrics = metrics;
-    remainingUnallocatedCapacity = new AtomicLong(totalCapacityInBytes);
-    long numSegments = (totalCapacityInBytes - 1) / segmentCapacityInBytes + 1;
-    loadSegments(segmentCapacity, numSegments);
+
+    File dir = new File(dataDir);
+    File[] segmentFiles = dir.listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
+    if (segmentFiles == null) {
+      throw new IOException("Could not read from directory: " + dataDir);
+    } else if (segmentFiles.length == 0) {
+      // first startup
+      checkArgsAndAllocateFirstSegment(totalCapacityInBytes, segmentCapacityInBytes);
+    } else {
+      // subsequent startup
+      loadSegments(segmentFiles, totalCapacityInBytes);
+    }
+    activeSegment = segmentsByName.lastEntry().getValue();
   }
 
   /**
@@ -116,11 +113,23 @@ class Log implements Write {
 
   /**
    * Sets the active segment in the log.
+   * </p>
+   * Frees all segments that follow the active segment. Therefore, this should be
+   * used only after the active segment is conclusively determined.
    * @param name the name of the log segment that is to be marked active.
+   * @throws IllegalArgumentException if there no segment with name {@code name}.
+   * @throws IOException if there is any I/O error freeing segments.
    */
-  void setActiveSegment(String name) {
+  void setActiveSegment(String name)
+      throws IOException {
     if (!segmentsByName.containsKey(name)) {
       throw new IllegalArgumentException("There is no log segment with name: " + name);
+    }
+    Map.Entry<String, LogSegment> higherEntry = segmentsByName.higherEntry(name);
+    while (higherEntry != null) {
+      free(higherEntry.getValue());
+      segmentsByName.remove(higherEntry.getKey());
+      higherEntry = segmentsByName.higherEntry(name);
     }
     activeSegment = segmentsByName.get(name);
   }
@@ -162,8 +171,7 @@ class Log implements Write {
    */
   long getUsedCapacity() {
     long usedCapacity = 0;
-    for (Map.Entry<String, LogSegment> entry : segmentsByName.entrySet()) {
-      LogSegment segment = entry.getValue();
+    for (LogSegment segment : segmentsByName.values()) {
       if (segment != activeSegment) {
         usedCapacity += segment.getCapacityInBytes();
       } else {
@@ -187,8 +195,8 @@ class Log implements Write {
    */
   void flush()
       throws IOException {
-    for (Map.Entry<String, LogSegment> entry : segmentsByName.entrySet()) {
-      entry.getValue().flush();
+    for (LogSegment segment : segmentsByName.values()) {
+      segment.flush();
     }
   }
 
@@ -198,45 +206,64 @@ class Log implements Write {
    */
   void close()
       throws IOException {
-    for (Map.Entry<String, LogSegment> entry : segmentsByName.entrySet()) {
-      entry.getValue().close();
+    for (LogSegment segment : segmentsByName.values()) {
+      segment.close();
     }
   }
 
   /**
-   * Loads segment files (if they exist) and creates {@link LogSegment} instances. If no segment files exist, the first
-   * segment file is created.
-   * @param segmentCapacity the intended capacity of each log segment. This is of importance on first startup.
-   * @param numSegments the total number of segments that the log abstraction will contain.
-   * @throws IOException if there is an I/O error creating/loading the segment files or creating the {@link LogSegment}
-   * instances
+   * Checks the provided arguments for consistency and allocates the first segment file and creates the
+   * {@link LogSegment} instance for it.
+   * @param totalCapacity the intended total capacity of the log.
+   * @param segmentCapacity the intended capacity of each segment of the log.
+   * @throws IOException if there is an I/O error creating the segment files or creating {@link LogSegment} instances.
    */
-  private void loadSegments(long segmentCapacity, long numSegments)
+  private void checkArgsAndAllocateFirstSegment(long totalCapacity, long segmentCapacity)
       throws IOException {
-    File dir = new File(dataDir);
-    File[] segmentFiles = dir.listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
-    if (segmentFiles == null || segmentFiles.length == 0) {
-      String firstSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
-      File segmentFile = allocate(LogSegmentNameHelper.nameToFilename(firstSegmentName), segmentCapacity);
-      // to be backwards compatible, headers are not written for a log segment if it is the only log segment.
-      LogSegment segment = new LogSegment(firstSegmentName, segmentFile, segmentCapacity, metrics, numSegments > 1);
-      segmentsByName.put(segment.getName(), segment);
-    } else {
-      for (File segmentFile : segmentFiles) {
-        String name = LogSegmentNameHelper.nameFromFilename(segmentFile.getName());
-        LogSegment segment;
-        if (numSegments == 1) {
-          // for backwards compatibility, a single segment log is loaded by providing capacity since the old logs have
-          // no headers
-          segment = new LogSegment(name, segmentFile, segmentCapacity, metrics, false);
-        } else {
-          segment = new LogSegment(name, segmentFile, metrics);
-        }
-        segmentsByName.put(segment.getName(), segment);
-        remainingUnallocatedCapacity.addAndGet(-segmentCapacity);
-      }
+    if (totalCapacity <= 0 || segmentCapacity <= 0) {
+      throw new IllegalArgumentException(
+          "One of totalCapacityInBytes [" + totalCapacity + "] or " + "segmentCapacityInBytes [" + segmentCapacity + "]"
+              + " is <=0");
     }
-    activeSegment = segmentsByName.firstEntry().getValue();
+    segmentCapacity = Math.min(totalCapacity, segmentCapacity);
+    // all segments should be the same size.
+    long numSegments = totalCapacity / segmentCapacity;
+    if (totalCapacity % segmentCapacity != 0) {
+      throw new IllegalArgumentException(
+          "Capacity of log [" + totalCapacity + "] should be a multiple of segment capacity [" + segmentCapacity + "]");
+    }
+    remainingUnallocatedSegments = numSegments;
+    String firstSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
+    File segmentFile = allocate(LogSegmentNameHelper.nameToFilename(firstSegmentName), segmentCapacity);
+    // to be backwards compatible, headers are not written for a log segment if it is the only log segment.
+    LogSegment segment = new LogSegment(firstSegmentName, segmentFile, segmentCapacity, metrics, numSegments > 1);
+    segmentsByName.put(segment.getName(), segment);
+  }
+
+  /**
+   * Loads segment files and creates {@link LogSegment} instances.
+   * @param segmentFiles the files that form the segments of the log.
+   * @param totalCapacity the total capacity of the log. This is used only if this is a single segment log.
+   * @throws IOException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
+   */
+  private void loadSegments(File[] segmentFiles, long totalCapacity)
+      throws IOException {
+    long totalSegments = -1;
+    for (File segmentFile : segmentFiles) {
+      String name = LogSegmentNameHelper.nameFromFilename(segmentFile.getName());
+      LogSegment segment;
+      if (name.isEmpty()) {
+        totalSegments = 1;
+        // for backwards compatibility, a single segment log is loaded by providing capacity since the old logs have
+        // no headers
+        segment = new LogSegment(name, segmentFile, totalCapacity, metrics, false);
+      } else {
+        segment = new LogSegment(name, segmentFile, metrics);
+        totalSegments = totalSegments == -1 ? totalCapacity / segment.getCapacityInBytes() : totalSegments;
+      }
+      segmentsByName.put(segment.getName(), segment);
+    }
+    remainingUnallocatedSegments = totalSegments - segmentsByName.size();
   }
 
   /**
@@ -252,16 +279,32 @@ class Log implements Write {
     // TODO (DiskManager changes): a pool of segments.
     File segmentFile = new File(dataDir, filename);
     Utils.preAllocateFileIfNeeded(segmentFile, size);
-    remainingUnallocatedCapacity.addAndGet(-size);
+    remainingUnallocatedSegments--;
     return segmentFile;
   }
 
   /**
-   * Rolls the log segment over if required. Also ensures enough capacity.
+   * Frees the given {@link LogSegment} and its backing segment file.
+   * @param logSegment the {@link LogSegment} instance whose backing file needs to be freed.
+   * @throws IOException if there is any I/O error freeing the log segment.
+   */
+  private void free(LogSegment logSegment)
+      throws IOException {
+    // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
+    File segmentFile = logSegment.getView().getFirst();
+    logSegment.close();
+    if (!segmentFile.delete()) {
+      throw new IllegalStateException("Could not delete segment file: " + segmentFile.getAbsolutePath());
+    }
+    remainingUnallocatedSegments++;
+  }
+
+  /**
+   * Rolls the active log segment over if required. Also ensures enough capacity.
    * @param writeSize the size of the incoming write.
    * @throws IllegalArgumentException if the {@code writeSize} is greater than a single segment's size
-   * @throws IllegalStateException if there no more capacity in the log.
-   * @throws IOException if any I/O error occurred as a part of ensuring capacity.
+   * @throws IllegalStateException if there is no more capacity in the log.
+   * @throws IOException if any I/O error occurred as part of ensuring capacity.
    *
    */
   private void rollOverIfRequired(long writeSize)
@@ -273,13 +316,13 @@ class Log implements Write {
       logger.info("Rolling over writes to {} from {} on write of data of size {}. End offset was {} and capacity is {}",
           nextActiveSegment.getName(), activeSegment.getName(), writeSize, activeSegment.getEndOffset(),
           activeSegment.getCapacityInBytes());
-      activeSegment.flush();
       activeSegment = nextActiveSegment;
     }
   }
 
   /**
-   * Ensures that there is enough capacity of a write of size {@code writeSize}.
+   * Ensures that there is enough capacity of a write of size {@code writeSize}. As a part of ensuring capacity, this
+   * function will also allocate more segments if required.
    * @param writeSize the size of a subsequent write on the active log segment.
    * @throws IllegalArgumentException if the {@code writeSize} is greater than a single segment's size
    * @throws IllegalStateException if there no more capacity in the log.
@@ -287,23 +330,19 @@ class Log implements Write {
    */
   private void ensureCapacity(long writeSize)
       throws IOException {
-    if (segmentsByName.higherEntry(activeSegment.getName()) != null) {
-      return;
-    }
-    // all segments are (should be) the same size.
-    long segmentCapacity = activeSegment.getCapacityInBytes();
-    if (segmentCapacity > remainingUnallocatedCapacity.get()) {
+    if (remainingUnallocatedSegments == 0) {
       metrics.overflowWriteError.inc();
       throw new IllegalStateException(
           "There is no more capacity left in [" + dataDir + "]. Max capacity is [" + capacityInBytes + "]");
     }
+    // all segments are (should be) the same size.
+    long segmentCapacity = activeSegment.getCapacityInBytes();
     if (writeSize > segmentCapacity - LogSegment.HEADER_SIZE) {
       metrics.overflowWriteError.inc();
       throw new IllegalArgumentException("Write of size [" + writeSize + "] cannot be serviced because it is greater "
           + "than a single segment's capacity [" + (segmentCapacity - LogSegment.HEADER_SIZE) + "]");
     }
-    String lastSegmentName = segmentsByName.lastEntry().getKey();
-    String newSegmentName = LogSegmentNameHelper.getNextPositionName(lastSegmentName);
+    String newSegmentName = LogSegmentNameHelper.getNextPositionName(activeSegment.getName());
     File newSegmentFile = allocate(LogSegmentNameHelper.nameToFilename(newSegmentName), segmentCapacity);
     LogSegment newSegment = new LogSegment(newSegmentName, newSegmentFile, segmentCapacity, metrics, true);
     segmentsByName.put(newSegmentName, newSegment);
@@ -318,8 +357,8 @@ class Log implements Write {
    */
   @Deprecated
   StoreMessageReadSet getView(List<BlobReadOptions> readOptions) {
-    LogSegment firstSegment = segmentsByName.firstEntry().getValue();
-    Pair<File, FileChannel> view = firstSegment.getView();
-    return new StoreMessageReadSet(view.getFirst(), view.getSecond(), readOptions, firstSegment.getEndOffset());
+    LogSegment firstLogSegment = segmentsByName.firstEntry().getValue();
+    Pair<File, FileChannel> view = firstLogSegment.getView();
+    return new StoreMessageReadSet(view.getFirst(), view.getSecond(), readOptions, firstLogSegment.getEndOffset());
   }
 }

@@ -157,6 +157,18 @@ class LogSegmentNameHelper {
     if (!filename.endsWith(SUFFIX)) {
       throw new IllegalArgumentException("The filename of the log segment does not end with [" + SUFFIX + "]");
     }
-    return filename.substring(0, filename.length() - SUFFIX.length());
+    String name = filename.substring(0, filename.length() - SUFFIX.length());
+    validate(name);
+    return name;
+  }
+
+  /**
+   * Validates that the name provided is a valid log segment name.
+   * @param name the log segment name.
+   */
+  private static void validate(String name) {
+    if (!name.equals(getName(getPosition(name), getGeneration(name)))) {
+      throw new IllegalArgumentException("Invalid name: " + name);
+    }
   }
 }

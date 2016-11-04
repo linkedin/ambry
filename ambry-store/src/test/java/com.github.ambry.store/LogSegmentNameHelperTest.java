@@ -230,12 +230,18 @@ public class LogSegmentNameHelperTest {
     String name = LogSegmentNameHelper.getName(0, 0);
     String filename = LogSegmentNameHelper.nameToFilename(name);
     assertEquals("Did not get expected name", name, LogSegmentNameHelper.nameFromFilename(filename));
-    name = UtilsTest.getRandomString(10);
-    try {
-      LogSegmentNameHelper.nameFromFilename(name);
-      fail("Should have failed to get name for filename [" + filename + "]");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
+
+    // bad file names
+    String badNameBase = UtilsTest.getRandomString(10);
+    String[] badNames = {badNameBase,
+        badNameBase + LogSegmentNameHelper.SUFFIX, name + BlobStore.SEPARATOR + "123" + LogSegmentNameHelper.SUFFIX};
+    for (String badName : badNames) {
+      try {
+        LogSegmentNameHelper.nameFromFilename(badName);
+        fail("Should have failed to get name for filename [" + badName + "]");
+      } catch (IllegalArgumentException | StringIndexOutOfBoundsException e) {
+        // expected. Nothing to do.
+      }
     }
   }
 

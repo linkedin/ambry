@@ -285,14 +285,16 @@ public class LogTest {
     List<String> segmentNames = new ArrayList<>(numToCreate);
     if (numFinalSegments == 1) {
       String name = LogSegmentNameHelper.generateFirstSegmentName(numFinalSegments);
-      create(LogSegmentNameHelper.nameToFilename(name), segmentCapacity);
+      File file = create(LogSegmentNameHelper.nameToFilename(name), segmentCapacity);
+      new LogSegment(name, file, segmentCapacity, metrics, false).close();
       segmentNames.add(name);
     } else {
       for (int i = 0; i < numToCreate; i++) {
         long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         String name = LogSegmentNameHelper.getName(pos, gen);
-        create(LogSegmentNameHelper.nameToFilename(name), segmentCapacity);
+        File file = create(LogSegmentNameHelper.nameToFilename(name), segmentCapacity);
+        new LogSegment(name, file, segmentCapacity, metrics, true).close();
         segmentNames.add(name);
       }
     }
@@ -349,13 +351,17 @@ public class LogTest {
       checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, expectedSegmentNames);
       String activeSegmentName = expectedSegmentNames.get(segmentIdxToMarkActive);
       log.setActiveSegment(activeSegmentName);
-      List<String> allSegmentNames = getSegmentNames(numSegments, expectedSegmentNames);
+      // all segment files from segmentIdxToMarkActive + 1 to expectedSegmentNames.size() - 1 will be freed.
+      List<String> prunedSegmentNames = expectedSegmentNames.subList(0, segmentIdxToMarkActive + 1);
+      checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, prunedSegmentNames);
+      List<String> allSegmentNames = getSegmentNames(numSegments, prunedSegmentNames);
       writeAndCheckLog(log, logCapacity, Math.min(logCapacity, segmentCapacity), numSegments - segmentIdxToMarkActive,
           writeSize, allSegmentNames, segmentIdxToMarkActive, appender);
       // log full - so all segments should be there
       assertEquals("Unexpected number of segments", numSegments, allSegmentNames.size());
       checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, allSegmentNames);
       flushCloseAndValidate(log);
+      checkLogReload(logCapacity, Math.min(logCapacity, segmentCapacity), allSegmentNames);
     } finally {
       log.close();
       cleanDirectory(tempDir);
@@ -366,6 +372,7 @@ public class LogTest {
    * Checks the log to ensure segment names, capacities and count.
    * @param log the {@link Log} instance to check.
    * @param expectedSegmentCapacity the expected capacity of each segment.
+   * @param numFinalSegments the max number of segments of the log.
    * @param expectedSegmentNames the expected names of all segments that should have been created in the {@code log}.
    * @throws IOException
    */
@@ -467,6 +474,29 @@ public class LogTest {
       segmentNames.add(nextSegmentName);
     }
     return segmentNames;
+  }
+
+  /**
+   * Reloads a {@link Log} (by creating a new instance) that already has segments and mimics changed configs and ensures
+   * that the config is ignored.
+   * @param originalLogCapacity the original total capacity of the log.
+   * @param originalSegmentCapacity the original segment capacity of the log.
+   * @param allSegmentNames the expected names of the all the segments.
+   * @throws IOException
+   */
+  private void checkLogReload(long originalLogCapacity, long originalSegmentCapacity, List<String> allSegmentNames)
+      throws IOException {
+    // modify the segment capacity (mimics modifying the config)
+    long[] newConfigs = {originalSegmentCapacity - 1, originalSegmentCapacity + 1};
+    for (long newConfig : newConfigs) {
+      Log log = new Log(tempDir.getAbsolutePath(), originalLogCapacity, newConfig, metrics);
+      try {
+        // the new config should be ignored.
+        checkLog(log, originalSegmentCapacity, allSegmentNames.size(), allSegmentNames);
+      } finally {
+        log.close();
+      }
+    }
   }
 
   /**
