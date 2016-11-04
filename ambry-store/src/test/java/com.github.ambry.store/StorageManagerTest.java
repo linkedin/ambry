@@ -79,7 +79,7 @@ public class StorageManagerTest {
     StorageManager storageManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
       if (replica.getMountPath().equals(mountPathToDelete)) {
-        assertNull(storageManager.getStore(replica.getPartitionId()));
+        assertNull("This store should not be accessible.", storageManager.getStore(replica.getPartitionId()));
       } else {
         Store store = storageManager.getStore(replica.getPartitionId());
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
@@ -106,7 +106,7 @@ public class StorageManagerTest {
     for (int i = 0; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
       if (badReplicaIndexes.contains(i)) {
-        assertNull(storageManager.getStore(replica.getPartitionId()));
+        assertNull("This store should not be accessible.", storageManager.getStore(replica.getPartitionId()));
       } else {
         Store store = storageManager.getStore(replica.getPartitionId());
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
@@ -135,7 +135,7 @@ public class StorageManagerTest {
     StorageManager storageManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
       if (replica.getMountPath().equals(badDiskMountPath)) {
-        assertNull(storageManager.getStore(replica.getPartitionId()));
+        assertNull("This store should not be accessible.", storageManager.getStore(replica.getPartitionId()));
       } else {
         Store store = storageManager.getStore(replica.getPartitionId());
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
@@ -160,7 +160,7 @@ public class StorageManagerTest {
       assertTrue("Store should be started", ((BlobStore) store).isStarted());
     }
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
-    assertNull(storageManager.getStore(invalidPartition));
+    assertNull("Should not have found a store for an invalid partition.", storageManager.getStore(invalidPartition));
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 

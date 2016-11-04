@@ -16,9 +16,8 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Throttler;
 import java.io.Closeable;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 
 /**
@@ -31,16 +30,14 @@ import java.util.concurrent.ConcurrentMap;
  * In the future this will have functions to submit feedback so that more intelligent decisions can be made.
  */
 class DiskIOScheduler implements Closeable {
-  private final ConcurrentMap<String, Throttler> throttlers = new ConcurrentHashMap<>();
+  private final Map<String, Throttler> throttlers;
 
   /**
    * Create a {@link DiskIOScheduler}.
    * @param throttlers the {@link Throttler}s to use for each job type.
    */
   DiskIOScheduler(Map<String, Throttler> throttlers) {
-    if (throttlers != null) {
-      this.throttlers.putAll(throttlers);
-    }
+    this.throttlers = throttlers != null ? throttlers : new HashMap<String, Throttler>();
   }
 
   /**

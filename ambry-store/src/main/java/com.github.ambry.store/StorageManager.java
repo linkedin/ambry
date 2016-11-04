@@ -25,8 +25,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * {@link DiskManager}
  */
 public class StorageManager {
-  private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
+  private final Map<PartitionId, DiskManager> partitionToDiskManager = new HashMap<>();
   private final List<DiskManager> diskManagers = new ArrayList<>();
   private final StorageManagerMetrics metrics;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);

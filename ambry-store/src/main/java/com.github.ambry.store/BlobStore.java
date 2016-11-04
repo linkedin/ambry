@@ -38,7 +38,7 @@ class BlobStore implements Store {
   private Log log;
   private PersistentIndex index;
   private final String dataDir;
-  private final ScheduledExecutorService scheduler;
+  private final ScheduledExecutorService taskScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
@@ -54,13 +54,13 @@ class BlobStore implements Store {
   private StoreMetrics metrics;
   private Time time;
 
-  public BlobStore(String storeId, StoreConfig config, ScheduledExecutorService scheduler,
+  public BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       DiskIOScheduler diskIOScheduler, StorageManagerMetrics storageManagerMetrics, String dataDir,
       long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.dataDir = dataDir;
-    this.scheduler = scheduler;
+    this.taskScheduler = taskScheduler;
     this.diskIOScheduler = diskIOScheduler;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
@@ -102,7 +102,7 @@ class BlobStore implements Store {
               StoreErrorCodes.Initialization_Error);
         }
         log = new Log(dataDir, capacityInBytes, metrics);
-        index = new PersistentIndex(dataDir, scheduler, log, config, factory, recovery, hardDelete, metrics, time);
+        index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time);
         // set the log end offset to the recovered offset from the index after initializing it
         log.setLogEndOffset(index.getCurrentEndOffset());
         metrics.initializeCapacityUsedMetric(log, capacityInBytes);

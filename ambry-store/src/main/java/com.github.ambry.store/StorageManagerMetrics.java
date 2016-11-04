@@ -24,7 +24,6 @@ import java.util.Map;
  * Metrics for all of the stores on a node.
  */
 public class StorageManagerMetrics {
-  private final Map<String, StoreMetrics> storeIdToStoreMetrics = new HashMap<>();
   private final MetricRegistry registry;
 
   public final Timer diskStartTime;
@@ -50,15 +49,6 @@ public class StorageManagerMetrics {
    */
   public StoreMetrics createStoreMetrics(String storeId) {
     StoreMetrics metrics = new StoreMetrics(storeId, registry);
-    storeIdToStoreMetrics.put(storeId, metrics);
     return metrics;
-  }
-
-  /**
-   * @param storeId the name of the store to lookup the metrics object for.
-   * @return the {@link StoreMetrics} for a disk name, or {@code null} if that disk could not be found.
-   */
-  public StoreMetrics getStoreMetrics(String storeId) {
-    return storeIdToStoreMetrics.get(storeId);
   }
 }

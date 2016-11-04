@@ -23,10 +23,9 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
@@ -37,10 +36,10 @@ import org.slf4j.LoggerFactory;
  * Manages all the stores on a disk.
  */
 class DiskManager {
-  private final ConcurrentMap<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
+  private final Map<PartitionId, BlobStore> stores = new HashMap<>();
   private final DiskId disk;
-  private final StoreConfig config;
   private final StorageManagerMetrics metrics;
+  private final DiskIOScheduler diskIOScheduler;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -60,13 +59,12 @@ class DiskManager {
       StorageManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time) {
     this.disk = disk;
-    this.config = config;
     this.metrics = metrics;
-    DiskIOScheduler ioScheduler = new DiskIOScheduler(null);
+    diskIOScheduler = new DiskIOScheduler(null);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
-        BlobStore store = new BlobStore(storeId, config, scheduler, ioScheduler, metrics, replica.getReplicaPath(),
+        BlobStore store = new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, replica.getReplicaPath(),
             replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
         stores.put(replica.getPartitionId(), store);
       }
@@ -129,6 +127,7 @@ class DiskManager {
             "Exception while shutting down store for partition " + partitionAndStore.getKey() + " on disk " + disk);
       }
     }
+    diskIOScheduler.close();
   }
 
   /**
