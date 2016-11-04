@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * It provides ability to read from arbitrary offset into the file. It can also provide a static view
  * of the log for a given set of offset,size pairs.
  */
-public class Log implements Read, Write {
+class Log implements Read, Write {
 
   private AtomicLong currentWriteOffset;
   private final FileChannel fileChannel;

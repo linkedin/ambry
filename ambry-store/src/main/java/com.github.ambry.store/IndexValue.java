@@ -20,7 +20,7 @@ import java.nio.ByteBuffer;
  * Represents the blob value stored in the index for a key.
  */
 
-public class IndexValue {
+class IndexValue {
   public enum Flags {
     Delete_Index
   }

@@ -11,15 +11,12 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.tools.admin;
+package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.store.IndexValue;
-import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
