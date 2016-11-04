@@ -42,13 +42,11 @@ public class StorageManagerMetrics {
   }
 
   /**
-   * Create a {@link StoreMetrics} object for handling metrics related to a specific store and make it
-   * accessible for lookup.
+   * Create a {@link StoreMetrics} object for handling metrics related to a specific store.
    * @param storeId the name of the store.
    * @return the {@link StoreMetrics}
    */
   public StoreMetrics createStoreMetrics(String storeId) {
-    StoreMetrics metrics = new StoreMetrics(storeId, registry);
-    return metrics;
+    return new StoreMetrics(storeId, registry);
   }
 }
