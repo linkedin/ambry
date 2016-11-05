@@ -97,7 +97,7 @@ public class HardDeleter implements Runnable {
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;
-    logSegment = log.getSegmentIterator().next().getValue();
+    logSegment = log.getFirstSegment();
     this.index = index;
     this.hardDelete = hardDelete;
     this.factory = factory;

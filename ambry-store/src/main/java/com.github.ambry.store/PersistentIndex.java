@@ -134,7 +134,7 @@ class PersistentIndex {
       this.time = time;
       this.scheduler = scheduler;
       this.metrics = metrics;
-      logSegment = log.getSegmentIterator().next().getValue();
+      logSegment = log.getFirstSegment();
       File indexDir = new File(datadir);
       File[] indexFiles = indexDir.listFiles(new IndexFilter());
       this.factory = factory;

@@ -354,7 +354,7 @@ class BlobStore implements Store {
       throws IOException {
     // TODO (Index Changes): Since the index works under the assumption that there is only one log segment, the code
     // TODO (Index Changes): here does the same. Once the index can handle multiple segments, this will change.
-    LogSegment firstSegment = log.getSegmentIterator().next().getValue();
+    LogSegment firstSegment = log.getFirstSegment();
     firstSegment.setEndOffset(index.getCurrentEndOffset());
     log.setActiveSegment(firstSegment.getName());
   }

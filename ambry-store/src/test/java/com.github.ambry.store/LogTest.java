@@ -27,9 +27,7 @@ import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import org.junit.After;
 import org.junit.Test;
 
@@ -132,6 +130,15 @@ public class LogTest {
         // expected. Nothing to do.
       }
     }
+
+    // file which is not a directory
+    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)), 1);
+    try {
+      new Log(file.getAbsolutePath(), 1, 1, metrics);
+      fail("Construction should have failed");
+    } catch (IOException e) {
+      // expected. Nothing to do.
+    }
   }
 
   /**
@@ -182,6 +189,24 @@ public class LogTest {
     } finally {
       log.close();
       cleanDirectory(tempDir);
+    }
+  }
+
+  /**
+   * Tests cases where bad arguments are provided to {@link Log#getNextSegment(LogSegment)}.
+   * @throws IOException
+   */
+  @Test
+  public void getNextSegmentBadArgsTest()
+      throws IOException {
+    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
+    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)), 1);
+    LogSegment segment = new LogSegment(LogSegmentNameHelper.getName(1, 1), file, 1, metrics, false);
+    try {
+      log.getNextSegment(segment);
+      fail("Getting next segment should have failed because provided segment does not exist in the log");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
     }
   }
 
@@ -318,10 +343,6 @@ public class LogTest {
     }
     assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
     file.deleteOnExit();
-    // create a log segment so that it writes the headers
-    LogSegment segment =
-        new LogSegment(LogSegmentNameHelper.nameFromFilename(filename), file, capacityInBytes, metrics, true);
-    segment.close();
     return file;
   }
 
@@ -378,13 +399,16 @@ public class LogTest {
    */
   private void checkLog(Log log, long expectedSegmentCapacity, long numFinalSegments, List<String> expectedSegmentNames)
       throws IOException {
-    // get all log segments from the log and validates them
+    LogSegment nextSegment = log.getFirstSegment();
     for (String segmentName : expectedSegmentNames) {
+      assertEquals("Next segment is not as expected", segmentName, nextSegment.getName());
       LogSegment segment = log.getSegment(segmentName);
       assertEquals("Segment name is not as expected", segmentName, segment.getName());
       assertEquals("Segment capacity not as expected", expectedSegmentCapacity, segment.getCapacityInBytes());
       assertEquals("Segment returned by getSegment() is incorrect", segment, log.getSegment(segment.getName()));
+      nextSegment = log.getNextSegment(segment);
     }
+    assertNull("Next segment should be null", nextSegment);
     assertEquals("Log segments reported is wrong", expectedSegmentNames.size(), log.getSegmentCount());
     long startOffsetInSegment = numFinalSegments > 1 ? LogSegment.HEADER_SIZE : 0;
     Offset expectedStartOffset = new Offset(expectedSegmentNames.get(0), startOffsetInSegment);
@@ -510,9 +534,10 @@ public class LogTest {
     log.flush();
     // close log and ensure segments are closed
     log.close();
-    Iterator<Map.Entry<String, LogSegment>> iterator = log.getSegmentIterator();
-    while (iterator.hasNext()) {
-      assertFalse("LogSegment has not been closed", iterator.next().getValue().getView().getSecond().isOpen());
+    LogSegment segment = log.getFirstSegment();
+    while (segment != null) {
+      assertFalse("LogSegment has not been closed", segment.getView().getSecond().isOpen());
+      segment = log.getNextSegment(segment);
     }
   }
 

@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -135,10 +134,24 @@ class Log implements Write {
   }
 
   /**
-   * @return a segment iterator that can iterate over all the log segments in this log
+   * @return the first {@link LogSegment} instance in the log.
    */
-  Iterator<Map.Entry<String, LogSegment>> getSegmentIterator() {
-    return segmentsByName.entrySet().iterator();
+  LogSegment getFirstSegment() {
+    return segmentsByName.firstEntry().getValue();
+  }
+
+  /**
+   * Returns the {@link LogSegment} that is logically after the given {@code segment}.
+   * @param segment the {@link LogSegment} whose "next" segment is required.
+   * @return the {@link LogSegment} that is logically after the given {@code segment}.
+   */
+  LogSegment getNextSegment(LogSegment segment) {
+    String name = segment.getName();
+    if (!segmentsByName.containsKey(name)) {
+      throw new IllegalArgumentException("Invalid log segment name: " + name);
+    }
+    Map.Entry<String, LogSegment> nextEntry = segmentsByName.higherEntry(name);
+    return nextEntry == null ? null : nextEntry.getValue();
   }
 
   /**
@@ -153,7 +166,7 @@ class Log implements Write {
    * @return the start offset of the log abstraction.
    */
   Offset getStartOffset() {
-    LogSegment segment = getSegmentIterator().next().getValue();
+    LogSegment segment = getFirstSegment();
     return new Offset(segment.getName(), segment.getStartOffset());
   }
 
