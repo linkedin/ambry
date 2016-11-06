@@ -160,7 +160,7 @@ public class HardwareLayout {
     for (Datacenter datacenter : datacenters) {
       for (DataNode dataNode : datacenter.getDataNodes()) {
         for (Disk disk : dataNode.getDisks()) {
-          diskInStateCount.put(disk.getState(), diskInStateCount.get(dataNode.getState()) + 1);
+          diskInStateCount.put(disk.getState(), diskInStateCount.get(disk.getState()) + 1);
         }
       }
     }
