@@ -124,32 +124,19 @@ public class NetworkClientUtils implements Runnable {
   private void onResponse(List<ResponseInfo> responseInfoList) {
     for (ResponseInfo responseInfo : responseInfoList) {
       try {
-        RequestOrResponseType type = ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getRequestType();
-        int correlationId = -1;
-        switch (type) {
-          case PutRequest:
-            correlationId = ((PutRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
-            break;
-          case GetRequest:
-            correlationId = ((GetRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
-            break;
-          case DeleteRequest:
-            correlationId = ((DeleteRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
-            break;
-          default:
-            logger.error("Unexpected response type: " + type + " received, discarding " + responseInfo);
-        }
-        if (correlationId != -1) {
+        RequestOrResponse requestOrResponse = (RequestOrResponse) responseInfo.getRequestInfo().getRequest();
+        int correlationId = requestOrResponse.getCorrelationId();
           RequestMetadata requestMetadata = correlationIdToRequestMetadataMap.remove(correlationId);
+        if(requestMetadata != null) {
           requestMetadata.futureResult.done(responseInfo.getResponse(),
               responseInfo.getError() != null ? new NetworkClientException("The Operation could not be completed.",
                   responseInfo.getError()) : null);
           if (requestMetadata.callback != null) {
             requestMetadata.callback.onCompletion(responseInfo.getResponse(),
                 responseInfo.getError() != null ? new NetworkClientException("The Operation could not be completed.",
-                    responseInfo.getError()) : null);
+                    responseInfo.getError()) : null);}
+
           }
-        }
       } catch (Exception e) {
         logger.error("Unexpected error received while handling a response : " + responseInfo + ", exception : "
             + e.getStackTrace());

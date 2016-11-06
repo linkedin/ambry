@@ -23,13 +23,13 @@ import java.util.Properties;
  */
 public class ServerPutGetHelperFactory implements PutGetHelperFactory {
 
-  Properties properties;
-  String hostName;
-  int port;
-  ClusterMap clusterMap;
-  int maxBlobSize;
-  int minBlobSize;
-  boolean enableVerboseLogging;
+  private final Properties properties;
+  private final String hostName;
+  private final int port;
+  private final ClusterMap clusterMap;
+  private final int maxBlobSize;
+  private final int minBlobSize;
+  private final boolean enableVerboseLogging;
 
   public ServerPutGetHelperFactory(Properties properties, String hostName, Integer port, ClusterMap clusterMap,
       Integer maxBlobSize, Integer minBlobSize, Boolean enableVerboseLogging) {

@@ -124,8 +124,9 @@ public class ConcurrencyTestTool {
     PutGetHelper putGetHelper = putGetHelperFactory.getPutGetHelper();
     ConcurrencyTestTool concurrencyTestTool = new ConcurrencyTestTool();
     concurrencyTestTool.startTest(putGetHelper, options.maxParallelPutCount, options.parallelGetCount,
-        options.totalPutBlobCount, options.maxGetCountPerBlob, options.burstCountForGet, options.deleteOnExit,
-        options.enabledVerboseLogging, options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs);
+        options.totalPutBlobCount, options.maxGetCountPerBlob, options.burstCountForGet,
+        options.maxFailuresPerPutBatchToStopPuts, options.deleteOnExit, options.enabledVerboseLogging,
+        options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs);
   }
 
   /**
@@ -133,18 +134,20 @@ public class ConcurrencyTestTool {
    * @param putGetHelper the {@link PutGetHelper} to be used for PUTs and GETs
    * @param maxParallelPutCount maximum number of parallel puts per phase
    * @param parallelGetCount the number of parallel Gets per phase
-   * @param maxPutCount total number of blobs to be uploaded
+   * @param totalPutCount total number of blobs to be uploaded
    * @param maxGetCountPerBlob total number of times a particular blob can be fetched before its deleted
    * @param burstCountGet Burst count for GETs. Each GET consumer thread will fetch a blob these many no of
    *                         times simultaneously
+   * @param maxFailuresPerPutBatchToStopPuts Maximum allowable failures per Put batch in order to continue with PUTs
    * @param deleteOnExit Deletes the blobs once GETs have reached a threshold on every blob
    * @param enableVerboseLogging Enables verbose logging
    * @param sleepTimeBetweenBatchPutsInMs Time to sleep in ms between batch Puts per Producer thread
    * @param sleepTimeBetweenBatchGetsInMs Time to sleep in ms between batch Gets per Consumer thread
    * @throws InterruptedException
    */
-  public void startTest(PutGetHelper putGetHelper, int maxParallelPutCount, int parallelGetCount, int maxPutCount,
-      int maxGetCountPerBlob, int burstCountGet, boolean deleteOnExit, boolean enableVerboseLogging,
+  public void startTest(PutGetHelper putGetHelper, int maxParallelPutCount, int parallelGetCount, int totalPutCount,
+      int maxGetCountPerBlob, int burstCountGet, int maxFailuresPerPutBatchToStopPuts, boolean deleteOnExit,
+      boolean enableVerboseLogging,
       long sleepTimeBetweenBatchPutsInMs, long sleepTimeBetweenBatchGetsInMs)
       throws InterruptedException {
 
@@ -159,13 +162,13 @@ public class ConcurrencyTestTool {
     logger.trace("Initiating Producer thread ");
     // Creating PutThread
     Thread putThread = new Thread(
-        new PutThread("Producer", putGetHelper, sharedQueue, maxPutCount, currentPutCount, maxParallelPutCount,
-            sleepTimeBetweenBatchPutsInMs, enableVerboseLogging, threadLocalRandom));
+        new PutThread("Producer", putGetHelper, sharedQueue, totalPutCount, currentPutCount, maxParallelPutCount,
+            maxFailuresPerPutBatchToStopPuts, sleepTimeBetweenBatchPutsInMs, enableVerboseLogging, threadLocalRandom));
 
     logger.trace("Initiating Consumer thread ");
     // Creating Get thread
     Thread getThread = new Thread(
-        new GetThread("Consumer", putGetHelper, sharedQueue, maxGetCountPerBlob, maxPutCount, getCompletedCount,
+        new GetThread("Consumer", putGetHelper, sharedQueue, maxGetCountPerBlob, currentPutCount, getCompletedCount,
             burstCountGet, parallelGetCount, sleepTimeBetweenBatchGetsInMs, deleteOnExit, enableVerboseLogging,
             threadLocalRandom, deletedBlobIds));
 
@@ -173,7 +176,7 @@ public class ConcurrencyTestTool {
     if (deleteOnExit) {
       logger.trace("Initiating Delete thread ");
       DeleteThread deleteBlobThread =
-          new DeleteThread("DeleteThread", putGetHelper, maxPutCount, deletedBlobIds, enableVerboseLogging);
+          new DeleteThread("DeleteThread", putGetHelper, totalPutCount, deletedBlobIds, enableVerboseLogging);
       deleteThread = new Thread(deleteBlobThread);
       deleteThread.start();
     }
@@ -202,23 +205,25 @@ public class ConcurrencyTestTool {
   class PutThread implements Runnable {
     private final String threadName;
     private final PutGetHelper producerJob;
-    private final ArrayList<BlobAccessInfo> blobInfos;
-    private final int maxPutCount;
+    private final ArrayList<BlobAccessInfo> blobAccessInfos;
+    private final int totalPutCount;
     private final AtomicInteger currentPutCount;
     private final int maxParallelRequest;
+    private final int maxFailuresPerPutBatchToStopPuts;
     private final long sleepTimeBetweenBatchPutsInMs;
     private final boolean enableVerboseLogging;
     private final ThreadLocalRandom threadLocalRandom;
 
-    public PutThread(String threadName, PutGetHelper producerJob, ArrayList<BlobAccessInfo> blobInfos,
-        final int maxPutCount, AtomicInteger currentPutCount, int maxParallelRequest,
+    public PutThread(String threadName, PutGetHelper producerJob, ArrayList<BlobAccessInfo> blobAccessInfos,
+        final int totalPutCount, AtomicInteger currentPutCount, int maxParallelRequest, int maxFailuresPerPutBatchToStopPuts,
         long sleepTimeBetweenBatchPutsInMs, boolean enableVerboseLogging, ThreadLocalRandom threadLocalRandom) {
       this.threadName = threadName;
       this.producerJob = producerJob;
-      this.blobInfos = blobInfos;
-      this.maxPutCount = maxPutCount;
+      this.blobAccessInfos = blobAccessInfos;
+      this.totalPutCount = totalPutCount;
       this.currentPutCount = currentPutCount;
       this.maxParallelRequest = maxParallelRequest;
+      this.maxFailuresPerPutBatchToStopPuts = maxFailuresPerPutBatchToStopPuts;
       this.sleepTimeBetweenBatchPutsInMs = sleepTimeBetweenBatchPutsInMs;
       this.enableVerboseLogging = enableVerboseLogging;
       this.threadLocalRandom = threadLocalRandom;
@@ -226,21 +231,23 @@ public class ConcurrencyTestTool {
 
     @Override
     public void run() {
-      while (currentPutCount.get() < maxPutCount) {
+      while (currentPutCount.get() < totalPutCount) {
         try {
           int burstCount = threadLocalRandom.nextInt(maxParallelRequest) + 1;
           logger.trace(threadName + " Producing " + burstCount + " times ");
           CountDownLatch countDownLatch = new CountDownLatch(burstCount);
+          final int[] failureCount = {0};
           for (int j = 0; j < burstCount; j++) {
-            Callback callback = new Callback() {
+            Callback<Pair<String, byte[]>> callback = new Callback<Pair<String, byte[]>>() {
               @Override
-              public void onCompletion(Object result, Exception exception) {
+              public void onCompletion(Pair<String, byte[]> result, Exception exception) {
                 if (exception == null) {
-                  Pair<String, byte[]> response = (Pair<String, byte[]>) result;
-                  if (currentPutCount.get() < maxPutCount) {
-                    blobInfos.add(new BlobAccessInfo(response.getFirst(), response.getSecond()));
+                  if (currentPutCount.get() < totalPutCount) {
+                    blobAccessInfos.add(new BlobAccessInfo(result.getFirst(), result.getSecond()));
                     currentPutCount.incrementAndGet();
                   }
+                } else{
+                  failureCount[0]++;
                 }
                 countDownLatch.countDown();
               }
@@ -249,13 +256,17 @@ public class ConcurrencyTestTool {
             producerJob.produce(futureResult, callback);
           }
           countDownLatch.await();
+          if(failureCount[0] > maxFailuresPerPutBatchToStopPuts){
+            logger.error(failureCount[0]+ "  failures during this batch, hence exiting the producer");
+            break;
+          }
           Thread.sleep(threadLocalRandom.nextLong(sleepTimeBetweenBatchPutsInMs));
         } catch (InterruptedException ex) {
           logger.error("InterruptedException in " + threadName + " " + ex.getStackTrace());
         }
       }
-      logger.info("Exiting Producer " + threadName + ": current Put Count " + currentPutCount.get() + ", max Put Count "
-          + maxPutCount);
+      logger.info("Exiting Producer " + threadName + ": current Put Count " + currentPutCount.get() + ", total Put Count "
+          + totalPutCount);
     }
   }
 
@@ -285,7 +296,7 @@ public class ConcurrencyTestTool {
     private final ArrayList<BlobAccessInfo> blobInfos;
     private final int maxGetCountPerBlob;
     private final AtomicInteger getCompletedCount;
-    private final int maxPutCount;
+    private final AtomicInteger totalPutCount;
     private final int maxBurstCountPerblob;
     private final int parallelGetCount;
     private final boolean deleteOnExit;
@@ -295,14 +306,14 @@ public class ConcurrencyTestTool {
     private final BlockingQueue<String> deleteBlobIds;
 
     public GetThread(String threadName, PutGetHelper getConsumerJob, ArrayList<BlobAccessInfo> blobInfos,
-        int maxGetCountPerBlob, final int maxPutCount, AtomicInteger getCompletedCount, int maxBurstCountPerBlob,
+        int maxGetCountPerBlob, final AtomicInteger totalPutCount, AtomicInteger getCompletedCount, int maxBurstCountPerBlob,
         int parallelGetCount, long sleepTimeBetweenBatchGetsInMs, boolean deleteOnExit, boolean enableVerboseLogging,
         ThreadLocalRandom threadLocalRandom, BlockingQueue<String> deleteBlobIds) {
       this.threadName = threadName;
       this.getConsumerJob = getConsumerJob;
       this.blobInfos = blobInfos;
       this.maxGetCountPerBlob = maxGetCountPerBlob;
-      this.maxPutCount = maxPutCount;
+      this.totalPutCount = totalPutCount;
       this.parallelGetCount = parallelGetCount;
       this.getCompletedCount = getCompletedCount;
       this.maxBurstCountPerblob = maxBurstCountPerBlob;
@@ -315,7 +326,7 @@ public class ConcurrencyTestTool {
 
     @Override
     public void run() {
-      while (getCompletedCount.get() < maxPutCount) {
+      while (getCompletedCount.get() < totalPutCount.get()) {
         try {
           int size = blobInfos.size();
           if (size > 0) {
@@ -344,9 +355,9 @@ public class ConcurrencyTestTool {
               logger.trace(threadName + " fetching " + blobAccessInfo.blobId + " " + burstCount + " times ");
               CountDownLatch countDownLatch = new CountDownLatch(burstCount);
               for (int j = 0; j < burstCount; j++) {
-                Callback callback = new Callback() {
+                Callback<Void> callback = new Callback<Void>() {
                   @Override
-                  public void onCompletion(Object result, Exception exception) {
+                  public void onCompletion(Void result, Exception exception) {
                     countDownLatch.countDown();
                     blobAccessInfo.burstGetReferenceCount.decrementAndGet();
                     if (countDownLatch.getCount() == 0) {
@@ -404,9 +415,9 @@ public class ConcurrencyTestTool {
             deletedCount.incrementAndGet();
             logger.trace(threadName + " Deleting blob " + blobIdStr);
             FutureResult futureResult = new FutureResult();
-            Callback callback = new Callback() {
+            Callback<Void> callback = new Callback<Void>() {
               @Override
-              public void onCompletion(Object result, Exception exception) {
+              public void onCompletion(Void result, Exception exception) {
                 logger.trace("Deletion completed for " + blobIdStr);
                 countDownLatch.countDown();
               }
@@ -434,25 +445,31 @@ public class ConcurrencyTestTool {
   interface PutGetHelper<T> {
     /**
      * Request to produce a blob
-     * @return a {@link Pair<String, byte[]>} which contains the blobId and the content
+     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
+     * @param callback the {@link Callback} that will be called on completion
+     * @return a {@link FutureResult} which will contain the result eventually
      */
-    FutureResult produce(FutureResult futureResult, Callback callback);
+    FutureResult<T> produce(FutureResult<T> futureResult, Callback<T> callback);
 
     /**
      * Request to fetch the blob pertaining to the {@code blobId} passed in and verify for its content
      * @param blobId the blobId the of that blob that needs to be fetched
      * @param blobContent the content of the blob that needs to be verified against
      * @param expectedErrorCode the expected error code for the Get call
+     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
+     * @param callback the {@link Callback} that will be called on completion
      */
-    void consumeAndValidate(String blobId, byte[] blobContent, T expectedErrorCode, FutureResult futureResult,
-        Callback callback);
+    void consumeAndValidate(String blobId, byte[] blobContent, T expectedErrorCode, FutureResult<T> futureResult,
+        Callback<T> callback);
 
     /**
      * Deletes a blob from ambry pertaining to the {@code blobId} passed in and verifies that subsequent Get fails
      * @param blobId the blobId the of that blob that needs to be fetched
      * @param expectedErrorCode the expected error code for the Delete call
+     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
+     * @param callback the {@link Callback} that will be called on completion
      */
-    void deleteAndValidate(String blobId, T expectedErrorCode, FutureResult futureResult, Callback callback);
+    void deleteAndValidate(String blobId, T expectedErrorCode, FutureResult<T> futureResult, Callback<T> callback);
 
     /**
      * Returns the default Error code that is expected for a Get or a Delete call
@@ -499,8 +516,9 @@ public class ConcurrencyTestTool {
     /**
      * {@inheritDoc}
      * Uploads a blob to the server directly and returns the blobId along with the content
-     * @return a {@link Pair<String, byte[]>} which contains the blobId and the content
-     * @throws IOException
+     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
+     * @param callback the {@link Callback} that will be called on completion
+     * @return a {@link FutureResult} which will contain the result eventually
      */
     @Override
     public FutureResult produce(FutureResult futureResult, Callback callback) {
@@ -520,13 +538,13 @@ public class ConcurrencyTestTool {
                 ByteBuffer.wrap(blob), props.getBlobSize(), BlobType.DataBlob);
         long startTime = SystemTime.getInstance().nanoseconds();
         List<NetworkClientUtils.RequestMetadata> requestMetadataList = new ArrayList<>();
-        NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<>();
+        NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<ByteBuffer>();
         requestMetadata.requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), putRequest);
         requestMetadata.futureResult = new FutureResult<ByteBuffer>();
         requestMetadata.correlationId = correlationId;
-        requestMetadata.callback = new Callback() {
+        requestMetadata.callback = new Callback<ByteBuffer>() {
           @Override
-          public void onCompletion(Object result, Exception exception) {
+          public void onCompletion(ByteBuffer result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTime;
             logger.trace(requestMetadata.correlationId + " Time taken to put blob id " + blobId + " in ms "
                 + latencyPerBlob / SystemTime.NsPerMs + " for blob of size " + blob.length);
@@ -534,13 +552,13 @@ public class ConcurrencyTestTool {
             Pair<String, byte[]> toReturn = null;
             if (result != null) {
               try {
-                ByteBuffer response = (ByteBuffer) result;
                 PutResponse putResponse =
-                    PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(response)));
+                    PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(result)));
                 if (putResponse.getError() != ServerErrorCode.No_Error) {
                   exceptionToReturn = new UnexpectedException("error " + putResponse.getError());
+                } else {
+                  toReturn = new Pair<>(blobId.getID(), blob);
                 }
-                toReturn = new Pair<>(blobId.getID(), blob);
               } catch (IOException e) {
                 exceptionToReturn = e;
               }
@@ -570,10 +588,11 @@ public class ConcurrencyTestTool {
      * {@inheritDoc}
      * Request to fetch the blob from the server directly pertaining to the {@code blobId} passed in and verify for
      * its content
-     * @param blobIdStr the blobId the of that blob that needs to be fetched
+     * @param blobIdStr the (string representation of the) blobId of that blob that needs to be fetched
      * @param blobContent the content of the blob that needs to be verified against
      * @param expectedErrorCode the expected error code for the Get call
-     * @throws IOException
+     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
+     * @param callback the {@link Callback} that will be called on completion
      */
     @Override
     public void consumeAndValidate(String blobIdStr, byte[] blobContent, ServerErrorCode expectedErrorCode,
@@ -586,7 +605,6 @@ public class ConcurrencyTestTool {
         ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
         blobIds.add(blobId);
         ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-        partitionRequestInfoList.clear();
         PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
         partitionRequestInfoList.add(partitionRequestInfo);
         correlationId = correlationIdGenerator.incrementAndGet();
@@ -595,20 +613,19 @@ public class ConcurrencyTestTool {
                 GetOptions.None);
         Long startTimeGetBlob = SystemTime.getInstance().nanoseconds();
         List<NetworkClientUtils.RequestMetadata> requestInfoList = new ArrayList<>();
-        NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<>();
+        NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<ByteBuffer>();
         requestMetadata.requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), getRequest);
         requestMetadata.futureResult = new FutureResult<ByteBuffer>();
         requestMetadata.correlationId = correlationId;
-        requestMetadata.callback = new Callback() {
+        requestMetadata.callback = new Callback<ByteBuffer>() {
           @Override
-          public void onCompletion(Object result, Exception exception) {
+          public void onCompletion(ByteBuffer result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
             Exception exceptionToReturn = null;
             if (result != null) {
               try {
-                ByteBuffer response = (ByteBuffer) result;
                 GetResponse getResponse =
-                    GetResponse.readFrom(new DataInputStream(new ByteBufferInputStream(response)), clusterMap);
+                    GetResponse.readFrom(new DataInputStream(new ByteBufferInputStream(result)), clusterMap);
                 if (getResponse.getError() == ServerErrorCode.No_Error) {
                   ServerErrorCode serverErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
                   if (serverErrorCode == ServerErrorCode.No_Error) {
@@ -679,7 +696,8 @@ public class ConcurrencyTestTool {
      * the subsequent get fails with {@link ServerErrorCode#Blob_Deleted}
      * @param blobId the blobId the of that blob that needs to be fetched
      * @param expectedErrorCode the expected error code for the Delete call
-     * @throws IOException
+     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
+     * @param callback the {@link Callback} that will be called on completion
      */
     @Override
     public void deleteAndValidate(String blobId, ServerErrorCode expectedErrorCode, FutureResult futureResult,
@@ -695,9 +713,9 @@ public class ConcurrencyTestTool {
         requestMetadata.requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), deleteRequest);
         requestMetadata.futureResult = new FutureResult<ByteBuffer>();
         requestMetadata.correlationId = correlationId;
-        requestMetadata.callback = new Callback() {
+        requestMetadata.callback = new Callback<ByteBuffer>() {
           @Override
-          public void onCompletion(Object result, Exception exception) {
+          public void onCompletion(ByteBuffer result, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeDeleteBlob;
             logger.trace(
                 requestMetadata.correlationId + " Delete of  " + blobId + " took " + latencyPerBlob / SystemTime.NsPerMs
@@ -705,9 +723,8 @@ public class ConcurrencyTestTool {
             Exception exceptionToReturn = null;
             if (result != null) {
               try {
-                ByteBuffer response = (ByteBuffer) result;
                 DeleteResponse deleteResponse =
-                    DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(response)));
+                    DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(result)));
                 if (deleteResponse.getError() != ServerErrorCode.No_Error) {
                   logger.error(requestMetadata.correlationId + " Deletion of " + blobId + " failed with an exception "
                       + deleteResponse.getError());
@@ -772,7 +789,7 @@ public class ConcurrencyTestTool {
     }
   }
 
-  static class InvocationOptions {
+  private static class InvocationOptions {
     public final String hardwareLayoutFilePath;
     public final String partitionLayoutFilePath;
     public final int maxParallelPutCount;
@@ -782,6 +799,7 @@ public class ConcurrencyTestTool {
     public final int maxGetCountPerBlob;
     public final int maxBlobSizeInBytes;
     public final int minBlobSizeInBytes;
+    public final int maxFailuresPerPutBatchToStopPuts;
     public final long sleepTimeBetweenBatchPutsInMs;
     public final long sleepTimeBetweenBatchGetsInMs;
 
@@ -859,6 +877,12 @@ public class ConcurrencyTestTool {
               .describedAs("minBlobSizeInBytes")
               .ofType(Integer.class)
               .defaultsTo(1);
+      ArgumentAcceptingOptionSpec<Integer> maxFailuresPerPutBatchToStopPutsOpt =
+          parser.accepts("maxFailuresPerPutBatchToStopPuts", "Maximum failures per Put batch to stop PUTs")
+              .withOptionalArg()
+              .describedAs("maxFailuresPerPutBatchToStopPuts")
+              .ofType(Integer.class)
+              .defaultsTo(1);
       ArgumentAcceptingOptionSpec<Integer> sleepTimeBetweenBatchPutsInMsOpt =
           parser.accepts("sleepTimeBetweenBatchPutsInMs", "Time to sleep in ms between batch puts")
               .withOptionalArg()
@@ -917,6 +941,7 @@ public class ConcurrencyTestTool {
       this.maxGetCountPerBlob = options.valueOf(maxGetCountPerBlobOpt);
       this.maxBlobSizeInBytes = options.valueOf(maxBlobSizeInBytesOpt);
       this.minBlobSizeInBytes = options.valueOf(minBlobSizeInBytesOpt);
+      this.maxFailuresPerPutBatchToStopPuts = options.valueOf(maxFailuresPerPutBatchToStopPutsOpt);
       this.sleepTimeBetweenBatchPutsInMs = options.valueOf(sleepTimeBetweenBatchPutsInMsOpt);
       this.sleepTimeBetweenBatchGetsInMs = options.valueOf(sleepTimeBetweenBatchGetsInMsOpt);
       this.hostName = options.valueOf(hostNameOpt);
