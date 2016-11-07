@@ -183,16 +183,7 @@ class Log implements Write {
    * {@link LogSegment} instances that are not fully filled.
    */
   long getUsedCapacity() {
-    long usedCapacity = 0;
-    for (LogSegment segment : segmentsByName.values()) {
-      if (segment != activeSegment) {
-        usedCapacity += segment.getCapacityInBytes();
-      } else {
-        usedCapacity += segment.getEndOffset();
-        break;
-      }
-    }
-    return usedCapacity;
+    return getDifference(getEndOffset(), new Offset(getFirstSegment().getName(), 0));
   }
 
   /**
@@ -200,6 +191,42 @@ class Log implements Write {
    */
   long getSegmentCount() {
     return segmentsByName.size();
+  }
+
+  /**
+   * Gets the absolute difference in bytes between {@code o1} and {@code o2}. The difference returned also includes the
+   * sizes of log segment headers if the offsets are across segments.
+   * @param o1 the first {@link Offset}.
+   * @param o2 the second {@link Offset}.
+   * @return the difference between {@code o1} and {@code o2}. If {@code o1} > {@code o2}, the difference returned is
+   * positive, else, unless equal, it is negative
+   */
+  long getDifference(Offset o1, Offset o2) {
+    if (!segmentsByName.containsKey(o1.getName()) || !segmentsByName.containsKey(o2.getName())) {
+      throw new IllegalArgumentException("One of the log segments provided [" + o1.getName() + ", " + o2.getName() +
+          "] does not belong to this log");
+    }
+    LogSegment firstSegment = segmentsByName.get(o1.getName());
+    LogSegment secondSegment = segmentsByName.get(o2.getName());
+    if (o1.getOffset() > firstSegment.getEndOffset() || o2.getOffset() > secondSegment.getEndOffset()) {
+      throw new IllegalArgumentException("One of the offsets provided [" + o1.getOffset() + ", " + o2.getOffset() +
+          "] is out of range of the segment it refers to [" + firstSegment.getEndOffset() + ", " +
+          secondSegment.getEndOffset() + "]");
+    }
+    if (o1.getName().equals(o2.getName())) {
+      return o1.getOffset() - o2.getOffset();
+    }
+    Offset higher = o1.compareTo(o2) > 0 ? o1 : o2;
+    Offset lower = higher == o1 ? o2 : o1;
+    LogSegment segment = segmentsByName.higherEntry(lower.getName()).getValue();
+    // segment capacity is the same for every segment.
+    long difference = segment.getCapacityInBytes() - lower.getOffset();
+    while (!segment.getName().equals(higher.getName())) {
+      difference += segment.getCapacityInBytes();
+      segment = segmentsByName.higherEntry(segment.getName()).getValue();
+    }
+    difference += higher.getOffset();
+    return o1.compareTo(o2) * difference;
   }
 
   /**

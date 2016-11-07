@@ -132,7 +132,7 @@ public class LogTest {
     }
 
     // file which is not a directory
-    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)), 1);
+    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)));
     try {
       new Log(file.getAbsolutePath(), 1, 1, metrics);
       fail("Construction should have failed");
@@ -183,9 +183,42 @@ public class LogTest {
     long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
     try {
       log.setActiveSegment(LogSegmentNameHelper.getName(numSegments + 1, 0));
-      fail("Should have failed to set a non exsistent segment as active");
+      fail("Should have failed to set a non existent segment as active");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
+    } finally {
+      log.close();
+      cleanDirectory(tempDir);
+    }
+  }
+
+  /**
+   * Tests cases where bad arguments are provided to {@link Log#getDifference(Offset, Offset)}.
+   * @throws IOException
+   */
+  @Test
+  public void getDifferenceBadArgsTest()
+      throws IOException {
+    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
+    long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
+    Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(numSegments + 1, 0), 0);
+    Offset badOffsetOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getEndOffset() + 1);
+    List<Pair<Offset, Offset>> pairsToCheck = new ArrayList<>();
+    pairsToCheck.add(new Pair<>(log.getStartOffset(), badSegmentOffset));
+    pairsToCheck.add(new Pair<>(badSegmentOffset, log.getEndOffset()));
+    pairsToCheck.add(new Pair<>(log.getStartOffset(), badOffsetOffset));
+    pairsToCheck.add(new Pair<>(badOffsetOffset, log.getEndOffset()));
+
+    try {
+      for (Pair<Offset, Offset> pairToCheck : pairsToCheck) {
+        try {
+          log.getDifference(pairToCheck.getFirst(), pairToCheck.getSecond());
+          fail("Should have failed to get difference with invalid offset input. Input was [" + pairToCheck.getFirst() +
+              ", " + pairToCheck.getSecond() + "]");
+        } catch (IllegalArgumentException e) {
+          // expected. Nothing to do.
+        }
+      }
     } finally {
       log.close();
       cleanDirectory(tempDir);
@@ -200,7 +233,7 @@ public class LogTest {
   public void getNextSegmentBadArgsTest()
       throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
-    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)), 1);
+    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)));
     LogSegment segment = new LogSegment(LogSegmentNameHelper.getName(1, 1), file, 1, metrics, false);
     try {
       log.getNextSegment(segment);
@@ -310,7 +343,7 @@ public class LogTest {
     List<String> segmentNames = new ArrayList<>(numToCreate);
     if (numFinalSegments == 1) {
       String name = LogSegmentNameHelper.generateFirstSegmentName(numFinalSegments);
-      File file = create(LogSegmentNameHelper.nameToFilename(name), segmentCapacity);
+      File file = create(LogSegmentNameHelper.nameToFilename(name));
       new LogSegment(name, file, segmentCapacity, metrics, false).close();
       segmentNames.add(name);
     } else {
@@ -318,7 +351,7 @@ public class LogTest {
         long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         String name = LogSegmentNameHelper.getName(pos, gen);
-        File file = create(LogSegmentNameHelper.nameToFilename(name), segmentCapacity);
+        File file = create(LogSegmentNameHelper.nameToFilename(name));
         new LogSegment(name, file, segmentCapacity, metrics, true).close();
         segmentNames.add(name);
       }
@@ -330,12 +363,10 @@ public class LogTest {
   /**
    * Creates a file with name {@code filename}.
    * @param filename the desired name of the file to be created.
-   * @param capacityInBytes the capacity of the file in bytes. The file is not preallocated, but this information is
-   *                        used to write the {@link LogSegment} headers.
    * @return a {@link File} instance pointing the newly created file named {@code filename}.
    * @throws IOException
    */
-  private File create(String filename, long capacityInBytes)
+  private File create(String filename)
       throws IOException {
     File file = new File(tempDir, filename);
     if (file.exists()) {
@@ -381,6 +412,7 @@ public class LogTest {
       // log full - so all segments should be there
       assertEquals("Unexpected number of segments", numSegments, allSegmentNames.size());
       checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, allSegmentNames);
+      doDifferenceTest(log, allSegmentNames);
       flushCloseAndValidate(log);
       checkLogReload(logCapacity, Math.min(logCapacity, segmentCapacity), allSegmentNames);
     } finally {
@@ -498,6 +530,75 @@ public class LogTest {
       segmentNames.add(nextSegmentName);
     }
     return segmentNames;
+  }
+
+  /**
+   * Tests {@link Log#getDifference(Offset, Offset)} for all cases.
+   * 1. Same segment and offset
+   * 2. Same segment, different offsets
+   * 3. Boundary offsets (combination of -start of lower, end of lower- and -start of higher, end of higher-
+   * 4. Random offsets that are not boundary offsets.
+   * @param log the {@link Log} instance to use.
+   * @param segmentNames the names of all the segments in the {@code log}.
+   */
+  private void doDifferenceTest(Log log, List<String> segmentNames) {
+    int lowerIdx = 0;
+    int higherIdx = 0;
+    if (segmentNames.size() > 1) {
+      // pick any segment except the last one
+      lowerIdx = TestUtils.RANDOM.nextInt(segmentNames.size() - 1);
+      // pick a segment higher than lowerIdx
+      higherIdx = lowerIdx + 1 + TestUtils.RANDOM.nextInt(segmentNames.size() - lowerIdx - 1);
+    }
+    String lowerSegmentName = segmentNames.get(lowerIdx);
+    String higherSegmentName = segmentNames.get(higherIdx);
+    LogSegment lowerSegment = log.getSegment(lowerSegmentName);
+    LogSegment higherSegment = log.getSegment(higherSegmentName);
+
+    // get boundary offsets
+    Offset lowerLowBound = new Offset(lowerSegmentName, 0);
+    Offset lowerHighBound = new Offset(lowerSegmentName, lowerSegment.getEndOffset());
+    Offset higherLowBound = new Offset(higherSegmentName, 0);
+    Offset higherHighBound = new Offset(higherSegmentName, higherSegment.getEndOffset());
+
+    // get random offsets that are not 0 or the end offset
+    Offset lower =
+        new Offset(lowerSegmentName, Utils.getRandomLong(TestUtils.RANDOM, lowerSegment.getEndOffset() - 1) + 1);
+    Offset higher =
+        new Offset(higherSegmentName, Utils.getRandomLong(TestUtils.RANDOM, higherSegment.getEndOffset() - 1) + 1);
+
+    checkDifference(log, lower, higher, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
+    checkDifference(log, lowerLowBound, higherLowBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
+    checkDifference(log, lowerLowBound, higherHighBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
+    checkDifference(log, lowerHighBound, higherLowBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
+    checkDifference(log, lowerHighBound, higherHighBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
+    checkDifference(log, lower, lower, 0, lowerSegment.getCapacityInBytes());
+    checkDifference(log, lowerLowBound, lower, 0, lowerSegment.getCapacityInBytes());
+  }
+
+  /**
+   * Checks the output of {@link Log#getDifference(Offset, Offset)} for {@code higher} and {@code lower} against the
+   * expected value.
+   * @param log the {@link Log} instance to use.
+   * @param lower the {@link Offset} that is the "lower" offset.
+   * @param higher the {@link Offset} that is the "higher" offset.
+   * @param numSegmentHops the number of segment hops it takes to get from {@code lower} to {@code higher}.
+   * @param segmentCapacity the capacity of each segment.
+   */
+  private void checkDifference(Log log, Offset lower, Offset higher, int numSegmentHops, long segmentCapacity) {
+    long expectedDifference;
+    if (numSegmentHops == 0) {
+      expectedDifference = higher.getOffset() - lower.getOffset();
+    } else {
+      // capacities of full segments b/w higher and lower
+      expectedDifference = (numSegmentHops - 1) * segmentCapacity;
+      // diff b/w lower segment cap and the offset in the lower segment.
+      expectedDifference += segmentCapacity - lower.getOffset();
+      // the offset in the higher segment
+      expectedDifference += higher.getOffset();
+    }
+    assertEquals("Difference returned is not as expected", expectedDifference, log.getDifference(higher, lower));
+    assertEquals("Difference returned is not as expected", -expectedDifference, log.getDifference(lower, higher));
   }
 
   /**
