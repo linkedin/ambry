@@ -46,7 +46,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 
-class HardDeleteVerifier {
+public class HardDeleteVerifier {
   private final ClusterMap map;
   private final String outFile;
   private final String dataDir;
