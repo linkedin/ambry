@@ -25,6 +25,9 @@ import java.util.Comparator;
  * generation number of the log segment at "pos".
  * <p/>
  * The file name is a combination of the segment name and a suffix "_log"
+ * <p/>
+ * If the file name format changes, the version of {@link LogSegment} has to be updated and this class updated to
+ * handle the new and old versions.
  */
 class LogSegmentNameHelper {
   static final String SUFFIX = BlobStore.SEPARATOR + "log";

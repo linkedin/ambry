@@ -202,12 +202,12 @@ class Log implements Write {
    * positive, else, unless equal, it is negative
    */
   long getDifference(Offset o1, Offset o2) {
-    if (!segmentsByName.containsKey(o1.getName()) || !segmentsByName.containsKey(o2.getName())) {
+    LogSegment firstSegment = segmentsByName.get(o1.getName());
+    LogSegment secondSegment = segmentsByName.get(o2.getName());
+    if (firstSegment == null || secondSegment == null) {
       throw new IllegalArgumentException("One of the log segments provided [" + o1.getName() + ", " + o2.getName() +
           "] does not belong to this log");
     }
-    LogSegment firstSegment = segmentsByName.get(o1.getName());
-    LogSegment secondSegment = segmentsByName.get(o2.getName());
     if (o1.getOffset() > firstSegment.getEndOffset() || o2.getOffset() > secondSegment.getEndOffset()) {
       throw new IllegalArgumentException("One of the offsets provided [" + o1.getOffset() + ", " + o2.getOffset() +
           "] is out of range of the segment it refers to [" + firstSegment.getEndOffset() + ", " +
@@ -340,7 +340,7 @@ class Log implements Write {
   }
 
   /**
-   * Rolls the active log segment over if required. Also ensures enough capacity.
+   * Rolls the active log segment over if required. If rollover is required, a new segment is allocated.
    * @param writeSize the size of the incoming write.
    * @throws IllegalArgumentException if the {@code writeSize} is greater than a single segment's size
    * @throws IllegalStateException if there is no more capacity in the log.
@@ -361,8 +361,8 @@ class Log implements Write {
   }
 
   /**
-   * Ensures that there is enough capacity of a write of size {@code writeSize}. As a part of ensuring capacity, this
-   * function will also allocate more segments if required.
+   * Ensures that there is enough capacity for a write of size {@code writeSize} in the log. As a part of ensuring
+   * capacity, this function will also allocate more segments if required.
    * @param writeSize the size of a subsequent write on the active log segment.
    * @throws IllegalArgumentException if the {@code writeSize} is greater than a single segment's size
    * @throws IllegalStateException if there no more capacity in the log.
