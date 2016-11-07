@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * recovering an index from the log and commit and recover index to disk . This class
  * is not thread safe and expects the caller to do appropriate synchronization.
  **/
-public class PersistentIndex {
+class PersistentIndex {
 
   public static final String Index_File_Name_Suffix = "index";
   public static final String Bloom_File_Name_Suffix = "bloom";

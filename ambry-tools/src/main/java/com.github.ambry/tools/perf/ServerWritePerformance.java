@@ -35,7 +35,6 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;

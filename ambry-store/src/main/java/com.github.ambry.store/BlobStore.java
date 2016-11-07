@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
 /**
  * The blob store that controls the log and index
  */
-public class BlobStore implements Store {
+class BlobStore implements Store {
 
   private Log log;
   private PersistentIndex index;
