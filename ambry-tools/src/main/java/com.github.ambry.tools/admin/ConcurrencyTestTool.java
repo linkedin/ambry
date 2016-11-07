@@ -253,7 +253,7 @@ public class ConcurrencyTestTool {
               }
             };
             FutureResult futureResult = new FutureResult();
-            producerJob.produce(futureResult, callback);
+            producerJob.putBlob(futureResult, callback);
           }
           countDownLatch.await();
           if(failureCount[0] > maxFailuresPerPutBatchToStopPuts){
@@ -367,7 +367,7 @@ public class ConcurrencyTestTool {
                 };
                 FutureResult futureResult = new FutureResult();
                 blobAccessInfo.burstGetReferenceCount.incrementAndGet();
-                getConsumerJob.consumeAndValidate(blobAccessInfo.blobId, blobAccessInfo.blobContent,
+                getConsumerJob.getBlobAndValidate(blobAccessInfo.blobId, blobAccessInfo.blobContent,
                     getConsumerJob.getErrorCodeForNoError(), futureResult, callback);
               }
             }
@@ -422,7 +422,7 @@ public class ConcurrencyTestTool {
                 countDownLatch.countDown();
               }
             };
-            deleteConsumerJob.deleteAndValidate(blobIdStr, deleteConsumerJob.getErrorCodeForNoError(), futureResult,
+            deleteConsumerJob.deleteBlobAndValidate(blobIdStr, deleteConsumerJob.getErrorCodeForNoError(), futureResult,
                 callback);
           }
         } catch (InterruptedException e) {
@@ -440,16 +440,16 @@ public class ConcurrencyTestTool {
   }
 
   /**
-   * An interface for assisting in producing and consuming blobs
+   * An interface to assist in uploading blobs to ambry, fetching and deleting the same from ambry
    */
   interface PutGetHelper<T> {
     /**
-     * Request to produce a blob
+     * Request to uplaod a blob to ambry
      * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
      * @param callback the {@link Callback} that will be called on completion
      * @return a {@link FutureResult} which will contain the result eventually
      */
-    FutureResult<T> produce(FutureResult<T> futureResult, Callback<T> callback);
+    FutureResult<T> putBlob(FutureResult<T> futureResult, Callback<T> callback);
 
     /**
      * Request to fetch the blob pertaining to the {@code blobId} passed in and verify for its content
@@ -459,7 +459,7 @@ public class ConcurrencyTestTool {
      * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
      * @param callback the {@link Callback} that will be called on completion
      */
-    void consumeAndValidate(String blobId, byte[] blobContent, T expectedErrorCode, FutureResult<T> futureResult,
+    void getBlobAndValidate(String blobId, byte[] blobContent, T expectedErrorCode, FutureResult<T> futureResult,
         Callback<T> callback);
 
     /**
@@ -469,7 +469,7 @@ public class ConcurrencyTestTool {
      * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
      * @param callback the {@link Callback} that will be called on completion
      */
-    void deleteAndValidate(String blobId, T expectedErrorCode, FutureResult<T> futureResult, Callback<T> callback);
+    void deleteBlobAndValidate(String blobId, T expectedErrorCode, FutureResult<T> futureResult, Callback<T> callback);
 
     /**
      * Returns the default Error code that is expected for a Get or a Delete call
@@ -521,7 +521,7 @@ public class ConcurrencyTestTool {
      * @return a {@link FutureResult} which will contain the result eventually
      */
     @Override
-    public FutureResult produce(FutureResult futureResult, Callback callback) {
+    public FutureResult putBlob(FutureResult futureResult, Callback callback) {
       int randomNum = localRandom.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
       byte[] blob = new byte[randomNum];
       byte[] usermetadata = new byte[new Random().nextInt(1024)];
@@ -595,7 +595,7 @@ public class ConcurrencyTestTool {
      * @param callback the {@link Callback} that will be called on completion
      */
     @Override
-    public void consumeAndValidate(String blobIdStr, byte[] blobContent, ServerErrorCode expectedErrorCode,
+    public void getBlobAndValidate(String blobIdStr, byte[] blobContent, ServerErrorCode expectedErrorCode,
         FutureResult futureResult, Callback callback) {
       final BlobData[] blobData = {null};
       BlobId blobId = null;
@@ -700,7 +700,7 @@ public class ConcurrencyTestTool {
      * @param callback the {@link Callback} that will be called on completion
      */
     @Override
-    public void deleteAndValidate(String blobId, ServerErrorCode expectedErrorCode, FutureResult futureResult,
+    public void deleteBlobAndValidate(String blobId, ServerErrorCode expectedErrorCode, FutureResult futureResult,
         Callback callback) {
       int correlationId = -1;
       try {
@@ -743,7 +743,7 @@ public class ConcurrencyTestTool {
                       }
                     }
                   };
-                  consumeAndValidate(blobId, null, ServerErrorCode.Blob_Deleted, futureResultForGet, null);
+                  getBlobAndValidate(blobId, null, ServerErrorCode.Blob_Deleted, futureResultForGet, null);
                 }
               } catch (IOException e) {
                 exceptionToReturn = e;
