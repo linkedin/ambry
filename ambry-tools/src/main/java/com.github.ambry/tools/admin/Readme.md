@@ -82,7 +82,6 @@ java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLay
 #### Dump log file
 ```java
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile]
->>>>>>> Fixing Readme:ambry-tools/src/main/java/com.github.ambry.tools/admin/Readme.md
 --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog --fileToRead [logFile]
 ```
 
@@ -103,7 +102,7 @@ java -cp ambry.jar com.github.ambry.store.DumpData
 ### Comparing index entries to log entries(or in other words, trying to read a log record based on index info for
 every entry in the index)
 ```java
-java -cp "*" com.github.ambry.store.DumpData
+java -cp ambry.jar com.github.ambry.store.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation CompareIndexToLog
 --fileToRead [indexFile] --logFileToDump [logFile]
 ```
