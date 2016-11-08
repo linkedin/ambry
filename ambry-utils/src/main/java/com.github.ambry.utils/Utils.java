@@ -31,6 +31,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -228,6 +232,31 @@ public class Utils {
   }
 
   /**
+   * Create a {@link ScheduledExecutorService} with the given properties.
+   * @param numThreads The number of threads in the scheduler's thread pool.
+   * @param threadNamePrefix The prefix string for thread names in this thread pool.
+   * @param isDaemon {@code true} if the threads in this scheduler's should be daemon threads.
+   * @return A {@link ScheduledExecutorService}.
+   */
+  public static ScheduledExecutorService newScheduler(int numThreads, String threadNamePrefix, boolean isDaemon) {
+    ScheduledThreadPoolExecutor scheduler =
+        new ScheduledThreadPoolExecutor(numThreads, new SchedulerThreadFactory(threadNamePrefix, isDaemon));
+    scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+    scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+    return scheduler;
+  }
+
+  /**
+   * Create a {@link ScheduledExecutorService} with the given properties.
+   * @param numThreads The number of threads in the scheduler's thread pool.
+   * @param isDaemon {@code true} if the threads in this scheduler's should be daemon threads.
+   * @return A {@link ScheduledExecutorService}.
+   */
+  public static ScheduledExecutorService newScheduler(int numThreads, boolean isDaemon) {
+    return newScheduler(numThreads, "ambry-scheduler-", isDaemon);
+  }
+
+  /**
    * Open a channel for the given file
    * @param file
    * @param mutable
@@ -297,8 +326,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 2 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) &&
-          ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())) {
+      if (ctor.getParameterTypes().length == 2 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) && ctor
+          .getParameterTypes()[1].isAssignableFrom(arg2.getClass())) {
         return (T) ctor.newInstance(arg1, arg2);
       }
     }
@@ -323,8 +352,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 3 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) &&
-          ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass()) && ctor.getParameterTypes()[2]
+      if (ctor.getParameterTypes().length == 3 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) && ctor
+          .getParameterTypes()[1].isAssignableFrom(arg2.getClass()) && ctor.getParameterTypes()[2]
           .isAssignableFrom(arg3.getClass())) {
         return (T) ctor.newInstance(arg1, arg2, arg3);
       }
@@ -559,9 +588,9 @@ public class Utils {
         // ignore the interruption and check the exit value to be sure
       }
       if (process.exitValue() != 0) {
-        throw new IOException("error while trying to preallocate file " + file.getAbsolutePath() +
-            " exitvalue " + process.exitValue() +
-            " error string " + process.getErrorStream());
+        throw new IOException(
+            "error while trying to preallocate file " + file.getAbsolutePath() + " exitvalue " + process.exitValue()
+                + " error string " + process.getErrorStream());
       }
     }
   }
@@ -705,5 +734,30 @@ public class Utils {
       throwable = throwable.getCause();
     }
     return throwable;
+  }
+
+  /**
+   * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
+   * {@link #newScheduler(int, String, boolean)}.
+   */
+  private static class SchedulerThreadFactory implements ThreadFactory {
+    private final AtomicInteger schedulerThreadId = new AtomicInteger(0);
+    private final String threadNamePrefix;
+    private final boolean isDaemon;
+
+    /**
+     * Create a {@link SchedulerThreadFactory}
+     * @param threadNamePrefix the prefix string for threads in this scheduler's thread pool.
+     * @param isDaemon {@code true} if the created threads should be daemon threads.
+     */
+    SchedulerThreadFactory(String threadNamePrefix, boolean isDaemon) {
+      this.threadNamePrefix = threadNamePrefix;
+      this.isDaemon = isDaemon;
+    }
+
+    @Override
+    public Thread newThread(Runnable r) {
+      return Utils.newThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), r, isDaemon);
+    }
   }
 }

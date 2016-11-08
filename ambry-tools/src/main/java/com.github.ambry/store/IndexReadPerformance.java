@@ -14,10 +14,10 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -25,14 +25,9 @@ import com.github.ambry.store.BlobIndexMetrics;
 import com.github.ambry.store.Log;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreMetrics;
-import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-
+import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.util.ArrayList;
@@ -42,9 +37,14 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 
 /**
@@ -134,8 +134,7 @@ public class IndexReadPerformance {
       String line;
       StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
       Log log = new Log(System.getProperty("user.dir"), 1000, metrics);
-      Scheduler s = new Scheduler(numberOfReaders, "index", true);
-      s.startup();
+      ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
 
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "1048576");
@@ -151,16 +150,15 @@ public class IndexReadPerformance {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
             latch.await();
-            System.out.println("Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get() +
-                " Nano Seconds  Average time taken per read " +
-                ((double) totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
+            System.out.println("Total reads : " + totalReads.get() + "  Total time taken : " + totalTimeTaken.get()
+                + " Nano Seconds  Average time taken per read "
+                + ((double) totalReads.get() / totalTimeTaken.get()) / SystemTime.NsPerSec + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
         }
       });
-      Scheduler scheduleReadLog = new Scheduler(1, true);
-      scheduleReadLog.startup();
+      ScheduledExecutorService scheduleReadLog = Utils.newScheduler(1, true);
       while ((line = br.readLine()) != null) {
         if (line.startsWith("logdir")) {
           String[] logdirs = line.split("-");
@@ -174,7 +172,7 @@ public class IndexReadPerformance {
       }
 
       // read next batch of ids after 2 minutes
-      scheduleReadLog.schedule("readlog", new Runnable() {
+      scheduleReadLog.scheduleAtFixedRate(new Runnable() {
         @Override
         public void run() {
           populateIds(br, hashes);

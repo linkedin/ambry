@@ -103,8 +103,11 @@ public class MockReplicaId implements ReplicaId {
 
   public void cleanup() {
     File replicaDir = new File(replicaPath);
-    for (File replica : replicaDir.listFiles()) {
-      replica.delete();
+    File[] replicaDirFiles = replicaDir.listFiles();
+    if (replicaDirFiles != null) {
+      for (File replica : replicaDirFiles) {
+        replica.delete();
+      }
     }
     replicaDir.delete();
   }

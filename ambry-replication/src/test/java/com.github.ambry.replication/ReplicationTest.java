@@ -23,7 +23,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -49,8 +48,6 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
-import com.github.ambry.store.MessageStoreHardDelete;
-import com.github.ambry.store.MessageStoreRecovery;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
@@ -58,12 +55,10 @@ import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreManager;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -317,22 +312,6 @@ public class ReplicationTest {
     }
   }
 
-  class MockStoreManager extends StoreManager {
-    Map<PartitionId, MockStore> stores;
-
-    public MockStoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
-        StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-        Map<PartitionId, MockStore> stores)
-        throws StoreException {
-      super(config, scheduler, registry, replicas, factory, recovery, hardDelete, SystemTime.getInstance());
-      this.stores = stores;
-    }
-
-    public Store getStore(PartitionId id) {
-      return stores.get(id);
-    }
-  }
-
   class MockConnection implements ConnectedChannel {
 
     class MockSend implements Send {
@@ -424,7 +403,8 @@ public class ReplicationTest {
       if (metadataRequest != null) {
         List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
             new ArrayList<ReplicaMetadataResponseInfo>();
-        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest.getReplicaMetadataRequestInfoList()) {
+        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest
+            .getReplicaMetadataRequestInfoList()) {
           List<MessageInfo> messageInfoToReturn = new ArrayList<MessageInfo>();
           int startIndex = ((MockFindToken) (replicaMetadataRequestInfo.getToken())).getIndex();
           int endIndex = Math.min(messageInfoForPartition.get(replicaMetadataRequestInfo.getPartitionId()).size(),
