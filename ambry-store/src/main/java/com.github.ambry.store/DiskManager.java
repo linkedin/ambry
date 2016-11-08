@@ -137,7 +137,7 @@ class DiskManager {
    */
   Store getStore(PartitionId id) {
     BlobStore store = stores.get(id);
-    return store.isStarted() ? store : null;
+    return (store != null && store.isStarted()) ? store : null;
   }
 
   /**

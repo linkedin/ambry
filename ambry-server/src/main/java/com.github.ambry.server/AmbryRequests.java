@@ -589,6 +589,13 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
+  /**
+   * Check that the provided partition is valid, on the disk, and can be written to.
+   * @param partition the partition to validate.
+   * @param checkPartitionState {@code true} to check if a partition is read-write.
+   * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
+   *         if it cannot.
+   */
   private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
     // 1. check if partition exists on this node and that the store for this partition has been started
     if (storageManager.getStore(partition) == null) {

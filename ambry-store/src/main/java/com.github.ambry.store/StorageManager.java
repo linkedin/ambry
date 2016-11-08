@@ -101,7 +101,7 @@ public class StorageManager {
    */
   public void start()
       throws InterruptedException {
-    logger.info("Starting store manager");
+    logger.info("Starting storage manager");
     List<Thread> startupThreads = new ArrayList<>();
     for (final DiskManager diskManager : diskManagers) {
       Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), new Runnable() {
@@ -121,7 +121,7 @@ public class StorageManager {
     for (Thread startupThread : startupThreads) {
       startupThread.join();
     }
-    logger.info("Starting store manager complete");
+    logger.info("Starting storage manager complete");
   }
 
   /**
@@ -140,10 +140,10 @@ public class StorageManager {
    */
   public void shutdown()
       throws StoreException {
-    logger.info("Shutting down store manager");
+    logger.info("Shutting down storage manager");
     for (DiskManager diskManager : diskManagers) {
       diskManager.shutdown();
     }
-    logger.info("Shutting down store manager complete");
+    logger.info("Shutting down storage manager complete");
   }
 }
