@@ -100,7 +100,7 @@ java -cp ambry.jar com.github.ambry.store.DumpData
 ```
 
 ### Comparing index entries to log entries(or in other words, trying to read a log record based on index info for
-every entry in the index)
+### every entry in the index)
 ```java
 java -cp ambry.jar com.github.ambry.store.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation CompareIndexToLog
@@ -129,7 +129,7 @@ java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --ambryBlobId [blobid]
 ```
 
-#### Get blob from all replicas from a datecenter
+#### Get blob from all replicas from a datacenter
 ```java
 java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_DATACENTER --fabric [fabric]
@@ -196,8 +196,8 @@ Ensure that ambry server is running at the given hostName and port
 
 ```java
 java -cp ambry.jar com.github.ambry.tools.admin.ConcurrencyTestTool --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --putGetHelperFactory com.github.ambry.tools.admin.ServerPutGetHelperFactory
---maxParallelPutCount 2 --parallelGetCount 4 --burstCountForGet 4 --maxGetCountPerBlob 10
- *  --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --hostName [HostName] --port [PortNo]
- *  --deleteOnExit true
+ --partitionLayout [PartitionLayoutFile] --putGetHelperFactory com.github.ambry.tools.admin.RouterPutGetHelperFactory
+ --maxParallelPutCount 2 --parallelGetCount 4 --burstCountForGet 4 --maxGetCountPerBlob 10
+ --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --routerPropsFilePath [Path to router props
+ file] --deleteOnExit true
 ```

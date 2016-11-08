@@ -18,23 +18,21 @@ import java.util.Properties;
 
 
 /**
- * {@link PutGetHelperFactory} for a Server. This factory can be used to fetch
- * {@link ConcurrencyTestTool.ServerPutGetHelper} on {@link #getPutGetHelper()}
+ * {@link PutGetHelperFactory} for a Router. This factory can be used to fetch
+ * {@link ConcurrencyTestTool.RouterPutGetHelper} on {@link #getPutGetHelper()}
  */
-public class ServerPutGetHelperFactory implements PutGetHelperFactory {
+public class RouterPutGetHelperFactory implements PutGetHelperFactory {
 
   private final Properties properties;
-  private final String hostName;
-  private final int port;
+  private final String routerFactoryClass;
   private final ClusterMap clusterMap;
   private final int maxBlobSize;
   private final int minBlobSize;
 
-  public ServerPutGetHelperFactory(Properties properties, String hostName, Integer port, ClusterMap clusterMap,
-      Integer maxBlobSize, Integer minBlobSize) {
+  public RouterPutGetHelperFactory(Properties properties, ClusterMap clusterMap, Integer maxBlobSize,
+      Integer minBlobSize) {
     this.properties = properties;
-    this.hostName = hostName;
-    this.port = port;
+    this.routerFactoryClass = (String) properties.get("rest.server.router.factory");
     this.clusterMap = clusterMap;
     this.maxBlobSize = maxBlobSize;
     this.minBlobSize = minBlobSize;
@@ -42,11 +40,12 @@ public class ServerPutGetHelperFactory implements PutGetHelperFactory {
 
   /**
    * {@inheritDoc}
-   * @return an instance of {@link ConcurrencyTestTool.ServerPutGetHelper}
-   * @throws Exception if creation of {@link com.github.ambry.network.BlockingChannelConnectionPool} fails
+   * @return an instance of {@link ConcurrencyTestTool.RouterPutGetHelper}
+   * throws Exception if instantiation of the {@link ConcurrencyTestTool.RouterPutGetHelper} fails
    */
-  public ConcurrencyTestTool.ServerPutGetHelper getPutGetHelper()
+  public ConcurrencyTestTool.RouterPutGetHelper getPutGetHelper()
       throws Exception {
-    return new ConcurrencyTestTool.ServerPutGetHelper(properties, hostName, port, clusterMap, maxBlobSize, minBlobSize);
+    return new ConcurrencyTestTool.RouterPutGetHelper(properties, clusterMap, routerFactoryClass, maxBlobSize,
+        minBlobSize);
   }
 }
