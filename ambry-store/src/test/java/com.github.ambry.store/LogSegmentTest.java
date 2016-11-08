@@ -417,7 +417,7 @@ public class LogSegmentTest {
     }
 
     // unknown version
-    LogSegment segment = getSegment("log_current", STANDARD_SEGMENT_SIZE, true);
+    LogSegment segment = getSegment("dummy_log", STANDARD_SEGMENT_SIZE, true);
     file = segment.getView().getFirst();
     byte[] header = getHeader(segment);
     byte savedByte = header[0];

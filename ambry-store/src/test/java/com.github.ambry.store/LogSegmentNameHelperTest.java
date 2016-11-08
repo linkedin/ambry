@@ -77,9 +77,6 @@ public class LogSegmentNameHelperTest {
   @Test
   public void filenameFilterTest()
       throws IOException {
-    File tempFile = File.createTempFile("ambry", ".tmp");
-    tempFile.deleteOnExit();
-
     int validFileCount = 10;
     int invalidFileCount = 5;
     Set<File> validFiles = new HashSet<>(validFileCount);
