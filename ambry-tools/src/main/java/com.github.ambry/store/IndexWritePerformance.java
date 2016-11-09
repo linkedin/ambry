@@ -14,11 +14,11 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -27,22 +27,22 @@ import com.github.ambry.store.Log;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreMetrics;
-import com.github.ambry.utils.Scheduler;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 
 /**
@@ -116,8 +116,7 @@ public class IndexWritePerformance {
       StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
       Log log = new Log(System.getProperty("user.dir"), 10, metrics);
 
-      Scheduler s = new Scheduler(numberOfWriters, "index", false);
-      s.startup();
+      ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);
 
       ArrayList<BlobIndexMetrics> indexWithMetrics = new ArrayList<BlobIndexMetrics>(numberOfIndexes);
       Properties props = new Properties();
@@ -148,10 +147,10 @@ public class IndexWritePerformance {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
             latch.await();
-            System.out
-                .println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTakenInNs.get() +
-                    " Nano Seconds  Average time taken per write " +
-                    ((double) totalWrites.get() / totalTimeTakenInNs.get()) / SystemTime.NsPerSec + " Seconds");
+            System.out.println(
+                "Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTakenInNs.get()
+                    + " Nano Seconds  Average time taken per write "
+                    + ((double) totalWrites.get() / totalTimeTakenInNs.get()) / SystemTime.NsPerSec + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }

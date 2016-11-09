@@ -38,14 +38,15 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreManager;
-import com.github.ambry.utils.Scheduler;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,8 +60,8 @@ public class AmbryServer {
   private NetworkServer networkServer = null;
   private AmbryRequests requests = null;
   private RequestHandlerPool requestHandlerPool = null;
-  private Scheduler scheduler = null;
-  private StoreManager storeManager = null;
+  private ScheduledExecutorService scheduler = null;
+  private StorageManager storageManager = null;
   private ReplicationManager replicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
@@ -108,27 +109,26 @@ public class AmbryServer {
       // verify the configs
       properties.verify();
 
-      scheduler = new Scheduler(serverConfig.serverSchedulerNumOfthreads, false);
-      scheduler.startup();
+      scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       logger.info("check if node exist in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null) {
-        throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port +
-            "is not present in the clustermap. Failing to start the datanode");
+        throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
+            + "is not present in the clustermap. Failing to start the datanode");
       }
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      storeManager =
-          new StoreManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
+      storageManager =
+          new StorageManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
               new BlobStoreRecovery(), new BlobStoreHardDelete(), time);
-      storeManager.start();
+      storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       connectionPool.start();
 
       replicationManager =
-          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory,
+          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem);
       replicationManager.start();
 
@@ -140,7 +140,7 @@ public class AmbryServer {
 
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
-          new AmbryRequests(storeManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
+          new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
@@ -164,6 +164,9 @@ public class AmbryServer {
 
       if (scheduler != null) {
         scheduler.shutdown();
+        if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {
+          logger.error("Could not terminate all tasks after scheduler shutdown");
+        }
       }
       if (networkServer != null) {
         networkServer.shutdown();
@@ -174,8 +177,8 @@ public class AmbryServer {
       if (replicationManager != null) {
         replicationManager.shutdown();
       }
-      if (storeManager != null) {
-        storeManager.shutdown();
+      if (storageManager != null) {
+        storageManager.shutdown();
       }
       if (connectionPool != null) {
         connectionPool.shutdown();

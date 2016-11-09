@@ -14,8 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import org.junit.Assert;
-import org.junit.Test;
+import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -23,9 +22,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ClosedChannelException;
 import java.util.Random;
-import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.metrics.MetricsRegistryMap;
-import com.github.ambry.metrics.ReadableMetricsRegistry;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class LogTest {
@@ -49,8 +47,8 @@ public class LogTest {
       randomFile.setLength(5000);
       File logFile = new File(tempFile.getParent(), "log_current");
       logFile.deleteOnExit();
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
+      Log logTest =
+          new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[1000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer
@@ -157,8 +155,8 @@ public class LogTest {
       randomFile.setLength(5000);
       File logFile = new File(tempFile.getParent(), "log_current");
       logFile.deleteOnExit();
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
+      Log logTest =
+          new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[2000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer
@@ -204,8 +202,8 @@ public class LogTest {
       randomFile.setLength(5000);
       File logFile = new File(tempFile.getParent(), "log_current");
       logFile.deleteOnExit();
-      ReadableMetricsRegistry registry = new MetricsRegistryMap();
-      Log logTest = new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
+      Log logTest =
+          new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[2000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer

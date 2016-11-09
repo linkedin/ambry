@@ -96,7 +96,6 @@ project(':ambry-api') {
 project(':ambry-clustermap') {
     dependencies {
         compile project(':ambry-api'),
-                project(':ambry-metrics'),
                 project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
@@ -129,7 +128,6 @@ project(':ambry-server') {
     dependencies {
         compile project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
-                project(':ambry-metrics'),
                 project(':ambry-network'),
                 project(':ambry-protocol'),
                 project(':ambry-commons'),
@@ -150,7 +148,6 @@ project(':ambry-store') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-clustermap'),
-                project(':ambry-metrics'),
                 project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         testCompile project(':ambry-clustermap').sourceSets.test.output
@@ -189,12 +186,6 @@ project(':ambry-tools') {
                 project(':ambry-admin'),
                 project(':ambry-frontend')
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-    }
-}
-
-project(':ambry-metrics') {
-    dependencies {
-        compile project(':ambry-api')
     }
 }
 

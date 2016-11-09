@@ -11,6 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
+
 package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
@@ -21,10 +22,11 @@ import com.codahale.metrics.Timer;
 
 
 /**
- * Metrics for the store
+ * Metrics for a specific store.
  */
 public class StoreMetrics {
-
+  private final MetricRegistry registry;
+  private final String name;
   public final Timer getResponse;
   public final Timer putResponse;
   public final Timer deleteResponse;
@@ -32,6 +34,7 @@ public class StoreMetrics {
   public final Timer findMissingKeysResponse;
   public final Timer isKeyDeletedResponse;
   public final Timer storeStartTime;
+  public final Counter storeStartFailure;
   public final Counter overflowWriteError;
   public final Counter overflowReadError;
   public final Timer recoveryTime;
@@ -54,8 +57,6 @@ public class StoreMetrics {
   public final Histogram segmentSizeForExists;
   public Gauge<Double> percentageUsedCapacity;
   public Gauge<Double> percentageHardDeleteCompleted;
-  private final MetricRegistry registry;
-  private final String name;
 
   public StoreMetrics(String storeId, MetricRegistry registry) {
     this.registry = registry;
@@ -69,12 +70,14 @@ public class StoreMetrics {
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindMissingKeyResponse"));
     isKeyDeletedResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "IsKeyDeletedResponse"));
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreStartTime"));
+    storeStartFailure = registry.counter(MetricRegistry.name(BlobStore.class, name + "StoreStartFailure"));
     overflowWriteError = registry.counter(MetricRegistry.name(Log.class, name + "OverflowWriteError"));
     overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "OverflowReadError"));
     recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexRecoveryTime"));
     findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFindTime"));
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));
-    cleanupTokenFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "CleanupTokenFlushTime"));
+    cleanupTokenFlushTime =
+        registry.timer(MetricRegistry.name(PersistentIndex.class, name + "CleanupTokenFlushTime"));
     hardDeleteTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteTime"));
     nonzeroMessageRecovery =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "NonZeroMessageRecovery"));
