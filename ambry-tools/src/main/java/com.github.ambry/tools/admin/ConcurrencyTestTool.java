@@ -13,38 +13,14 @@
  */
 package com.github.ambry.tools.admin;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.BlobType;
-import com.github.ambry.messageformat.MessageFormatException;
-import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.NetworkClient;
-import com.github.ambry.network.NetworkClientFactory;
-import com.github.ambry.network.NetworkMetrics;
-import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
-import com.github.ambry.network.RequestInfo;
-import com.github.ambry.protocol.DeleteRequest;
-import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.protocol.GetOptions;
-import com.github.ambry.protocol.GetRequest;
-import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.protocol.PutRequest;
-import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -54,17 +30,12 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.router.RouterFactory;
-import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.rmi.UnexpectedException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -84,8 +55,6 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.github.ambry.utils.Utils.getRandomLong;
 
 
 /**
@@ -113,14 +82,14 @@ import static com.github.ambry.utils.Utils.getRandomLong;
  *  --partitionLayout [PartitionLayoutFile] --putGetHelperFactory com.github.ambry.tools.admin.RouterPutGetHelperFactory
  *  --maxParallelPutCount 2 --parallelGetCount 4 --burstCountForGet 4 --maxGetCountPerBlob 10
  *  --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --routerPropsFilePath [Path to router props
- *  file] --deleteOnExit true
+ *  file] --deleteAndValidate true
  *
  * Server
  *  java -cp ambry.jar com.github.ambry.tools.admin.ConcurrencyTestTool --hardwareLayout [HardwareLayoutFile]
  *  --partitionLayout [PartitionLayoutFile] --putGetHelperFactory com.github.ambry.tools.admin.RouterPutGetHelperFactory
  *  --maxParallelPutCount 2 --parallelGetCount 4 --burstCountForGet 4 --maxGetCountPerBlob 10
  *  --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --hostName [HostName] --port [PortNo]
- *  --deleteOnExit true
+ *  --deleteAndValidate true
  *
  *  Few other options that might be useful:
  * --sleepTimeBetweenBatchGetsInMs long : Time to sleep in ms between batch Gets
@@ -153,7 +122,7 @@ public class ConcurrencyTestTool {
     ConcurrencyTestTool concurrencyTestTool = new ConcurrencyTestTool();
     concurrencyTestTool.startTest(putGetHelper, options.maxParallelPutCount, options.parallelGetCount,
         options.totalPutBlobCount, options.maxGetCountPerBlob, options.burstCountForGet,
-        options.maxFailuresPerPutBatchToStopPuts, options.maxFailuresPerGetBatchToStopGets, options.deleteOnExit,
+        options.maxFailuresPerPutBatchToStopPuts, options.maxFailuresPerGetBatchToStopGets, options.deleteAndValidate,
         options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs);
   }
 
@@ -168,14 +137,14 @@ public class ConcurrencyTestTool {
    *                         times simultaneously
    * @param maxFailuresPerPutBatchToStopPuts Maximum allowable failures per Put batch in order to continue with PUTs
    * @param maxFailuresPerGetBatchToStopGets Maximum allowable failures per Get batch in order to continue with GETs
-   * @param deleteOnExit Deletes the blobs once GETs have reached a threshold on every blob
+   * @param deleteAndValidate Deletes the blobs once GETs have reached a threshold on every blob
    * @param sleepTimeBetweenBatchPutsInMs Time to sleep in ms between batch Puts per Producer thread
    * @param sleepTimeBetweenBatchGetsInMs Time to sleep in ms between batch Gets per Consumer thread
    * @throws InterruptedException
    */
   public void startTest(PutGetHelper putGetHelper, int maxParallelPutCount, int parallelGetCount, int totalPutCount,
       int maxGetCountPerBlob, int burstCountGet, int maxFailuresPerPutBatchToStopPuts,
-      int maxFailuresPerGetBatchToStopGets, boolean deleteOnExit, long sleepTimeBetweenBatchPutsInMs,
+      int maxFailuresPerGetBatchToStopGets, boolean deleteAndValidate, long sleepTimeBetweenBatchPutsInMs,
       long sleepTimeBetweenBatchGetsInMs)
       throws InterruptedException {
     AtomicInteger currentPutCount = new AtomicInteger(0);
@@ -186,30 +155,26 @@ public class ConcurrencyTestTool {
     BlockingQueue<String> deletedBlobIds = new LinkedBlockingQueue<>();
     final ThreadLocalRandom threadLocalRandom = ThreadLocalRandom.current();
 
-    logger.trace("Initiating Put thread ");
     // Creating PutThread
     Thread putThread = new Thread(
         new PutThread(putGetHelper, sharedQueue, totalPutCount, currentPutCount, maxParallelPutCount,
             maxFailuresPerPutBatchToStopPuts, putComplete, sleepTimeBetweenBatchPutsInMs, threadLocalRandom));
 
-    logger.trace("Initiating Get thread ");
     // Creating Get thread
     Thread getThread = new Thread(
         new GetThread(putGetHelper, sharedQueue, maxGetCountPerBlob, currentPutCount, getCompletedCount, burstCountGet,
             parallelGetCount, putComplete, maxFailuresPerGetBatchToStopGets, sleepTimeBetweenBatchGetsInMs,
-            deleteOnExit, threadLocalRandom, deletedBlobIds));
+            deleteAndValidate, threadLocalRandom, deletedBlobIds));
 
     Thread deleteThread = null;
-    if (deleteOnExit) {
+    if (deleteAndValidate) {
       logger.trace("Initiating Delete thread ");
       DeleteThread deleteBlobThread = new DeleteThread(putGetHelper, totalPutCount, deletedBlobIds);
       deleteThread = new Thread(deleteBlobThread);
       deleteThread.start();
     }
 
-    logger.trace("Starting Put thread ");
     putThread.start();
-    logger.trace("Starting Get thread ");
     getThread.start();
 
     putThread.join();
@@ -813,310 +778,6 @@ public class ConcurrencyTestTool {
     }
   }
 
-
-  /**
-   * An implementation of {@link PutGetHelper} for an Ambry Server
-   */
-  static class ServerPutGetHelper implements PutGetHelper<ServerErrorCode> {
-    private final String hostName;
-    private final int port;
-    private final ClusterMap clusterMap;
-    private final int maxBlobSize;
-    private final int minBlobSize;
-    private final ThreadLocalRandom localRandom;
-    private final NetworkClientUtils networkClientUtils;
-    private final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
-
-    public ServerPutGetHelper(Properties properties, String hostName, int port, ClusterMap clusterMap, int maxBlobSize,
-        int minBlobSize)
-        throws Exception {
-      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      NetworkClientFactory networkClientFactory =
-          new NetworkClientFactory(new NetworkMetrics(new MetricRegistry()), new NetworkConfig(verifiableProperties),
-              null, 20, 20, 10000, SystemTime.getInstance());
-      NetworkClient networkClient = networkClientFactory.getNetworkClient();
-      this.networkClientUtils = new NetworkClientUtils(networkClient, 50);
-      this.hostName = hostName;
-      this.port = port;
-      this.clusterMap = clusterMap;
-      this.maxBlobSize = maxBlobSize;
-      this.minBlobSize = minBlobSize;
-      this.localRandom = ThreadLocalRandom.current();
-    }
-
-    /**
-     * {@inheritDoc}
-     * Uploads a blob to the server directly and returns the blobId along with the content
-     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
-     * @param callback the {@link Callback} that will be called on completion
-     * @return a {@link FutureResult} which will contain the result eventually
-     */
-    @Override
-    public void putBlob(FutureResult futureResult, final Callback callback) {
-      int randomNum = localRandom.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
-      final byte[] blob = new byte[randomNum];
-      byte[] usermetadata = new byte[new Random().nextInt(1024)];
-      BlobProperties props = new BlobProperties(randomNum, "test");
-      int correlationId = -1;
-      try {
-        List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
-        int index = (int) getRandomLong(localRandom, partitionIds.size());
-        PartitionId partitionId = partitionIds.get(index);
-        final BlobId blobId = new BlobId(partitionId);
-        correlationId = correlationIdGenerator.incrementAndGet();
-        PutRequest putRequest =
-            new PutRequest(correlationId, "ConcurrencyTest", blobId, props, ByteBuffer.wrap(usermetadata),
-                ByteBuffer.wrap(blob), props.getBlobSize(), BlobType.DataBlob);
-        final long startTime = SystemTime.getInstance().nanoseconds();
-        List<NetworkClientUtils.RequestMetadata> requestMetadataList = new ArrayList<>();
-        final NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<ByteBuffer>();
-        requestMetadata.requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), putRequest);
-        requestMetadata.futureResult = new FutureResult<ByteBuffer>();
-        requestMetadata.correlationId = correlationId;
-        requestMetadata.callback = new Callback<ByteBuffer>() {
-          @Override
-          public void onCompletion(ByteBuffer result, Exception exception) {
-            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTime;
-            logger.trace(requestMetadata.correlationId + " Time taken to put blob id " + blobId + " in ms "
-                + latencyPerBlob / SystemTime.NsPerMs + " for blob of size " + blob.length);
-            Exception exceptionToReturn = null;
-            Pair<String, byte[]> toReturn = null;
-            if (result != null) {
-              try {
-                PutResponse putResponse = PutResponse.readFrom(new DataInputStream(new ByteBufferInputStream(result)));
-                if (putResponse.getError() != ServerErrorCode.No_Error) {
-                  exceptionToReturn = new UnexpectedException("error " + putResponse.getError());
-                } else {
-                  toReturn = new Pair<>(blobId.getID(), blob);
-                }
-              } catch (IOException e) {
-                exceptionToReturn = e;
-              }
-            } else {
-              exceptionToReturn = exception;
-            }
-            requestMetadata.futureResult.done(toReturn, exceptionToReturn);
-            if (callback != null) {
-              callback.onCompletion(toReturn, exceptionToReturn);
-            }
-          }
-        };
-        requestMetadataList.add(requestMetadata);
-        networkClientUtils.poll(requestMetadataList);
-      } catch (Exception e) {
-        logger.error(correlationId + " Unknown Exception thrown when putting blob " + e.getStackTrace());
-        futureResult.done(null, e);
-        if (callback != null) {
-          callback.onCompletion(null, e);
-        }
-      }
-    }
-
-    /**
-     * {@inheritDoc}
-     * Request to fetch the blob from the server directly pertaining to the {@code blobId} passed in and verify for
-     * its content
-     * @param blobIdStr the (string representation of the) blobId of that blob that needs to be fetched
-     * @param blobContent the content of the blob that needs to be verified against
-     * @param expectedErrorCode the expected error code for the Get call
-     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
-     * @param callback the {@link Callback} that will be called on completion
-     */
-    @Override
-    public void getBlobAndValidate(final String blobIdStr, final byte[] blobContent,
-        final ServerErrorCode expectedErrorCode, FutureResult futureResult, final Callback callback) {
-      final BlobData[] blobData = {null};
-      BlobId blobId = null;
-      int correlationId = -1;
-      try {
-        blobId = new BlobId(blobIdStr, clusterMap);
-        ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
-        blobIds.add(blobId);
-        ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-        PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
-        partitionRequestInfoList.add(partitionRequestInfo);
-        correlationId = correlationIdGenerator.incrementAndGet();
-        GetRequest getRequest =
-            new GetRequest(correlationId, "ConcurrencyTest", MessageFormatFlags.Blob, partitionRequestInfoList,
-                GetOptions.None);
-        final Long startTimeGetBlob = SystemTime.getInstance().nanoseconds();
-        List<NetworkClientUtils.RequestMetadata> requestInfoList = new ArrayList<>();
-        final NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<ByteBuffer>();
-        requestMetadata.requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), getRequest);
-        requestMetadata.futureResult = new FutureResult<ByteBuffer>();
-        requestMetadata.correlationId = correlationId;
-        requestMetadata.callback = new Callback<ByteBuffer>() {
-          @Override
-          public void onCompletion(ByteBuffer result, Exception exception) {
-            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
-            Exception exceptionToReturn = null;
-            if (result != null) {
-              try {
-                GetResponse getResponse =
-                    GetResponse.readFrom(new DataInputStream(new ByteBufferInputStream(result)), clusterMap);
-                if (getResponse.getError() == ServerErrorCode.No_Error) {
-                  ServerErrorCode serverErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-                  if (serverErrorCode == ServerErrorCode.No_Error) {
-                    blobData[0] = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
-                    long sizeRead = 0;
-                    byte[] outputBuffer = new byte[(int) blobData[0].getSize()];
-                    ByteBufferOutputStream streamOut = new ByteBufferOutputStream(ByteBuffer.wrap(outputBuffer));
-                    while (sizeRead < blobData[0].getSize()) {
-                      streamOut.write(blobData[0].getStream().read());
-                      sizeRead++;
-                    }
-                    boolean blobcontentMatched = Arrays.equals(blobContent, outputBuffer);
-                    if (!blobcontentMatched) {
-                      logger.error(requestMetadata.correlationId + " Blob content mismatch for " + blobIdStr + " from "
-                          + hostName + ":" + port);
-                    }
-                  } else if (expectedErrorCode.equals(serverErrorCode)) {
-                    logger.trace(
-                        requestMetadata.correlationId + " Get of blob " + blobIdStr + " throws " + expectedErrorCode
-                            + " as expected ");
-                  } else {
-                    logger.error(requestMetadata.correlationId + " Get of blob " + blobIdStr
-                        + " failed with unexpected Store level error code " + serverErrorCode + ", expected "
-                        + expectedErrorCode);
-                    exceptionToReturn = new IllegalStateException(
-                        requestMetadata.correlationId + " Get of " + blobIdStr + " throws " + serverErrorCode
-                            + " different from what is expected  " + expectedErrorCode);
-                  }
-                } else {
-                  logger.error(requestMetadata.correlationId + " Get of blob " + blobIdStr
-                      + " failed with unexpected Server Level error code " + getResponse.getError() + ", expected "
-                      + expectedErrorCode);
-                  exceptionToReturn = new IllegalStateException(
-                      requestMetadata.correlationId + " Get of " + blobIdStr + " throws " + getResponse.getError()
-                          + " different from what is expected  " + expectedErrorCode);
-                }
-                logger.trace(requestMetadata.correlationId + " Time taken to get blob " + blobIdStr + " in ms "
-                    + latencyPerBlob / SystemTime.NsPerMs);
-              } catch (IOException e) {
-                exceptionToReturn = e;
-              } catch (MessageFormatException e) {
-                exceptionToReturn = e;
-              }
-            } else {
-              exceptionToReturn = exception;
-            }
-            requestMetadata.futureResult.done(null, exceptionToReturn);
-            if (callback != null) {
-              callback.onCompletion(null, exceptionToReturn);
-            }
-          }
-        };
-        requestInfoList.add(requestMetadata);
-        networkClientUtils.poll(requestInfoList);
-      } catch (Exception e) {
-        logger.error(
-            correlationId + " Unknown Exception thrown when getting blob " + blobId + ", " + e.getStackTrace());
-        futureResult.done(null, e);
-        if (callback != null) {
-          callback.onCompletion(null, e);
-        }
-      }
-    }
-
-    /**
-     * {@inheritDoc}
-     * Request to delete the blob from the server directly pertaining to the {@code blobId} passed in and verify that
-     * the subsequent get fails with {@link ServerErrorCode#Blob_Deleted}
-     * @param blobId the blobId the of that blob that needs to be fetched
-     * @param expectedErrorCode the expected error code for the Delete call
-     * @param futureResult the {@link FutureResult} where the result/exception will be set on completion
-     * @param callback the {@link Callback} that will be called on completion
-     */
-    @Override
-    public void deleteBlobAndValidate(final String blobId, final ServerErrorCode expectedErrorCode,
-        final FutureResult futureResult, final Callback callback) {
-      int correlationId = -1;
-      try {
-        correlationId = correlationIdGenerator.incrementAndGet();
-        DeleteRequest deleteRequest =
-            new DeleteRequest(correlationId, "ConcurrencyTest", new BlobId(blobId, clusterMap));
-        final Long startTimeDeleteBlob = SystemTime.getInstance().nanoseconds();
-        List<NetworkClientUtils.RequestMetadata> requestMetadataList = new ArrayList<>();
-        final NetworkClientUtils.RequestMetadata requestMetadata = new NetworkClientUtils.RequestMetadata<>();
-        requestMetadata.requestInfo = new RequestInfo(hostName, new Port(port, PortType.PLAINTEXT), deleteRequest);
-        requestMetadata.futureResult = new FutureResult<ByteBuffer>();
-        requestMetadata.correlationId = correlationId;
-        requestMetadata.callback = new Callback<ByteBuffer>() {
-          @Override
-          public void onCompletion(ByteBuffer result, Exception exception) {
-            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeDeleteBlob;
-            logger.trace(
-                requestMetadata.correlationId + " Delete of  " + blobId + " took " + latencyPerBlob / SystemTime.NsPerMs
-                    + " ms");
-            Exception exceptionToReturn = null;
-            if (result != null) {
-              try {
-                DeleteResponse deleteResponse =
-                    DeleteResponse.readFrom(new DataInputStream(new ByteBufferInputStream(result)));
-                if (deleteResponse.getError() != ServerErrorCode.No_Error) {
-                  logger.error(requestMetadata.correlationId + " Deletion of " + blobId + " failed with an exception "
-                      + deleteResponse.getError());
-                  exceptionToReturn = new IllegalStateException(
-                      requestMetadata.correlationId + " Deletion of " + blobId + " failed with an exception "
-                          + deleteResponse.getError());
-                } else {
-                  logger.trace(requestMetadata.correlationId + " Deletion of " + blobId + " succeeded ");
-                  FutureResult futureResultForGet = new FutureResult();
-                  Callback callbackForGet = new Callback() {
-                    @Override
-                    public void onCompletion(Object result, Exception exception) {
-                      futureResult.done(null, exception);
-                      if (callback != null) {
-                        callback.onCompletion(null, exception);
-                      }
-                    }
-                  };
-                  getBlobAndValidate(blobId, null, ServerErrorCode.Blob_Deleted, futureResultForGet, callbackForGet);
-                }
-              } catch (IOException e) {
-                exceptionToReturn = e;
-              }
-            } else {
-              exceptionToReturn = exception;
-            }
-            futureResult.done(null, exceptionToReturn);
-            if (callback != null) {
-              callback.onCompletion(null, exceptionToReturn);
-            }
-          }
-        };
-        requestMetadataList.add(requestMetadata);
-        networkClientUtils.poll(requestMetadataList);
-      } catch (Exception e) {
-        logger.error(correlationId + " Unknown Exception thrown when deleting " + blobId + ", " + e.getStackTrace());
-        futureResult.done(null, e);
-        if (callback != null) {
-          callback.onCompletion(null, e);
-        }
-      }
-    }
-
-    /**
-     * {@inheritDoc}
-     * Returns the default Error code that is expected for a Get call or a delete call
-     * @return the default error code that is expected for a Get call or a delete call
-     */
-    @Override
-    public ServerErrorCode getErrorCodeForNoError() {
-      return ServerErrorCode.No_Error;
-    }
-
-    /**
-     * {@inheritDoc}
-     * Request to clean up resources used by this helper class, i.e. NetworkClient in this context
-     */
-    @Override
-    public void shutdown()
-        throws InterruptedException {
-      networkClientUtils.close();
-    }
-  }
-
   private static class InvocationOptions {
     public final String hardwareLayoutFilePath;
     public final String partitionLayoutFilePath;
@@ -1136,7 +797,7 @@ public class ConcurrencyTestTool {
     public final String hostName;
     public final int port;
     public final String putGetHelperFactoryStr;
-    public final boolean deleteOnExit;
+    public final boolean deleteAndValidate;
     public final boolean enabledVerboseLogging;
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -1248,10 +909,10 @@ public class ConcurrencyTestTool {
               .describedAs("port")
               .ofType(Integer.class)
               .defaultsTo(6667);
-      ArgumentAcceptingOptionSpec<Boolean> deleteOnExitOpt =
-          parser.accepts("deleteOnExit", "Delete blobs on exiting the test")
+      ArgumentAcceptingOptionSpec<Boolean> deleteAndValidateOpt =
+          parser.accepts("deleteAndValidate", "Delete blobs once Get threshold is reached")
               .withOptionalArg()
-              .describedAs("deleteOnExit")
+              .describedAs("deleteAndValidate")
               .ofType(Boolean.class)
               .defaultsTo(true);
       ArgumentAcceptingOptionSpec<Boolean> enableVerboseLoggingOpt =
@@ -1290,7 +951,7 @@ public class ConcurrencyTestTool {
       this.hostName = options.valueOf(hostNameOpt);
       this.port = options.valueOf(portNumberOpt);
       this.putGetHelperFactoryStr = options.valueOf(putGetHelperFactoryOpt);
-      this.deleteOnExit = options.valueOf(deleteOnExitOpt);
+      this.deleteAndValidate = options.valueOf(deleteAndValidateOpt);
       this.enabledVerboseLogging = options.valueOf(enableVerboseLoggingOpt);
     }
 
