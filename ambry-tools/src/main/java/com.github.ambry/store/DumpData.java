@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
@@ -29,15 +28,13 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableSet;
 import java.util.Properties;
 import java.util.Set;
-import java.util.TreeSet;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -561,40 +558,31 @@ public class DumpData {
     RandomAccessFile randomAccessFile = new RandomAccessFile(new File(logFile), "r");
     logger.info("Comparing Index entries to Log ");
     File replicaDirectory = new File(replicaRootDirectory);
-    MergedIntervals coveredRangesInLog = new MergedIntervals();
-    Map<Long, Long> deletedMsgInfo = new HashMap<>();
     for (File indexFile : replicaDirectory.listFiles(new IndexFileNameFilter())) {
-      compareIndexEntriesToLogContent(indexFile, replicaDirectory, randomAccessFile, coveredRangesInLog, deletedMsgInfo,
-          false);
+      TreeMap<Long, Long> coveredRanges = new TreeMap<Long, Long>();
+      Set<Long> deleteMsgsOriginalOffsets = new HashSet<Long>();
+      compareIndexEntriesToLogContent(indexFile, replicaDirectory, randomAccessFile, coveredRanges,
+          deleteMsgsOriginalOffsets);
     }
-    logUnCoveredRanges(coveredRangesInLog, deletedMsgInfo);
   }
 
   /**
-   * Logs uncovered ranges in the log
-   * @param coveredRangesInLog
+   * Logs uncovered ranges by the index in the log
+   * @param coveredRanges {@link Map} of covered ranges in the log
    */
-  private void logUnCoveredRanges(MergedIntervals coveredRangesInLog, Map<Long, Long> deletedMsgInfo) {
-    Set<Long> originalOffsets = deletedMsgInfo.keySet();
-    Iterator<Pair<Long, Long>> rangeIterator = coveredRangesInLog.getCoveredIntervals().iterator();
-    Pair<Long, Long> previousRange = rangeIterator.next();
-    while (rangeIterator.hasNext()) {
-      Pair<Long, Long> curRange = rangeIterator.next();
-      if (previousRange.getSecond().compareTo(curRange.getFirst()) != 0) {
-        if (originalOffsets.contains(previousRange.getSecond())) {
-          logger.error(
-              "Might be a PUT record covering range from " + previousRange.getSecond() + " to " + curRange.getFirst()
-                  + " with a hole of " + (curRange.getFirst() - previousRange.getSecond())
-                  + " in the Log. Delete Record was found " + "at offset " + deletedMsgInfo.get(
-                  previousRange.getSecond()) + " with offset difference of " + (
-                  deletedMsgInfo.get(previousRange.getSecond()) - previousRange.getSecond()));
-        } else {
-          logger.error("Cannot find entries in Index covering range from " + previousRange.getSecond() + " to "
-              + curRange.getFirst() + " with a hole of " + (curRange.getFirst() - previousRange.getSecond())
-              + " in the Log");
-        }
+  private void logUnCoveredRanges(Map<Long, Long> coveredRanges) {
+    Iterator<Map.Entry<Long, Long>> iterator = coveredRanges.entrySet().iterator();
+    Map.Entry<Long, Long> prevEntry = iterator.next();
+    logger.trace("Record startOffset " + prevEntry.getKey() + ", endOffset " + prevEntry.getValue());
+    while (iterator.hasNext()) {
+      Map.Entry<Long, Long> curEntry = iterator.next();
+      logger.trace("Record startOffset " + curEntry.getKey() + ", endOffset " + curEntry.getValue());
+      if (prevEntry.getValue().compareTo(curEntry.getKey()) != 0) {
+        logger.error(
+            "Cannot find entries in Index ranging from " + prevEntry.getValue() + " to " + curEntry.getKey()
+                + " with a hole of " + (curEntry.getKey() - prevEntry.getValue()) + " in the Log");
       }
-      previousRange = curRange;
+      prevEntry = curEntry;
     }
   }
 
@@ -614,10 +602,10 @@ public class DumpData {
     try {
       randomAccessFile = new RandomAccessFile(new File(logFile), "r");
       logger.info("Comparing Index entries to Log ");
-      MergedIntervals coveredRangesInLog = new MergedIntervals();
-      Map<Long, Long> deletedMsgInfo = new HashMap<>();
-      compareIndexEntriesToLogContent(new File(indexFile), null, randomAccessFile, coveredRangesInLog, deletedMsgInfo,
-          true);
+      TreeMap<Long, Long> coveredRanges = new TreeMap<Long, Long>();
+      Set<Long> deleteMsgsOriginalOffsets = new HashSet<Long>();
+      compareIndexEntriesToLogContent(new File(indexFile), null, randomAccessFile, coveredRanges,
+          deleteMsgsOriginalOffsets);
     } finally {
       if (randomAccessFile != null) {
         randomAccessFile.close();
@@ -631,17 +619,19 @@ public class DumpData {
    * @param indexFile the index file that needs to be checked for
    * @param replicaDirectory the replica root directory where the index is located
    * @param randomAccessFile the {@link RandomAccessFile} referring to the log file
-   * @param coveredRangesInLog {@link MergedIntervals} to track all covered ranges. Can be {@code null}
-   * @param deletedMsgInfo Tracks deleted msg info like original msg offsets and the deleted msg offsets
+   * @param coveredRanges {@link Map} containing all covered ranges.
+   * @param deletedMsgOriginalOffsets Tracks deleted msg's original msg offset
    * @throws Exception
    */
   private void compareIndexEntriesToLogContent(File indexFile, File replicaDirectory, RandomAccessFile randomAccessFile,
-      MergedIntervals coveredRangesInLog, Map<Long, Long> deletedMsgInfo, boolean printUnCoveredRanges)
+      TreeMap<Long, Long> coveredRanges, Set<Long> deletedMsgOriginalOffsets)
       throws Exception {
     logger.info(
         "Dumping index " + indexFile.getName() + " for " + ((replicaDirectory != null) ? replicaDirectory.getName()
             : null));
     DataInputStream stream = null;
+    String startOffsetStr = indexFile.getName().substring(0, indexFile.getName().indexOf('_'));
+    long startOffset = Long.valueOf(startOffsetStr);
     try {
       stream = new DataInputStream(new FileInputStream(indexFile));
       short version = stream.readShort();
@@ -665,20 +655,41 @@ public class DumpData {
               + " Original Message Offset " + blobValue.getOriginalMessageOffset() + " Flag " + blobValue.getFlags()
               + "\n";
           boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
-          if (deletedMsgInfo != null && isDeleted) {
-            deletedMsgInfo.put(blobValue.getOriginalMessageOffset(), blobValue.getOffset());
-          }
           boolean success =
               dumpDataHelper.readFromLogAndVerify(randomAccessFile, blobValue.getOffset(), key.getID(), blobValue,
-                  coveredRangesInLog);
+                  coveredRanges);
           if (!success) {
             logger.error("Failed for Index Entry " + msg);
           }
+          if (isDeleted && deletedMsgOriginalOffsets != null) {
+            long originalOffset = blobValue.getOriginalMessageOffset();
+            deletedMsgOriginalOffsets.add(originalOffset);
+            if (originalOffset != -1 && !coveredRanges.containsKey(originalOffset) &&
+                originalOffset > startOffset) {
+              randomAccessFile.seek(originalOffset);
+              DumpDataHelper.BlobRecordInfo blobRecordInfo =
+                  dumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset);
+              coveredRanges.put(originalOffset, originalOffset + blobRecordInfo.totalRecordSize);
+              logger.trace("PUT Record " + blobRecordInfo.blobId + " added with orig offset " + originalOffset
+                  + " and end offset " + (originalOffset + blobRecordInfo.totalRecordSize) + " for a delete msg "
+                  + key.getID() + " at offset " + blobValue.getOffset());
+              if (!blobRecordInfo.blobId.getID().equals(key.getID())) {
+                logger.error("BlobId value mismatch between delete record " + key.getID() + " and put record "
+                    + blobRecordInfo.blobId.getID());
+              }
+            } else {
+              if (coveredRanges.containsKey(originalOffset)) {
+                logger.error("Missed out Put Record ignored at " + originalOffset + " with delete msg's offset "
+                    + blobValue.getOffset() + " for an already available put record ");
+              } else if (!coveredRanges.containsKey(originalOffset) && startOffset > originalOffset) {
+                logger.trace("Missed out Put Record ignored at " + originalOffset + " with delete msg's offset "
+                    + blobValue.getOffset() + " outside of range " + startOffset);
+              }
+            }
+          }
         }
         logger.trace("crc " + stream.readLong());
-        if (printUnCoveredRanges) {
-          logUnCoveredRanges(coveredRangesInLog, deletedMsgInfo);
-        }
+        logUnCoveredRanges(coveredRanges);
       }
     } finally {
       if (stream != null) {
@@ -727,50 +738,6 @@ public class DumpData {
       }
     }
     logger.info("Total Inconsistent blobs count " + totalInconsistentBlobs);
-  }
-
-  /**
-   * Holds all ranges covered from entries in the index
-   */
-  class MergedIntervals {
-    NavigableSet<Pair<Long, Long>> coveredIntervals;
-
-    public MergedIntervals() {
-      coveredIntervals = new TreeSet<>(new Comparator<Pair<Long, Long>>() {
-        @Override
-        public int compare(Pair<Long, Long> o1, Pair<Long, Long> o2) {
-          return o1.getFirst().compareTo(o2.getFirst());
-        }
-      });
-    }
-
-    /**
-     * Adds and merges the interval if need be
-     * @param newInterval the new interval that needs to be added
-     */
-    void addInterval(Pair<Long, Long> newInterval) {
-      Pair<Long, Long> ceiling = coveredIntervals.ceiling(newInterval);
-      Pair<Long, Long> floor = coveredIntervals.floor(newInterval);
-      boolean added = false;
-      if (floor != null && (floor.getSecond().compareTo(newInterval.getFirst()) == 0)) {
-        coveredIntervals.remove(floor);
-        newInterval = new Pair(floor.getFirst(), newInterval.getSecond());
-        coveredIntervals.add(newInterval);
-        added = true;
-      }
-      if (ceiling != null && (ceiling.getFirst().compareTo(newInterval.getSecond()) == 0)) {
-        coveredIntervals.remove(ceiling);
-        coveredIntervals.add(new Pair(newInterval.getFirst(), ceiling.getSecond()));
-        added = true;
-      }
-      if (!added) {
-        coveredIntervals.add(newInterval);
-      }
-    }
-
-    NavigableSet<Pair<Long, Long>> getCoveredIntervals() {
-      return coveredIntervals;
-    }
   }
 
   /**

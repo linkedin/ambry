@@ -21,7 +21,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -36,6 +35,7 @@ import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.apache.log4j.lf5.LogLevel;
@@ -157,7 +157,8 @@ public class DumpDataHelper {
           } else {
             logger.info(
                 blobRecordInfo.messageHeader + "\n " + blobRecordInfo.blobId + "\n" + blobRecordInfo.blobProperty + "\n"
-                    + blobRecordInfo.userMetadata + "\n" + blobRecordInfo.blobDataOutput);
+                    + blobRecordInfo.userMetadata + "\n" + blobRecordInfo.blobDataOutput + " end offset " + (
+                    currentOffset + blobRecordInfo.totalRecordSize));
             updateBlobIdToLogRecordMap(blobIdToLogRecord, blobRecordInfo.blobId.getID(), currentOffset,
                 !blobRecordInfo.isDeleted, blobRecordInfo.isExpired);
           }
@@ -171,8 +172,8 @@ public class DumpDataHelper {
                   !blobRecordInfo.isDeleted, blobRecordInfo.isExpired);
             }
           } else {
-            logger.info(blobRecordInfo.messageHeader + "\n " + blobRecordInfo.blobId + "\n" + blobRecordInfo.deleteMsg,
-                LogLevel.INFO);
+            logger.info(blobRecordInfo.messageHeader + "\n " + blobRecordInfo.blobId + "\n" + blobRecordInfo.deleteMsg
+                + " end offset " + (currentOffset + blobRecordInfo.totalRecordSize), LogLevel.INFO);
             updateBlobIdToLogRecordMap(blobIdToLogRecord, blobRecordInfo.blobId.getID(), currentOffset,
                 !blobRecordInfo.isDeleted, blobRecordInfo.isExpired);
           }
@@ -219,7 +220,7 @@ public class DumpDataHelper {
   /**
    * Holds information about a blob record in the log
    */
-  private class BlobRecordInfo {
+  class BlobRecordInfo {
     String messageHeader = null;
     BlobId blobId = null;
     String blobProperty = null;
@@ -231,9 +232,8 @@ public class DumpDataHelper {
     long timeToLiveInSeconds;
     int totalRecordSize;
 
-    public BlobRecordInfo(String messageHeader, BlobId blobId, String blobProperty, String userMetadata,
-        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long timeToLiveInSeconds,
-        int totalRecordSize) {
+    BlobRecordInfo(String messageHeader, BlobId blobId, String blobProperty, String userMetadata, String blobDataOutput,
+        String deleteMsg, boolean isDeleted, boolean isExpired, long timeToLiveInSeconds, int totalRecordSize) {
       this.messageHeader = messageHeader;
       this.blobId = blobId;
       this.blobProperty = blobProperty;
@@ -255,7 +255,7 @@ public class DumpDataHelper {
    * @throws IOException
    * @throws MessageFormatException
    */
-  private BlobRecordInfo readSingleRecordFromLog(RandomAccessFile randomAccessFile, long currentOffset)
+  public BlobRecordInfo readSingleRecordFromLog(RandomAccessFile randomAccessFile, long currentOffset)
       throws IOException, MessageFormatException {
     String messageheader = null;
     BlobId blobId = null;
@@ -353,12 +353,13 @@ public class DumpDataHelper {
    * @throws IOException
    */
   public boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, long offset, String blobId,
-      IndexValue indexValue, DumpData.MergedIntervals coveredRangeInLog) throws Exception {
+      IndexValue indexValue, Map<Long, Long> coveredRanges)
+      throws Exception {
     try {
       randomAccessFile.seek(offset);
       BlobRecordInfo blobRecordInfo = readSingleRecordFromLog(randomAccessFile, offset);
-      if (coveredRangeInLog != null) {
-        coveredRangeInLog.addInterval(new Pair(offset, offset + blobRecordInfo.totalRecordSize));
+      if (coveredRanges != null) {
+        coveredRanges.put(offset, offset + blobRecordInfo.totalRecordSize);
       }
       compareIndexValueToLogEntry(blobId, indexValue, blobRecordInfo);
       if (!blobRecordInfo.isDeleted) {
