@@ -14,6 +14,9 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.protocol.GetOptions;
+
+
 /**
  * Represents any options associated with a getBlob request when making a
  * {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
@@ -21,31 +24,33 @@ package com.github.ambry.router;
 public class GetBlobOptions {
 
   private final OperationType operationType;
+  private final GetOptions getOptions;
   private final ByteRange range;
 
   /**
-   * Construct a {@link GetBlobOptions} object with the default options: {@link OperationType#All} and no
-   * {@link ByteRange}
+   * Construct a {@link GetBlobOptions} object with the default options: {@link OperationType#All},
+   * {@link GetOptions#None} and no {@link ByteRange}.
    */
   public GetBlobOptions() {
-    this(OperationType.All, null);
+    this(OperationType.All, GetOptions.None, null);
   }
 
   /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
    * @param operationType the {@link OperationType} for this request. This must be non-null.
+   * @param getOptions the {@link GetOptions} associated with the request.
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
    */
-  public GetBlobOptions(OperationType operationType, ByteRange range) {
-    if (operationType == null) {
-      throw new IllegalArgumentException("operationType must be defined");
+  public GetBlobOptions(OperationType operationType, GetOptions getOptions, ByteRange range) {
+    if (operationType == null || getOptions == null) {
+      throw new IllegalArgumentException("operationType and getOptions must be defined");
     }
     this.operationType = operationType;
+    this.getOptions = getOptions;
     this.range = range;
   }
 
   /**
-   * Get the {@link OperationType} for the associated getBlob request.
    * @return the {@link OperationType} for the request.
    */
   public OperationType getOperationType() {
@@ -53,7 +58,13 @@ public class GetBlobOptions {
   }
 
   /**
-   * Get the {@link ByteRange} for a getBlob request, if present.
+   * @return the {@link GetOptions} associated with the request.
+   */
+  public GetOptions getGetOptions() {
+    return getOptions;
+  }
+
+  /**
    * @return the {@link ByteRange}, if set, or {@code null} if no range was set.
    */
   public ByteRange getRange() {
@@ -62,7 +73,7 @@ public class GetBlobOptions {
 
   @Override
   public String toString() {
-    return "GetBlobOptions{operationType=" + operationType + ", range=" + range + '}';
+    return "GetBlobOptions{operationType=" + operationType + ", getOptions=" + getOptions + ", range=" + range + '}';
   }
 
   @Override
@@ -79,12 +90,16 @@ public class GetBlobOptions {
     if (operationType != that.operationType) {
       return false;
     }
-    return range != null ? range.equals(that.range) : that.range == null;
+    if (getOptions != that.getOptions) {
+      return false;
+    }
+    return !(range != null ? !range.equals(that.range) : that.range != null);
   }
 
   @Override
   public int hashCode() {
-    int result = operationType != null ? operationType.hashCode() : 0;
+    int result = operationType.hashCode();
+    result = 31 * result + getOptions.hashCode();
     result = 31 * result + (range != null ? range.hashCode() : 0);
     return result;
   }

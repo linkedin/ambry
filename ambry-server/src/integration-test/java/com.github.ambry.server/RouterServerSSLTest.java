@@ -13,16 +13,12 @@
  */
 package com.github.ambry.server;
 
-import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.Selector;
 import com.github.ambry.network.TestSSLUtils;
-import com.github.ambry.server.RouterServerTestFramework.OperationChain;
-import com.github.ambry.server.RouterServerTestFramework.OperationType;
+import com.github.ambry.server.RouterServerTestFramework.*;
 import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;
@@ -40,11 +36,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static com.github.ambry.server.RouterServerTestFramework.getRouterProperties;
-import static com.github.ambry.server.RouterServerTestFramework.plaintextReceiveBytesMetricName;
-import static com.github.ambry.server.RouterServerTestFramework.plaintextSendBytesMetricName;
-import static com.github.ambry.server.RouterServerTestFramework.sslReceiveBytesMetricName;
-import static com.github.ambry.server.RouterServerTestFramework.sslSendBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.*;
 
 
 public class RouterServerSSLTest {
@@ -131,6 +123,8 @@ public class RouterServerSSLTest {
           operations.add(OperationType.AWAIT_DELETION);
           operations.add(OperationType.GET_DELETED);
           operations.add(OperationType.GET_INFO_DELETED);
+          operations.add(OperationType.GET_DELETED_SUCCESS);
+          operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
           break;
         case 1:
           operations.add(OperationType.PUT);
@@ -141,6 +135,8 @@ public class RouterServerSSLTest {
           operations.add(OperationType.GET_INFO_DELETED);
           operations.add(OperationType.GET_DELETED);
           operations.add(OperationType.GET_INFO_DELETED);
+          operations.add(OperationType.GET_DELETED_SUCCESS);
+          operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
           break;
         case 2:
           operations.add(OperationType.PUT);

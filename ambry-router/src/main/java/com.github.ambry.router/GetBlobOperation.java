@@ -133,7 +133,7 @@ class GetBlobOperation extends GetOperation {
     this.operationCompleteCallback = operationCompleteCallback;
     this.readyForPollCallback = readyForPollCallback;
     this.blobIdFactory = blobIdFactory;
-    firstChunk = new FirstGetChunk(blobId);
+    firstChunk = new FirstGetChunk(blobId, options.getGetOptions());
   }
 
   /**
@@ -809,12 +809,16 @@ class GetBlobOperation extends GetOperation {
    * and whether a chunk is composite or simple can only be determined after the first chunk is fetched.
    */
   private class FirstGetChunk extends GetChunk {
+    private final GetOptions getOptions;
+
     /**
      * Construct a FirstGetChunk and initialize it with the given {@link BlobId}.
      * @param blobId the {@link BlobId} to assign to this chunk. This will be the id of the overall blob.
+     * @param getOptions the {@link GetOptions} associated with the operation.
      */
-    FirstGetChunk(BlobId blobId) {
+    FirstGetChunk(BlobId blobId, GetOptions getOptions) {
       super(-1, blobId);
+      this.getOptions = getOptions;
     }
 
     /**
@@ -830,7 +834,7 @@ class GetBlobOperation extends GetOperation {
 
     @Override
     GetOptions getGetOptions() {
-      return GetOptions.None;
+      return getOptions;
     }
 
     /**

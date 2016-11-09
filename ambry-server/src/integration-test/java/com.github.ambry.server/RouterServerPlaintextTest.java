@@ -16,8 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.server.RouterServerTestFramework.OperationChain;
-import com.github.ambry.server.RouterServerTestFramework.OperationType;
+import com.github.ambry.server.RouterServerTestFramework.*;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -34,11 +33,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static com.github.ambry.server.RouterServerTestFramework.getRouterProperties;
-import static com.github.ambry.server.RouterServerTestFramework.plaintextReceiveBytesMetricName;
-import static com.github.ambry.server.RouterServerTestFramework.plaintextSendBytesMetricName;
-import static com.github.ambry.server.RouterServerTestFramework.sslReceiveBytesMetricName;
-import static com.github.ambry.server.RouterServerTestFramework.sslSendBytesMetricName;
+import static com.github.ambry.server.RouterServerTestFramework.*;
 
 
 public class RouterServerPlaintextTest {
@@ -116,6 +111,8 @@ public class RouterServerPlaintextTest {
           operations.add(OperationType.AWAIT_DELETION);
           operations.add(OperationType.GET_DELETED);
           operations.add(OperationType.GET_INFO_DELETED);
+          operations.add(OperationType.GET_DELETED_SUCCESS);
+          operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
           break;
         case 1:
           operations.add(OperationType.PUT);
@@ -126,6 +123,8 @@ public class RouterServerPlaintextTest {
           operations.add(OperationType.GET_INFO_DELETED);
           operations.add(OperationType.GET_DELETED);
           operations.add(OperationType.GET_INFO_DELETED);
+          operations.add(OperationType.GET_DELETED_SUCCESS);
+          operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
           break;
         case 2:
           operations.add(OperationType.PUT);
@@ -161,6 +160,8 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.AWAIT_DELETION);
       operations.add(OperationType.GET_INFO_DELETED);
       operations.add(OperationType.GET_DELETED);
+      operations.add(OperationType.GET_DELETED_SUCCESS);
+      operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
       int blobSize = random.nextInt(100 * 1024);
       testFramework
           .checkOperationChains(Collections.singletonList(testFramework.startOperationChain(blobSize, i, operations)));
@@ -186,6 +187,8 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.AWAIT_DELETION);
       operations.add(OperationType.GET_INFO_DELETED);
       operations.add(OperationType.GET_DELETED);
+      operations.add(OperationType.GET_DELETED_SUCCESS);
+      operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
       opChains.add(testFramework.startOperationChain(blobSize, i, operations));
     }
     testFramework.checkOperationChains(opChains);

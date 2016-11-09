@@ -18,6 +18,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.IdConverterFactory;
@@ -153,7 +154,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       }
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource);
+      GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource, GetOptions.None);
       GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       SecurityProcessRequestCallback securityCallback =
@@ -361,7 +362,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               break;
             case HEAD:
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), headCallback);
+              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOptions.None, null),
+                  headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();

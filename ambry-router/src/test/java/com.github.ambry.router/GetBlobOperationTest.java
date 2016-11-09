@@ -30,6 +30,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.router.RouterTestHelpers.ErrorCodeChecker;
@@ -215,9 +216,9 @@ public class GetBlobOperationTest {
     blobIdStr = new BlobId(mockClusterMap.getWritablePartitionIds().get(0)).getID();
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
-    GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, null,
-            operationFuture, operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+    GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
+        new GetBlobOptions(), operationFuture, operationCallback, operationCompleteCallback, readyForPollCallback,
+        blobIdFactory, time);
 
     Assert.assertEquals("Callbacks must match", operationCallback, op.getCallback());
     Assert.assertEquals("Futures must match", operationFuture, op.getFuture());
@@ -236,10 +237,10 @@ public class GetBlobOperationTest {
       doPut();
       switch (i % 2) {
         case 0:
-          options = new GetBlobOptions(GetBlobOptions.OperationType.All, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.All, GetOptions.None, null);
           break;
         case 1:
-          options = new GetBlobOptions(GetBlobOptions.OperationType.Data, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOptions.None, null);
           break;
       }
       getAndAssertSuccess();
@@ -282,10 +283,10 @@ public class GetBlobOperationTest {
       doPut();
       switch (i % 2) {
         case 0:
-          options = new GetBlobOptions(GetBlobOptions.OperationType.All, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.All, GetOptions.None, null);
           break;
         case 1:
-          options = new GetBlobOptions(GetBlobOptions.OperationType.Data, null);
+          options = new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOptions.None, null);
           break;
       }
       getAndAssertSuccess();
@@ -676,7 +677,8 @@ public class GetBlobOperationTest {
   private void testRangeRequestOffsetRange(long startOffset, long endOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromOffsetRange(startOffset, endOffset));
+    options = new GetBlobOptions(GetBlobOptions.OperationType.All, GetOptions.None,
+        ByteRange.fromOffsetRange(startOffset, endOffset));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -690,7 +692,8 @@ public class GetBlobOperationTest {
   private void testRangeRequestFromStartOffset(long startOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromStartOffset(startOffset));
+    options =
+        new GetBlobOptions(GetBlobOptions.OperationType.All, GetOptions.None, ByteRange.fromStartOffset(startOffset));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -704,7 +707,8 @@ public class GetBlobOperationTest {
   private void testRangeRequestLastNBytes(long lastNBytes, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromLastNBytes(lastNBytes));
+    options =
+        new GetBlobOptions(GetBlobOptions.OperationType.All, GetOptions.None, ByteRange.fromLastNBytes(lastNBytes));
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 

@@ -23,6 +23,7 @@ import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.MockRestResponseChannel;
@@ -343,15 +344,15 @@ public class AdminBlobStorageServiceTest {
     headers.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     headers.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     String blobId = putBlobInRouter(headers, content);
-    getBlobAndVerify(blobId, headers, content);
-    getNotModifiedBlobAndVerify(blobId);
-    getUserMetadataAndVerify(blobId, headers);
-    getBlobInfoAndVerify(blobId, headers);
-    getHeadAndVerify(blobId, headers);
+    getBlobAndVerify(blobId, null, headers, content);
+    getNotModifiedBlobAndVerify(blobId, null);
+    getUserMetadataAndVerify(blobId, null, headers);
+    getBlobInfoAndVerify(blobId, null, headers);
+    getHeadAndVerify(blobId, null, headers);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId);
+    verifyOperationsAfterDelete(blobId, headers, content);
   }
 
   /**
@@ -700,13 +701,19 @@ public class AdminBlobStorageServiceTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the headers and content match with what is expected.
    * @param blobId the blob ID of the blob to GET.
+   * @param getOptions the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param expectedContent the expected content of the blob.
    * @throws Exception
    */
-  public void getBlobAndVerify(String blobId, Map<String, Object> expectedHeaders, ByteBuffer expectedContent)
+  public void getBlobAndVerify(String blobId, GetOptions getOptions, Map<String, Object> expectedHeaders,
+      ByteBuffer expectedContent)
       throws Exception {
-    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, blobId, null, null);
+    JSONObject headers = new JSONObject();
+    if (getOptions != null) {
+      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+    }
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, blobId, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
@@ -722,11 +729,15 @@ public class AdminBlobStorageServiceTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
    * @param blobId the blob ID of the blob to GET.
+   * @param getOptions the options to use while getting the blob.
    * @throws Exception
    */
-  public void getNotModifiedBlobAndVerify(String blobId)
+  public void getNotModifiedBlobAndVerify(String blobId, GetOptions getOptions)
       throws Exception {
     JSONObject headers = new JSONObject();
+    if (getOptions != null) {
+      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+    }
     SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
     dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
     Date date = new Date(System.currentTimeMillis());
@@ -747,13 +758,18 @@ public class AdminBlobStorageServiceTest {
   /**
    * Gets the user metadata of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOptions the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getUserMetadataAndVerify(String blobId, Map<String, Object> expectedHeaders)
+  private void getUserMetadataAndVerify(String blobId, GetOptions getOptions, Map<String, Object> expectedHeaders)
       throws Exception {
-    RestRequest restRequest =
-        AdminTestUtils.createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
+    JSONObject headers = new JSONObject();
+    if (getOptions != null) {
+      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+    }
+    RestRequest restRequest = AdminTestUtils
+        .createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
@@ -765,13 +781,18 @@ public class AdminBlobStorageServiceTest {
   /**
    * Gets the blob info of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOptions the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getBlobInfoAndVerify(String blobId, Map<String, Object> expectedHeaders)
+  private void getBlobInfoAndVerify(String blobId, GetOptions getOptions, Map<String, Object> expectedHeaders)
       throws Exception {
+    JSONObject headers = new JSONObject();
+    if (getOptions != null) {
+      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+    }
     RestRequest restRequest =
-        AdminTestUtils.createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
+        AdminTestUtils.createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
@@ -784,12 +805,17 @@ public class AdminBlobStorageServiceTest {
   /**
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOptions the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getHeadAndVerify(String blobId, Map<String, Object> expectedHeaders)
+  private void getHeadAndVerify(String blobId, GetOptions getOptions, Map<String, Object> expectedHeaders)
       throws Exception {
-    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.HEAD, blobId, null, null);
+    JSONObject headers = new JSONObject();
+    if (getOptions != null) {
+      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+    }
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.HEAD, blobId, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
@@ -860,9 +886,12 @@ public class AdminBlobStorageServiceTest {
   /**
    * Verifies that the right {@link ResponseStatus} is returned for GET, HEAD and DELETE once a blob is deleted.
    * @param blobId the ID of the blob that was deleted.
+   * @param expectedHeaders the expected headers in the response.
+   * @param expectedContent the expected content of the blob.
    * @throws Exception
    */
-  private void verifyOperationsAfterDelete(String blobId)
+  private void verifyOperationsAfterDelete(String blobId, Map<String, Object> expectedHeaders,
+      ByteBuffer expectedContent)
       throws Exception {
     RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, blobId, null, null);
     verifyGone(restRequest);
@@ -872,6 +901,15 @@ public class AdminBlobStorageServiceTest {
 
     restRequest = AdminTestUtils.createRestRequest(RestMethod.DELETE, blobId, null, null);
     verifyDeleteAccepted(restRequest);
+
+    GetOptions[] options = {GetOptions.Include_Deleted_Blobs, GetOptions.Include_All};
+    for (GetOptions option : options) {
+      getBlobAndVerify(blobId, option, expectedHeaders, expectedContent);
+      getNotModifiedBlobAndVerify(blobId, option);
+      getUserMetadataAndVerify(blobId, option, expectedHeaders);
+      getBlobInfoAndVerify(blobId, option, expectedHeaders);
+      getHeadAndVerify(blobId, option, expectedHeaders);
+    }
   }
 
   /**

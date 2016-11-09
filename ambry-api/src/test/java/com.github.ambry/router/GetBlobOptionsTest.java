@@ -14,6 +14,7 @@
 
 package com.github.ambry.router;
 
+import com.github.ambry.protocol.GetOptions;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -34,8 +35,8 @@ public class GetBlobOptionsTest {
     long startOffset = 1;
     long endOffset = 2;
     ByteRange range = ByteRange.fromOffsetRange(startOffset, endOffset);
-    GetBlobOptions options =
-        new GetBlobOptions(GetBlobOptions.OperationType.All, ByteRange.fromOffsetRange(startOffset, endOffset));
+    GetBlobOptions options = new GetBlobOptions(GetBlobOptions.OperationType.All, GetOptions.None,
+        ByteRange.fromOffsetRange(startOffset, endOffset));
     assertEquals("Range from options not as expected.", range, options.getRange());
   }
 
@@ -45,9 +46,19 @@ public class GetBlobOptionsTest {
    */
   @Test
   public void testGetOperationTypeOption() {
-    GetBlobOptions options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
+    GetBlobOptions options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOptions.None, null);
     assertEquals("OperationType from options not as expected.", GetBlobOptions.OperationType.BlobInfo,
         options.getOperationType());
+  }
+
+  /**
+   * Test that the {@link GetOptions} option can be assigned and retrieved correctly.
+   * @throws Exception
+   */
+  @Test
+  public void testGetGetOptionsOption() {
+    GetBlobOptions options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOptions.Include_All, null);
+    assertEquals("GetOptions from options not as expected.", GetOptions.Include_All, options.getGetOptions());
   }
 
   /**
@@ -56,17 +67,21 @@ public class GetBlobOptionsTest {
   @Test
   public void testToStringEqualsAndHashcode() {
     ByteRange byteRange = ByteRange.fromLastNBytes(4);
+    GetOptions getOptions = GetOptions.None;
     GetBlobOptions.OperationType type = GetBlobOptions.OperationType.Data;
-    GetBlobOptions a = new GetBlobOptions(type, byteRange);
-    GetBlobOptions b = new GetBlobOptions(type, byteRange);
+    GetBlobOptions a = new GetBlobOptions(type, getOptions, byteRange);
+    GetBlobOptions b = new GetBlobOptions(type, getOptions, byteRange);
     assertEquals("GetBlobOptions should be equal", a, b);
     assertEquals("GetBlobOptions hashcodes should be equal", a.hashCode(), b.hashCode());
     assertEquals("toString output not as expected",
-        "GetBlobOptions{operationType=" + type + ", range=" + byteRange.toString() + "}", a.toString());
+        "GetBlobOptions{operationType=" + type + ", getOptions=" + getOptions + ", range=" + byteRange.toString() + "}",
+        a.toString());
 
-    b = new GetBlobOptions(GetBlobOptions.OperationType.Data, ByteRange.fromOffsetRange(2, 7));
+    b = new GetBlobOptions(type, getOptions, ByteRange.fromOffsetRange(2, 7));
     assertFalse("GetBlobOptions should not be equal.", a.equals(b));
-    b = new GetBlobOptions(GetBlobOptions.OperationType.All, byteRange);
+    b = new GetBlobOptions(GetBlobOptions.OperationType.All, getOptions, byteRange);
+    assertFalse("GetBlobOptions should not be equal.", a.equals(b));
+    b = new GetBlobOptions(type, GetOptions.Include_All, byteRange);
     assertFalse("GetBlobOptions should not be equal.", a.equals(b));
   }
 }

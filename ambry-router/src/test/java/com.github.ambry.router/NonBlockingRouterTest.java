@@ -28,6 +28,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -183,7 +184,7 @@ public class NonBlockingRouterTest {
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.getBlob(blobId, new GetBlobOptions()).get();
-    router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null)).get();
+    router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOptions.None, null)).get();
     router.deleteBlob(blobId).get();
     router.close();
     assertExpectedThreadCounts(0);
@@ -744,8 +745,8 @@ public class NonBlockingRouterTest {
           break;
         case GET:
           futureResult = new FutureResult<BlobInfo>();
-          getManager.submitGetBlobOperation(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null),
-              futureResult, null);
+          getManager.submitGetBlobOperation(blobId,
+              new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOptions.None, null), futureResult, null);
           break;
         case DELETE:
           futureResult = new FutureResult<BlobInfo>();
