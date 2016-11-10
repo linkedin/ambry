@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
  * The blob store that controls the log and index
  */
 class BlobStore implements Store {
+  static final String SEPARATOR = "_";
 
   private Log log;
   private PersistentIndex index;
@@ -42,7 +43,7 @@ class BlobStore implements Store {
   private final DiskIOScheduler diskIOScheduler;
   private Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
-  private Object lock = new Object();
+  private final Object lock = new Object();
   private boolean started;
   private StoreConfig config;
   private long capacityInBytes;
@@ -101,11 +102,10 @@ class BlobStore implements Store {
               "Failed to acquire lock on file " + dataDir + ". Another process or thread is using this directory.",
               StoreErrorCodes.Initialization_Error);
         }
-        log = new Log(dataDir, capacityInBytes, metrics);
+        log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time);
-        // set the log end offset to the recovered offset from the index after initializing it
-        log.setLogEndOffset(index.getCurrentEndOffset());
-        metrics.initializeCapacityUsedMetric(log, capacityInBytes);
+        setSegmentStatesAndEndOffsets();
+        metrics.initializeLogGauges(log, capacityInBytes);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -142,9 +142,6 @@ class BlobStore implements Store {
       return new StoreInfo(readSet, messageInfoList);
     } catch (StoreException e) {
       throw e;
-    } catch (IOException e) {
-      throw new StoreException("IO error while trying to fetch blobs from store " + dataDir, e,
-          StoreErrorCodes.IOError);
     } catch (Exception e) {
       throw new StoreException("Unknown exception while trying to fetch blobs from store " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
@@ -182,18 +179,20 @@ class BlobStore implements Store {
             }
           }
         }
-        long writeStartOffset = log.getLogEndOffset();
+        // TODO (Index changes): Working under the assumption that there is only one log segment.
+        long currentLogEndOffset = log.getEndOffset().getOffset();
         messageSetToWrite.writeTo(log);
         logger.trace("Store : {} message set written to log", dataDir);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
         ArrayList<IndexEntry> indexEntries = new ArrayList<IndexEntry>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
-          IndexValue value = new IndexValue(info.getSize(), writeStartOffset, (byte) 0, info.getExpirationTimeInMs());
+          IndexValue value =
+              new IndexValue(info.getSize(), currentLogEndOffset, (byte) 0, info.getExpirationTimeInMs());
           IndexEntry entry = new IndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry);
-          writeStartOffset += info.getSize();
+          currentLogEndOffset += info.getSize();
         }
-        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), log.getLogEndOffset());
+        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), currentLogEndOffset);
         index.addToIndex(indexEntries, fileSpan);
         logger.trace("Store : {} message set written to index ", dataDir);
       }
@@ -241,13 +240,14 @@ class BlobStore implements Store {
             }
           }
         }
-        long writeStartOffset = log.getLogEndOffset();
+        // TODO (Index changes): Working under the assumption that there is only one log segment.
+        long currentLogEndOffset = log.getEndOffset().getOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
-          FileSpan fileSpan = new FileSpan(writeStartOffset, writeStartOffset + info.getSize());
+          FileSpan fileSpan = new FileSpan(currentLogEndOffset, currentLogEndOffset + info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          writeStartOffset += info.getSize();
+          currentLogEndOffset += info.getSize();
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
@@ -307,7 +307,7 @@ class BlobStore implements Store {
 
   @Override
   public long getSizeInBytes() {
-    return log.getLogEndOffset();
+    return log.getUsedCapacity();
   }
 
   @Override
@@ -344,5 +344,18 @@ class BlobStore implements Store {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
     }
+  }
+
+  /**
+   * Sets the end offsets and states for all the segments (by setting the active segment).
+   * @throws IOException if there is an I/O error while setting the end offsets.
+   */
+  private void setSegmentStatesAndEndOffsets()
+      throws IOException {
+    // TODO (Index Changes): Since the index works under the assumption that there is only one log segment, the code
+    // TODO (Index Changes): here does the same. Once the index can handle multiple segments, this will change.
+    LogSegment firstSegment = log.getFirstSegment();
+    firstSegment.setEndOffset(index.getCurrentEndOffset());
+    log.setActiveSegment(firstSegment.getName());
   }
 }

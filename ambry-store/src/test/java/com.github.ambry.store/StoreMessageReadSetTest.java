@@ -55,14 +55,14 @@ public class StoreMessageReadSetTest {
       // preallocate file
       randomFile.setLength(5000);
       Log logTest =
-          new Log(tempFile.getParent(), 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
+          new Log(tempFile.getParent(), 5000, 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
       byte[] testbuf = new byte[3000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 3000);
       MessageReadSet readSet =
-          new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getLogEndOffset());
+          new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getEndOffset().getOffset());
       Assert.assertEquals(readSet.count(), 3);
       Assert.assertEquals(readSet.sizeInBytes(0), 15);
       Assert.assertEquals(readSet.sizeInBytes(1), 100);

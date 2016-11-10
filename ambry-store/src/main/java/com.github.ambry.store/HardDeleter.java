@@ -56,6 +56,8 @@ public class HardDeleter implements Runnable {
   private final Time time;
   private final int scanSizeInBytes;
   private final int messageRetentionSeconds;
+  // TODO (HardDelete Changes): This will stay until the HardDelete is rewritten to handle multiple segments.
+  private final LogSegment logSegment;
   //how long to sleep if token does not advance.
   private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * Time.MsPerSec;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -95,6 +97,7 @@ public class HardDeleter implements Runnable {
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;
+    logSegment = log.getFirstSegment();
     this.index = index;
     this.hardDelete = hardDelete;
     this.factory = factory;
@@ -174,7 +177,7 @@ public class HardDeleter implements Runnable {
         if (hardDeleteInfo == null) {
           metrics.hardDeleteFailedCount.inc(1);
         } else {
-          log.writeFrom(hardDeleteInfo.getHardDeleteChannel(),
+          logSegment.writeFrom(hardDeleteInfo.getHardDeleteChannel(),
               readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
               hardDeleteInfo.getHardDeletedMessageSize());
           metrics.hardDeleteDoneCount.inc(1);
@@ -509,7 +512,7 @@ public class HardDeleter implements Runnable {
               StoreErrorCodes.Store_Shutting_Down);
         }
 
-        log.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);
+        logSegment.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);
         metrics.hardDeleteDoneCount.inc(1);
         throttler.maybeThrottle(logWriteInfo.size);
       }

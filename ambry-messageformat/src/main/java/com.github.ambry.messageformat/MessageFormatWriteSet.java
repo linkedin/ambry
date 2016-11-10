@@ -22,8 +22,6 @@ import java.io.InputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -32,21 +30,18 @@ import org.slf4j.LoggerFactory;
 public class MessageFormatWriteSet implements MessageWriteSet {
 
   private final InputStream streamToWrite;
-  private long sizeToWrite;
   private List<MessageInfo> streamInfo;
 
   public MessageFormatWriteSet(InputStream streamToWrite, List<MessageInfo> streamInfo, boolean materializeStream)
       throws IOException {
-    sizeToWrite = 0;
+    long sizeToWrite = 0;
     for (MessageInfo info : streamInfo) {
       sizeToWrite += info.getSize();
     }
     this.streamInfo = streamInfo;
-    if(materializeStream){
-      ByteBufferInputStream byteBufferInputStream = new ByteBufferInputStream(streamToWrite, (int)sizeToWrite);
-      this.streamToWrite = byteBufferInputStream;
-    }
-    else{
+    if (materializeStream) {
+      this.streamToWrite = new ByteBufferInputStream(streamToWrite, (int) sizeToWrite);
+    } else {
       this.streamToWrite = streamToWrite;
     }
   }
@@ -55,8 +50,12 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   public long writeTo(Write writeChannel)
       throws IOException {
     ReadableByteChannel readableByteChannel = Channels.newChannel(streamToWrite);
-    writeChannel.appendFrom(readableByteChannel, sizeToWrite);
-    return sizeToWrite;
+    long sizeWritten = 0;
+    for (MessageInfo info : streamInfo) {
+      writeChannel.appendFrom(readableByteChannel, info.getSize());
+      sizeWritten += info.getSize();
+    }
+    return sizeWritten;
   }
 
   @Override

@@ -114,7 +114,7 @@ public class IndexWritePerformance {
       writer = new FileWriter(logFile);
 
       StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
-      Log log = new Log(System.getProperty("user.dir"), 10, metrics);
+      Log log = new Log(System.getProperty("user.dir"), 10, 10, metrics);
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);
 

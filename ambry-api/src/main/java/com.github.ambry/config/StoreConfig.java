@@ -89,6 +89,13 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeEnableHardDelete;
 
+  /**
+   * The size of a single segment in the log. Only relevant for first startup of a {@link com.github.ambry.store.Store}.
+   */
+  @Config("store.segment.size.in.bytes")
+  @Default("9223372036854775807")
+  public final long storeSegmentSizeInBytes;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -103,6 +110,8 @@ public class StoreConfig {
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
     storeHardDeleteBytesPerSec = verifiableProperties.getInt("store.hard.delete.bytes.per.sec", 1 * 1024 * 1024);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
+    storeSegmentSizeInBytes =
+        verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
   }
 }
 

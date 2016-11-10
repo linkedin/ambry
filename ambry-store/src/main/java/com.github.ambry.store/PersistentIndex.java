@@ -60,7 +60,6 @@ class PersistentIndex {
 
   private long maxInMemoryIndexSizeInBytes;
   private int maxInMemoryNumElements;
-  private Log log;
   private String dataDir;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private IndexPersistor persistor;
@@ -74,6 +73,9 @@ class PersistentIndex {
   private long logEndOffsetOnStartup;
   private final StoreMetrics metrics;
   private Time time;
+
+  // TODO (Index Changes): This will stay until the index is rewritten to handle multiple segments.
+  private final LogSegment logSegment;
 
   private class IndexFilter implements FilenameFilter {
     @Override
@@ -132,7 +134,7 @@ class PersistentIndex {
       this.time = time;
       this.scheduler = scheduler;
       this.metrics = metrics;
-      this.log = log;
+      logSegment = log.getFirstSegment();
       File indexDir = new File(datadir);
       File[] indexFiles = indexDir.listFiles(new IndexFilter());
       this.factory = factory;
@@ -178,21 +180,21 @@ class PersistentIndex {
         indexes.put(info.getStartOffset(), info);
       }
       this.dataDir = datadir;
-      logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getLogEndOffset());
+      logger.info("Index : " + datadir + " log end offset of index  before recovery " + logSegment.getEndOffset());
       // perform recovery if required
       final Timer.Context context = metrics.recoveryTime.time();
       // Recover the last messages in the log into the index, if any.
       if (indexes.size() > 0) {
         IndexSegment lastSegment = indexes.lastEntry().getValue();
         // recover last segment
-        recover(lastSegment, log.sizeInBytes(), recovery);
+        recover(lastSegment, logSegment.sizeInBytes(), recovery);
       } else {
-        recover(null, log.sizeInBytes(), recovery);
+        recover(null, logSegment.sizeInBytes(), recovery);
       }
       context.stop();
       // set the log end offset to the recovered offset from the index after initializing it
-      log.setLogEndOffset(getCurrentEndOffset());
-      logEndOffsetOnStartup = log.getLogEndOffset();
+      logSegment.setEndOffset(getCurrentEndOffset());
+      logEndOffsetOnStartup = logSegment.getEndOffset();
 
       // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.
       // NOTE: It is safe to do the hard delete recovery after the regular recovery because we ensure that hard deletes
@@ -252,7 +254,9 @@ class PersistentIndex {
     }
     logger.info("Index : {} performing recovery on index with start offset {} and end offset {}", dataDir,
         startOffsetForRecovery, endOffset);
-    List<MessageInfo> messagesRecovered = recovery.recover(log, startOffsetForRecovery, endOffset, factory);
+    // TODO (Index Changes): This currently works on the assumption that there is only one log segment. Will
+    // TODO (Index Changes): be rewritten.
+    List<MessageInfo> messagesRecovered = recovery.recover(logSegment, startOffsetForRecovery, endOffset, factory);
     if (messagesRecovered.size() > 0) {
       metrics.nonzeroMessageRecovery.inc(1);
     }
@@ -492,7 +496,10 @@ class PersistentIndex {
         // original message offset and ends at the delete message's start offset (the original message surely cannot go
         // beyond the start offset of the delete message.
         try {
-          MessageInfo deletedBlobInfo = hardDelete.getMessageInfo(log, value.getOriginalMessageOffset(), factory);
+          // TODO (Index Changes): This currently works on the assumption that there is only one log segment. Will
+          // TODO (Index Changes): be rewritten.
+          MessageInfo deletedBlobInfo =
+              hardDelete.getMessageInfo(logSegment, value.getOriginalMessageOffset(), factory);
           return new BlobReadOptions(value.getOriginalMessageOffset(), deletedBlobInfo.getSize(),
               deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getStoreKey());
         } catch (IOException e) {
@@ -543,7 +550,7 @@ class PersistentIndex {
     long startTimeInMs = time.milliseconds();
     try {
       boolean tokenWasReset = false;
-      long logEndOffsetBeforeFind = log.getLogEndOffset();
+      long logEndOffsetBeforeFind = logSegment.getEndOffset();
       StoreFindToken storeToken = (StoreFindToken) token;
       // validate token
       if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
@@ -1021,7 +1028,7 @@ class PersistentIndex {
           Map.Entry<Long, IndexSegment> lastEntry = indexes.lastEntry();
           IndexSegment currentInfo = lastEntry.getValue();
           long currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
-          long logEndOffsetBeforeFlush = log.getLogEndOffset();
+          long logEndOffsetBeforeFlush = logSegment.getEndOffset();
           if (logEndOffsetBeforeFlush < currentIndexEndOffsetBeforeFlush) {
             throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than "
                 + "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
@@ -1030,13 +1037,13 @@ class PersistentIndex {
           hardDeleter.preLogFlush();
 
           // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
-          log.flush();
+          logSegment.flush();
 
           hardDeleter.postLogFlush();
 
           long lastOffset = lastEntry.getKey();
           IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastOffset).getValue() : null;
-          long currentLogEndPointer = log.getLogEndOffset();
+          long currentLogEndPointer = logSegment.getEndOffset();
           while (prevInfo != null && !prevInfo.isMapped()) {
             if (prevInfo.getEndOffset() > currentLogEndPointer) {
               String message = "The read only index cannot have a file end pointer " + prevInfo.getEndOffset()
