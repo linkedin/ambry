@@ -20,8 +20,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,12 +122,15 @@ class Log implements Write {
     if (!segmentsByName.containsKey(name)) {
       throw new IllegalArgumentException("There is no log segment with name: " + name);
     }
-    Map.Entry<String, LogSegment> higherEntry = segmentsByName.higherEntry(name);
-    while (higherEntry != null) {
-      free(higherEntry.getValue());
-      segmentsByName.remove(higherEntry.getKey());
-      higherEntry = segmentsByName.higherEntry(name);
+    ConcurrentNavigableMap<String, LogSegment> extraSegments = segmentsByName.tailMap(name, false);
+    Iterator<Map.Entry<String, LogSegment>> iterator = extraSegments.entrySet().iterator();
+    while (iterator.hasNext()) {
+      Map.Entry<String, LogSegment> entry = iterator.next();
+      logger.info("Freeing extra segment with name [{}] ", entry.getValue().getName());
+      free(entry.getValue());
+      iterator.remove();
     }
+    logger.info("Setting active segment to [{}]", name);
     activeSegment = segmentsByName.get(name);
   }
 
@@ -204,24 +209,22 @@ class Log implements Write {
       throw new IllegalArgumentException(
           "One of the log segments provided [" + o1.getName() + ", " + o2.getName() + "] does not belong to this log");
     }
-    if (o1.getOffset() > firstSegment.getEndOffset() || o2.getOffset() > secondSegment.getEndOffset()) {
+    if (o1.getOffset() > firstSegment.getCapacityInBytes() || o2.getOffset() > secondSegment.getCapacityInBytes()) {
       throw new IllegalArgumentException("One of the offsets provided [" + o1.getOffset() + ", " + o2.getOffset()
-          + "] is out of range of the segment it refers to [" + firstSegment.getEndOffset() + ", "
-          + secondSegment.getEndOffset() + "]");
+          + "] is out of range of the segment it refers to [" + firstSegment.getCapacityInBytes() + ", " + secondSegment
+          .getCapacityInBytes() + "]");
     }
     if (o1.getName().equals(o2.getName())) {
       return o1.getOffset() - o2.getOffset();
     }
     Offset higher = o1.compareTo(o2) > 0 ? o1 : o2;
     Offset lower = higher == o1 ? o2 : o1;
-    LogSegment segment = segmentsByName.higherEntry(lower.getName()).getValue();
+    int interveningSegmentsCount = segmentsByName.subMap(lower.getName(), false, higher.getName(), false).size();
     // segment capacity is the same for every segment.
-    long difference = segment.getCapacityInBytes() - lower.getOffset();
-    while (!segment.getName().equals(higher.getName())) {
-      difference += segment.getCapacityInBytes();
-      segment = segmentsByName.higherEntry(segment.getName()).getValue();
-    }
-    difference += higher.getOffset();
+    long segmentCapacity = firstSegment.getCapacityInBytes();
+    // adding the left over capacity in lower segment + capacities of all segments inbetween + offset in higher segment
+    long difference =
+        segmentCapacity - lower.getOffset() + segmentCapacity * interveningSegmentsCount + higher.getOffset();
     return o1.compareTo(o2) * difference;
   }
 
@@ -230,6 +233,8 @@ class Log implements Write {
    * @throws IOException if the flush encountered an I/O error.
    */
   void flush() throws IOException {
+    // TODO: try to flush only segments that require flushing.
+    logger.trace("Flushing log");
     for (LogSegment segment : segmentsByName.values()) {
       segment.flush();
     }
@@ -267,6 +272,8 @@ class Log implements Write {
     }
     remainingUnallocatedSegments = numSegments;
     String firstSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
+    logger.info("Allocating first segment with name [{}] and capacity {} bytes. Total number of segments is {}",
+        firstSegmentName, segmentCapacity, numSegments);
     File segmentFile = allocate(LogSegmentNameHelper.nameToFilename(firstSegmentName), segmentCapacity);
     // to be backwards compatible, headers are not written for a log segment if it is the only log segment.
     LogSegment segment = new LogSegment(firstSegmentName, segmentFile, segmentCapacity, metrics, numSegments > 1);
@@ -283,6 +290,7 @@ class Log implements Write {
     long totalSegments = -1;
     for (File segmentFile : segmentFiles) {
       String name = LogSegmentNameHelper.nameFromFilename(segmentFile.getName());
+      logger.info("Loading segment with name [{}]", name);
       LogSegment segment;
       if (name.isEmpty()) {
         totalSegments = 1;
@@ -293,6 +301,7 @@ class Log implements Write {
         segment = new LogSegment(name, segmentFile, metrics);
         totalSegments = totalSegments == -1 ? totalCapacity / segment.getCapacityInBytes() : totalSegments;
       }
+      logger.info("Segment [{}] has capacity of {} bytes", name, segment.getCapacityInBytes());
       segmentsByName.put(segment.getName(), segment);
     }
     remainingUnallocatedSegments = totalSegments - segmentsByName.size();
@@ -371,6 +380,7 @@ class Log implements Write {
           + "than a single segment's capacity [" + (segmentCapacity - LogSegment.HEADER_SIZE) + "]");
     }
     String newSegmentName = LogSegmentNameHelper.getNextPositionName(activeSegment.getName());
+    logger.info("Allocating new segment with name: " + newSegmentName);
     File newSegmentFile = allocate(LogSegmentNameHelper.nameToFilename(newSegmentName), segmentCapacity);
     LogSegment newSegment = new LogSegment(newSegmentName, newSegmentFile, segmentCapacity, metrics, true);
     segmentsByName.put(newSegmentName, newSegment);

@@ -202,7 +202,8 @@ public class LogTest {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
     Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(numSegments + 1, 0), 0);
-    Offset badOffsetOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getEndOffset() + 1);
+    Offset badOffsetOffset =
+        new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getCapacityInBytes() + 1);
     List<Pair<Offset, Offset>> pairsToCheck = new ArrayList<>();
     pairsToCheck.add(new Pair<>(log.getStartOffset(), badSegmentOffset));
     pairsToCheck.add(new Pair<>(badSegmentOffset, log.getEndOffset()));
