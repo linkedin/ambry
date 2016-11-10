@@ -54,8 +54,7 @@ class Log implements Write {
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
-  public Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics)
-      throws IOException {
+  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics) throws IOException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.metrics = metrics;
@@ -86,8 +85,7 @@ class Log implements Write {
    * @throws IOException if there was an I/O error while writing.
    */
   @Override
-  public int appendFrom(ByteBuffer buffer)
-      throws IOException {
+  public int appendFrom(ByteBuffer buffer) throws IOException {
     rollOverIfRequired(buffer.remaining());
     return activeSegment.appendFrom(buffer);
   }
@@ -104,8 +102,7 @@ class Log implements Write {
    * @throws IOException if there was an I/O error while writing.
    */
   @Override
-  public void appendFrom(ReadableByteChannel channel, long size)
-      throws IOException {
+  public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
     rollOverIfRequired(size);
     activeSegment.appendFrom(channel, size);
   }
@@ -119,8 +116,7 @@ class Log implements Write {
    * @throws IllegalArgumentException if there no segment with name {@code name}.
    * @throws IOException if there is any I/O error freeing segments.
    */
-  void setActiveSegment(String name)
-      throws IOException {
+  void setActiveSegment(String name) throws IOException {
     if (!segmentsByName.containsKey(name)) {
       throw new IllegalArgumentException("There is no log segment with name: " + name);
     }
@@ -205,13 +201,13 @@ class Log implements Write {
     LogSegment firstSegment = segmentsByName.get(o1.getName());
     LogSegment secondSegment = segmentsByName.get(o2.getName());
     if (firstSegment == null || secondSegment == null) {
-      throw new IllegalArgumentException("One of the log segments provided [" + o1.getName() + ", " + o2.getName() +
-          "] does not belong to this log");
+      throw new IllegalArgumentException(
+          "One of the log segments provided [" + o1.getName() + ", " + o2.getName() + "] does not belong to this log");
     }
     if (o1.getOffset() > firstSegment.getEndOffset() || o2.getOffset() > secondSegment.getEndOffset()) {
-      throw new IllegalArgumentException("One of the offsets provided [" + o1.getOffset() + ", " + o2.getOffset() +
-          "] is out of range of the segment it refers to [" + firstSegment.getEndOffset() + ", " +
-          secondSegment.getEndOffset() + "]");
+      throw new IllegalArgumentException("One of the offsets provided [" + o1.getOffset() + ", " + o2.getOffset()
+          + "] is out of range of the segment it refers to [" + firstSegment.getEndOffset() + ", "
+          + secondSegment.getEndOffset() + "]");
     }
     if (o1.getName().equals(o2.getName())) {
       return o1.getOffset() - o2.getOffset();
@@ -233,8 +229,7 @@ class Log implements Write {
    * Flushes the Log and all its segments.
    * @throws IOException if the flush encountered an I/O error.
    */
-  void flush()
-      throws IOException {
+  void flush() throws IOException {
     for (LogSegment segment : segmentsByName.values()) {
       segment.flush();
     }
@@ -244,8 +239,7 @@ class Log implements Write {
    * Closes the Log and all its segments.
    * @throws IOException if the flush encountered an I/O error.
    */
-  void close()
-      throws IOException {
+  void close() throws IOException {
     for (LogSegment segment : segmentsByName.values()) {
       segment.close();
     }
@@ -258,8 +252,7 @@ class Log implements Write {
    * @param segmentCapacity the intended capacity of each segment of the log.
    * @throws IOException if there is an I/O error creating the segment files or creating {@link LogSegment} instances.
    */
-  private void checkArgsAndAllocateFirstSegment(long totalCapacity, long segmentCapacity)
-      throws IOException {
+  private void checkArgsAndAllocateFirstSegment(long totalCapacity, long segmentCapacity) throws IOException {
     if (totalCapacity <= 0 || segmentCapacity <= 0) {
       throw new IllegalArgumentException(
           "One of totalCapacityInBytes [" + totalCapacity + "] or " + "segmentCapacityInBytes [" + segmentCapacity + "]"
@@ -286,8 +279,7 @@ class Log implements Write {
    * @param totalCapacity the total capacity of the log. This is used only if this is a single segment log.
    * @throws IOException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
    */
-  private void loadSegments(File[] segmentFiles, long totalCapacity)
-      throws IOException {
+  private void loadSegments(File[] segmentFiles, long totalCapacity) throws IOException {
     long totalSegments = -1;
     for (File segmentFile : segmentFiles) {
       String name = LogSegmentNameHelper.nameFromFilename(segmentFile.getName());
@@ -313,8 +305,7 @@ class Log implements Write {
    * @return a {@link File} instance that points to the created file named {@code filename} and capacity {@code size}.
    * @throws IOException if the there is any I/O error in allocating the file.
    */
-  private File allocate(String filename, long size)
-      throws IOException {
+  private File allocate(String filename, long size) throws IOException {
     // TODO (DiskManager changes): This is intended to "request" the segment file from the DiskManager which will have
     // TODO (DiskManager changes): a pool of segments.
     File segmentFile = new File(dataDir, filename);
@@ -328,8 +319,7 @@ class Log implements Write {
    * @param logSegment the {@link LogSegment} instance whose backing file needs to be freed.
    * @throws IOException if there is any I/O error freeing the log segment.
    */
-  private void free(LogSegment logSegment)
-      throws IOException {
+  private void free(LogSegment logSegment) throws IOException {
     // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
     File segmentFile = logSegment.getView().getFirst();
     logSegment.close();
@@ -347,8 +337,7 @@ class Log implements Write {
    * @throws IOException if any I/O error occurred as part of ensuring capacity.
    *
    */
-  private void rollOverIfRequired(long writeSize)
-      throws IOException {
+  private void rollOverIfRequired(long writeSize) throws IOException {
     if (activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() < writeSize) {
       ensureCapacity(writeSize);
       // this cannot be null since capacity has either been ensured or has thrown.
@@ -368,8 +357,7 @@ class Log implements Write {
    * @throws IllegalStateException if there no more capacity in the log.
    * @throws IOException if any I/O error occurred as a part of ensuring capacity.
    */
-  private void ensureCapacity(long writeSize)
-      throws IOException {
+  private void ensureCapacity(long writeSize) throws IOException {
     if (remainingUnallocatedSegments == 0) {
       metrics.overflowWriteError.inc();
       throw new IllegalStateException(
