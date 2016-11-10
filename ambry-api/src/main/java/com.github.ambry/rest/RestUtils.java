@@ -115,10 +115,10 @@ public class RestUtils {
      */
     public final static String OWNER_ID = "x-ambry-owner-id";
     /**
-     * optional in request; defines options while getting the blob and is optional support in a
+     * optional in request; defines an option while getting the blob and is optional support in a
      * {@link BlobStorageService}. Valid values are available in {@link GetOptions}. Defaults to {@link GetOptions#None}
      */
-    public final static String GET_OPTIONS = "x-ambry-get-options";
+    public final static String GET_OPTION = "x-ambry-get-option";
     /**
      * not allowed  in request. Allowed in response only; string; time at which blob was created.
      */
@@ -499,13 +499,13 @@ public class RestUtils {
    * Gets the {@link GetOptions} required by the request.
    * @param restRequest the representation of the request.
    * @return the required {@link GetOptions}. Defaults to {@link GetOptions#None}.
-   * @throws RestServiceException if the {@link RestUtils.Headers#GET_OPTIONS} is present but not recognized.
+   * @throws RestServiceException if the {@link RestUtils.Headers#GET_OPTION} is present but not recognized.
    */
   public static GetOptions getGetOptions(RestRequest restRequest)
       throws RestServiceException {
     GetOptions options = GetOptions.None;
     Map<String, Object> args = restRequest.getArgs();
-    Object value = args.get(RestUtils.Headers.GET_OPTIONS);
+    Object value = args.get(RestUtils.Headers.GET_OPTION);
     if (value != null) {
       String str = (String) value;
       boolean foundMatch = false;
@@ -517,7 +517,7 @@ public class RestUtils {
         }
       }
       if (!foundMatch) {
-        throw new RestServiceException("Unrecognized value for [" + RestUtils.Headers.GET_OPTIONS + "]: " + str,
+        throw new RestServiceException("Unrecognized value for [" + RestUtils.Headers.GET_OPTION + "]: " + str,
             RestServiceErrorCode.InvalidArgs);
       }
     }

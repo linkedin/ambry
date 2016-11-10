@@ -359,7 +359,7 @@ public class AdminIntegrationTest {
       throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOptions != null) {
-      headers.add(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.add(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -385,7 +385,7 @@ public class AdminIntegrationTest {
       throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOptions != null) {
-      headers.add(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.add(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
@@ -414,7 +414,7 @@ public class AdminIntegrationTest {
       throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOptions != null) {
-      headers.add(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.add(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     FullHttpRequest httpRequest =
         buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, headers, null);
@@ -440,7 +440,7 @@ public class AdminIntegrationTest {
       throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOptions != null) {
-      headers.add(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.add(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     FullHttpRequest httpRequest =
         buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
@@ -465,7 +465,7 @@ public class AdminIntegrationTest {
       throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOptions != null) {
-      headers.add(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.add(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();

@@ -594,7 +594,7 @@ public class RestUtilsTest {
       throws Exception {
     for (GetOptions option : GetOptions.values()) {
       JSONObject headers = new JSONObject();
-      headers.put(RestUtils.Headers.GET_OPTIONS, option.toString().toLowerCase());
+      headers.put(RestUtils.Headers.GET_OPTION, option.toString().toLowerCase());
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/", headers);
       assertEquals("Options returned not as expected", option, RestUtils.getGetOptions(restRequest));
     }
@@ -603,7 +603,7 @@ public class RestUtilsTest {
     assertEquals("Options returned not as expected", GetOptions.None, RestUtils.getGetOptions(restRequest));
     // bad value
     JSONObject headers = new JSONObject();
-    headers.put(RestUtils.Headers.GET_OPTIONS, "non_existent_option");
+    headers.put(RestUtils.Headers.GET_OPTION, "non_existent_option");
     restRequest = createRestRequest(RestMethod.GET, "/", headers);
     try {
       RestUtils.getGetOptions(restRequest);

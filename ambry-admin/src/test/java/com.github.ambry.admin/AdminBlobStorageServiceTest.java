@@ -711,7 +711,7 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     JSONObject headers = new JSONObject();
     if (getOptions != null) {
-      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.put(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, blobId, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -736,7 +736,7 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     JSONObject headers = new JSONObject();
     if (getOptions != null) {
-      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.put(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
     dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -766,7 +766,7 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     JSONObject headers = new JSONObject();
     if (getOptions != null) {
-      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.put(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     RestRequest restRequest = AdminTestUtils
         .createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, headers, null);
@@ -789,7 +789,7 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     JSONObject headers = new JSONObject();
     if (getOptions != null) {
-      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.put(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     RestRequest restRequest =
         AdminTestUtils.createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
@@ -813,7 +813,7 @@ public class AdminBlobStorageServiceTest {
       throws Exception {
     JSONObject headers = new JSONObject();
     if (getOptions != null) {
-      headers.put(RestUtils.Headers.GET_OPTIONS, getOptions.toString());
+      headers.put(RestUtils.Headers.GET_OPTION, getOptions.toString());
     }
     RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.HEAD, blobId, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
