@@ -246,7 +246,6 @@ class Log implements Write {
    */
   void close() throws IOException {
     for (LogSegment segment : segmentsByName.values()) {
-      segment.flush();
       segment.close();
     }
   }
