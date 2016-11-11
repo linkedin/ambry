@@ -169,7 +169,7 @@ public class ConsistencyCheckerTool {
     private void doCheck(File[] replicas, ArrayList<String> replicasList,
         ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed)
         throws IOException, InterruptedException {
-      DumpData dumpData = new DumpData(map, true);
+      DumpData dumpData = new DumpData(map);
       CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
       IndexStats indexStats = new IndexStats();
       for (File replica : replicas) {
@@ -256,8 +256,9 @@ public class ConsistencyCheckerTool {
       }
 
       public void run() {
-        File[] indexFiles = rootDirectory.listFiles();
+        File[] indexFiles = rootDirectory.listFiles(new DumpData.IndexFileNameFilter());
         long keysProcessedforReplica = 0;
+        Arrays.sort(indexFiles, new IndexFileNameComparator());
         for (File indexFile : indexFiles) {
           keysProcessedforReplica +=
               dumpData.dumpIndex(indexFile, rootDirectory.getName(), replicaList, new ArrayList<String>(),
@@ -342,17 +343,17 @@ public class ConsistencyCheckerTool {
       }
       return fileEndPointer;
     }
+  }
 
-    class IndexFileNameComparator implements Comparator {
-      public int compare(Object o1, Object o2) {
-        String s1 = ((File) o1).getName();
-        String s2 = ((File) o2).getName();
+  static class IndexFileNameComparator implements Comparator {
+    public int compare(Object o1, Object o2) {
+      String s1 = ((File) o1).getName();
+      String s2 = ((File) o2).getName();
 
-        long n1 = Long.parseLong(s1.substring(0, s1.indexOf("_")));
-        long n2 = Long.parseLong(s2.substring(0, s2.indexOf("_")));
+      long n1 = Long.parseLong(s1.substring(0, s1.indexOf("_")));
+      long n2 = Long.parseLong(s2.substring(0, s2.indexOf("_")));
 
-        return Long.compare(n1, n2);
-      }
+      return Long.compare(n1, n2);
     }
   }
 }
