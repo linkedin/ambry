@@ -450,7 +450,7 @@ class RouterServerTestFramework {
     AWAIT_DELETION(false);
 
     /**
-     * {@code true} if this operation follows a delete operation.
+     * {@code true} if this operation needs to check that the response returned indicates that the blob is deleted.
      */
     final boolean checkDeleted;
 
