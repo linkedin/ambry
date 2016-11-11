@@ -26,6 +26,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -51,6 +52,7 @@ class LogSegment implements Read, Write {
   private final long startOffset;
   private final AtomicLong endOffset;
   private final AtomicLong refCount = new AtomicLong(0);
+  private final AtomicBoolean open = new AtomicBoolean(true);
 
   /**
    * Creates a LogSegment abstraction with the given capacity.
@@ -337,7 +339,9 @@ class LogSegment implements Read, Write {
    */
   void close()
       throws IOException {
-    fileChannel.close();
+    if (open.compareAndSet(true, false)) {
+      fileChannel.close();
+    }
   }
 
   /**

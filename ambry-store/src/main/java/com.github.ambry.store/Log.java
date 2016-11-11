@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +41,6 @@ class Log implements Write {
   private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
       new ConcurrentSkipListMap<>(LogSegmentNameHelper.COMPARATOR);
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final AtomicBoolean open = new AtomicBoolean(true);
 
   private long remainingUnallocatedSegments;
   private LogSegment activeSegment;
@@ -247,11 +245,8 @@ class Log implements Write {
    * @throws IOException if the flush encountered an I/O error.
    */
   void close() throws IOException {
-    if (open.compareAndSet(true, false)) {
-      for (LogSegment segment : segmentsByName.values()) {
-        segment.flush();
-        segment.close();
-      }
+    for (LogSegment segment : segmentsByName.values()) {
+      segment.close();
     }
   }
 
