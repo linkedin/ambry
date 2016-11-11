@@ -72,7 +72,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storePutTest() throws IOException {
+  public void storePutTest() throws Exception {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -135,8 +135,6 @@ public class BlobStoreTest {
       } catch (StoreException e) {
         Assert.assertTrue(e.getErrorCode() == StoreErrorCodes.Already_Exist);
       }
-    } catch (Exception e) {
-      Assert.assertEquals(false, true);
     } finally {
       if (map != null) {
         map.cleanup();
@@ -145,7 +143,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeGetTest() throws IOException {
+  public void storeGetTest() throws Exception {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -194,9 +192,6 @@ public class BlobStoreTest {
       for (int i = 1000; i < 2000; i++) {
         Assert.assertEquals(bufToWrite[i], output[i - 1000]);
       }
-    } catch (Exception e) {
-      e.printStackTrace();
-      Assert.assertEquals(false, true);
     } finally {
       if (map != null) {
         map.cleanup();
@@ -205,7 +200,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeDeleteTest() throws IOException {
+  public void storeDeleteTest() throws Exception {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -276,8 +271,6 @@ public class BlobStoreTest {
       keys.clear();
       keys.add(blobId2);
       store.get(keys, EnumSet.noneOf(StoreGetOptions.class));
-    } catch (Exception e) {
-      Assert.assertEquals(false, true);
     } finally {
       if (map != null) {
         map.cleanup();
@@ -286,7 +279,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeGetDeletedTest() throws IOException {
+  public void storeGetDeletedTest() throws Exception {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -369,7 +362,7 @@ public class BlobStoreTest {
       }
 
       // delete a few ids
-      byte[] bufToDelete = new byte[1000];
+      byte[] bufToDelete = new byte[3000];
       new Random().nextBytes(bufToDelete);
 
       MessageInfo info1d = new MessageInfo(blobId1, 1000, 1234);
@@ -382,12 +375,7 @@ public class BlobStoreTest {
       MessageWriteSet setToDelete = new MockMessageWriteSet(ByteBuffer.wrap(bufToDelete), listInfo1);
       store.delete(setToDelete);
 
-      try {
-        info = store.get(keys, EnumSet.of(StoreGetOptions.Store_Include_Deleted));
-      } catch (StoreException e) {
-        Assert.assertEquals(false, true);
-      }
-
+      info = store.get(keys, EnumSet.of(StoreGetOptions.Store_Include_Deleted));
       readSet = info.getMessageReadSet();
       Assert.assertEquals(readSet.count(), 5);
       Assert.assertEquals(readSet.sizeInBytes(0), 1000);
@@ -417,8 +405,6 @@ public class BlobStoreTest {
       for (int i = 4000; i < 5000; i++) {
         Assert.assertEquals(bufToWrite[i], output[i - 4000]);
       }
-    } catch (Exception e) {
-      Assert.assertEquals(false, true);
     } finally {
       if (map != null) {
         map.cleanup();
@@ -427,7 +413,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeShutdownTest() throws IOException {
+  public void storeShutdownTest() throws Exception {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -475,8 +461,6 @@ public class BlobStoreTest {
       } catch (StoreException e) {
         Assert.assertTrue(e.getErrorCode() == StoreErrorCodes.Store_Not_Started);
       }
-    } catch (Exception e) {
-      Assert.assertTrue(false);
     } finally {
       if (map != null) {
         map.cleanup();

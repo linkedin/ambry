@@ -23,14 +23,14 @@ import java.util.List;
  * condition of an entry getting added to the index but not yet to the journal.
  */
 class MockJournal extends Journal {
-  private List<Long> savedOffsets;
+  private List<Offset> savedOffsets;
   private List<StoreKey> savedKeys;
   boolean paused;
 
   public MockJournal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
     super(dataDir, maxEntriesToJournal, maxEntriesToReturn);
-    savedOffsets = new ArrayList<Long>();
-    savedKeys = new ArrayList<StoreKey>();
+    savedOffsets = new ArrayList<>();
+    savedKeys = new ArrayList<>();
     paused = false;
   }
 
@@ -46,7 +46,7 @@ class MockJournal extends Journal {
   }
 
   @Override
-  public void addEntry(long offset, StoreKey key) {
+  public void addEntry(Offset offset, StoreKey key) {
     if (paused) {
       savedOffsets.add(offset);
       savedKeys.add(key);

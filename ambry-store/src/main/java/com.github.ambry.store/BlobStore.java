@@ -35,30 +35,30 @@ import org.slf4j.LoggerFactory;
  */
 class BlobStore implements Store {
   static final String SEPARATOR = "_";
+  private final static String LockFile = ".lock";
 
-  private Log log;
-  private PersistentIndex index;
   private final String dataDir;
   private final ScheduledExecutorService taskScheduler;
   private final DiskIOScheduler diskIOScheduler;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
   private final Object lock = new Object();
-  private boolean started;
-  private StoreConfig config;
-  private long capacityInBytes;
-  private static String LockFile = ".lock";
-  private FileLock fileLock;
-  private StoreKeyFactory factory;
-  private MessageStoreRecovery recovery;
-  private MessageStoreHardDelete hardDelete;
-  private StoreMetrics metrics;
-  private Time time;
+  private final StoreConfig config;
+  private final long capacityInBytes;
+  private final StoreKeyFactory factory;
+  private final MessageStoreRecovery recovery;
+  private final MessageStoreHardDelete hardDelete;
+  private final StoreMetrics metrics;
+  private final Time time;
 
-  public BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      DiskIOScheduler diskIOScheduler, StorageManagerMetrics storageManagerMetrics, String dataDir,
-      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      Time time) {
+  private Log log;
+  private PersistentIndex index;
+  private boolean started;
+  private FileLock fileLock;
+
+  BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler, DiskIOScheduler diskIOScheduler,
+      StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
@@ -103,7 +103,6 @@ class BlobStore implements Store {
         }
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time);
-        setSegmentStatesAndEndOffsets();
         metrics.initializeLogGauges(log, capacityInBytes);
         started = true;
       } catch (Exception e) {
@@ -130,7 +129,7 @@ class BlobStore implements Store {
         indexMessages.put(key, readInfo.getMessageInfo());
       }
 
-      MessageReadSet readSet = log.getView(readOptions);
+      MessageReadSet readSet = new StoreMessageReadSet(readOptions);
       // We ensure that the metadata list is ordered with the order of the message read set view that the
       // log provides. This ensures ordering of all messages across the log and metadata from the index.
       List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(readSet.count());
@@ -156,7 +155,7 @@ class BlobStore implements Store {
       if (messageSetToWrite.getMessageSetInfo().size() == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
-      long indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       // if any of the keys already exist in the store, we fail
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
         if (index.findKey(info.getStoreKey()) != null) {
@@ -167,8 +166,8 @@ class BlobStore implements Store {
       synchronized (lock) {
         // Validate that log end offset was not changed. If changed, check once again for existing
         // keys in store
-        long currentIndexEndOffset = index.getCurrentEndOffset();
-        if (currentIndexEndOffset != indexEndOffsetBeforeCheck) {
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
             if (index.findKey(info.getStoreKey(), fileSpan) != null) {
@@ -176,18 +175,18 @@ class BlobStore implements Store {
             }
           }
         }
-        // TODO (Index changes): Working under the assumption that there is only one log segment.
-        long currentLogEndOffset = log.getEndOffset().getOffset();
+        Offset currentLogEndOffset = log.getEndOffset();
         messageSetToWrite.writeTo(log);
         logger.trace("Store : {} message set written to log", dataDir);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
-        ArrayList<IndexEntry> indexEntries = new ArrayList<IndexEntry>(messageInfo.size());
+        ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
+          FileSpan fileSpan = getFileSpanForMessage(currentLogEndOffset, info.getSize());
           IndexValue value =
               new IndexValue(info.getSize(), currentLogEndOffset, (byte) 0, info.getExpirationTimeInMs());
           IndexEntry entry = new IndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry);
-          currentLogEndOffset += info.getSize();
+          currentLogEndOffset = fileSpan.getEndOffset();
         }
         FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), currentLogEndOffset);
         index.addToIndex(indexEntries, fileSpan);
@@ -211,7 +210,7 @@ class BlobStore implements Store {
     final Timer.Context context = metrics.deleteResponse.time();
     try {
       List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
-      long indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infoList) {
         IndexValue value = index.findKey(info.getStoreKey());
         if (value == null) {
@@ -224,8 +223,8 @@ class BlobStore implements Store {
         }
       }
       synchronized (lock) {
-        long currentIndexEndOffset = index.getCurrentEndOffset();
-        if (indexEndOffsetBeforeCheck != currentIndexEndOffset) {
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           for (MessageInfo info : infoList) {
             IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
@@ -236,14 +235,13 @@ class BlobStore implements Store {
             }
           }
         }
-        // TODO (Index changes): Working under the assumption that there is only one log segment.
-        long currentLogEndOffset = log.getEndOffset().getOffset();
+        Offset currentLogEndOffset = log.getEndOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
-          FileSpan fileSpan = new FileSpan(currentLogEndOffset, currentLogEndOffset + info.getSize());
+          FileSpan fileSpan = getFileSpanForMessage(currentLogEndOffset, info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          currentLogEndOffset += info.getSize();
+          currentLogEndOffset = fileSpan.getEndOffset();
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
@@ -338,14 +336,24 @@ class BlobStore implements Store {
   }
 
   /**
-   * Sets the end offsets and states for all the segments (by setting the active segment).
-   * @throws IOException if there is an I/O error while setting the end offsets.
+   * Gets the {@link FileSpan} for a message that is written starting at {@code writeStartOffset} and is of size
+   * {@code size}.
+   * @param writeStartOffset the start offset of the write.
+   * @param size the size of the write.
+   * @return the {@link FileSpan} for a message that is written starting at {@code writeStartOffset} and is of size
+   * {@code size}.
    */
-  private void setSegmentStatesAndEndOffsets() throws IOException {
-    // TODO (Index Changes): Since the index works under the assumption that there is only one log segment, the code
-    // TODO (Index Changes): here does the same. Once the index can handle multiple segments, this will change.
-    LogSegment firstSegment = log.getFirstSegment();
-    firstSegment.setEndOffset(index.getCurrentEndOffset());
-    log.setActiveSegment(firstSegment.getName());
+  private FileSpan getFileSpanForMessage(Offset writeStartOffset, long size) {
+    LogSegment segment = log.getSegment(writeStartOffset.getName());
+    long startOffset = writeStartOffset.getOffset();
+    if (startOffset == segment.getEndOffset()) {
+      // current segment has ended. Since a blob will be wholly contained within one segment, this blob is in the
+      // next segment
+      segment = log.getNextSegment(segment);
+      startOffset = segment.getStartOffset();
+    } else if (startOffset + size > segment.getEndOffset()) {
+      throw new IllegalStateException("Blob is not wholly contained within a single segment");
+    }
+    return new FileSpan(new Offset(segment.getName(), startOffset), new Offset(segment.getName(), startOffset + size));
   }
 }

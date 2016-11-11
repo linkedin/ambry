@@ -66,6 +66,7 @@ class DumpDataHelper {
       ConcurrentHashMap<String, IndexRecord> blobIdToMessageMap) {
     long numberOfKeysProcessed = 0;
     try {
+      Offset startOffset = IndexSegment.getIndexSegmentStartOffset(indexFileToDump.getName());
       DataInputStream stream = new DataInputStream(new FileInputStream(indexFileToDump));
       short version = stream.readShort();
       logger.trace("version {} ", version);
@@ -82,17 +83,17 @@ class DumpDataHelper {
           StoreKey key = storeKeyFactory.getStoreKey(stream);
           byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
           stream.read(value);
-          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+          IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value));
           String msg =
               "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
                   + " size " + blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset()
                   + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index) + " LiveUntil "
-                  + blobValue.getTimeToLiveInMs();
+                  + blobValue.getExpiresAtMs();
           boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           numberOfKeysProcessed++;
 
           if (blobList == null || blobList.size() == 0 || blobList.contains(key.toString())) {
-            IndexRecord indexRecord = new IndexRecord(msg, isDeleted, isExpired(blobValue.getTimeToLiveInMs()));
+            IndexRecord indexRecord = new IndexRecord(msg, isDeleted, isExpired(blobValue.getExpiresAtMs()));
             if (blobIdToMessageMap.containsKey(key.getID())) {
               logger.error(
                   "Duplicate record found for same blob " + key.getID() + ". Prev record " + blobIdToMessageMap.get(
@@ -374,7 +375,7 @@ class DumpDataHelper {
    */
   private void compareIndexValueToLogEntry(String blobId, IndexValue indexValue, LogBlobRecordInfo logBlobRecordInfo) {
     boolean isDeleted = indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
-    boolean isExpired = isExpired(indexValue.getTimeToLiveInMs());
+    boolean isExpired = isExpired(indexValue.getExpiresAtMs());
     if (isDeleted != logBlobRecordInfo.isDeleted) {
       logger.error(
           "Deleted value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isDeleted + ", Log value "
@@ -382,7 +383,7 @@ class DumpDataHelper {
     } else if (!logBlobRecordInfo.isDeleted && isExpired != logBlobRecordInfo.isExpired) {
       logger.error(
           "Expiration value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isExpired + ", Log value "
-              + logBlobRecordInfo.isExpired + ", index TTL in ms " + indexValue.getTimeToLiveInMs()
+              + logBlobRecordInfo.isExpired + ", index TTL in ms " + indexValue.getExpiresAtMs()
               + ", log Time to live in secs " + logBlobRecordInfo.timeToLiveInSeconds + ", in ms "
               + TimeUnit.SECONDS.toMillis(logBlobRecordInfo.timeToLiveInSeconds));
     } else if (!blobId.equals(logBlobRecordInfo.blobId.getID())) {

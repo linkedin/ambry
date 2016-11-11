@@ -50,14 +50,13 @@ public class HardDeleter implements Runnable {
   private final StoreMetrics metrics;
   private final String dataDir;
   private final Log log;
+  private final Offset logAbsoluteZeroOffset;
   private final PersistentIndex index;
   private final MessageStoreHardDelete hardDelete;
   private final StoreKeyFactory factory;
   private final Time time;
   private final int scanSizeInBytes;
   private final int messageRetentionSeconds;
-  // TODO (HardDelete Changes): This will stay until the HardDelete is rewritten to handle multiple segments.
-  private final LogSegment logSegment;
   //how long to sleep if token does not advance.
   private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * Time.MsPerSec;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -97,7 +96,7 @@ public class HardDeleter implements Runnable {
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;
-    logSegment = log.getFirstSegment();
+    logAbsoluteZeroOffset = new Offset(log.getFirstSegment().getName(), 0);
     this.index = index;
     this.hardDelete = hardDelete;
     this.factory = factory;
@@ -161,7 +160,7 @@ public class HardDeleter implements Runnable {
 
         /* Next, perform the log write. The token file does not have to be persisted again as only entries that are
            currently in it are being hard deleted as part of recovery. */
-      StoreMessageReadSet readSet = log.getView(readOptionsList);
+      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList);
       Iterator<HardDeleteInfo> hardDeleteIterator =
           hardDelete.getHardDeleteMessages(readSet, factory, hardDeleteRecoveryRange.getMessageStoreRecoveryInfoList());
 
@@ -176,6 +175,7 @@ public class HardDeleter implements Runnable {
         if (hardDeleteInfo == null) {
           metrics.hardDeleteFailedCount.inc(1);
         } else {
+          LogSegment logSegment = log.getSegment(readOptions.getLogSegmentName());
           logSegment.writeFrom(hardDeleteInfo.getHardDeleteChannel(),
               readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
               hardDeleteInfo.getHardDeletedMessageSize());
@@ -204,7 +204,7 @@ public class HardDeleter implements Runnable {
    */
   void pruneHardDeleteRecoveryRange() {
     StoreFindToken logFlushedTillToken = (StoreFindToken) startTokenSafeToPersist;
-    if (logFlushedTillToken != null && !logFlushedTillToken.isUninitialized()) {
+    if (logFlushedTillToken != null && !logFlushedTillToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
       if (logFlushedTillToken.equals(endToken)) {
         hardDeleteRecoveryRange.clear();
       } else if (logFlushedTillToken.getStoreKey() != null) {
@@ -245,7 +245,7 @@ public class HardDeleter implements Runnable {
    * @return true if the token moved forward, false otherwise.
    */
   boolean hardDelete() throws StoreException {
-    if (index.getCurrentEndOffset() > 0) {
+    if (index.getCurrentEndOffset().compareTo(log.getStartOffset()) > 0) {
       final Timer.Context context = metrics.hardDeleteTime.time();
       try {
         FindInfo info =
@@ -294,20 +294,15 @@ public class HardDeleter implements Runnable {
    */
   long getProgress() {
     StoreFindToken token = (StoreFindToken) startToken;
-    if (token.isUninitialized()) {
-      return 0;
-    } else if (token.getOffset() != StoreFindToken.Uninitialized_Offset) {
-      return token.getOffset();
-    } else {
-      return token.getIndexStartOffset();
-    }
+    return token.getType().equals(StoreFindToken.Type.Uninitialized) ? 0
+        : log.getDifference(token.getOffset(), logAbsoluteZeroOffset);
   }
 
   /**
    * Returns true if the hard delete is currently running.
    * @return true if running, false otherwise.
    */
-  public boolean isRunning() {
+  boolean isRunning() {
     return shutdownLatch.getCount() != 0;
   }
 
@@ -411,7 +406,7 @@ public class HardDeleter implements Runnable {
            crc
            ---
          */
-    if (endToken == null || ((StoreFindToken) endToken).isUninitialized()) {
+    if (endToken == null || ((StoreFindToken) endToken).getType().equals(StoreFindToken.Type.Uninitialized)) {
       return;
     }
     final Timer.Context context = metrics.cleanupTokenFlushTime.time();
@@ -469,7 +464,7 @@ public class HardDeleter implements Runnable {
 
       List<LogWriteInfo> logWriteInfoList = new ArrayList<LogWriteInfo>();
 
-      StoreMessageReadSet readSet = log.getView(readOptionsList);
+      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList);
       Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory, null);
       Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
 
@@ -486,7 +481,8 @@ public class HardDeleter implements Runnable {
           metrics.hardDeleteFailedCount.inc(1);
         } else {
           hardDeleteRecoveryRange.addMessageInfo(readOptions, hardDeleteInfo.getRecoveryInfo());
-          logWriteInfoList.add(new LogWriteInfo(hardDeleteInfo.getHardDeleteChannel(),
+          LogSegment logSegment = log.getSegment(readOptions.getLogSegmentName());
+          logWriteInfoList.add(new LogWriteInfo(logSegment, hardDeleteInfo.getHardDeleteChannel(),
               readOptions.getOffset() + hardDeleteInfo.getStartOffsetInMessage(),
               hardDeleteInfo.getHardDeletedMessageSize()));
         }
@@ -505,8 +501,7 @@ public class HardDeleter implements Runnable {
           throw new StoreException("Aborting hard deletes as store is shutting down",
               StoreErrorCodes.Store_Shutting_Down);
         }
-
-        logSegment.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);
+        logWriteInfo.logSegment.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);
         metrics.hardDeleteDoneCount.inc(1);
         throttler.maybeThrottle(logWriteInfo.size);
       }
@@ -526,11 +521,13 @@ public class HardDeleter implements Runnable {
    * A class to hold the information required to write hard delete stream to the Log.
    */
   private class LogWriteInfo {
-    ReadableByteChannel channel;
-    long offset;
-    long size;
+    final LogSegment logSegment;
+    final ReadableByteChannel channel;
+    final long offset;
+    final long size;
 
-    LogWriteInfo(ReadableByteChannel channel, long offset, long size) {
+    LogWriteInfo(LogSegment logSegment, ReadableByteChannel channel, long offset, long size) {
+      this.logSegment = logSegment;
       this.channel = channel;
       this.offset = offset;
       this.size = size;
@@ -554,7 +551,7 @@ public class HardDeleter implements Runnable {
       this();
       int numBlobsToRecover = stream.readInt();
       for (int i = 0; i < numBlobsToRecover; i++) {
-        blobReadOptionsList.add(BlobReadOptions.fromBytes(stream, storeKeyFactory));
+        blobReadOptionsList.add(BlobReadOptions.fromBytes(stream, storeKeyFactory, log));
       }
 
       for (int i = 0; i < numBlobsToRecover; i++) {

@@ -22,91 +22,95 @@ import java.nio.ByteBuffer;
  */
 
 class IndexValue {
-  public enum Flags {
+  enum Flags {
     Delete_Index
   }
 
   private static int Blob_Size_In_Bytes = 8;
   private static int Offset_Size_In_Bytes = 8;
   private static int Flag_Size_In_Bytes = 1;
-  private static int Time_To_Live_Size_In_Bytes = 8;
+  private static int Expires_At_Ms_Size_In_Bytes = 8;
   private static int Original_Message_Offset_Size_In_Bytes = 8;
 
-  public static int Index_Value_Size_In_Bytes =
-      Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes
+  static int Index_Value_Size_In_Bytes =
+      Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes
           + Original_Message_Offset_Size_In_Bytes;
 
-  private ByteBuffer value;
+  private final ByteBuffer value;
+  private Offset offset;
 
-  public IndexValue(ByteBuffer value) {
+  IndexValue(String logSegmentName, ByteBuffer value) {
     if (value.capacity() != Index_Value_Size_In_Bytes) {
       throw new IllegalArgumentException("Invalid buffer size");
     }
     this.value = value;
+    offset = new Offset(logSegmentName, value.getLong(Blob_Size_In_Bytes));
   }
 
-  public IndexValue(long size, long offset, byte flags, long timeToLiveInMs) {
-    this(size, offset, flags, timeToLiveInMs, offset);
+  IndexValue(long size, Offset offset, byte flags, long expiresAtMs) {
+    this(size, offset, flags, expiresAtMs, offset.getOffset());
   }
 
-  public IndexValue(long size, long offset, byte flags, long timeToLiveInMs, long originalMessageOffset) {
+  IndexValue(long size, Offset offset, long expiresAtMs) {
+    this(size, offset, (byte) 0, expiresAtMs);
+  }
+
+  IndexValue(long size, Offset offset) {
+    this(size, offset, (byte) 0, Utils.Infinite_Time);
+  }
+
+  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset) {
+    this.offset = offset;
     value = ByteBuffer.allocate(Index_Value_Size_In_Bytes);
     value.putLong(size);
-    value.putLong(offset);
+    value.putLong(offset.getOffset());
     value.put(flags);
-    value.putLong(timeToLiveInMs);
+    value.putLong(expiresAtMs);
     value.putLong(originalMessageOffset);
     value.position(0);
   }
 
-  public IndexValue(long size, long offset, long timeToLiveInMs) {
-    this(size, offset, (byte) 0, timeToLiveInMs);
-  }
-
-  public IndexValue(long size, long offset) {
-    this(size, offset, (byte) 0, Utils.Infinite_Time);
-  }
-
-  public long getSize() {
+  long getSize() {
     return value.getLong(0);
   }
 
-  public long getOffset() {
-    return value.getLong(Blob_Size_In_Bytes);
+  Offset getOffset() {
+    return offset;
   }
 
-  public byte getFlags() {
+  byte getFlags() {
     return value.get(Blob_Size_In_Bytes + Offset_Size_In_Bytes);
   }
 
-  public boolean isFlagSet(Flags flag) {
+  boolean isFlagSet(Flags flag) {
     return ((getFlags() & (1 << flag.ordinal())) != 0);
   }
 
-  public long getTimeToLiveInMs() {
+  long getExpiresAtMs() {
     return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes);
   }
 
-  public long getOriginalMessageOffset() {
-    return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes);
+  long getOriginalMessageOffset() {
+    return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes);
   }
 
-  public void setFlag(Flags flag) {
+  void setFlag(Flags flag) {
     value.put(Blob_Size_In_Bytes + Offset_Size_In_Bytes, (byte) (getFlags() | (1 << flag.ordinal())));
   }
 
-  public void setNewOffset(long newOffset) {
-    long oldOffset = getOffset();
-    value.putLong(Blob_Size_In_Bytes, newOffset);
-    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes,
-        oldOffset);
+  void setNewOffset(Offset newOffset) {
+    long originalMessageOffset = offset.getName().equals(newOffset.getName()) ? offset.getOffset() : -1;
+    offset = newOffset;
+    value.putLong(Blob_Size_In_Bytes, offset.getOffset());
+    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes,
+        originalMessageOffset);
   }
 
-  public void setNewSize(long size) {
+  void setNewSize(long size) {
     value.putLong(0, size);
   }
 
-  public ByteBuffer getBytes() {
+  ByteBuffer getBytes() {
     return value;
   }
 }

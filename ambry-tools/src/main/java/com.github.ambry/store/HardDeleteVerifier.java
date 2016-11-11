@@ -289,7 +289,7 @@ public class HardDeleteVerifier {
     for (File indexFile : indexFiles) {
       DataInputStream stream = null;
       try {
-        long segmentStartOffset = Long.parseLong(indexFile.getName().substring(0, indexFile.getName().indexOf("_", 0)));
+        Offset segmentStartOffset = IndexSegment.getIndexSegmentStartOffset(indexFile.getName());
         /* Read each index file as long as it is within the endToken and populate a map with the status of the blob.*/
         stream = new DataInputStream(new FileInputStream(indexFile));
         short version = stream.readShort();
@@ -299,7 +299,7 @@ public class HardDeleteVerifier {
         int keysize = stream.readInt();
         int valueSize = stream.readInt();
         long segmentEndOffset = stream.readLong();
-        if (segmentStartOffset > offsetUpto) {
+        if (segmentStartOffset.getOffset() > offsetUpto) {
           if (!blobMap.equals(offRangeMap)) {
             System.out.println(
                 "Reached the last segment with segment start offset " + segmentStartOffset + " greater than offsetUpto "
@@ -316,7 +316,7 @@ public class HardDeleteVerifier {
           BlobId key = (BlobId) storeKeyFactory.getStoreKey(stream);
           byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
           stream.read(value);
-          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+          IndexValue blobValue = new IndexValue(segmentStartOffset.getName(), ByteBuffer.wrap(value));
           boolean deleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           numberOfKeysProcessed++;
           IndexValue oldValue = blobMap.get(key);

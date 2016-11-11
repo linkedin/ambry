@@ -13,15 +13,12 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -384,19 +381,5 @@ class Log implements Write {
     File newSegmentFile = allocate(LogSegmentNameHelper.nameToFilename(newSegmentName), segmentCapacity);
     LogSegment newSegment = new LogSegment(newSegmentName, newSegmentFile, segmentCapacity, metrics, true);
     segmentsByName.put(newSegmentName, newSegment);
-  }
-
-  /**
-   * Gets a {@link StoreMessageReadSet} with the file and file channel of the first segment of the log.
-   * @param readOptions the {@link BlobReadOptions} to include in the {@link StoreMessageReadSet}.
-   * @return a {@link StoreMessageReadSet} with the file and file channel of the first segment and the given {@code }
-   * @deprecated this function is deprecated and is available for use until {@link PersistentIndex} and
-   * {@link HardDeleter} are rewritten to understand segmented logs.
-   */
-  @Deprecated
-  StoreMessageReadSet getView(List<BlobReadOptions> readOptions) {
-    LogSegment firstLogSegment = segmentsByName.firstEntry().getValue();
-    Pair<File, FileChannel> view = firstLogSegment.getView();
-    return new StoreMessageReadSet(view.getFirst(), view.getSecond(), readOptions, firstLogSegment.getEndOffset());
   }
 }

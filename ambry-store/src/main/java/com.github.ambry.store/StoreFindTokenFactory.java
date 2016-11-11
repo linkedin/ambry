@@ -21,7 +21,7 @@ import java.io.IOException;
  * Factory that creates the store token from an inputstream
  */
 public class StoreFindTokenFactory implements FindTokenFactory {
-  private StoreKeyFactory factory;
+  private final StoreKeyFactory factory;
 
   public StoreFindTokenFactory(StoreKeyFactory factory) {
     this.factory = factory;

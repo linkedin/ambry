@@ -26,6 +26,8 @@ import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static org.junit.Assert.*;
+
 
 public class StoreMessageReadSetTest {
 
@@ -42,25 +44,25 @@ public class StoreMessageReadSetTest {
   public void testMessageRead() throws IOException {
     File tempFile = tempFile();
     try {
-      BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1, null);
-      BlobReadOptions readOptions2 = new BlobReadOptions(100, 15, 1, null);
-      BlobReadOptions readOptions3 = new BlobReadOptions(200, 100, 1, null);
-      List<BlobReadOptions> options = new ArrayList<BlobReadOptions>(3);
-      options.add(0, readOptions1);
-      options.add(1, readOptions2);
-      options.add(2, readOptions3);
       RandomAccessFile randomFile = new RandomAccessFile(tempFile.getParent() + File.separator + "log_current", "rw");
       // preallocate file
       randomFile.setLength(5000);
       Log logTest =
           new Log(tempFile.getParent(), 5000, 5000, new StoreMetrics(tempFile.getParent(), new MetricRegistry()));
+      String logSegmentName = logTest.getFirstSegment().getName();
       byte[] testbuf = new byte[3000];
       new Random().nextBytes(testbuf);
       // append to log from byte buffer
       int written = logTest.appendFrom(ByteBuffer.wrap(testbuf));
       Assert.assertEquals(written, 3000);
-      MessageReadSet readSet =
-          new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, logTest.getEndOffset().getOffset());
+      BlobReadOptions readOptions1 = new BlobReadOptions(logTest, new Offset(logSegmentName, 500), 30, 1, null);
+      BlobReadOptions readOptions2 = new BlobReadOptions(logTest, new Offset(logSegmentName, 100), 15, 1, null);
+      BlobReadOptions readOptions3 = new BlobReadOptions(logTest, new Offset(logSegmentName, 200), 100, 1, null);
+      List<BlobReadOptions> options = new ArrayList<>(3);
+      options.add(0, readOptions1);
+      options.add(1, readOptions2);
+      options.add(2, readOptions3);
+      MessageReadSet readSet = new StoreMessageReadSet(options);
       Assert.assertEquals(readSet.count(), 3);
       Assert.assertEquals(readSet.sizeInBytes(0), 15);
       Assert.assertEquals(readSet.sizeInBytes(1), 100);
@@ -92,31 +94,31 @@ public class StoreMessageReadSetTest {
       }
 
       // verify args
-      readOptions1 = new BlobReadOptions(500, 30, 1, null);
-      readOptions2 = new BlobReadOptions(100, 15, 1, null);
-      readOptions3 = new BlobReadOptions(200, 100, 1, null);
-      options = new ArrayList<BlobReadOptions>(3);
+      readOptions1 = new BlobReadOptions(logTest, new Offset(logSegmentName, 500), 30, 1, null);
+      readOptions2 = new BlobReadOptions(logTest, new Offset(logSegmentName, 100), 15, 1, null);
+      readOptions3 = new BlobReadOptions(logTest, new Offset(logSegmentName, 200), 100, 1, null);
+      options = new ArrayList<>(3);
       options.add(0, readOptions1);
       options.add(1, readOptions2);
       options.add(2, readOptions3);
       try {
-        readSet = new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, 10);
-        Assert.assertTrue(false);
+        new BlobReadOptions(logTest, new Offset(logSegmentName, logTest.getFirstSegment().getEndOffset()), 1, 1, null);
+        fail("Construction should have failed because offset + size > endOffset");
       } catch (IllegalArgumentException e) {
-        Assert.assertTrue(true);
+        // expected. Nothing to do.
       }
-      readSet = new StoreMessageReadSet(tempFile, randomFile.getChannel(), options, 1000);
+      readSet = new StoreMessageReadSet(options);
       try {
         readSet.sizeInBytes(4);
-        Assert.assertTrue(false);
+        fail("Reading should have failed because index is out of bounds");
       } catch (IndexOutOfBoundsException e) {
-        Assert.assertTrue(true);
+        // expected. Nothing to do.
       }
       try {
         readSet.writeTo(4, randomFile.getChannel(), 100, 100);
-        Assert.assertTrue(false);
+        fail("Reading should have failed because index is out of bounds");
       } catch (IndexOutOfBoundsException e) {
-        Assert.assertTrue(true);
+        // expected. Nothing to do.
       }
     } finally {
       tempFile.delete();
