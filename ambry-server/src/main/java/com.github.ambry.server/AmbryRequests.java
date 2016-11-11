@@ -40,7 +40,7 @@ import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
@@ -260,13 +260,13 @@ public class AmbryRequests implements RequestAPI {
             Store storeToGet = storageManager.getStore(partitionRequestInfo.getPartition());
             EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
             // Currently only one option is supported.
-            if (getRequest.getGetOptions() == GetOptions.Include_Expired_Blobs) {
+            if (getRequest.getGetOption() == GetOption.Include_Expired_Blobs) {
               storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Expired);
             }
-            if (getRequest.getGetOptions() == GetOptions.Include_Deleted_Blobs) {
+            if (getRequest.getGetOption() == GetOption.Include_Deleted_Blobs) {
               storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
             }
-            if (getRequest.getGetOptions() == GetOptions.Include_All) {
+            if (getRequest.getGetOption() == GetOption.Include_All) {
               storeGetOptions =
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }

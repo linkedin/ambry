@@ -21,6 +21,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -113,7 +114,7 @@ public class GetManagerTest {
   @Test
   public void testRangeRequest()
       throws Exception {
-    testGetSuccess(chunkSize * 6 + 11, new GetBlobOptions(GetBlobOptions.OperationType.Data,
+    testGetSuccess(chunkSize * 6 + 11, new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.None,
         ByteRange.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
   }
 
@@ -129,7 +130,7 @@ public class GetManagerTest {
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     getBlobAndCompareContent(blobId);
     // Test GetBlobInfoOperation, regardless of options passed in.
-    this.options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
+    this.options = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null);
     getBlobAndCompareContent(blobId);
     router.close();
   }
@@ -204,8 +205,8 @@ public class GetManagerTest {
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     List<Future<GetBlobResult>> getBlobInfoFutures = new ArrayList<>();
     List<Future<GetBlobResult>> getBlobDataFutures = new ArrayList<>();
-    GetBlobOptions infoOptions = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null);
-    GetBlobOptions dataOptions = new GetBlobOptions(GetBlobOptions.OperationType.Data, null);
+    GetBlobOptions infoOptions = new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null);
+    GetBlobOptions dataOptions = new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.None, null);
     for (int i = 0; i < 5; i++) {
       if (i == 1) {
         getBlobInfoFutures.add(router.getBlob(blobId, infoOptions, new Callback<GetBlobResult>() {
@@ -259,7 +260,7 @@ public class GetManagerTest {
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
     Future future;
     try {
-      future = router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null));
+      future = router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null));
       while (!future.isDone()) {
         mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
         Thread.yield();

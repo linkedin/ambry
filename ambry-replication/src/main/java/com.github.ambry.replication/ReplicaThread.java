@@ -32,7 +32,7 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
@@ -615,7 +615,7 @@ class ReplicaThread implements Runnable {
     }
     GetRequest getRequest =
         new GetRequest(correlationIdGenerator.incrementAndGet(), "replication-fetch-" + dataNodeId.getHostname(),
-            MessageFormatFlags.All, partitionRequestInfoList, GetOptions.None);
+            MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       connectedChannel.send(getRequest);
