@@ -375,13 +375,13 @@ class RouterServerTestFramework {
           options = GetOptions.Include_Deleted_Blobs;
         case GET_INFO:
         case GET_INFO_DELETED:
-          startGetBlobInfo(options, nextOp.afterDelete && options.equals(GetOptions.None), opChain);
+          startGetBlobInfo(options, nextOp.checkDeleted, opChain);
           break;
         case GET_DELETED_SUCCESS:
           options = GetOptions.Include_Deleted_Blobs;
         case GET:
         case GET_DELETED:
-          startGetBlob(options, nextOp.afterDelete && options.equals(GetOptions.None), opChain);
+          startGetBlob(options, nextOp.checkDeleted, opChain);
           break;
         case DELETE:
           startDeleteBlob(opChain);
@@ -432,12 +432,12 @@ class RouterServerTestFramework {
      * GetBlobInfo with the nonblocking router. Will use {@link GetOptions#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
-    GET_INFO_DELETED_SUCCESS(true),
+    GET_INFO_DELETED_SUCCESS(false),
     /**
      * GetBlob with the nonblocking router. Will use {@link GetOptions#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
-    GET_DELETED_SUCCESS(true),
+    GET_DELETED_SUCCESS(false),
     /**
      * Wait for the operation chain's blob ID to be reported as created on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
@@ -452,10 +452,10 @@ class RouterServerTestFramework {
     /**
      * {@code true} if this operation follows a delete operation.
      */
-    final boolean afterDelete;
+    final boolean checkDeleted;
 
-    OperationType(boolean afterDelete) {
-      this.afterDelete = afterDelete;
+    OperationType(boolean checkDeleted) {
+      this.checkDeleted = checkDeleted;
     }
   }
 
