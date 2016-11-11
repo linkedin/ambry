@@ -22,7 +22,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Selector;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
@@ -268,11 +268,11 @@ class RouterServerTestFramework {
 
   /**
    * Submit a getBlobInfo operation.
-   * @param options the {@link GetOptions} associated with the request.
+   * @param options the {@link GetOption} associated with the request.
    * @param checkDeleted {@code true}, checks that the blob is deleted.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startGetBlobInfo(GetOptions options, final boolean checkDeleted, final OperationChain opChain) {
+  private void startGetBlobInfo(GetOption options, final boolean checkDeleted, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
     Future<GetBlobResult> future = router
         .getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, options, null), callback);
@@ -293,11 +293,11 @@ class RouterServerTestFramework {
 
   /**
    * Submit a getBlob operation.
-   * @param options the {@link GetOptions} associated with the request.
+   * @param options the {@link GetOption} associated with the request.
    * @param checkDeleted {@code true}, checks that the blob is deleted.
    * @param opChain the {@link OperationChain} object that this operation is a part of.
    */
-  private void startGetBlob(GetOptions options, final boolean checkDeleted, final OperationChain opChain) {
+  private void startGetBlob(GetOption options, final boolean checkDeleted, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
     Future<GetBlobResult> future =
         router.getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.All, options, null), callback);
@@ -366,19 +366,19 @@ class RouterServerTestFramework {
         opChain.latch.countDown();
         return;
       }
-      GetOptions options = GetOptions.None;
+      GetOption options = GetOption.None;
       switch (nextOp) {
         case PUT:
           startPutBlob(opChain);
           break;
         case GET_INFO_DELETED_SUCCESS:
-          options = GetOptions.Include_Deleted_Blobs;
+          options = GetOption.Include_Deleted_Blobs;
         case GET_INFO:
         case GET_INFO_DELETED:
           startGetBlobInfo(options, nextOp.checkDeleted, opChain);
           break;
         case GET_DELETED_SUCCESS:
-          options = GetOptions.Include_Deleted_Blobs;
+          options = GetOption.Include_Deleted_Blobs;
         case GET:
         case GET_DELETED:
           startGetBlob(options, nextOp.checkDeleted, opChain);
@@ -429,12 +429,12 @@ class RouterServerTestFramework {
      */
     GET_DELETED(true),
     /**
-     * GetBlobInfo with the nonblocking router. Will use {@link GetOptions#Include_Deleted_Blobs} and is expected to
+     * GetBlobInfo with the nonblocking router. Will use {@link GetOption#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
     GET_INFO_DELETED_SUCCESS(false),
     /**
-     * GetBlob with the nonblocking router. Will use {@link GetOptions#Include_Deleted_Blobs} and is expected to
+     * GetBlob with the nonblocking router. Will use {@link GetOption#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
     GET_DELETED_SUCCESS(false),

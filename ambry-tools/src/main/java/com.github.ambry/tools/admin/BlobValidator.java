@@ -34,7 +34,7 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.Port;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
@@ -440,7 +440,7 @@ public class BlobValidator {
     ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfos.add(partitionRequestInfo);
 
-    GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
+    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
 
     try {
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
@@ -448,7 +448,7 @@ public class BlobValidator {
 
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
-              partitionRequestInfos, getOptions);
+              partitionRequestInfos, getOption);
       System.out
           .println("----- Contacting " + replicaId.getDataNodeId().getHostname() + ":" + port.toString() + " -------");
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
@@ -472,7 +472,7 @@ public class BlobValidator {
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
           return serverResponseCode;
         } else if (serverResponseCode == ServerErrorCode.Blob_Expired) {
-          if (getOptions != GetOptions.Include_Expired_Blobs) {
+          if (getOption != GetOption.Include_Expired_Blobs) {
             return serverResponseCode;
           }
         } else {
@@ -488,7 +488,7 @@ public class BlobValidator {
       }
 
       getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobUserMetadata,
-          partitionRequestInfos, getOptions);
+          partitionRequestInfos, getOption);
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
       getResponse = getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
       if (getResponse == null) {
@@ -509,7 +509,7 @@ public class BlobValidator {
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
           return serverResponseCode;
         } else if (serverResponseCode == ServerErrorCode.Blob_Expired) {
-          if (getOptions != GetOptions.Include_Expired_Blobs) {
+          if (getOption != GetOption.Include_Expired_Blobs) {
             return serverResponseCode;
           }
         } else {
@@ -521,7 +521,7 @@ public class BlobValidator {
       }
 
       getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.Blob,
-          partitionRequestInfos, getOptions);
+          partitionRequestInfos, getOption);
       System.out.println("Get Request to get blob : " + getRequest);
       getResponse = getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
       if (getResponse == null) {
@@ -541,7 +541,7 @@ public class BlobValidator {
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
           return serverResponseCode;
         } else if (serverResponseCode == ServerErrorCode.Blob_Expired) {
-          if (getOptions != GetOptions.Include_Expired_Blobs) {
+          if (getOption != GetOption.Include_Expired_Blobs) {
             return serverResponseCode;
           }
         } else {

@@ -26,7 +26,7 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
@@ -90,7 +90,7 @@ class Verifier implements Runnable {
               partitionRequestInfoList.add(partitionRequestInfo);
               GetRequest getRequest =
                   new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-                      GetOptions.None);
+                      GetOption.None);
               channel1.send(getRequest);
               InputStream stream = channel1.receive().getInputStream();
               GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -123,7 +123,7 @@ class Verifier implements Runnable {
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
               getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-                  GetOptions.None);
+                  GetOption.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -149,7 +149,7 @@ class Verifier implements Runnable {
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
               getRequest =
-                  new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+                  new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);

@@ -16,7 +16,7 @@ package com.github.ambry.protocol;
 /**
  * The list of options for the Get request.
  */
-public enum GetOptions {
+public enum GetOption {
   /**
    * This is the default. This returns all blobs that are not expired and not deleted
    */
