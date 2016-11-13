@@ -92,6 +92,13 @@ public class RestServerConfig {
   @Default("/healthCheck")
   public final String restServerHealthCheckUri;
 
+  /**
+   * Health check URI for load balancers (VIPs)
+   */
+  @Config("rest.server.reporter.classes")
+  @Default("com.codahale.metrics.JmxReporter")
+  public final String reporterClasses;
+
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
     restServerNioServerFactory =
@@ -112,5 +119,6 @@ public class RestServerConfig {
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
     restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
+    reporterClasses = verifiableProperties.getString("rest.server.reporter.classes", "com.codahale.metrics.JmxReporter");
   }
 }
