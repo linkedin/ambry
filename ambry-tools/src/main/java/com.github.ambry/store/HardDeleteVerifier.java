@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.tools.admin;
+package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
@@ -22,11 +22,6 @@ import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.store.FindToken;
-import com.github.ambry.store.FindTokenFactory;
-import com.github.ambry.store.IndexValue;
-import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -51,7 +46,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 
-class HardDeleteVerifier {
+public class HardDeleteVerifier {
   private final ClusterMap map;
   private final String outFile;
   private final String dataDir;

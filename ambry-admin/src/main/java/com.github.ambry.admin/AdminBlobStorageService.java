@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.AdminConfig;
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.IdConverterFactory;
@@ -353,12 +354,13 @@ class AdminBlobStorageService implements BlobStorageService {
           switch (restMethod) {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
+              GetOption getOption = RestUtils.getGetOption(restRequest);
               if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource
                   .equals(RestUtils.SubResource.UserMetadata)) {
                 getCallback.markStartTime();
                 GetBlobOptions.OperationType getOperationType =
                     subresource != null ? GetBlobOptions.OperationType.BlobInfo : GetBlobOptions.OperationType.All;
-                router.getBlob(result, new GetBlobOptions(getOperationType, null), getCallback);
+                router.getBlob(result, new GetBlobOptions(getOperationType, getOption, null), getCallback);
               } else {
                 switch (subresource) {
                   case Replicas:
@@ -368,8 +370,10 @@ class AdminBlobStorageService implements BlobStorageService {
               }
               break;
             case HEAD:
+              getOption = RestUtils.getGetOption(restRequest);
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), headCallback);
+              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, getOption, null),
+                  headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();

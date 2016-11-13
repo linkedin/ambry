@@ -16,7 +16,7 @@ package com.github.ambry.store;
 /**
  * Represents a portion of a file. Provides the start and end offset of a file
  */
-public class FileSpan {
+class FileSpan {
   private long fileStartOffset;
   private long fileEndOffset;
 

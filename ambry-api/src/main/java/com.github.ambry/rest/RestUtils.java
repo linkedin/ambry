@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
@@ -113,6 +114,11 @@ public class RestUtils {
      * Expected usage is to set to member id of content owner.
      */
     public final static String OWNER_ID = "x-ambry-owner-id";
+    /**
+     * optional in request; defines an option while getting the blob and is optional support in a
+     * {@link BlobStorageService}. Valid values are available in {@link GetOption}. Defaults to {@link GetOption#None}
+     */
+    public final static String GET_OPTION = "x-ambry-get-option";
     /**
      * not allowed  in request. Allowed in response only; string; time at which blob was created.
      */
@@ -366,17 +372,19 @@ public class RestUtils {
    * @param args the arguments associated with the request. This is typically a map of header names and query string
    *             arguments to values.
    * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
+   * @param getOption the {@link GetOption} required.
    * @return a populated {@link GetBlobOptions} object.
    * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
    */
-  public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource)
+  public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource,
+      GetOption getOption)
       throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
     if (subResource != null && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources.", RestServiceErrorCode.InvalidArgs);
     }
     return new GetBlobOptions(
-        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo,
+        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo, getOption,
         rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null);
   }
 
@@ -485,6 +493,35 @@ public class RestUtils {
    */
   public static long toSecondsPrecisionInMs(long ms) {
     return ms - (ms % 1000);
+  }
+
+  /**
+   * Gets the {@link GetOption} required by the request.
+   * @param restRequest the representation of the request.
+   * @return the required {@link GetOption}. Defaults to {@link GetOption#None}.
+   * @throws RestServiceException if the {@link RestUtils.Headers#GET_OPTION} is present but not recognized.
+   */
+  public static GetOption getGetOption(RestRequest restRequest)
+      throws RestServiceException {
+    GetOption options = GetOption.None;
+    Map<String, Object> args = restRequest.getArgs();
+    Object value = args.get(RestUtils.Headers.GET_OPTION);
+    if (value != null) {
+      String str = (String) value;
+      boolean foundMatch = false;
+      for (GetOption getOption : GetOption.values()) {
+        if (str.equalsIgnoreCase(getOption.name())) {
+          options = getOption;
+          foundMatch = true;
+          break;
+        }
+      }
+      if (!foundMatch) {
+        throw new RestServiceException("Unrecognized value for [" + RestUtils.Headers.GET_OPTION + "]: " + str,
+            RestServiceErrorCode.InvalidArgs);
+      }
+    }
+    return options;
   }
 
   /**

@@ -33,12 +33,11 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.Port;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -220,7 +219,7 @@ public class AdminTool {
     ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfos.add(partitionRequestInfo);
 
-    GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
+    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
 
     try {
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
@@ -228,7 +227,7 @@ public class AdminTool {
 
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
-              partitionRequestInfos, getOptions);
+              partitionRequestInfos, getOption);
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 
@@ -305,14 +304,14 @@ public class AdminTool {
     ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfos.add(partitionRequestInfo);
 
-    GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
+    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
 
     try {
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.Blob,
-          partitionRequestInfos, getOptions);
+          partitionRequestInfos, getOption);
       System.out.println("Get Request to get blob : " + getRequest);
       GetResponse getResponse = null;
       getResponse = BlobValidator.getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
@@ -382,7 +381,7 @@ public class AdminTool {
     ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfos.add(partitionRequestInfo);
 
-    GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
+    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
 
     try {
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
@@ -390,7 +389,7 @@ public class AdminTool {
 
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobUserMetadata,
-              partitionRequestInfos, getOptions);
+              partitionRequestInfos, getOption);
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
       GetResponse getResponse = null;
       getResponse = BlobValidator.getGetResponseFromStream(connectedChannel, getRequest, clusterMap);

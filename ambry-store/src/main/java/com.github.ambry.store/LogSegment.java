@@ -13,13 +13,20 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -29,25 +36,35 @@ import java.util.concurrent.atomic.AtomicLong;
  * transparently redirect operations if required.
  */
 class LogSegment implements Read, Write {
+  private static final short VERSION = 0;
+  private static final int VERSION_HEADER_SIZE = 2;
+  private static final int CAPACITY_HEADER_SIZE = 8;
+  private static final int CRC_SIZE = 8;
+
+  static final int HEADER_SIZE = VERSION_HEADER_SIZE + CAPACITY_HEADER_SIZE + CRC_SIZE;
+
   private final FileChannel fileChannel;
   private final File file;
   private final long capacityInBytes;
   private final String name;
   private final Pair<File, FileChannel> segmentView;
   private final StoreMetrics metrics;
+  private final long startOffset;
   private final AtomicLong endOffset;
   private final AtomicLong refCount = new AtomicLong(0);
+  private final AtomicBoolean open = new AtomicBoolean(true);
 
   /**
-   * Creates a LogSegment abstraction.
+   * Creates a LogSegment abstraction with the given capacity.
    * @param name the desired name of the segment. The name signifies the handle/ID of the LogSegment and may be
    *             different from the filename of the {@code file}.
    * @param file the backing {@link File} for this segment.
    * @param capacityInBytes the intended capacity of the segment
    * @param metrics the {@link StoreMetrics} instance to use.
+   * @param writeHeader if {@code true}, headers are written that provide metadata about the segment.
    * @throws IOException if the file cannot be read or created
    */
-  LogSegment(String name, File file, long capacityInBytes, StoreMetrics metrics)
+  LogSegment(String name, File file, long capacityInBytes, StoreMetrics metrics, boolean writeHeader)
       throws IOException {
     if (!file.exists() || !file.isFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
@@ -58,9 +75,51 @@ class LogSegment implements Read, Write {
     this.metrics = metrics;
     fileChannel = Utils.openChannel(file, true);
     segmentView = new Pair<>(file, fileChannel);
-    // the end offset is always initialized to 0.
-    // externals will set the correct value
+    // externals will set the correct value of end offset.
     endOffset = new AtomicLong(0);
+    if (writeHeader) {
+      // this will update end offset
+      writeHeader(capacityInBytes);
+    }
+    startOffset = endOffset.get();
+  }
+
+  /**
+   * Creates a LogSegment abstraction with the given file. Obtains capacity from the headers in the file.
+   * @param name the desired name of the segment. The name signifies the handle/ID of the LogSegment and may be
+   *             different from the filename of the {@code file}.
+   * @param file the backing {@link File} for this segment.
+   * @param metrics he {@link StoreMetrics} instance to use.
+   * @throws IOException
+   */
+  LogSegment(String name, File file, StoreMetrics metrics)
+      throws IOException {
+    if (!file.exists() || !file.isFile()) {
+      throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
+    }
+    CrcInputStream crcStream = new CrcInputStream(new FileInputStream(file));
+    try (DataInputStream stream = new DataInputStream(crcStream)) {
+      switch (stream.readShort()) {
+        case 0:
+          capacityInBytes = stream.readLong();
+          long computedCrc = crcStream.getValue();
+          long crcFromFile = stream.readLong();
+          if (crcFromFile != computedCrc) {
+            throw new IllegalStateException("CRC from the segment file does not match computed CRC of header");
+          }
+          startOffset = HEADER_SIZE;
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown version in segment [" + file.getAbsolutePath() + "]");
+      }
+    }
+    this.file = file;
+    this.name = name;
+    this.metrics = metrics;
+    fileChannel = Utils.openChannel(file, true);
+    segmentView = new Pair<>(file, fileChannel);
+    // externals will set the correct value of end offset.
+    endOffset = new AtomicLong(startOffset);
   }
 
   /**
@@ -129,13 +188,13 @@ class LogSegment implements Read, Write {
    * @param buffer The buffer into which the data needs to be written
    * @param position The position to start the read from
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws IndexOutOfBoundsException if {@code position} < 0 or >= {@link #getEndOffset()} or if {@code buffer} size is
-   * greater than the data available for read.
+   * @throws IndexOutOfBoundsException if {@code position} < header size or >= {@link #getEndOffset()} or if
+   * {@code buffer} size is greater than the data available for read.
    */
   @Override
   public void readInto(ByteBuffer buffer, long position)
       throws IOException {
-    if (position < 0 || position >= getEndOffset()) {
+    if (position < startOffset || position >= getEndOffset()) {
       throw new IndexOutOfBoundsException(
           "Provided position [" + position + "] is out of bounds for the segment [" + file.getAbsolutePath()
               + "] with end offset [" + getEndOffset() + "]");
@@ -160,13 +219,13 @@ class LogSegment implements Read, Write {
    * @param offset The offset in the segment at which to start writing.
    * @param size The amount of data in bytes to be written from the channel.
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws IndexOutOfBoundsException if {@code offset} < 0 or if there is not enough space for {@code offset } +
-   * {@code size} data.
+   * @throws IndexOutOfBoundsException if {@code offset} < header size or if there is not enough space for
+   * {@code offset } + {@code size} data.
    *
    */
   void writeFrom(ReadableByteChannel channel, long offset, long size)
       throws IOException {
-    if (offset < 0 || offset >= capacityInBytes) {
+    if (offset < startOffset || offset >= capacityInBytes) {
       throw new IndexOutOfBoundsException(
           "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
               + "] with capacity [" + capacityInBytes + "]");
@@ -224,13 +283,13 @@ class LogSegment implements Read, Write {
    * until which data that is readable is stored (exclusive) and the offset (inclusive) from which the next append will
    * begin.
    * @param endOffset the end offset of this log.
-   * @throws IllegalArgumentException if {@code endOffset} < 0 or {@code endOffset} > the size of the file.
+   * @throws IllegalArgumentException if {@code endOffset} < header size or {@code endOffset} > the size of the file.
    * @throws IOException if there is any I/O error.
    */
   void setEndOffset(long endOffset)
       throws IOException {
     long fileSize = sizeInBytes();
-    if (endOffset < 0 || endOffset > fileSize) {
+    if (endOffset < startOffset || endOffset > fileSize) {
       throw new IllegalArgumentException(file.getAbsolutePath() + ": EndOffset [" + endOffset +
           "] outside the file size [" + fileSize + "]");
     }
@@ -242,7 +301,7 @@ class LogSegment implements Read, Write {
    * @return the offset in this log segment from which there is valid data.
    */
   long getStartOffset() {
-    return 0;
+    return startOffset;
   }
 
   /**
@@ -280,6 +339,25 @@ class LogSegment implements Read, Write {
    */
   void close()
       throws IOException {
-    fileChannel.close();
+    if (open.compareAndSet(true, false)) {
+      fileChannel.close();
+    }
+  }
+
+  /**
+   * Writes a header describing the segment.
+   * @param capacityInBytes the intended capacity of the segment.
+   * @throws IOException if there is any I/O error writing to the file.
+   */
+  private void writeHeader(long capacityInBytes)
+      throws IOException {
+    Crc32 crc = new Crc32();
+    ByteBuffer buffer = ByteBuffer.allocate(HEADER_SIZE);
+    buffer.putShort(VERSION);
+    buffer.putLong(capacityInBytes);
+    crc.update(buffer.array(), 0, HEADER_SIZE - CRC_SIZE);
+    buffer.putLong(crc.getValue());
+    buffer.flip();
+    appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), buffer.remaining());
   }
 }

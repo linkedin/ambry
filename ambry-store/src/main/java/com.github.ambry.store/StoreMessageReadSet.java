@@ -117,8 +117,7 @@ class StoreMessageReadSet implements MessageReadSet {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   public StoreMessageReadSet(File file, FileChannel fileChannel, List<BlobReadOptions> readOptions,
-      long fileEndPosition)
-      throws IOException {
+      long fileEndPosition) {
 
     Collections.sort(readOptions);
     for (BlobReadOptions readOption : readOptions) {

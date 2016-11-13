@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -107,7 +108,7 @@ class AmbrySecurityService implements SecurityService {
         RestMethod restMethod = restRequest.getRestMethod();
         switch (restMethod) {
           case HEAD:
-            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null);
+            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
             responseChannel.setStatus(options.getRange() == null ? ResponseStatus.Ok : ResponseStatus.PartialContent);
             responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
@@ -124,7 +125,7 @@ class AmbrySecurityService implements SecurityService {
                 responseChannel.setStatus(ResponseStatus.NotModified);
                 responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
               } else {
-                options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null);
+                options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
                 if (options.getRange() != null) {
                   responseChannel.setStatus(ResponseStatus.PartialContent);
                 }

@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.tools.perf;
+package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.BlobId;
@@ -26,14 +26,14 @@ import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreMetrics;
-import com.github.ambry.utils.Scheduler;
 
+import com.github.ambry.store.StoreMetrics;
 import com.github.ambry.utils.SystemTime;
 import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -47,7 +47,7 @@ class BlobIndexMetrics extends PersistentIndex {
   private FileWriter writer;
   private String datadir;
 
-  public BlobIndexMetrics(String datadir, Scheduler scheduler, Log log, boolean enableVerboseLogging,
+  public BlobIndexMetrics(String datadir, ScheduledExecutorService scheduler, Log log, boolean enableVerboseLogging,
       AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads, StoreConfig config, FileWriter writer,
       StoreKeyFactory factory)
       throws StoreException {

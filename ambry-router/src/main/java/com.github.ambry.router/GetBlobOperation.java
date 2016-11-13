@@ -32,7 +32,7 @@ import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -133,7 +133,7 @@ class GetBlobOperation extends GetOperation {
     this.operationCompleteCallback = operationCompleteCallback;
     this.readyForPollCallback = readyForPollCallback;
     this.blobIdFactory = blobIdFactory;
-    firstChunk = new FirstGetChunk(blobId);
+    firstChunk = new FirstGetChunk();
   }
 
   /**
@@ -458,13 +458,13 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
-     * @return the {@link GetOptions} to associate with the {@link GetRequest}s that will be issued by this GetChunk.
+     * @return the {@link GetOption} to associate with the {@link GetRequest}s that will be issued by this GetChunk.
      */
-    GetOptions getGetOptions() {
+    GetOption getGetOption() {
       // Anything other than the first GetChunk should ignore Delete and Expired flags. This is to avoid errors due
       // to the blob getting expired or deleted in the middle of a retrieval - after the metadata chunk was
       // successfully retrieved.
-      return GetOptions.Include_All;
+      return GetOption.Include_All;
     }
 
     /**
@@ -564,7 +564,7 @@ class GetBlobOperation extends GetOperation {
         replicaIterator.remove();
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
-        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOptions());
+        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
         RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
@@ -809,11 +809,11 @@ class GetBlobOperation extends GetOperation {
    * and whether a chunk is composite or simple can only be determined after the first chunk is fetched.
    */
   private class FirstGetChunk extends GetChunk {
+
     /**
-     * Construct a FirstGetChunk and initialize it with the given {@link BlobId}.
-     * @param blobId the {@link BlobId} to assign to this chunk. This will be the id of the overall blob.
+     * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
      */
-    FirstGetChunk(BlobId blobId) {
+    FirstGetChunk() {
       super(-1, blobId);
     }
 
@@ -829,8 +829,8 @@ class GetBlobOperation extends GetOperation {
     }
 
     @Override
-    GetOptions getGetOptions() {
-      return GetOptions.None;
+    GetOption getGetOption() {
+      return options.getGetOption();
     }
 
     /**

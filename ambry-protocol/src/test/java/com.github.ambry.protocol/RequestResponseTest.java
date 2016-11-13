@@ -234,7 +234,7 @@ public class RequestResponseTest {
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfoList.add(partitionRequestInfo1);
     GetRequest getRequest =
-        new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+        new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
     do {

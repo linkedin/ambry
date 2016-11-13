@@ -78,44 +78,46 @@ public class LogSegmentTest {
   public void basicWriteAndReadTest()
       throws IOException {
     String segmentName = "log_current";
-    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
-      assertEquals("Start offset is not as expected", 0, segment.getStartOffset());
       assertEquals("Name of segment is inconsistent with what was provided", segmentName, segment.getName());
       assertEquals("Capacity of segment is inconsistent with what was provided", STANDARD_SEGMENT_SIZE,
           segment.getCapacityInBytes());
+      assertEquals("Start offset is not equal to header size", LogSegment.HEADER_SIZE, segment.getStartOffset());
       int writeSize = 100;
       byte[] buf = TestUtils.getRandomBytes(3 * writeSize);
+      long writeStartOffset = segment.getStartOffset();
       // append with buffer
       int written = segment.appendFrom(ByteBuffer.wrap(buf, 0, writeSize));
       assertEquals("Size written did not match size of buffer provided", writeSize, written);
-      assertEquals("End offset is not equal to the cumulative bytes written", writeSize, segment.getEndOffset());
-      readAndEnsureMatch(segment, 0, Arrays.copyOfRange(buf, 0, writeSize));
+      assertEquals("End offset is not as expected", writeStartOffset + writeSize, segment.getEndOffset());
+      readAndEnsureMatch(segment, writeStartOffset, Arrays.copyOfRange(buf, 0, writeSize));
 
       // append with channel
       segment.appendFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(buf, writeSize, writeSize))),
           writeSize);
-      assertEquals("End offset is not equal to the cumulative bytes written", 2 * writeSize, segment.getEndOffset());
-      readAndEnsureMatch(segment, writeSize, Arrays.copyOfRange(buf, writeSize, 2 * writeSize));
+      assertEquals("End offset is not as expected", writeStartOffset + 2 * writeSize, segment.getEndOffset());
+      readAndEnsureMatch(segment, writeStartOffset + writeSize, Arrays.copyOfRange(buf, writeSize, 2 * writeSize));
 
       // use writeFrom
       segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(buf, 2 * writeSize, writeSize))),
           segment.getEndOffset(), writeSize);
-      assertEquals("End offset is not equal to the cumulative bytes written", 3 * writeSize, segment.getEndOffset());
-      readAndEnsureMatch(segment, 2 * writeSize, Arrays.copyOfRange(buf, 2 * writeSize, buf.length));
+      assertEquals("End offset is not as expected", writeStartOffset + 3 * writeSize, segment.getEndOffset());
+      readAndEnsureMatch(segment, writeStartOffset + 2 * writeSize, Arrays.copyOfRange(buf, 2 * writeSize, buf.length));
 
-      readAndEnsureMatch(segment, 0, buf);
+      readAndEnsureMatch(segment, writeStartOffset, buf);
       // check file size and end offset (they will not match)
-      assertEquals("End offset is not equal to the cumulative bytes written", 3 * writeSize, segment.getEndOffset());
+      assertEquals("End offset is not equal to the cumulative bytes written", writeStartOffset + 3 * writeSize,
+          segment.getEndOffset());
       assertEquals("Size in bytes is not equal to size of the file", STANDARD_SEGMENT_SIZE, segment.sizeInBytes());
 
       // ensure flush doesn't throw any errors.
       segment.flush();
       // close and reopen segment and ensure persistence.
       segment.close();
-      segment = new LogSegment(segmentName, new File(tempDir, segmentName), STANDARD_SEGMENT_SIZE, metrics);
-      segment.setEndOffset(buf.length);
-      readAndEnsureMatch(segment, 0, buf);
+      segment = new LogSegment(segmentName, new File(tempDir, segmentName), metrics);
+      segment.setEndOffset(writeStartOffset + buf.length);
+      readAndEnsureMatch(segment, writeStartOffset, buf);
     } finally {
       closeSegmentAndDeleteFile(segment);
     }
@@ -129,14 +131,15 @@ public class LogSegmentTest {
   public void viewAndRefCountTest()
       throws IOException {
     String segmentName = "log_current";
-    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
+      long startOffset = segment.getStartOffset();
       int readSize = 100;
       int viewCount = 5;
       byte[] data = appendRandomData(segment, readSize * viewCount);
 
       for (int i = 0; i < viewCount; i++) {
-        getAndVerifyView(segment, i * readSize, data, i + 1);
+        getAndVerifyView(segment, startOffset, i * readSize, data, i + 1);
       }
 
       for (int i = 0; i < viewCount; i++) {
@@ -156,22 +159,23 @@ public class LogSegmentTest {
   public void endOffsetTest()
       throws IOException {
     String segmentName = "log_current";
-    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
+      long writeStartOffset = segment.getStartOffset();
       int segmentSize = 500;
       appendRandomData(segment, segmentSize);
-      assertEquals("End offset is not equal to the cumulative bytes written", segmentSize, segment.getEndOffset());
+      assertEquals("End offset is not as expected", writeStartOffset + segmentSize, segment.getEndOffset());
 
-      // should be able to set end offset to something > 0 and < file size
-      int[] offsetsToSet = {1, segmentSize / 2, segmentSize};
+      // should be able to set end offset to something >= initial offset and <= file size
+      int[] offsetsToSet = {(int) (writeStartOffset), segmentSize / 2, segmentSize};
       for (int offset : offsetsToSet) {
         segment.setEndOffset(offset);
         assertEquals("End offset is not equal to what was set", offset, segment.getEndOffset());
         assertEquals("File channel positioning is incorrect", offset, segment.getView().getSecond().position());
       }
 
-      // cannot set end offset to illegal values (< 0 or > file size)
-      int[] invalidOffsets = {-1, (int) (segment.sizeInBytes() + 1)};
+      // cannot set end offset to illegal values (< initial offset or > file size)
+      int[] invalidOffsets = {(int) (writeStartOffset - 1), (int) (segment.sizeInBytes() + 1)};
       for (int offset : invalidOffsets) {
         try {
           segment.setEndOffset(offset);
@@ -225,21 +229,22 @@ public class LogSegmentTest {
       throws IOException {
     Random random = new Random();
     String segmentName = "log_current";
-    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
+      long writeStartOffset = segment.getStartOffset();
       byte[] data = appendRandomData(segment, 2 * STANDARD_SEGMENT_SIZE / 3);
-      readAndEnsureMatch(segment, 0, data);
+      readAndEnsureMatch(segment, writeStartOffset, data);
       int readCount = 10;
       for (int i = 0; i < readCount; i++) {
         int position = random.nextInt(data.length);
         int size = random.nextInt(data.length - position);
-        readAndEnsureMatch(segment, position, Arrays.copyOfRange(data, position, position + size));
+        readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
       }
 
       // error scenarios
       ByteBuffer readBuf = ByteBuffer.wrap(new byte[data.length]);
       // data cannot be read at invalid offsets.
-      long[] invalidOffsets = {-1, segment.getEndOffset(), segment.getEndOffset() + 1};
+      long[] invalidOffsets = {writeStartOffset - 1, segment.getEndOffset(), segment.getEndOffset() + 1};
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
       for (long invalidOffset : invalidOffsets) {
         try {
@@ -253,7 +258,7 @@ public class LogSegmentTest {
       // position + buffer.remaining() > endOffset.
       long readOverFlowCount = metrics.overflowReadError.getCount();
       try {
-        segment.readInto(readBuf, 1);
+        segment.readInto(readBuf, writeStartOffset + 1);
         fail("Should have failed to read because position + buffer.remaining() > endOffset");
       } catch (IndexOutOfBoundsException e) {
         assertEquals("Read overflow should have been reported", readOverFlowCount + 1,
@@ -265,7 +270,7 @@ public class LogSegmentTest {
       // read after close
       buffer = ByteBuffer.allocate(1);
       try {
-        segment.readInto(buffer, 0);
+        segment.readInto(buffer, writeStartOffset);
         fail("Should have failed to read because segment is closed");
       } catch (ClosedChannelException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
@@ -283,40 +288,48 @@ public class LogSegmentTest {
   public void writeFromTest()
       throws IOException {
     String currSegmentName = "log_current";
-    LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE, true);
     try {
+      long writeStartOffset = segment.getStartOffset();
       byte[] bufOne = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 3);
       byte[] bufTwo = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2);
 
-      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), 0, bufOne.length);
-      assertEquals("End offset in current segment is not as expected", bufOne.length, segment.getEndOffset());
-      readAndEnsureMatch(segment, 0, bufOne);
+      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), writeStartOffset,
+          bufOne.length);
+      assertEquals("End offset is not as expected", writeStartOffset + bufOne.length, segment.getEndOffset());
+      readAndEnsureMatch(segment, writeStartOffset, bufOne);
 
       // overwrite using bufTwo
-      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufTwo))), 0, bufTwo.length);
-      assertEquals("End offset in current segment is not as expected", bufTwo.length, segment.getEndOffset());
-      readAndEnsureMatch(segment, 0, bufTwo);
+      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufTwo))), writeStartOffset,
+          bufTwo.length);
+      assertEquals("End offset is not as expected", writeStartOffset + bufTwo.length, segment.getEndOffset());
+      readAndEnsureMatch(segment, writeStartOffset, bufTwo);
 
       // overwrite using bufOne
-      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), 0, bufOne.length);
+      segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), writeStartOffset,
+          bufOne.length);
       // end offset should not have changed
-      assertEquals("End offset in current segment is not as expected", bufTwo.length, segment.getEndOffset());
-      readAndEnsureMatch(segment, 0, bufOne);
-      readAndEnsureMatch(segment, bufOne.length, Arrays.copyOfRange(bufTwo, bufOne.length, bufTwo.length));
+      assertEquals("End offset is not as expected", writeStartOffset + bufTwo.length, segment.getEndOffset());
+      readAndEnsureMatch(segment, writeStartOffset, bufOne);
+      readAndEnsureMatch(segment, writeStartOffset + bufOne.length,
+          Arrays.copyOfRange(bufTwo, bufOne.length, bufTwo.length));
 
       // write at random locations
       for (int i = 0; i < 10; i++) {
-        long offset = Utils.getRandomLong(TestUtils.RANDOM, segment.getCapacityInBytes() - bufOne.length);
+        long offset = writeStartOffset + Utils
+            .getRandomLong(TestUtils.RANDOM, segment.getCapacityInBytes() - bufOne.length - writeStartOffset);
         segment
             .writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), offset, bufOne.length);
         readAndEnsureMatch(segment, offset, bufOne);
       }
 
       // try to overwrite using a channel that won't fit
-      ByteBuffer failBuf = ByteBuffer.wrap(TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE + 1));
+      ByteBuffer failBuf =
+          ByteBuffer.wrap(TestUtils.getRandomBytes((int) (STANDARD_SEGMENT_SIZE - writeStartOffset + 1)));
       long writeOverFlowCount = metrics.overflowWriteError.getCount();
       try {
-        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(failBuf)), 0, failBuf.remaining());
+        segment
+            .writeFrom(Channels.newChannel(new ByteBufferInputStream(failBuf)), writeStartOffset, failBuf.remaining());
         fail("WriteFrom should have failed because data won't fit");
       } catch (IndexOutOfBoundsException e) {
         assertEquals("Write overflow should have been reported", writeOverFlowCount + 1,
@@ -325,7 +338,7 @@ public class LogSegmentTest {
       }
 
       // data cannot be written at invalid offsets.
-      long[] invalidOffsets = {-1, STANDARD_SEGMENT_SIZE, STANDARD_SEGMENT_SIZE + 1};
+      long[] invalidOffsets = {writeStartOffset - 1, STANDARD_SEGMENT_SIZE, STANDARD_SEGMENT_SIZE + 1};
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1));
       for (long invalidOffset : invalidOffsets) {
         try {
@@ -339,7 +352,7 @@ public class LogSegmentTest {
       segment.close();
       // ensure that writeFrom fails.
       try {
-        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), 0, buffer.remaining());
+        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), writeStartOffset, buffer.remaining());
         fail("WriteFrom should have failed because segments are closed");
       } catch (ClosedChannelException e) {
         assertEquals("Position of buffer has changed", 0, buffer.position());
@@ -350,6 +363,17 @@ public class LogSegmentTest {
   }
 
   /**
+   * Tests for special constructor cases.
+   * @throws IOException
+   */
+  @Test
+  public void constructorTest()
+      throws IOException {
+    LogSegment segment = getSegment("log_current", STANDARD_SEGMENT_SIZE, false);
+    assertEquals("Start offset should be 0 when no headers are written", 0, segment.getStartOffset());
+  }
+
+  /**
    * Tests for bad construction cases of {@link LogSegment}.
    * @throws IOException
    */
@@ -357,20 +381,84 @@ public class LogSegmentTest {
   public void badConstructionTest()
       throws IOException {
     // try to construct with a file that does not exist.
+    String name = "log_non_existent";
+    File file = new File(tempDir, name);
     try {
-      new LogSegment("log_non_existent", new File(tempDir, "log_non_existent"), STANDARD_SEGMENT_SIZE, metrics);
+      new LogSegment(name, file, STANDARD_SEGMENT_SIZE, metrics, true);
+      fail("Construction should have failed because the backing file does not exist");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    try {
+      new LogSegment(name, file, metrics);
       fail("Construction should have failed because the backing file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
 
     // try to construct with a file that is a directory
+    name = tempDir.getName();
+    file = new File(tempDir.getParent(), name);
     try {
-      new LogSegment(tempDir.getName(), new File(tempDir.getParent(), tempDir.getName()), STANDARD_SEGMENT_SIZE,
-          metrics);
+      new LogSegment(name, file, STANDARD_SEGMENT_SIZE, metrics, true);
       fail("Construction should have failed because the backing file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
+    }
+
+    name = tempDir.getName();
+    file = new File(tempDir.getParent(), name);
+    try {
+      new LogSegment(name, file, metrics);
+      fail("Construction should have failed because the backing file does not exist");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // unknown version
+    LogSegment segment = getSegment("dummy_log", STANDARD_SEGMENT_SIZE, true);
+    file = segment.getView().getFirst();
+    byte[] header = getHeader(segment);
+    byte savedByte = header[0];
+    // mess with version
+    header[0] = (byte) (header[0] + 10);
+    writeHeader(segment, header);
+    try {
+      new LogSegment(name, file, metrics);
+      fail("Construction should have failed because version is unknown");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // bad CRC
+    // fix version but mess with data after version
+    header[0] = savedByte;
+    header[2] = header[2] == (byte) 1 ? (byte) 0 : (byte) 1;
+    writeHeader(segment, header);
+    try {
+      new LogSegment(name, file, metrics);
+      fail("Construction should have failed because crc check should have failed");
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
+    closeSegmentAndDeleteFile(segment);
+  }
+
+  private byte[] getHeader(LogSegment segment)
+      throws IOException {
+    FileChannel channel = segment.getView().getSecond();
+    ByteBuffer header = ByteBuffer.allocate(LogSegment.HEADER_SIZE);
+    channel.read(header, 0);
+    return header.array();
+  }
+
+  private void writeHeader(LogSegment segment, byte[] buf)
+      throws IOException {
+    FileChannel channel = segment.getView().getSecond();
+    ByteBuffer buffer = ByteBuffer.wrap(buf);
+    while (buffer.hasRemaining()) {
+      channel.write(buffer, 0);
     }
   }
 
@@ -381,11 +469,12 @@ public class LogSegmentTest {
    * Creates and gets a {@link LogSegment}.
    * @param segmentName the name of the segment as well as the file backing the segment.
    * @param capacityInBytes the capacity of the file/segment.
+   * @param writeHeaders if {@code true}, writes headers for the segment.
    * @return instance of {@link LogSegment} that is backed by the file with name {@code segmentName} of capacity
    * {@code capacityInBytes}.
    * @throws IOException
    */
-  private LogSegment getSegment(String segmentName, long capacityInBytes)
+  private LogSegment getSegment(String segmentName, long capacityInBytes, boolean writeHeaders)
       throws IOException {
     File file = new File(tempDir, segmentName);
     if (file.exists()) {
@@ -395,9 +484,7 @@ public class LogSegmentTest {
     file.deleteOnExit();
     try (RandomAccessFile raf = new RandomAccessFile(tempDir + File.separator + segmentName, "rw")) {
       raf.setLength(capacityInBytes);
-      LogSegment segment = new LogSegment(segmentName, file, capacityInBytes, metrics);
-      segment.setEndOffset(0);
-      return segment;
+      return new LogSegment(segmentName, file, capacityInBytes, metrics, writeHeaders);
     }
   }
 
@@ -448,13 +535,15 @@ public class LogSegmentTest {
    * Gets a view of the given {@code segment} and verifies the ref count and the data obtained from the view against
    * {@code expectedRefCount} and {@code dataInSegment} respectively.
    * @param segment the {@link LogSegment} to get a view from.
+   * @param writeStartOffset the offset at which write was started on the segment.
    * @param offset the offset for which a view is required.
    * @param dataInSegment the entire data in the {@link LogSegment}.
    * @param expectedRefCount the expected return value of {@link LogSegment#refCount()} once the view is obtained from
    *                         the {@code segment}
    * @throws IOException
    */
-  private void getAndVerifyView(LogSegment segment, int offset, byte[] dataInSegment, long expectedRefCount)
+  private void getAndVerifyView(LogSegment segment, long writeStartOffset, int offset, byte[] dataInSegment,
+      long expectedRefCount)
       throws IOException {
     Random random = new Random();
     Pair<File, FileChannel> view = segment.getView();
@@ -463,7 +552,7 @@ public class LogSegmentTest {
     assertEquals("Ref count is not as expected", expectedRefCount, segment.refCount());
     int sizeToRead = random.nextInt(dataInSegment.length - offset + 1);
     ByteBuffer buffer = ByteBuffer.wrap(new byte[sizeToRead]);
-    view.getSecond().read(buffer, offset);
+    view.getSecond().read(buffer, writeStartOffset + offset);
     assertArrayEquals("Data read from file does not match data written",
         Arrays.copyOfRange(dataInSegment, offset, offset + sizeToRead), buffer.array());
   }
@@ -479,21 +568,22 @@ public class LogSegmentTest {
   private void doAppendTest(Appender appender)
       throws IOException {
     String currSegmentName = "log_current";
-    LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE);
+    LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE, true);
     try {
+      long writeStartOffset = segment.getStartOffset();
       byte[] bufOne = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 2);
       byte[] bufTwo = TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE / 3);
 
       appender.append(segment, ByteBuffer.wrap(bufOne));
-      assertEquals("End offset in current segment is not equal to the cumulative bytes written", bufOne.length,
-          segment.getEndOffset());
+      assertEquals("End offset is not as expected", writeStartOffset + bufOne.length, segment.getEndOffset());
 
       appender.append(segment, ByteBuffer.wrap(bufTwo));
-      assertEquals("End offset in current segment is not equal to the cumulative bytes written",
-          bufOne.length + bufTwo.length, segment.getEndOffset());
+      assertEquals("End offset is not as expected", writeStartOffset + bufOne.length + bufTwo.length,
+          segment.getEndOffset());
 
       // try to do a write that won't fit
-      ByteBuffer failBuf = ByteBuffer.wrap(TestUtils.getRandomBytes(STANDARD_SEGMENT_SIZE + 1));
+      ByteBuffer failBuf =
+          ByteBuffer.wrap(TestUtils.getRandomBytes((int) (STANDARD_SEGMENT_SIZE - writeStartOffset + 1)));
       long writeOverFlowCount = metrics.overflowWriteError.getCount();
       try {
         appender.append(segment, failBuf);
@@ -505,8 +595,8 @@ public class LogSegmentTest {
       }
 
       // read and ensure data matches
-      readAndEnsureMatch(segment, 0, bufOne);
-      readAndEnsureMatch(segment, bufOne.length, bufTwo);
+      readAndEnsureMatch(segment, writeStartOffset, bufOne);
+      readAndEnsureMatch(segment, writeStartOffset + bufOne.length, bufTwo);
 
       segment.close();
       // ensure that append fails.

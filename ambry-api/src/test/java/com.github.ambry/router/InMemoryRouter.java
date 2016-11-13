@@ -17,6 +17,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.GetOption;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -146,7 +147,8 @@ public class InMemoryRouter implements Router {
           new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
     } else {
       try {
-        if (deletedBlobs.contains(blobId)) {
+        if (deletedBlobs.contains(blobId) && !options.getGetOption().equals(GetOption.Include_All) && !options
+            .getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
           exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
         } else if (!blobs.containsKey(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
@@ -209,7 +211,6 @@ public class InMemoryRouter implements Router {
       try {
         if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
           deletedBlobs.add(blobId);
-          blobs.remove(blobId);
           if (notificationSystem != null) {
             notificationSystem.onBlobDeleted(blobId);
           }
