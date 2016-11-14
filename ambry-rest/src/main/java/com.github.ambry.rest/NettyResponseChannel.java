@@ -66,7 +66,7 @@ import org.slf4j.LoggerFactory;
  */
 class NettyResponseChannel implements RestResponseChannel {
   // Detailed message about an error in an error response.
-  static final String FAILURE_REASON_HEADER = "x-failure-reason";
+  static final String FAILURE_REASON_HEADER = "x-ambry-failure-reason";
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
