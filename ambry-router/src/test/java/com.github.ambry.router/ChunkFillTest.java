@@ -54,8 +54,7 @@ public class ChunkFillTest {
    * Test chunk filling with blob size zero.
    */
   @Test
-  public void testChunkFillingBlobSizeZero()
-      throws Exception {
+  public void testChunkFillingBlobSizeZero() throws Exception {
     blobSize = 0;
     fillChunksAndAssertSuccess();
   }
@@ -64,8 +63,7 @@ public class ChunkFillTest {
    * Test chunk filling with a non-zero blobSize that is less than the chunk size.
    */
   @Test
-  public void testChunkFillingBlobSizeLessThanChunkSize()
-      throws Exception {
+  public void testChunkFillingBlobSizeLessThanChunkSize() throws Exception {
     blobSize = random.nextInt(chunkSize - 1) + 1;
     fillChunksAndAssertSuccess();
   }
@@ -74,8 +72,7 @@ public class ChunkFillTest {
    * Test chunk filling with blob size a multiple of the chunk size.
    */
   @Test
-  public void testChunkFillingBlobSizeMultipleOfChunkSize()
-      throws Exception {
+  public void testChunkFillingBlobSizeMultipleOfChunkSize() throws Exception {
     blobSize = chunkSize * (random.nextInt(10) + 1);
     fillChunksAndAssertSuccess();
   }
@@ -84,8 +81,7 @@ public class ChunkFillTest {
    * Test chunk filling with blob size not a multiple of the chunk size.
    */
   @Test
-  public void testChunkFillingBlobSizeNotMultipleOfChunkSize()
-      throws Exception {
+  public void testChunkFillingBlobSizeNotMultipleOfChunkSize() throws Exception {
     blobSize = chunkSize * (random.nextInt(10) + 1) + random.nextInt(chunkSize - 1) + 1;
     fillChunksAndAssertSuccess();
   }
@@ -95,8 +91,7 @@ public class ChunkFillTest {
    * comparison is done. This test does not consume memory more than chunkSize.
    */
   @Test
-  public void testChunkNumAndSizeCalculations()
-      throws Exception {
+  public void testChunkNumAndSizeCalculations() throws Exception {
     chunkSize = 4 * 1024 * 1024;
     // a large blob greater than Integer.MAX_VALUE and not at chunk size boundary.
     final long blobSize = ((long) Integer.MAX_VALUE / chunkSize + 1) * chunkSize + random.nextInt(chunkSize - 1) + 1;
@@ -182,8 +177,7 @@ public class ChunkFillTest {
    * Note that this test is for the chunk filling flow, not for the ChunkFiller thread (which never gets exercised,
    * as we do not even instantiate the {@link PutManager})
    */
-  private void fillChunksAndAssertSuccess()
-      throws Exception {
+  private void fillChunksAndAssertSuccess() throws Exception {
     VerifiableProperties vProps = getNonBlockingRouterProperties();
     MockClusterMap mockClusterMap = new MockClusterMap();
     RouterConfig routerConfig = new RouterConfig(vProps);

@@ -30,8 +30,7 @@ public interface Write {
    * @return The number of bytes written to the write interface
    * @throws IOException
    */
-  int appendFrom(ByteBuffer buffer)
-      throws IOException;
+  int appendFrom(ByteBuffer buffer) throws IOException;
 
   /**
    * Appends the channel to the underlying write interface. Writes "size" number of bytes
@@ -40,6 +39,5 @@ public interface Write {
    * @param size The amount of data in bytes to be written from the channel
    * @throws IOException
    */
-  void appendFrom(ReadableByteChannel channel, long size)
-      throws IOException;
+  void appendFrom(ReadableByteChannel channel, long size) throws IOException;
 }

@@ -13,16 +13,14 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -31,8 +29,7 @@ import static org.junit.Assert.fail;
 public class PartitionTest {
 
   @Test
-  public void basics()
-      throws JSONException {
+  public void basics() throws JSONException {
     int replicaCount = 6;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
@@ -48,8 +45,7 @@ public class PartitionTest {
     assertEquals(partition.getPartitionState(), PartitionState.READ_WRITE);
   }
 
-  public void failValidation(HardwareLayout hardwareLayout, JSONObject jsonObject)
-      throws JSONException {
+  public void failValidation(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
     try {
       new Partition(hardwareLayout, jsonObject);
       fail("Should have failed validation.");
@@ -59,8 +55,7 @@ public class PartitionTest {
   }
 
   @Test
-  public void validation()
-      throws JSONException {
+  public void validation() throws JSONException {
     int replicaCount = 6;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
@@ -73,8 +68,8 @@ public class PartitionTest {
     failValidation(thl.getHardwareLayout(), jsonObject);
 
     // Bad replica capacity in bytes (too big)
-    jsonObject = TestUtils
-        .getJsonPartition(99, PartitionState.READ_WRITE, 1024 * 1024 * 1024 * 1024 * 1024 * 1024L, jsonReplicas);
+    jsonObject = TestUtils.getJsonPartition(99, PartitionState.READ_WRITE, 1024 * 1024 * 1024 * 1024 * 1024 * 1024L,
+        jsonReplicas);
     failValidation(thl.getHardwareLayout(), jsonObject);
 
     // Multiple Replica on same Disk.

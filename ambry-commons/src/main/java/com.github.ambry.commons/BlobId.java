@@ -55,8 +55,7 @@ public class BlobId extends StoreKey {
    * @param clusterMap of the cluster that the blob id belongs to
    * @throws IOException
    */
-  public BlobId(String id, ClusterMap clusterMap)
-      throws IOException {
+  public BlobId(String id, ClusterMap clusterMap) throws IOException {
     this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap, true);
   }
 
@@ -67,8 +66,7 @@ public class BlobId extends StoreKey {
    * @param clusterMap of the cluster that the blob id belongs to
    * @throws IOException
    */
-  public BlobId(DataInputStream stream, ClusterMap clusterMap)
-      throws IOException {
+  public BlobId(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     this(stream, clusterMap, false);
   }
 
@@ -82,8 +80,7 @@ public class BlobId extends StoreKey {
    *                        ID.
    * @throws IOException
    */
-  private BlobId(DataInputStream stream, ClusterMap clusterMap, boolean ensureFullyRead)
-      throws IOException {
+  private BlobId(DataInputStream stream, ClusterMap clusterMap, boolean ensureFullyRead) throws IOException {
     this.version = stream.readShort();
     if (version == 1) {
       partitionId = clusterMap.getPartitionIdFromStream(stream);

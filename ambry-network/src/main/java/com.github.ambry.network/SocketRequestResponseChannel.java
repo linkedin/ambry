@@ -32,8 +32,7 @@ class SocketServerRequest implements Request {
   private final long startTimeInMs;
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public SocketServerRequest(int processor, String connectionId, InputStream input)
-      throws IOException {
+  public SocketServerRequest(int processor, String connectionId, InputStream input) throws IOException {
     this.processor = processor;
     this.connectionId = connectionId;
     this.input = input;
@@ -131,8 +130,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
-  public void sendRequest(Request request)
-      throws InterruptedException {
+  public void sendRequest(Request request) throws InterruptedException {
     requestQueue.put(request);
   }
 
@@ -152,8 +150,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
    * Closes the connection and does not send any response
    */
   @Override
-  public void closeConnection(Request originalRequest)
-      throws InterruptedException {
+  public void closeConnection(Request originalRequest) throws InterruptedException {
     SocketServerResponse response = new SocketServerResponse(originalRequest, null, null);
     responseQueues.get(response.getProcessor()).put(response);
     for (ResponseListener listener : responseListeners) {
@@ -163,14 +160,12 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
 
   /** Get the next request or block until there is one */
   @Override
-  public Request receiveRequest()
-      throws InterruptedException {
+  public Request receiveRequest() throws InterruptedException {
     return requestQueue.take();
   }
 
   /** Get a response for the given processor if there is one */
-  public Response receiveResponse(int processor)
-      throws InterruptedException {
+  public Response receiveResponse(int processor) throws InterruptedException {
     return responseQueues.get(processor).poll();
   }
 

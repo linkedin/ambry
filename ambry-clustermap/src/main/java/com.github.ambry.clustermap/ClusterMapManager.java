@@ -15,25 +15,22 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Set;
-import java.util.HashSet;
-
-import static com.github.ambry.utils.Utils.readStringFromFile;
-import static com.github.ambry.utils.Utils.writeJsonToFile;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -74,8 +71,7 @@ public class ClusterMapManager implements ClusterMap {
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
-  public void persist(String hardwareLayoutPath, String partitionLayoutPath)
-      throws IOException, JSONException {
+  public void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
     logger.trace("persist " + hardwareLayoutPath + ", " + partitionLayoutPath);
     writeJsonToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
@@ -94,8 +90,7 @@ public class ClusterMapManager implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream)
-      throws IOException {
+  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
     PartitionId partitionId = partitionLayout.getPartition(stream);
     if (partitionId == null) {
       throw new IOException("Partition id from stream is null");
@@ -425,8 +420,8 @@ public class ClusterMapManager implements ClusterMap {
     // we ensure that the datacenter provided does not have any replicas
     for (ReplicaId replicaId : replicaIds) {
       if (replicaId.getDataNodeId().getDatacenterName().compareToIgnoreCase(dataCenterName) == 0) {
-        throw new IllegalArgumentException("Data center " + dataCenterName +
-            " provided already contains replica for partition " + partitionId);
+        throw new IllegalArgumentException(
+            "Data center " + dataCenterName + " provided already contains replica for partition " + partitionId);
       }
       capacityOfReplicasInBytes = replicaId.getCapacityInBytes();
       Integer numberOfReplicas = replicaCountByDatacenter.get(replicaId.getDataNodeId().getDatacenterName());

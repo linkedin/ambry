@@ -25,9 +25,7 @@ import java.util.HashSet;
 import java.util.Set;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -44,8 +42,9 @@ public class LogSegmentNameHelperTest {
     // compare empty name with empty name
     assertEquals("Empty names should be equal", 0, comparator.compare("", ""));
     // create sample names
-    String[] names = {LogSegmentNameHelper.getName(0, 0), LogSegmentNameHelper.getName(0, 1), LogSegmentNameHelper
-        .getName(1, 0), LogSegmentNameHelper.getName(1, 1)};
+    String[] names =
+        {LogSegmentNameHelper.getName(0, 0), LogSegmentNameHelper.getName(0, 1), LogSegmentNameHelper.getName(1,
+            0), LogSegmentNameHelper.getName(1, 1)};
     for (int i = 0; i < names.length; i++) {
       for (int j = 0; j < names.length; j++) {
         int expectCompare = i == j ? 0 : i > j ? 1 : -1;
@@ -75,8 +74,7 @@ public class LogSegmentNameHelperTest {
    * @throws IOException
    */
   @Test
-  public void filenameFilterTest()
-      throws IOException {
+  public void filenameFilterTest() throws IOException {
     int validFileCount = 10;
     int invalidFileCount = 5;
     Set<File> validFiles = new HashSet<>(validFileCount);
@@ -277,8 +275,7 @@ public class LogSegmentNameHelperTest {
    * @return a reference to the created {@link File}.
    * @throws IOException
    */
-  private File createFile(File parentDir, String filename)
-      throws IOException {
+  private File createFile(File parentDir, String filename) throws IOException {
     File file = new File(parentDir, filename);
     if (!file.exists()) {
       assertTrue("File could not be created at path " + file.getAbsolutePath(), file.createNewFile());

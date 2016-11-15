@@ -13,15 +13,14 @@
  */
 package com.github.ambry.store;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 class JournalEntry {
@@ -106,9 +105,8 @@ class Journal {
     Map.Entry<Long, StoreKey> last = journal.lastEntry();
 
     // check if the journal contains the offset.
-    if (first == null || offset < first.getKey() ||
-        last == null || offset > last.getKey() ||
-        !journal.containsKey(offset)) {
+    if (first == null || offset < first.getKey() || last == null || offset > last.getKey() || !journal.containsKey(
+        offset)) {
       return null;
     }
 

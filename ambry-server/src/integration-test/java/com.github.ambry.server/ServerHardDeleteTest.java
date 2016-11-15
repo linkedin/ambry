@@ -70,8 +70,7 @@ public class ServerHardDeleteTest {
   private MockClusterMap mockClusterMap;
 
   @Before
-  public void initialize()
-      throws Exception {
+  public void initialize() throws Exception {
     notificationSystem = new MockNotificationSystem(1);
     mockClusterMap = new MockClusterMap(false, 1, 1, 1);
     time = new MockTime(SystemTime.getInstance().milliseconds());
@@ -87,8 +86,7 @@ public class ServerHardDeleteTest {
   }
 
   @After
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     server.shutdown();
     mockClusterMap.cleanup();
   }
@@ -212,8 +210,7 @@ public class ServerHardDeleteTest {
    * @throws Exception
    */
   @Test
-  public void endToEndTestHardDeletes()
-      throws Exception {
+  public void endToEndTestHardDeletes() throws Exception {
     DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
@@ -252,8 +249,9 @@ public class ServerHardDeleteTest {
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobIdList.get(0), properties.get(0), ByteBuffer.wrap(usermetadata.get(0)),
             ByteBuffer.wrap(data.get(0)), properties.get(0).getBlobSize(), BlobType.DataBlob);
-    BlockingChannel channel = ServerTestUtil
-        .getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "localhost", null, null);
+    BlockingChannel channel =
+        ServerTestUtil.getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT),
+            "localhost", null, null);
     channel.connect();
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();

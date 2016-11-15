@@ -52,8 +52,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getBlobPropertiesGoodInputTest()
-      throws Exception {
+  public void getBlobPropertiesGoodInputTest() throws Exception {
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
@@ -66,8 +65,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getBlobPropertiesVariedInputTest()
-      throws Exception {
+  public void getBlobPropertiesVariedInputTest() throws Exception {
     String contentLength = Long.toString(RANDOM.nextInt(10000));
     String ttl = Long.toString(RANDOM.nextInt(10000));
     String isPrivate = Boolean.toString(RANDOM.nextBoolean());
@@ -163,8 +161,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getUserMetadataTest()
-      throws Exception {
+  public void getUserMetadataTest() throws Exception {
     byte[] usermetadata = RestUtils.buildUsermetadata(new HashMap<String, Object>());
     assertArrayEquals("Unexpected user metadata", new byte[0], usermetadata);
   }
@@ -174,8 +171,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getUserMetadataGoodInputTest()
-      throws Exception {
+  public void getUserMetadataGoodInputTest() throws Exception {
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
@@ -192,8 +188,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getUserMetadataWithUserMetadataArgTest()
-      throws Exception {
+  public void getUserMetadataWithUserMetadataArgTest() throws Exception {
     byte[] original = new byte[100];
     RANDOM.nextBytes(original);
     JSONObject headers = new JSONObject();
@@ -208,8 +203,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getUserMetadataUnusualInputTest()
-      throws Exception {
+  public void getUserMetadataUnusualInputTest() throws Exception {
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
@@ -246,8 +240,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getEmptyUserMetadataInputTest()
-      throws Exception {
+  public void getEmptyUserMetadataInputTest() throws Exception {
     JSONObject headers = new JSONObject();
     setAmbryHeaders(headers, Long.toString(RANDOM.nextInt(10000)), Long.toString(RANDOM.nextInt(10000)),
         Boolean.toString(RANDOM.nextBoolean()), generateRandomString(10), "image/gif", generateRandomString(10));
@@ -265,8 +258,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getUserMetadataFromByteArrayComplexTest()
-      throws Exception {
+  public void getUserMetadataFromByteArrayComplexTest() throws Exception {
 
     Map<String, String> userMetadataMap = null;
     // user metadata of size 1 byte
@@ -424,8 +416,7 @@ public class RestUtilsTest {
    * @throws URISyntaxException
    */
   @Test
-  public void getOperationOrBlobIdFromUriTest()
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+  public void getOperationOrBlobIdFromUriTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String baseId = "expectedOp";
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
     String[] validIdUris = {"/" + baseId, "/" + baseId + "/random/extra", baseId, baseId + "/random/extra"};
@@ -458,8 +449,9 @@ public class RestUtilsTest {
           String expectedOutput = testCase.getValue();
           expectedOutput = prefixesToRemove.contains(prefixToTestOn) ? expectedOutput : prefixToTestOn + expectedOutput;
           RestRequest restRequest = createRestRequest(RestMethod.GET, realTestPath, null);
-          assertEquals("Unexpected operation/blob id for: " + realTestPath, expectedOutput, RestUtils
-              .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest), prefixesToRemove));
+          assertEquals("Unexpected operation/blob id for: " + realTestPath, expectedOutput,
+              RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                  prefixesToRemove));
         }
       }
     }
@@ -472,8 +464,7 @@ public class RestUtilsTest {
    * @throws URISyntaxException
    */
   @Test
-  public void getBlobSubResourceTest()
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+  public void getBlobSubResourceTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     // sub resource null
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
     String[] nullUris = {"/op", "/op/", "/op/invalid", "/op/invalid/", "op", "op/", "op/invalid", "op/invalid/"};
@@ -547,8 +538,7 @@ public class RestUtilsTest {
    * @throws RestServiceException
    */
   @Test
-  public void buildGetBlobOptionsTest()
-      throws RestServiceException {
+  public void buildGetBlobOptionsTest() throws RestServiceException {
     // no range
     doBuildGetBlobOptionsTest(null, null, true, true);
     // valid ranges
@@ -570,8 +560,7 @@ public class RestUtilsTest {
    * Test {@link RestUtils#buildContentRangeAndLength(ByteRange, long)}.
    */
   @Test
-  public void buildContentRangeAndLengthTest()
-      throws RestServiceException {
+  public void buildContentRangeAndLengthTest() throws RestServiceException {
     // good cases
     doBuildContentRangeAndLengthTest(ByteRange.fromOffsetRange(4, 8), 12, "bytes 4-8/12", 5, true);
     doBuildContentRangeAndLengthTest(ByteRange.fromStartOffset(14), 17, "bytes 14-16/17", 3, true);
@@ -590,8 +579,7 @@ public class RestUtilsTest {
    * @throws Exception
    */
   @Test
-  public void getGetOptionTest()
-      throws Exception {
+  public void getGetOptionTest() throws Exception {
     for (GetOption option : GetOption.values()) {
       JSONObject headers = new JSONObject();
       headers.put(RestUtils.Headers.GET_OPTION, option.toString().toLowerCase());
@@ -663,8 +651,7 @@ public class RestUtilsTest {
    * @throws JSONException
    */
   private void setAmbryHeaders(JSONObject headers, String contentLength, String ttlInSecs, String isPrivate,
-      String serviceId, String contentType, String ownerId)
-      throws JSONException {
+      String serviceId, String contentType, String ownerId) throws JSONException {
     headers.putOpt(RestUtils.Headers.BLOB_SIZE, contentLength);
     headers.putOpt(RestUtils.Headers.TTL, ttlInSecs);
     headers.putOpt(RestUtils.Headers.PRIVATE, isPrivate);
@@ -679,8 +666,7 @@ public class RestUtilsTest {
    * @param headers the headers that need to go with the request that is used to construct {@link BlobProperties}.
    * @throws Exception
    */
-  private void verifyBlobPropertiesConstructionSuccess(JSONObject headers)
-      throws Exception {
+  private void verifyBlobPropertiesConstructionSuccess(JSONObject headers) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
     assertEquals("Blob size does not match", headers.getLong(RestUtils.Headers.BLOB_SIZE),
@@ -779,8 +765,7 @@ public class RestUtilsTest {
    * @throws RestServiceException
    */
   private void doBuildGetBlobOptionsTest(String rangeHeader, ByteRange expectedRange,
-      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithSubResource)
-      throws RestServiceException {
+      boolean shouldSucceedWithoutSubResource, boolean shouldSucceedWithSubResource) throws RestServiceException {
     Map<String, Object> args = new HashMap<>();
     if (rangeHeader != null) {
       args.put(RestUtils.Headers.RANGE, rangeHeader);
@@ -837,8 +822,7 @@ public class RestUtilsTest {
    * @throws RestServiceException
    */
   private void doBuildContentRangeAndLengthTest(ByteRange range, long blobSize, String expectedContentRange,
-      long expectedContentLength, boolean shouldSucceed)
-      throws RestServiceException {
+      long expectedContentLength, boolean shouldSucceed) throws RestServiceException {
     if (shouldSucceed) {
       Pair<String, Long> rangeAndLength = RestUtils.buildContentRangeAndLength(range, blobSize);
       assertEquals(expectedContentRange, rangeAndLength.getFirst());
@@ -859,8 +843,7 @@ public class RestUtilsTest {
    * @param userMetadata {@link Map} which has the new entries that has to be added
    * @throws org.json.JSONException
    */
-  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata)
-      throws JSONException {
+  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata) throws JSONException {
     for (String key : userMetadata.keySet()) {
       headers.put(key, userMetadata.get(key));
     }

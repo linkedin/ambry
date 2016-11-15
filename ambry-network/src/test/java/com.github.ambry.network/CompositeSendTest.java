@@ -34,8 +34,7 @@ class ByteArraySend implements Send {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     return channel.write(bytesToSend);
   }
 
@@ -53,8 +52,7 @@ class ByteArraySend implements Send {
 public class CompositeSendTest {
 
   @Test
-  public void testCompositeSend()
-      throws IOException {
+  public void testCompositeSend() throws IOException {
     byte[] buf1 = new byte[1024];
     byte[] buf2 = new byte[2048];
     byte[] buf3 = new byte[4096];

@@ -33,8 +33,7 @@ public interface BlobStorageService {
    * Does startup tasks for the BlobStorageService. When the function returns, startup is FULLY complete.
    * @throws InstantiationException if BlobStorageService is unable to start.
    */
-  public void start()
-      throws InstantiationException;
+  public void start() throws InstantiationException;
 
   /**
    * Does shutdown tasks for the BlobStorageService. When the function returns, shutdown is FULLY complete.

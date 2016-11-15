@@ -44,8 +44,7 @@ public class RouterServerPlaintextTest {
   private static long plainTextReceiveBytesCountBeforeTest;
 
   @BeforeClass
-  public static void initializeTests()
-      throws Exception {
+  public static void initializeTests() throws Exception {
     MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
@@ -59,8 +58,7 @@ public class RouterServerPlaintextTest {
   }
 
   @AfterClass
-  public static void cleanup()
-      throws IOException {
+  public static void cleanup() throws IOException {
     testFramework.cleanup();
     long start = System.currentTimeMillis();
     System.out.println("About to invoke cluster.cleanup()");
@@ -85,8 +83,8 @@ public class RouterServerPlaintextTest {
     Assert.assertTrue("Router should have received over Plain Text",
         meters.get(plaintextReceiveBytesMetricName).getCount() != plainTextReceiveBytesCountBeforeTest);
     Assert.assertTrue("Router should not have sent over SSL", meters.get(sslSendBytesMetricName).getCount() == 0);
-    Assert
-        .assertTrue("Router should not have received over SSL", meters.get(sslReceiveBytesMetricName).getCount() == 0);
+    Assert.assertTrue("Router should not have received over SSL",
+        meters.get(sslReceiveBytesMetricName).getCount() == 0);
   }
 
   /**
@@ -95,8 +93,7 @@ public class RouterServerPlaintextTest {
    * @throws Exception
    */
   @Test
-  public void interleavedOperationsTest()
-      throws Exception {
+  public void interleavedOperationsTest() throws Exception {
     List<OperationChain> opChains = new ArrayList<>();
     Random random = new Random();
     for (int i = 0; i < 20; i++) {
@@ -147,8 +144,7 @@ public class RouterServerPlaintextTest {
    * @throws Exception
    */
   @Test
-  public void nonInterleavedOperationsTest()
-      throws Exception {
+  public void nonInterleavedOperationsTest() throws Exception {
     Random random = new Random();
     for (int i = 0; i < 10; i++) {
       Queue<OperationType> operations = new LinkedList<>();
@@ -163,8 +159,8 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.GET_DELETED_SUCCESS);
       operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
       int blobSize = random.nextInt(100 * 1024);
-      testFramework
-          .checkOperationChains(Collections.singletonList(testFramework.startOperationChain(blobSize, i, operations)));
+      testFramework.checkOperationChains(
+          Collections.singletonList(testFramework.startOperationChain(blobSize, i, operations)));
     }
   }
 
@@ -173,8 +169,7 @@ public class RouterServerPlaintextTest {
    * @throws Exception
    */
   @Test
-  public void largeBlobTest()
-      throws Exception {
+  public void largeBlobTest() throws Exception {
     final int blobSize = RouterServerTestFramework.CHUNK_SIZE * 2 + 1;
     List<OperationChain> opChains = new ArrayList<>();
     for (int i = 0; i < 2; i++) {

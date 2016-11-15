@@ -51,8 +51,7 @@ public class SSLBlockingChannel extends BlockingChannel {
   }
 
   @Override
-  public void connect()
-      throws IOException {
+  public void connect() throws IOException {
     synchronized (lock) {
       if (!connected) {
         Socket socket = new Socket();
@@ -75,8 +74,8 @@ public class SSLBlockingChannel extends BlockingChannel {
         }
 
         ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
-        if (cipherSuitesList != null && cipherSuitesList.size() > 0 &&
-            !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
+        if (cipherSuitesList != null && cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1
+            && cipherSuitesList.get(0).equals(""))) {
           String[] cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
           sslSocket.setEnabledCipherSuites(cipherSuites);
         }

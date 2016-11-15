@@ -78,74 +78,116 @@ public class BlobValidator {
       OptionParser parser = new OptionParser();
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
           "The type of operation to execute - VALIDATE_BLOB_ON_REPLICA/"
-              + "/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS").withRequiredArg()
-          .describedAs("The type of operation").ofType(String.class).defaultsTo("VALIDATE_BLOB_ON_ALL_REPLICAS");
+              + "/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS")
+          .withRequiredArg()
+          .describedAs("The type of operation")
+          .ofType(String.class)
+          .defaultsTo("VALIDATE_BLOB_ON_ALL_REPLICAS");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdListOpt =
-          parser.accepts("blobIds", "Comma separated blobIds to execute get on").withRequiredArg()
-              .describedAs("Blob Ids").ofType(String.class);
+          parser.accepts("blobIds", "Comma separated blobIds to execute get on")
+              .withRequiredArg()
+              .describedAs("Blob Ids")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> replicaHostOpt =
-          parser.accepts("replicaHost", "The replica host to execute get on").withRequiredArg()
-              .describedAs("The host name").defaultsTo("localhost").ofType(String.class);
+          parser.accepts("replicaHost", "The replica host to execute get on")
+              .withRequiredArg()
+              .describedAs("The host name")
+              .defaultsTo("localhost")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> replicaPortOpt =
-          parser.accepts("replicaPort", "The replica port to execute get on").withRequiredArg()
-              .describedAs("The host name").defaultsTo("15088").ofType(String.class);
+          parser.accepts("replicaPort", "The replica port to execute get on")
+              .withRequiredArg()
+              .describedAs("The host name")
+              .defaultsTo("15088")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> datacenterOpt =
-          parser.accepts("datacenter", "Datacenter for which the replicas should be chosen from").withRequiredArg()
-              .describedAs("The file name with absolute path").ofType(String.class);
+          parser.accepts("datacenter", "Datacenter for which the replicas should be chosen from")
+              .withRequiredArg()
+              .describedAs("The file name with absolute path")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> expiredBlobsOpt =
-          parser.accepts("includeExpiredBlob", "Included expired blobs too").withRequiredArg()
-              .describedAs("Whether to include expired blobs while querying or not").defaultsTo("false")
+          parser.accepts("includeExpiredBlob", "Included expired blobs too")
+              .withRequiredArg()
+              .describedAs("Whether to include expired blobs while querying or not")
+              .defaultsTo("false")
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("").ofType(String.class);
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
-          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
-              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt = parser.accepts("sslKeystorePath", "SSL key store path")
+          .withOptionalArg()
+          .describedAs("The file path of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
-          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
-              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt = parser.accepts("sslKeystoreType", "SSL key store type")
+          .withOptionalArg()
+          .describedAs("The type of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
-          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
-              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePath", "SSL trust store path")
+              .withOptionalArg()
+              .describedAs("The file path of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
-          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
-              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslKeystorePassword", "SSL key store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL key store")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
-          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
-              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt = parser.accepts("sslKeyPassword", "SSL key password")
+          .withOptionalArg()
+          .describedAs("The password of SSL private key")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
-          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
-              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePassword", "SSL trust store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
-          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> verboseOpt =
-          parser.accepts("verbose", "Verbosity").withRequiredArg().describedAs("Verbosity").defaultsTo("false")
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA")
               .ofType(String.class);
+
+      ArgumentAcceptingOptionSpec<String> verboseOpt = parser.accepts("verbose", "Verbosity")
+          .withRequiredArg()
+          .describedAs("Verbosity")
+          .defaultsTo("false")
+          .ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -261,8 +303,7 @@ public class BlobValidator {
     }
   }
 
-  private ArrayList<BlobId> generateBlobId(ArrayList<String> blobIdListStr, ClusterMap map)
-      throws IOException {
+  private ArrayList<BlobId> generateBlobId(ArrayList<String> blobIdListStr, ClusterMap map) throws IOException {
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
     for (String blobIdStr : blobIdListStr) {
       try {
@@ -384,8 +425,7 @@ public class BlobValidator {
   }
 
   private void validateBlobOnReplica(ArrayList<BlobId> blobIdList, ClusterMap clusterMap, String replicaHost,
-      int replicaPort, boolean expiredBlobs)
-      throws Exception {
+      int replicaPort, boolean expiredBlobs) throws Exception {
     Map<BlobId, ServerErrorCode> resultMap = new HashMap<BlobId, ServerErrorCode>();
 
     // find the replicaId based on given host name and port number
@@ -449,8 +489,8 @@ public class BlobValidator {
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
               partitionRequestInfos, getOption);
-      System.out
-          .println("----- Contacting " + replicaId.getDataNodeId().getHostname() + ":" + port.toString() + " -------");
+      System.out.println(
+          "----- Contacting " + replicaId.getDataNodeId().getHostname() + ":" + port.toString() + " -------");
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 
@@ -463,10 +503,9 @@ public class BlobValidator {
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       System.out.println("Get Response from Stream to verify replica blob properties : " + getResponse.getError());
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("getBlobProperties error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println("getBlobProperties error on response " + getResponse.getError() + " error code on partition "
+            + serverResponseCode + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port "
+            + port.toString() + " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return ServerErrorCode.Blob_Not_Found;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
@@ -482,9 +521,8 @@ public class BlobValidator {
         BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         System.out.println(
             "Blob Properties : Content Type : " + properties.getContentType() + ", OwnerId : " + properties.getOwnerId()
-                +
-                ", Size : " + properties.getBlobSize() + ", CreationTimeInMs : " + properties.getCreationTimeInMs() +
-                ", ServiceId : " + properties.getServiceId() + ", TTL : " + properties.getTimeToLiveInSeconds());
+                + ", Size : " + properties.getBlobSize() + ", CreationTimeInMs : " + properties.getCreationTimeInMs()
+                + ", ServiceId : " + properties.getServiceId() + ", TTL : " + properties.getTimeToLiveInSeconds());
       }
 
       getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobUserMetadata,
@@ -500,10 +538,9 @@ public class BlobValidator {
 
       serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("usermetadata get error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println("usermetadata get error on response " + getResponse.getError() + " error code on partition "
+            + serverResponseCode + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port "
+            + port.toString() + " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return serverResponseCode;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
@@ -532,10 +569,10 @@ public class BlobValidator {
       System.out.println("Get Response to get blob : " + getResponse.getError());
       serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("blob get error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println(
+            "blob get error on response " + getResponse.getError() + " error code on partition " + serverResponseCode
+                + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() + " blobId "
+                + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return serverResponseCode;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {

@@ -15,21 +15,17 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-
 import java.util.Properties;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 // TestDisk permits Disk to be constructed with a null DataNode.
 class TestDisk extends Disk {
-  public TestDisk(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
-      throws JSONException {
+  public TestDisk(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     super(null, jsonObject, clusterMapConfig);
   }
 
@@ -69,8 +65,7 @@ class TestDisk extends Disk {
  */
 public class DiskTest {
   @Test
-  public void basics()
-      throws JSONException {
+  public void basics() throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
@@ -83,8 +78,7 @@ public class DiskTest {
     assertEquals(testDisk, new TestDisk(testDisk.toJSONObject(), clusterMapConfig));
   }
 
-  public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
-      throws JSONException {
+  public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     try {
       new TestDisk(jsonObject, clusterMapConfig);
       fail("Construction of TestDisk should have failed validation.");
@@ -94,8 +88,7 @@ public class DiskTest {
   }
 
   @Test
-  public void validation()
-      throws JSONException {
+  public void validation() throws JSONException {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
     try {
       // Null DataNode
@@ -116,14 +109,12 @@ public class DiskTest {
     failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 0), clusterMapConfig);
 
     // Bad capacity (too big)
-    failValidation(TestUtils
-        .getJsonDisk("/mnt1", HardwareState.UNAVAILABLE, 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L),
-        clusterMapConfig);
+    failValidation(TestUtils.getJsonDisk("/mnt1", HardwareState.UNAVAILABLE,
+        1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024L), clusterMapConfig);
   }
 
   @Test
-  public void testDiskSoftState()
-      throws JSONException, InterruptedException {
+  public void testDiskSoftState() throws JSONException, InterruptedException {
     JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
     Properties props = new Properties();
     props.setProperty("clustermap.fixedtimeout.disk.retry.backoff.ms", Integer.toString(2000));

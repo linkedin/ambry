@@ -74,8 +74,7 @@ class DiskManager {
   /**
    * Starts all the stores on this disk.
    */
-  void start()
-      throws InterruptedException {
+  void start() throws InterruptedException {
     Timer.Context context = metrics.diskStartTime.time();
     try {
       File mountPath = new File(disk.getMountPath());

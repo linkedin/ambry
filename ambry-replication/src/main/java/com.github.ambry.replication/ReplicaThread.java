@@ -127,11 +127,9 @@ class ReplicaThread implements Runnable {
       logger.trace("Starting replica thread on Local node: " + dataNodeId + " Thread name: " + threadName);
       List<List<RemoteReplicaInfo>> replicasToReplicate =
           new ArrayList<List<RemoteReplicaInfo>>(replicasToReplicateGroupedByNode.size());
-      for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateEntry : replicasToReplicateGroupedByNode
-          .entrySet()) {
-        logger.info("Remote node: " + replicasToReplicateEntry.getKey() +
-            " Thread name: " + threadName +
-            " ReplicasToReplicate: " + replicasToReplicateEntry.getValue());
+      for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateEntry : replicasToReplicateGroupedByNode.entrySet()) {
+        logger.info("Remote node: " + replicasToReplicateEntry.getKey() + " Thread name: " + threadName
+            + " ReplicasToReplicate: " + replicasToReplicateEntry.getValue());
         replicasToReplicate.add(replicasToReplicateEntry.getValue());
       }
       logger.info("Begin iteration for thread " + threadName);
@@ -179,9 +177,9 @@ class ReplicaThread implements Runnable {
           }
           if (activeReplicasPerNode.size() > 0) {
             try {
-              connectedChannel = connectionPool
-                  .checkOutConnection(remoteNode.getHostname(), replicasToReplicatePerNode.get(0).getPort(),
-                      replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+              connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(),
+                  replicasToReplicatePerNode.get(0).getPort(),
+                  replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
               checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
               startTimeInMs = SystemTime.getInstance().milliseconds();
               List<ExchangeMetadataResponse> exchangeMetadataResponseList =
@@ -225,11 +223,9 @@ class ReplicaThread implements Runnable {
                 connectedChannel = null;
               }
             } catch (Throwable e) {
-              logger.error("Remote node: " + remoteNode +
-                  " Thread name: " + threadName +
-                  " Remote replicas: " + replicasToReplicatePerNode +
-                  " Active remote replicas: " + activeReplicasPerNode +
-                  " Throwable exception while replicating with remote replica ", e);
+              logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
+                  + replicasToReplicatePerNode + " Active remote replicas: " + activeReplicasPerNode
+                  + " Throwable exception while replicating with remote replica ", e);
               replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
               if (connectedChannel != null) {
                 connectionPool.destroyConnection(connectedChannel);
@@ -237,9 +233,8 @@ class ReplicaThread implements Runnable {
               }
             } finally {
               long totalReplicationTime = SystemTime.getInstance().milliseconds() - replicationStartTimeInMs;
-              replicationMetrics
-                  .updateTotalReplicationTime(totalReplicationTime, replicatingFromRemoteColo, replicatingOverSsl,
-                      datacenterName);
+              replicationMetrics.updateTotalReplicationTime(totalReplicationTime, replicatingFromRemoteColo,
+                  replicatingOverSsl, datacenterName);
               if (connectedChannel != null) {
                 connectionPool.checkInConnection(connectedChannel);
               }
@@ -304,8 +299,9 @@ class ReplicaThread implements Runnable {
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
             } catch (Exception e) {
               replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
-              logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
-                  " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
+              logger.error(
+                  "Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replica: " + remoteReplicaInfo
+                      .getReplicaId(), e);
               responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), e);
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(ServerErrorCode.Unknown_Error);
@@ -325,9 +321,8 @@ class ReplicaThread implements Runnable {
             processMetadataResponseTimeInMs);
       } finally {
         long exchangeMetadataTime = SystemTime.getInstance().milliseconds() - exchangeMetadataStartTimeInMs;
-        replicationMetrics
-            .updateExchangeMetadataTime(exchangeMetadataTime, replicatingFromRemoteColo, replicatingOverSsl,
-                datacenterName);
+        replicationMetrics.updateExchangeMetadataTime(exchangeMetadataTime, replicatingFromRemoteColo,
+            replicatingOverSsl, datacenterName);
       }
     }
     return exchangeMetadataResponseList;
@@ -351,9 +346,9 @@ class ReplicaThread implements Runnable {
     try {
       if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
           || replicasToReplicatePerNode.size() == 0) {
-        throw new IllegalArgumentException("ExchangeMetadataResponseList size " + exchangeMetadataResponseList.size() +
-            " and replicasToReplicatePerNode size " + replicasToReplicatePerNode.size() +
-            " should be the same and greater than zero");
+        throw new IllegalArgumentException("ExchangeMetadataResponseList size " + exchangeMetadataResponseList.size()
+            + " and replicasToReplicatePerNode size " + replicasToReplicatePerNode.size()
+            + " should be the same and greater than zero");
       }
       DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
       GetResponse getResponse =
@@ -362,9 +357,8 @@ class ReplicaThread implements Runnable {
       writeMessagesToLocalStore(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode, remoteNode);
     } finally {
       long fixMissingStoreKeysTime = SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs;
-      replicationMetrics
-          .updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo, replicatingOverSsl,
-              datacenterName);
+      replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
+          replicatingOverSsl, datacenterName);
     }
   }
 
@@ -378,8 +372,7 @@ class ReplicaThread implements Runnable {
    * @throws IOException
    */
   private ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      ConnectedChannel connectedChannel, DataNodeId remoteNode)
-      throws ReplicationException, IOException {
+      ConnectedChannel connectedChannel, DataNodeId remoteNode) throws ReplicationException, IOException {
     long replicaMetadataRequestStartTime = SystemTime.getInstance().milliseconds();
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
@@ -388,9 +381,8 @@ class ReplicaThread implements Runnable {
               remoteReplicaInfo.getToken(), dataNodeId.getHostname(),
               remoteReplicaInfo.getLocalReplicaId().getReplicaPath());
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
-      logger
-          .trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ", remoteNode,
-              threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
+      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
+          remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
     }
 
     try {
@@ -412,12 +404,10 @@ class ReplicaThread implements Runnable {
 
       if (response.getError() != ServerErrorCode.No_Error
           || response.getReplicaMetadataResponseInfoList().size() != replicasToReplicatePerNode.size()) {
-        logger.error("Remote node: " + remoteNode +
-            " Thread name: " + threadName +
-            " Remote replicas: " + replicasToReplicatePerNode +
-            " Replica metadata response error: " + response.getError() +
-            " ReplicaMetadataResponseInfoListSize: " + response.getReplicaMetadataResponseInfoList().size() +
-            " ReplicasToReplicatePerNodeSize: " + replicasToReplicatePerNode.size());
+        logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
+            + replicasToReplicatePerNode + " Replica metadata response error: " + response.getError()
+            + " ReplicaMetadataResponseInfoListSize: " + response.getReplicaMetadataResponseInfoList().size()
+            + " ReplicasToReplicatePerNodeSize: " + replicasToReplicatePerNode.size());
         throw new ReplicationException("Replica Metadata Response Error " + response.getError());
       }
       return response;
@@ -436,8 +426,7 @@ class ReplicaThread implements Runnable {
    * @throws StoreException
    */
   private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
-      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo)
-      throws StoreException {
+      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     List<StoreKey> storeKeysToCheck = new ArrayList<StoreKey>(messageInfoList.size());
@@ -452,9 +441,8 @@ class ReplicaThread implements Runnable {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
     }
-    replicationMetrics
-        .updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime, replicatingFromRemoteColo,
-            datacenterName);
+    replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
+        replicatingFromRemoteColo, datacenterName);
     return missingStoreKeys;
   }
 
@@ -472,15 +460,15 @@ class ReplicaThread implements Runnable {
    */
   private void processReplicaMetadataResponse(Set<StoreKey> missingStoreKeys,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
-      DataNodeId remoteNode)
-      throws IOException, StoreException, MessageFormatException {
+      DataNodeId remoteNode) throws IOException, StoreException, MessageFormatException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     for (MessageInfo messageInfo : messageInfoList) {
       BlobId blobId = (BlobId) messageInfo.getStoreKey();
       if (remoteReplicaInfo.getLocalReplicaId().getPartitionId().compareTo(blobId.getPartition()) != 0) {
-        throw new IllegalStateException("Blob id is not in the expected partition Actual partition " +
-            blobId.getPartition() + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
+        throw new IllegalStateException(
+            "Blob id is not in the expected partition Actual partition " + blobId.getPartition()
+                + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
       }
       if (!missingStoreKeys.contains(messageInfo.getStoreKey())) {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
@@ -510,9 +498,8 @@ class ReplicaThread implements Runnable {
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
           // as long as the Delete is guaranteed to have taken effect locally.
           if (notification != null) {
-            notification
-                .onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), messageInfo.getStoreKey().getID(),
-                    BlobReplicaSourceType.REPAIRED);
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
+                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
           }
         }
       } else {
@@ -520,23 +507,20 @@ class ReplicaThread implements Runnable {
           // if the key is not present locally and if the remote replica has the message in deleted state,
           // it is not considered missing locally.
           missingStoreKeys.remove(messageInfo.getStoreKey());
-          logger
-              .trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {}", remoteNode,
-                  threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+          logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {}",
+              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
           // as long as the Delete is guaranteed to have taken effect locally.
           if (notification != null) {
-            notification
-                .onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), messageInfo.getStoreKey().getID(),
-                    BlobReplicaSourceType.REPAIRED);
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
+                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
           }
         } else if (messageInfo.isExpired()) {
           // if the key is not present locally and if the remote replica has the key as expired,
           // it is not considered missing locally.
           missingStoreKeys.remove(messageInfo.getStoreKey());
-          logger
-              .trace("Remote node: {} Thread name: {} Remote replica: {} Key in expired state remotely {}", remoteNode,
-                  threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+          logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in expired state remotely {}",
+              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
         }
       }
     }
@@ -544,8 +528,8 @@ class ReplicaThread implements Runnable {
       replicationMetrics.interColoProcessMetadataResponseTime.get(datacenterName)
           .update(SystemTime.getInstance().milliseconds() - startTime);
     } else {
-      replicationMetrics.intraColoProcessMetadataResponseTime
-          .update(SystemTime.getInstance().milliseconds() - startTime);
+      replicationMetrics.intraColoProcessMetadataResponseTime.update(
+          SystemTime.getInstance().milliseconds() - startTime);
     }
   }
 
@@ -557,13 +541,12 @@ class ReplicaThread implements Runnable {
    * @throws InterruptedException
    */
   private void waitIfRequired(ReplicaMetadataResponseInfo replicaMetadataResponseInfo, DataNodeId remoteNode,
-      RemoteReplicaInfo remoteReplicaInfo)
-      throws InterruptedException {
+      RemoteReplicaInfo remoteReplicaInfo) throws InterruptedException {
     long remoteReplicaLag = replicaMetadataResponseInfo.getRemoteReplicaLagInBytes();
     long startTime = SystemTime.getInstance().milliseconds();
     if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes) {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote replica lag: {} "
-          + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
+              + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(),
           replicationConfig.replicationMaxLagForWaitTimeInBytes, replicationConfig.replicaWaitTimeBetweenReplicasMs);
       // We apply the wait time between replication from remote replicas here. Any new objects that get written
@@ -594,8 +577,7 @@ class ReplicaThread implements Runnable {
    */
   private GetResponse getMessagesForMissingKeys(ConnectedChannel connectedChannel,
       List<ExchangeMetadataResponse> exchangeMetadataResponseList, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      DataNodeId remoteNode)
-      throws ReplicationException, IOException {
+      DataNodeId remoteNode) throws ReplicationException, IOException {
     List<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
@@ -622,13 +604,11 @@ class ReplicaThread implements Runnable {
       ChannelOutput channelOutput = connectedChannel.receive();
       GetResponse getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
       long getRequestTime = SystemTime.getInstance().milliseconds() - startTime;
-      replicationMetrics
-          .updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
+      replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
+          datacenterName);
       if (getResponse.getError() != ServerErrorCode.No_Error) {
-        logger.error("Remote node: " + remoteNode +
-            " Thread name: " + threadName +
-            " Remote replicas: " + replicasToReplicatePerNode +
-            " GetResponse from replication: " + getResponse.getError());
+        logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
+            + replicasToReplicatePerNode + " GetResponse from replication: " + getResponse.getError());
         throw new ReplicationException(
             " Get Request returned error when trying to get missing keys " + getResponse.getError());
       }
@@ -663,15 +643,16 @@ class ReplicaThread implements Runnable {
           responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           partitionResponseInfoIndex++;
           if (partitionResponseInfo.getPartition().compareTo(remoteReplicaInfo.getReplicaId().getPartitionId()) != 0) {
-            throw new IllegalStateException("The partition id from partitionResponseInfo " +
-                partitionResponseInfo.getPartition() + " and from remoteReplicaInfo " +
-                remoteReplicaInfo.getReplicaId().getPartitionId() + " are not the same");
+            throw new IllegalStateException(
+                "The partition id from partitionResponseInfo " + partitionResponseInfo.getPartition()
+                    + " and from remoteReplicaInfo " + remoteReplicaInfo.getReplicaId().getPartitionId()
+                    + " are not the same");
           }
           if (partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) {
             try {
               List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Messages to fix: {} "
-                  + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                      + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
@@ -682,8 +663,8 @@ class ReplicaThread implements Runnable {
                         metricRegistry);
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
                   replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
-                  logger.error("Out of " + (messageInfoList.size()) + " messages, " +
-                      (messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size())
+                  logger.error("Out of " + (messageInfoList.size()) + " messages, " + (messageInfoList.size()
+                      - validMessageDetectionInputStream.getValidMessageInfoList().size())
                       + " invalid messages were found in message stream from " + remoteReplicaInfo.getReplicaId());
                 }
                 messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
@@ -701,7 +682,7 @@ class ReplicaThread implements Runnable {
               for (MessageInfo messageInfo : messageInfoList) {
                 totalBytesFixed += messageInfo.getSize();
                 logger.trace("Remote node: {} Thread name: {} Remote replica: {} Message replicated: {} Partition: {} "
-                    + "Local mount path: {} Message size: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                        + "Local mount path: {} Message size: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
                     messageInfo.getStoreKey(), remoteReplicaInfo.getReplicaId().getPartitionId(),
                     remoteReplicaInfo.getLocalReplicaId().getMountPath(), messageInfo.getSize());
                 if (notification != null) {
@@ -716,8 +697,8 @@ class ReplicaThread implements Runnable {
             } catch (StoreException e) {
               if (e.getErrorCode() != StoreErrorCodes.Already_Exist) {
                 replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
-                logger.error("Remote node: " + remoteNode + " Thread name: " + threadName +
-                    " Remote replica: " + remoteReplicaInfo.getReplicaId(), e);
+                logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replica: "
+                    + remoteReplicaInfo.getReplicaId(), e);
               }
             }
           } else {
@@ -734,9 +715,8 @@ class ReplicaThread implements Runnable {
       }
     }
     long batchStoreWriteTime = SystemTime.getInstance().milliseconds() - startTime;
-    replicationMetrics
-        .updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed, replicatingFromRemoteColo,
-            replicatingOverSsl, datacenterName);
+    replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
+        replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
   }
 
   class ExchangeMetadataResponse {
@@ -761,8 +741,7 @@ class ReplicaThread implements Runnable {
     return running;
   }
 
-  public void shutdown()
-      throws InterruptedException {
+  public void shutdown() throws InterruptedException {
     running = false;
     shutdownLatch.await();
   }

@@ -53,8 +53,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router)
-      throws Exception {
+      RestResponseHandler responseHandler, Router router) throws Exception {
     if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
       throw new IllegalArgumentException("Null arguments were provided during instantiation!");
     } else {

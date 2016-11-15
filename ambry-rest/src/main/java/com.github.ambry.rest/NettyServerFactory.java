@@ -61,20 +61,20 @@ public class NettyServerFactory implements NioServerFactory {
           ch.pipeline()
               // connection stats handler to track connection related metrics
               .addLast("connectionStatsHandler", connectionStatsHandler)
-                  // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-                  // to go here.
+              // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+              // to go here.
               .addLast("codec",
                   new HttpServerCodec(nettyConfig.nettyServerMaxInitialLineLength, nettyConfig.nettyServerMaxHeaderSize,
                       nettyConfig.nettyServerMaxChunkSize))
-                  // for health check request handling
+              // for health check request handling
               .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
-                  // for public access logging
+              // for public access logging
               .addLast("publicAccessLogHandler", new PublicAccessLogHandler(publicAccessLogger, nettyMetrics))
-                  // for detecting connections that have been idle too long - probably because of an error.
+              // for detecting connections that have been idle too long - probably because of an error.
               .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-                  // for safe writing of chunks for responses
+              // for safe writing of chunks for responses
               .addLast("chunker", new ChunkedWriteHandler())
-                  // custom processing class that interfaces with a BlobStorageService.
+              // custom processing class that interfaces with a BlobStorageService.
               .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
         }
       };

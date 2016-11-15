@@ -58,8 +58,7 @@ public class SimpleByteBufferPool implements ByteBufferPool {
    *                                  if {@code timeToBlockInMs} is negative.
    */
   @Override
-  public ByteBuffer allocate(int size, final long timeToBlockInMs)
-      throws TimeoutException, InterruptedException {
+  public ByteBuffer allocate(int size, final long timeToBlockInMs) throws TimeoutException, InterruptedException {
     if (size > capacity) {
       throw new IllegalArgumentException("Requested size cannot exceed pool capacity.");
     } else if (timeToBlockInMs < 0) {

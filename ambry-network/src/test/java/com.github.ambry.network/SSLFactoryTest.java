@@ -28,18 +28,15 @@ import org.junit.Test;
 public class SSLFactoryTest {
 
   @Before
-  public void setup()
-      throws Exception {
+  public void setup() throws Exception {
   }
 
   @After
-  public void teardown()
-      throws Exception {
+  public void teardown() throws Exception {
   }
 
   @Test
-  public void testSSLFactory()
-      throws Exception {
+  public void testSSLFactory() throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
     SSLConfig sslConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));

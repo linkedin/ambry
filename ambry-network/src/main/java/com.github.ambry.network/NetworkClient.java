@@ -132,8 +132,8 @@ public class NetworkClient implements Closeable {
     while (iter.hasNext()) {
       RequestMetadata requestMetadata = iter.next();
       if (time.milliseconds() - requestMetadata.requestQueuedAtMs > checkoutTimeoutMs) {
-        responseInfoList
-            .add(new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
+        responseInfoList.add(
+            new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.ConnectionUnavailable, null));
         logger.trace("Failing request to host {} port {} due to connection unavailability",
             requestMetadata.requestInfo.getHost(), requestMetadata.requestInfo.getPort());
         iter.remove();
@@ -216,8 +216,8 @@ public class NetworkClient implements Closeable {
         requestMetadata = connectionIdToRequestInFlight.remove(connId);
         if (requestMetadata != null) {
           logger.trace("ConnectionId {} with request in flight disconnected", connId);
-          responseInfoList
-              .add(new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
+          responseInfoList.add(
+              new ResponseInfo(requestMetadata.requestInfo, NetworkClientErrorCode.NetworkError, null));
         }
       }
     }

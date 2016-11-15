@@ -44,8 +44,7 @@ public class InputStreamReadableStreamChannelTest {
    * @throws Exception
    */
   @Test
-  public void commonCasesTest()
-      throws Exception {
+  public void commonCasesTest() throws Exception {
     int bufSize = InputStreamReadableStreamChannel.BUFFER_SIZE;
     int randSizeLessThanBuffer = TestUtils.RANDOM.nextInt(bufSize - 2) + 2;
     int randMultiplier = TestUtils.RANDOM.nextInt(10);
@@ -73,13 +72,11 @@ public class InputStreamReadableStreamChannelTest {
    * @throws IOException
    */
   @Test
-  public void closeTest()
-      throws IOException {
+  public void closeTest() throws IOException {
     final AtomicBoolean streamOpen = new AtomicBoolean(true);
     InputStream stream = new InputStream() {
       @Override
-      public int read()
-          throws IOException {
+      public int read() throws IOException {
         throw new IllegalStateException("Not implemented");
       }
 
@@ -102,8 +99,7 @@ public class InputStreamReadableStreamChannelTest {
    * @throws Exception
    */
   @Test
-  public void readIntoAWCFailureTest()
-      throws Exception {
+  public void readIntoAWCFailureTest() throws Exception {
     String errMsg = "@@ExpectedExceptionMessage@@";
     InputStream stream = new ByteBufferInputStream(ByteBuffer.allocate(1));
 
@@ -152,13 +148,11 @@ public class InputStreamReadableStreamChannelTest {
    * @throws Exception
    */
   @Test
-  public void badInputStreamTest()
-      throws Exception {
+  public void badInputStreamTest() throws Exception {
     final String errMsg = "@@ExpectedExceptionMessage@@";
     InputStream stream = new InputStream() {
       @Override
-      public int read()
-          throws IOException {
+      public int read() throws IOException {
         // this represents any exception - bad behavior or closure before being read completely.
         throw new IllegalStateException(errMsg);
       }
@@ -189,8 +183,7 @@ public class InputStreamReadableStreamChannelTest {
    * @param sizeToProvide the size to provide to the constructor of {@link InputStreamReadableStreamChannel}.
    * @throws Exception
    */
-  private void doReadTest(InputStream stream, byte[] src, int sizeToProvide)
-      throws Exception {
+  private void doReadTest(InputStream stream, byte[] src, int sizeToProvide) throws Exception {
     InputStreamReadableStreamChannel channel;
     if (sizeToProvide >= 0) {
       channel = new InputStreamReadableStreamChannel(stream, sizeToProvide, EXECUTOR_SERVICE);
@@ -236,15 +229,13 @@ class HaltingInputStream extends InputStream {
   }
 
   @Override
-  public int read()
-      throws IOException {
+  public int read() throws IOException {
     sleep();
     return stream.read();
   }
 
   @Override
-  public int read(byte b[], int off, int len)
-      throws IOException {
+  public int read(byte b[], int off, int len) throws IOException {
     sleep();
     // simulate partial data availability.
     int lenToRead = Math.min(len, InputStreamReadableStreamChannel.BUFFER_SIZE / 2 - 1);

@@ -34,7 +34,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import junit.framework.Assert;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 
 /**
@@ -105,16 +105,14 @@ public class MockCluster {
     serverList.add(server);
   }
 
-  public void startServers()
-      throws InstantiationException {
+  public void startServers() throws InstantiationException {
     serverInitialized = true;
     for (AmbryServer server : serverList) {
       server.startup();
     }
   }
 
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     if (serverInitialized) {
       CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
       for (AmbryServer server : serverList) {
@@ -212,8 +210,7 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     // ignore
   }
 

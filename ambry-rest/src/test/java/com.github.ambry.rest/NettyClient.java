@@ -76,14 +76,12 @@ public class NettyClient implements Closeable {
    * @param hostname the host to connect to.
    * @param port the port to connect to.
    */
-  public NettyClient(String hostname, int port)
-      throws InterruptedException {
+  public NettyClient(String hostname, int port) throws InterruptedException {
     this.hostname = hostname;
     this.port = port;
     b.group(group).channel(NioSocketChannel.class).handler(new ChannelInitializer<SocketChannel>() {
       @Override
-      public void initChannel(SocketChannel ch)
-          throws Exception {
+      public void initChannel(SocketChannel ch) throws Exception {
         ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(communicationHandler);
       }
     });
@@ -145,8 +143,7 @@ public class NettyClient implements Closeable {
    * success of the connect.
    * @throws InterruptedException if the connect is interrupted.
    */
-  private void createChannel()
-      throws InterruptedException {
+  private void createChannel() throws InterruptedException {
     channelConnectFuture = b.connect(hostname, port);
     // add a listener to create a new channel if this channel disconnects.
     ChannelFuture channelCloseFuture = channelConnectFuture.channel().closeFuture();
@@ -205,8 +202,7 @@ public class NettyClient implements Closeable {
   private class ChannelCloseListener implements GenericFutureListener<ChannelFuture> {
 
     @Override
-    public void operationComplete(ChannelFuture future)
-        throws InterruptedException {
+    public void operationComplete(ChannelFuture future) throws InterruptedException {
       if (isOpen.get()) {
         createChannel();
       }

@@ -68,8 +68,7 @@ public class GetRequest extends RequestOrResponse {
     return getOption;
   }
 
-  public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
-      throws IOException {
+  public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.GetRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -91,8 +90,7 @@ public class GetRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
@@ -120,8 +118,8 @@ public class GetRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + message format size + partition request info size + total partition request info list size
-    return super.sizeInBytes() + MessageFormat_Size_In_Bytes +
-        Partition_Request_Info_List_Size + totalPartitionRequestInfoListSize + GetOption_Size_In_Bytes;
+    return super.sizeInBytes() + MessageFormat_Size_In_Bytes + Partition_Request_Info_List_Size
+        + totalPartitionRequestInfoListSize + GetOption_Size_In_Bytes;
   }
 
   @Override

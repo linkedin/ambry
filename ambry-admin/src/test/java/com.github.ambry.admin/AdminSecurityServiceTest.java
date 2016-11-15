@@ -65,8 +65,7 @@ public class AdminSecurityServiceTest {
    * @throws Exception
    */
   @Test
-  public void processRequestTest()
-      throws Exception {
+  public void processRequestTest() throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     //rest request being null
     try {
@@ -120,8 +119,7 @@ public class AdminSecurityServiceTest {
    * @throws Exception
    */
   @Test
-  public void processResponseTest()
-      throws Exception {
+  public void processResponseTest() throws Exception {
     RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, "/", null, null);
     //rest request being null
     try {
@@ -245,8 +243,7 @@ public class AdminSecurityServiceTest {
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}
    * @throws Exception
    */
-  private void testGetBlob(BlobInfo blobInfo)
-      throws Exception {
+  private void testGetBlob(BlobInfo blobInfo) throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, "/", null, null);
@@ -264,8 +261,7 @@ public class AdminSecurityServiceTest {
    * @param ifModifiedSinceMs the value (as a date string) of the {@link RestUtils.Headers#IF_MODIFIED_SINCE} header.
    * @throws Exception
    */
-  private void testGetNotModifiedBlob(BlobInfo blobInfo, long ifModifiedSinceMs)
-      throws Exception {
+  private void testGetNotModifiedBlob(BlobInfo blobInfo, long ifModifiedSinceMs) throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers = new JSONObject();
@@ -279,8 +275,8 @@ public class AdminSecurityServiceTest {
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
-      Assert
-          .assertEquals("Not modified response expected", ResponseStatus.NotModified, restResponseChannel.getStatus());
+      Assert.assertEquals("Not modified response expected", ResponseStatus.NotModified,
+          restResponseChannel.getStatus());
       verifyHeadersForGetBlobNotModified(restResponseChannel);
     } else {
       Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
@@ -295,8 +291,7 @@ public class AdminSecurityServiceTest {
    * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
    * @throws Exception
    */
-  private void testHeadBlob(BlobInfo blobInfo)
-      throws Exception {
+  private void testHeadBlob(BlobInfo blobInfo) throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.HEAD, "/", null, null);
@@ -312,8 +307,7 @@ public class AdminSecurityServiceTest {
    * @param subResource the {@link RestUtils.SubResource}  to test.
    * @throws Exception
    */
-  private void testGetSubResource(RestUtils.SubResource subResource)
-      throws Exception {
+  private void testGetSubResource(RestUtils.SubResource subResource) throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null, null);
@@ -344,8 +338,7 @@ public class AdminSecurityServiceTest {
    * @throws Exception
    */
   private void testExceptionCasesProcessResponse(RestMethod restMethod, RestResponseChannel restResponseChannel,
-      BlobInfo blobInfo, RestServiceErrorCode expectedErrorCode)
-      throws Exception {
+      BlobInfo blobInfo, RestServiceErrorCode expectedErrorCode) throws Exception {
     RestRequest restRequest = AdminTestUtils.createRestRequest(restMethod, "/", null, null);
     SecurityServiceCallback callback = new SecurityServiceCallback();
     try {
@@ -430,8 +423,8 @@ public class AdminSecurityServiceTest {
               .currentTimeMillis());
       Assert.assertEquals("Cache-Control value not as expected", "max-age=" + ADMIN_CONFIG.adminCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
-      Assert
-          .assertNull("Pragma value should not have been set", restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
+      Assert.assertNull("Pragma value should not have been set",
+          restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     }
   }
 
@@ -526,8 +519,7 @@ public class AdminSecurityServiceTest {
     }
 
     @Override
-    public void close()
-        throws IOException {
+    public void close() throws IOException {
     }
 
     @Override
@@ -535,8 +527,7 @@ public class AdminSecurityServiceTest {
     }
 
     @Override
-    public void setStatus(ResponseStatus status)
-        throws RestServiceException {
+    public void setStatus(ResponseStatus status) throws RestServiceException {
       throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
     }
 
@@ -546,8 +537,7 @@ public class AdminSecurityServiceTest {
     }
 
     @Override
-    public void setHeader(String headerName, Object headerValue)
-        throws RestServiceException {
+    public void setHeader(String headerName, Object headerValue) throws RestServiceException {
       throw new RestServiceException("Not Implemented", RestServiceErrorCode.InternalServerError);
     }
 

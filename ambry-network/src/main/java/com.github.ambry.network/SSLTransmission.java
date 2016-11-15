@@ -53,8 +53,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   private long handshakeStartTime;
 
   public SSLTransmission(SSLFactory sslFactory, String connectionId, SocketChannel socketChannel, SelectionKey key,
-      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode)
-      throws IOException {
+      String remoteHost, int remotePort, Time time, NetworkMetrics metrics, SSLFactory.Mode mode) throws IOException {
     super(connectionId, socketChannel, key, time, metrics);
     this.sslEngine = sslFactory.createSSLEngine(remoteHost, remotePort, mode);
     this.netReadBuffer = ByteBuffer.allocate(packetBufferSize());
@@ -66,8 +65,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   /**
    * starts sslEngine handshake process
    */
-  private void startHandshake()
-      throws IOException {
+  private void startHandshake() throws IOException {
     //clear & set netRead & netWrite buffers
     netWriteBuffer.position(0);
     netWriteBuffer.limit(0);
@@ -94,8 +92,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @throws IOException
    */
   @Override
-  public void prepare()
-      throws IOException {
+  public void prepare() throws IOException {
     if (!ready()) {
       handshake();
     }
@@ -149,8 +146,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @return boolean true if the buffer has been emptied out, false otherwise
    * @throws IOException
    */
-  private boolean flush(ByteBuffer buf)
-      throws IOException {
+  private boolean flush(ByteBuffer buf) throws IOException {
     int remaining = buf.remaining();
     if (remaining > 0) {
       int written = socketChannel.write(buf);
@@ -181,8 +177,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    *
    * @throws IOException
    */
-  private void handshake()
-      throws IOException {
+  private void handshake() throws IOException {
     boolean read = key.isReadable();
     boolean write = key.isWritable();
     handshakeComplete = false;
@@ -208,8 +203,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
             int currentPacketBufferSize = packetBufferSize();
             netWriteBuffer = Utils.ensureCapacity(netWriteBuffer, currentPacketBufferSize);
             if (netWriteBuffer.position() >= currentPacketBufferSize) {
-              throw new IllegalStateException("Buffer overflow when available data size (" + netWriteBuffer.position() +
-                  ") >= network buffer size (" + currentPacketBufferSize + ")");
+              throw new IllegalStateException("Buffer overflow when available data size (" + netWriteBuffer.position()
+                  + ") >= network buffer size (" + currentPacketBufferSize + ")");
             }
           } else if (handshakeResult.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
             throw new IllegalStateException("Should not have received BUFFER_UNDERFLOW during handshake WRAP.");
@@ -241,8 +236,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
             int currentAppBufferSize = applicationBufferSize();
             appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentAppBufferSize);
             if (appReadBuffer.position() > currentAppBufferSize) {
-              throw new IllegalStateException("Buffer underflow when available data size (" + appReadBuffer.position() +
-                  ") > packet buffer size (" + currentAppBufferSize + ")");
+              throw new IllegalStateException(
+                  "Buffer underflow when available data size (" + appReadBuffer.position() + ") > packet buffer size ("
+                      + currentAppBufferSize + ")");
             }
           } else if (handshakeResult.getStatus() == SSLEngineResult.Status.CLOSED) {
             throw new EOFException("SSL handshake status CLOSED during handshake UNWRAP");
@@ -297,8 +293,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * Checks if the handshake status is finished
    * Sets the interestOps for the selectionKey.
    */
-  private void handshakeFinished()
-      throws IOException {
+  private void handshakeFinished() throws IOException {
     // SSLEnginge.getHandshakeStatus is transient and it doesn't record FINISHED status properly.
     // It can move from FINISHED status to NOT_HANDSHAKING after the handshake is completed.
     // Hence we also need to check handshakeResult.getHandshakeStatus() if the handshake finished or not
@@ -328,8 +323,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @return SSLEngineResult
    * @throws IOException
    */
-  private SSLEngineResult handshakeWrap(Boolean doWrite)
-      throws IOException {
+  private SSLEngineResult handshakeWrap(Boolean doWrite) throws IOException {
     logger.trace("SSLHandshake handshakeWrap", getConnectionId());
     if (netWriteBuffer.hasRemaining()) {
       throw new IllegalStateException("handshakeWrap called with netWriteBuffer not empty");
@@ -357,8 +351,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @return SSLEngineResult
    * @throws IOException
    */
-  private SSLEngineResult handshakeUnwrap(Boolean doRead)
-      throws IOException {
+  private SSLEngineResult handshakeUnwrap(Boolean doRead) throws IOException {
     logger.trace("SSLHandshake handshakeUnwrap", getConnectionId());
     SSLEngineResult result;
     boolean cont = false;
@@ -388,8 +381,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   @Override
-  public boolean read()
-      throws IOException {
+  public boolean read() throws IOException {
     if (!hasReceive()) {
       this.networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
@@ -414,8 +406,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * @throws IOException if some other I/O error occurs
    */
   @Override
-  public int read(ByteBuffer dst)
-      throws IOException {
+  public int read(ByteBuffer dst) throws IOException {
     if (closing) {
       return -1;
     }
@@ -465,8 +456,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
           int currentApplicationBufferSize = applicationBufferSize();
           appReadBuffer = Utils.ensureCapacity(appReadBuffer, currentApplicationBufferSize);
           if (appReadBuffer.position() >= currentApplicationBufferSize) {
-            throw new IllegalStateException("Buffer overflow when available data size (" + appReadBuffer.position() +
-                ") >= application buffer size (" + currentApplicationBufferSize + ")");
+            throw new IllegalStateException("Buffer overflow when available data size (" + appReadBuffer.position()
+                + ") >= application buffer size (" + currentApplicationBufferSize + ")");
           }
 
           // appReadBuffer will extended upto currentApplicationBufferSize
@@ -481,8 +472,9 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
           int currentPacketBufferSize = packetBufferSize();
           netReadBuffer = Utils.ensureCapacity(netReadBuffer, currentPacketBufferSize);
           if (netReadBuffer.position() >= currentPacketBufferSize) {
-            throw new IllegalStateException("Buffer underflow when available data size (" + netReadBuffer.position() +
-                ") > packet buffer size (" + currentPacketBufferSize + ")");
+            throw new IllegalStateException(
+                "Buffer underflow when available data size (" + netReadBuffer.position() + ") > packet buffer size ("
+                    + currentPacketBufferSize + ")");
           }
           break;
         } else if (unwrapResult.getStatus() == SSLEngineResult.Status.CLOSED) {
@@ -494,8 +486,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
   }
 
   @Override
-  public boolean write()
-      throws IOException {
+  public boolean write() throws IOException {
     Send send = networkSend.getPayload();
     if (send == null) {
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
@@ -526,8 +517,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
    * is called from write() in the same class
    * @throws IOException If some other I/O error occurs
    */
-  public int write(ByteBuffer src)
-      throws IOException {
+  public int write(ByteBuffer src) throws IOException {
     int written = 0;
     if (closing) {
       throw new IllegalStateException("Channel is in closing state");

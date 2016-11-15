@@ -206,8 +206,8 @@ class GetManager {
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {
-        getResponse = GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), clusterMap);
+        getResponse = GetResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())),
+            clusterMap);
         ServerErrorCode serverError = getResponse.getError();
         if (serverError == ServerErrorCode.No_Error) {
           serverError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();

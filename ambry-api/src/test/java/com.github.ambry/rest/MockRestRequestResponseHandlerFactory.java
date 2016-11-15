@@ -41,8 +41,7 @@ public class MockRestRequestResponseHandlerFactory implements RestRequestHandler
    * @return an instance of {@link MockRestRequestResponseHandler}.
    */
   @Override
-  public RestRequestHandler getRestRequestHandler()
-      throws InstantiationException {
+  public RestRequestHandler getRestRequestHandler() throws InstantiationException {
     return getInstance();
   }
 
@@ -51,8 +50,7 @@ public class MockRestRequestResponseHandlerFactory implements RestRequestHandler
    * @return an instance of {@link MockRestRequestResponseHandler}.
    */
   @Override
-  public RestResponseHandler getRestResponseHandler()
-      throws InstantiationException {
+  public RestResponseHandler getRestResponseHandler() throws InstantiationException {
     return getInstance();
   }
 

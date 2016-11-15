@@ -25,13 +25,11 @@ public class ByteBufferOutputStream extends OutputStream {
     this.buffer = buffer;
   }
 
-  public void write(int b)
-      throws IOException {
+  public void write(int b) throws IOException {
     buffer.put((byte) b);
   }
 
-  public void write(byte[] bytes, int off, int len)
-      throws IOException {
+  public void write(byte[] bytes, int off, int len) throws IOException {
     buffer.put(bytes, off, len);
   }
 }

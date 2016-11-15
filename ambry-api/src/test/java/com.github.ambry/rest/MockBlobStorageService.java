@@ -75,8 +75,7 @@ public class MockBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     serviceRunning = true;
   }
 
@@ -320,8 +319,7 @@ class MockGetCallback implements Callback<GetBlobResult> {
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo)
-      throws RestServiceException {
+  private void setResponseHeaders(BlobInfo blobInfo) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
@@ -386,8 +384,7 @@ class MockPostCallback implements Callback<String> {
    * @param location the location of the created resource.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(String location)
-      throws RestServiceException {
+  private void setResponseHeaders(String location) throws RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Created);
     restResponseChannel.setHeader(RestUtils.Headers.LOCATION, location);
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
@@ -490,8 +487,7 @@ class MockHeadCallback implements Callback<GetBlobResult> {
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo)
-      throws RestServiceException {
+  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());

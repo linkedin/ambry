@@ -39,18 +39,16 @@ public class SystemTime extends Time {
 
   @Override
   public long seconds() {
-    return System.currentTimeMillis()/MsPerSec;
+    return System.currentTimeMillis() / MsPerSec;
   }
 
   @Override
-  public void sleep(long ms)
-      throws InterruptedException {
+  public void sleep(long ms) throws InterruptedException {
     Thread.sleep(ms);
   }
 
   @Override
-  public void wait(Object o, long ms)
-    throws InterruptedException {
+  public void wait(Object o, long ms) throws InterruptedException {
     o.wait(ms);
   }
 }

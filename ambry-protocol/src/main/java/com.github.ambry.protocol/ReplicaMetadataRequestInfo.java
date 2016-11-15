@@ -53,8 +53,7 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
-      FindTokenFactory factory)
-      throws IOException {
+      FindTokenFactory factory) throws IOException {
     String hostName = Utils.readIntString(stream);
     String replicaPath = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
@@ -72,9 +71,8 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public long sizeInBytes() {
-    return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes + replicaPath
-        .getBytes().length +
-        +partitionId.getBytes().length + token.toBytes().length;
+    return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
+        + replicaPath.getBytes().length + +partitionId.getBytes().length + token.toBytes().length;
   }
 
   public String toString() {

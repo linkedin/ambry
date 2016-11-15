@@ -30,9 +30,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 public class SSLBlockingChannelTest {
@@ -47,8 +45,7 @@ public class SSLBlockingChannelTest {
    * Run only once for all tests
    */
   @BeforeClass
-  public static void initializeTests()
-      throws Exception {
+  public static void initializeTests() throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
     SSLConfig sslConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
@@ -69,26 +66,22 @@ public class SSLBlockingChannelTest {
    * Run only once for all tests
    */
   @AfterClass
-  public static void finalizeTests()
-      throws Exception {
+  public static void finalizeTests() throws Exception {
     int serverExceptionCount = sslEchoServer.getExceptionCount();
     assertEquals(serverExceptionCount, 0);
     sslEchoServer.close();
   }
 
   @Before
-  public void setup()
-      throws Exception {
+  public void setup() throws Exception {
   }
 
   @After
-  public void teardown()
-      throws Exception {
+  public void teardown() throws Exception {
   }
 
   @Test
-  public void testSendAndReceive()
-      throws Exception {
+  public void testSendAndReceive() throws Exception {
     BlockingChannel channel =
         new SSLBlockingChannel(hostName, sslPort, new MetricRegistry(), 10000, 10000, 10000, 2000, sslSocketFactory,
             clientSSLConfig);
@@ -97,8 +90,7 @@ public class SSLBlockingChannelTest {
   }
 
   @Test
-  public void testRenegotiation()
-      throws Exception {
+  public void testRenegotiation() throws Exception {
     BlockingChannel channel =
         new SSLBlockingChannel(hostName, sslPort, new MetricRegistry(), 10000, 10000, 10000, 2000, sslSocketFactory,
             clientSSLConfig);
@@ -109,8 +101,7 @@ public class SSLBlockingChannelTest {
   }
 
   @Test
-  public void testWrongPortConnection()
-      throws Exception {
+  public void testWrongPortConnection() throws Exception {
     BlockingChannel channel =
         new SSLBlockingChannel(hostName, sslPort + 1, new MetricRegistry(), 10000, 10000, 10000, 2000, sslSocketFactory,
             clientSSLConfig);
@@ -122,8 +113,7 @@ public class SSLBlockingChannelTest {
     }
   }
 
-  private void sendAndReceive(BlockingChannel channel)
-      throws Exception {
+  private void sendAndReceive(BlockingChannel channel) throws Exception {
     long blobSize = 1028;
     byte[] bytesToSend = new byte[(int) blobSize];
     new Random().nextBytes(bytesToSend);

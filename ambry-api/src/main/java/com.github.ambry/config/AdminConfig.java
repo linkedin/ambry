@@ -59,10 +59,10 @@ public class AdminConfig {
 
   public AdminConfig(VerifiableProperties verifiableProperties) {
     adminCacheValiditySeconds = verifiableProperties.getLong("admin.cache.validity.seconds", 365 * 24 * 60 * 60);
-    adminIdConverterFactory = verifiableProperties
-        .getString("admin.id.converter.factory", "com.github.ambry.admin.AdminIdConverterFactory");
-    adminSecurityServiceFactory = verifiableProperties
-        .getString("admin.security.service.factory", "com.github.ambry.admin.AdminSecurityServiceFactory");
+    adminIdConverterFactory =
+        verifiableProperties.getString("admin.id.converter.factory", "com.github.ambry.admin.AdminIdConverterFactory");
+    adminSecurityServiceFactory = verifiableProperties.getString("admin.security.service.factory",
+        "com.github.ambry.admin.AdminSecurityServiceFactory");
     adminPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("admin.path.prefixes.to.remove", "").split(","));
     adminChunkedGetResponseThresholdInBytes =

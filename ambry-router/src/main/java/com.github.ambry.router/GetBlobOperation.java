@@ -127,8 +127,7 @@ class GetBlobOperation extends GetOperation {
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
       FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
       OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
-      BlobIdFactory blobIdFactory, Time time)
-      throws RouterException {
+      BlobIdFactory blobIdFactory, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     this.readyForPollCallback = readyForPollCallback;
@@ -201,8 +200,8 @@ class GetBlobOperation extends GetOperation {
    */
   @Override
   void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
-    GetChunk getChunk = correlationIdToGetChunk
-        .remove(((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
+    GetChunk getChunk = correlationIdToGetChunk.remove(
+        ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
     getChunk.handleResponse(responseInfo, getResponse);
     if (getChunk.isComplete()) {
       onChunkOperationComplete(getChunk);
@@ -330,8 +329,7 @@ class GetBlobOperation extends GetOperation {
     }
 
     @Override
-    public void close()
-        throws IOException {
+    public void close() throws IOException {
       if (isOpen.compareAndSet(true, false)) {
         if (numChunksWrittenOut != numChunksTotal) {
           setOperationException(new RouterException(
@@ -602,8 +600,7 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException if there is an IOException while deserializing the body.
      * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
      */
-    void handleBody(InputStream payload)
-        throws IOException, MessageFormatException {
+    void handleBody(InputStream payload) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(blobData));
@@ -633,8 +630,8 @@ class GetBlobOperation extends GetOperation {
       }
       long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs
-          .update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
+          requestLatencyMs);
       if (responseInfo.getError() != null) {
         chunkException = new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut);
         onErrorResponse(getRequestInfo.replicaId);
@@ -851,8 +848,7 @@ class GetBlobOperation extends GetOperation {
      * or the only chunk of the blob.
      */
     @Override
-    void handleBody(InputStream payload)
-        throws IOException, MessageFormatException {
+    void handleBody(InputStream payload) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
         if (getOperationFlag() == MessageFormatFlags.Blob) {
@@ -910,8 +906,7 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException
      * @throws MessageFormatException
      */
-    private void handleMetadataBlob(BlobData blobData)
-        throws IOException, MessageFormatException {
+    private void handleMetadataBlob(BlobData blobData) throws IOException, MessageFormatException {
       ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
       CompositeBlobInfo compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);

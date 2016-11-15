@@ -13,8 +13,8 @@
  */
 package com.github.ambry.network;
 
-import java.nio.channels.WritableByteChannel;
 import java.io.IOException;
+import java.nio.channels.WritableByteChannel;
 
 
 /**
@@ -28,8 +28,7 @@ public interface Send {
    * @return Number of bytes written
    * @throws IOException
    */
-  long writeTo(WritableByteChannel channel)
-      throws IOException;
+  long writeTo(WritableByteChannel channel) throws IOException;
 
   /**
    * Returns true if the all data has been written

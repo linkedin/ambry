@@ -107,24 +107,33 @@ public class HardDeleteVerifier {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> dataDirOpt = parser
-          .accepts("dataDir", "The data directory of the partition/replica that needs to be verified for hard deletes.")
-          .withRequiredArg().describedAs("data_dir").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> dataDirOpt = parser.accepts("dataDir",
+          "The data directory of the partition/replica that needs to be verified for hard deletes.")
+          .withRequiredArg()
+          .describedAs("data_dir")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> oldDataDirOpt = parser.accepts("oldDataDir",
           "[Optional] The data directory of the partition/replica before hard deletes are run for comparison")
-          .withOptionalArg().describedAs("old_data_dir").ofType(String.class);
+          .withOptionalArg()
+          .describedAs("old_data_dir")
+          .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> outFileOpt =
-          parser.accepts("outFile", "Output file to redirect to ").withRequiredArg().describedAs("outFile")
-              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> outFileOpt = parser.accepts("outFile", "Output file to redirect to ")
+          .withRequiredArg()
+          .describedAs("outFile")
+          .ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -163,8 +172,7 @@ public class HardDeleteVerifier {
     }
   }
 
-  private long getOffsetFromCleanupToken(File cleanupTokenFile)
-      throws Exception {
+  private long getOffsetFromCleanupToken(File cleanupTokenFile) throws Exception {
     long parsedTokenValue = -1;
     if (cleanupTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
@@ -241,8 +249,7 @@ public class HardDeleteVerifier {
    * @return the last offset in the rangeMap.
    * @throws Exception
    */
-  private long readAndPopulateIndex(long offsetUpto)
-      throws Exception {
+  private long readAndPopulateIndex(long offsetUpto) throws Exception {
     final String Index_File_Name_Suffix = "index";
     long lastEligibleSegmentEndOffset = -1;
     File indexDir = new File(dataDir);
@@ -362,8 +369,7 @@ public class HardDeleteVerifier {
    * @throws IOException
    */
 
-  public void verifyHardDeletes()
-      throws Exception {
+  public void verifyHardDeletes() throws Exception {
     if (oldDataDir != null) {
       verify(dataDir, oldDataDir);
     } else {
@@ -371,8 +377,7 @@ public class HardDeleteVerifier {
     }
   }
 
-  private void verify(String dataDir)
-      throws Exception {
+  private void verify(String dataDir) throws Exception {
     final String Cleanup_Token_Filename = "cleanuptoken";
 
     FileWriter fileWriter = null;
@@ -436,8 +441,8 @@ public class HardDeleteVerifier {
               }
 
               if (isDeleted) {
-                if (!verifyZeroed(metadata.array()) || !verifyZeroed(Utils
-                    .readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
+                if (!verifyZeroed(metadata.array()) || !verifyZeroed(
+                    Utils.readBytesFromStream(output.getStream(), new byte[(int) output.getSize()], 0,
                         (int) output.getSize()))) {
                     /* If the offset in the index is different from that in the log, hard delete wouldn't have been
                        possible and we just saw a duplicate put for the same key, otherwise we missed a hard delete. */
@@ -519,8 +524,7 @@ public class HardDeleteVerifier {
     }
   }
 
-  private void verify(String dataDir, String oldDataDir)
-      throws Exception {
+  private void verify(String dataDir, String oldDataDir) throws Exception {
     final String Cleanup_Token_Filename = "cleanuptoken";
 
     FileWriter fileWriter = null;
@@ -653,8 +657,7 @@ public class HardDeleteVerifier {
     }
   }
 
-  void deserializeDeleteRecord(InputStream streamlog, InputStream oldStreamlog)
-      throws ContinueException {
+  void deserializeDeleteRecord(InputStream streamlog, InputStream oldStreamlog) throws ContinueException {
     boolean caughtException = false;
     boolean caughtExceptionInOld = false;
     try {
@@ -710,18 +713,18 @@ public class HardDeleteVerifier {
     if (!caughtException) {
       if (isDeleted) {
         try {
-          asExpected = verifyZeroed(usermetadata.array()) && verifyZeroed(Utils
-              .readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
+          asExpected = verifyZeroed(usermetadata.array()) && verifyZeroed(
+              Utils.readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
                   (int) blobData.getSize()));
         } catch (IOException e) {
           asExpected = false;
         }
       } else {
         try {
-          asExpected = Arrays.equals(usermetadata.array(), oldUsermetadata.array()) && Arrays.equals(Utils
-              .readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
-                  (int) blobData.getSize()), Utils
-              .readBytesFromStream(oldBlobData.getStream(), new byte[(int) oldBlobData.getSize()], 0,
+          asExpected = Arrays.equals(usermetadata.array(), oldUsermetadata.array()) && Arrays.equals(
+              Utils.readBytesFromStream(blobData.getStream(), new byte[(int) blobData.getSize()], 0,
+                  (int) blobData.getSize()),
+              Utils.readBytesFromStream(oldBlobData.getStream(), new byte[(int) oldBlobData.getSize()], 0,
                   (int) oldBlobData.getSize()));
         } catch (IOException e) {
           asExpected = false;
@@ -781,8 +784,7 @@ public class HardDeleteVerifier {
     return true;
   }
 
-  IndexValue readIndexValueFromRangeMap(BlobId id)
-      throws ContinueException {
+  IndexValue readIndexValueFromRangeMap(BlobId id) throws ContinueException {
     IndexValue indexValue = rangeMap.get(id);
     if (indexValue == null) {
       return null;
@@ -790,8 +792,7 @@ public class HardDeleteVerifier {
     return indexValue;
   }
 
-  BlobId readBlobId(InputStream streamlog, InputStream oldStreamlog)
-      throws ContinueException {
+  BlobId readBlobId(InputStream streamlog, InputStream oldStreamlog) throws ContinueException {
     BlobId id = null;
     BlobId idInOld = null;
     boolean caughtException = false;

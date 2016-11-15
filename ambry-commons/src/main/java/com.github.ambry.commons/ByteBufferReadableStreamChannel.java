@@ -72,8 +72,7 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     channelOpen.set(false);
   }
 }

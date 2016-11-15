@@ -97,8 +97,7 @@ public class AdminIntegrationTest {
    * @throws Exception
    */
   @BeforeClass
-  public static void setup()
-      throws Exception {
+  public static void setup() throws Exception {
     adminRestServer = new RestServer(buildAdminVProps(), CLUSTER_MAP, new LoggingNotificationSystem());
     router = InMemoryRouterFactory.getLatestInstance();
     adminRestServer.start();
@@ -123,8 +122,7 @@ public class AdminIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void getHeadDeleteTest()
-      throws Exception {
+  public void getHeadDeleteTest() throws Exception {
     doGetHeadDeleteTest(0, false);
     doGetHeadDeleteTest(0, true);
 
@@ -145,8 +143,7 @@ public class AdminIntegrationTest {
    * @throws IOException
    */
   @Test
-  public void healtCheckRequestTest()
-      throws ExecutionException, InterruptedException, IOException {
+  public void healtCheckRequestTest() throws ExecutionException, InterruptedException, IOException {
     FullHttpRequest httpRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/healthCheck", Unpooled.buffer(0));
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -258,8 +255,7 @@ public class AdminIntegrationTest {
    * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
    * @throws Exception
    */
-  private void doGetHeadDeleteTest(int contentSize, boolean multipartPost)
-      throws Exception {
+  private void doGetHeadDeleteTest(int contentSize, boolean multipartPost) throws Exception {
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(contentSize));
     String serviceId = "getHeadDeleteServiceID";
     String contentType = "application/octet-stream";
@@ -304,8 +300,7 @@ public class AdminIntegrationTest {
    * @throws org.json.JSONException
    */
   private void setAmbryHeaders(HttpHeaders httpHeaders, long contentLength, long ttlInSecs, boolean isPrivate,
-      String serviceId, String contentType, String ownerId)
-      throws JSONException {
+      String serviceId, String contentType, String ownerId) throws JSONException {
     if (httpHeaders != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       httpHeaders.add(RestUtils.Headers.BLOB_SIZE, contentLength);
       httpHeaders.add(RestUtils.Headers.TTL, ttlInSecs);
@@ -328,8 +323,7 @@ public class AdminIntegrationTest {
    * @return the blob ID of the blob.
    * @throws Exception
    */
-  private String putBlob(HttpHeaders headers, ByteBuffer content, byte[] usermetadata)
-      throws Exception {
+  private String putBlob(HttpHeaders headers, ByteBuffer content, byte[] usermetadata) throws Exception {
     Map<String, Object> args = new HashMap<>();
     for (Map.Entry<String, String> entry : headers.entries()) {
       args.put(entry.getKey(), entry.getValue());
@@ -355,8 +349,7 @@ public class AdminIntegrationTest {
    * @throws InterruptedException
    */
   private void getBlobAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
-      ByteBuffer expectedContent)
-      throws ExecutionException, InterruptedException {
+      ByteBuffer expectedContent) throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOption != null) {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
@@ -381,8 +374,7 @@ public class AdminIntegrationTest {
    * @param getOption the options to use while getting the blob.
    * @throws Exception
    */
-  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption)
-      throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption) throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOption != null) {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
@@ -410,8 +402,7 @@ public class AdminIntegrationTest {
    * @throws InterruptedException
    */
   private void getUserMetadataAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
-      byte[] usermetadata)
-      throws ExecutionException, InterruptedException {
+      byte[] usermetadata) throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOption != null) {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
@@ -436,8 +427,7 @@ public class AdminIntegrationTest {
    * @throws InterruptedException
    */
   private void getBlobInfoAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
-      byte[] usermetadata)
-      throws ExecutionException, InterruptedException {
+      byte[] usermetadata) throws ExecutionException, InterruptedException {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOption != null) {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
@@ -547,8 +537,7 @@ public class AdminIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void deleteBlobAndVerify(String blobId)
-      throws ExecutionException, InterruptedException {
+  private void deleteBlobAndVerify(String blobId) throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.ACCEPTED);
   }
@@ -562,8 +551,7 @@ public class AdminIntegrationTest {
    * @throws Exception
    */
   private void verifyOperationsAfterDelete(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent,
-      byte[] usermetadata)
-      throws Exception {
+      byte[] usermetadata) throws Exception {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
 

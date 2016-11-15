@@ -67,8 +67,7 @@ class PerfNioServer implements NioServer {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     logger.info("Starting PerfNioServer");
     loadCreatorThread.start();
     logger.info("Started PerfNioServer");
@@ -139,8 +138,8 @@ class PerfNioServer implements NioServer {
           RestRequest restRequest =
               new PerfRestRequest(perfConfig.perfRequestRestMethod, usermetadata, chunk, perfConfig.perfBlobSize);
           restRequest.getMetricsTracker().nioMetricsTracker.markRequestReceived();
-          restRequestHandler
-              .handleRequest(restRequest, new NoOpRestResponseChannel(restRequest, perfNioServerMetrics, callback));
+          restRequestHandler.handleRequest(restRequest,
+              new NoOpRestResponseChannel(restRequest, perfNioServerMetrics, callback));
         } catch (Exception e) {
           callback.onCompletion(null, e);
         }
@@ -165,8 +164,7 @@ class PerfNioServer implements NioServer {
      * @return {@code true} if shutdown succeeded within the {@code timeout}. {@code false} otherwise.
      * @throws InterruptedException if the wait for shutdown is interrupted.
      */
-    protected boolean shutdown(long timeout, TimeUnit timeUnit)
-        throws InterruptedException {
+    protected boolean shutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
       logger.debug("Shutting down LoadCreator");
       running = false;
       return shutdownLatch.await(timeout, timeUnit);
@@ -267,8 +265,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void close()
-        throws IOException {
+    public void close() throws IOException {
       readableStreamChannel.close();
       restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
       restRequestMetricsTracker.recordMetrics();
@@ -364,8 +361,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void close()
-        throws IOException {
+    public void close() throws IOException {
       onResponseComplete(new ClosedChannelException());
     }
 
@@ -393,8 +389,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void setStatus(ResponseStatus status)
-        throws RestServiceException {
+    public void setStatus(ResponseStatus status) throws RestServiceException {
       responseStatus = status;
     }
 
@@ -404,8 +399,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void setHeader(String headerName, Object headerValue)
-        throws RestServiceException {
+    public void setHeader(String headerName, Object headerValue) throws RestServiceException {
       headers.put(headerName, headerValue);
     }
 

@@ -36,8 +36,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    * List of events of interest to the consumer of the content in this channel.
    */
   public enum EventType {
-    Write,
-    Close,
+    Write, Close,
   }
 
   /**
@@ -123,8 +122,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    *         channel is closed.
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
-  public ByteBuffer getNextChunk()
-      throws InterruptedException {
+  public ByteBuffer getNextChunk() throws InterruptedException {
     ByteBuffer chunkBuf = null;
     if (isOpen()) {
       chunkBuf = getChunkBuffer(chunks.take());
@@ -143,8 +141,7 @@ public class ByteBufferAsyncWritableChannel implements AsyncWritableChannel {
    *          expires.
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
-  public ByteBuffer getNextChunk(long timeoutInMs)
-      throws InterruptedException {
+  public ByteBuffer getNextChunk(long timeoutInMs) throws InterruptedException {
     ByteBuffer chunkBuf = null;
     if (isOpen()) {
       chunkBuf = getChunkBuffer(chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS));

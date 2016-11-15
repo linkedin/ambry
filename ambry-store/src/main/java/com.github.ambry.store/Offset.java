@@ -53,8 +53,7 @@ class Offset implements Comparable<Offset> {
    * of the record is not recognized.
    * @throws IOException if there are I/O problems reading from the stream.
    */
-  static Offset fromBytes(DataInputStream stream)
-      throws IOException {
+  static Offset fromBytes(DataInputStream stream) throws IOException {
     String name;
     long offset;
     int version = stream.readShort();

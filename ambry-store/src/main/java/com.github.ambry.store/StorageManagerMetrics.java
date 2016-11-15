@@ -16,8 +16,6 @@ package com.github.ambry.store;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import java.util.HashMap;
-import java.util.Map;
 
 
 /**

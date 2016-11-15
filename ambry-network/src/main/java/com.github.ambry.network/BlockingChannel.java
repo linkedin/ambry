@@ -51,8 +51,7 @@ public class BlockingChannel implements ConnectedChannel {
     this.connectTimeoutMs = connectTimeoutMs;
   }
 
-  public void connect()
-      throws IOException {
+  public void connect() throws IOException {
     synchronized (lock) {
       if (!connected) {
         channel = SocketChannel.open();
@@ -71,7 +70,7 @@ public class BlockingChannel implements ConnectedChannel {
         readChannel = channel.socket().getInputStream();
         connected = true;
         logger.debug("Created socket with SO_TIMEOUT = {} (requested {}), "
-            + "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})", channel.socket().getSoTimeout(),
+                + "SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {})", channel.socket().getSoTimeout(),
             readTimeoutMs, channel.socket().getReceiveBufferSize(), readBufferSize,
             channel.socket().getSendBufferSize(), writeBufferSize);
       }
@@ -108,8 +107,7 @@ public class BlockingChannel implements ConnectedChannel {
   }
 
   @Override
-  public void send(Send request)
-      throws IOException {
+  public void send(Send request) throws IOException {
     if (!connected) {
       throw new ClosedChannelException();
     }
@@ -119,8 +117,7 @@ public class BlockingChannel implements ConnectedChannel {
   }
 
   @Override
-  public ChannelOutput receive()
-      throws IOException {
+  public ChannelOutput receive() throws IOException {
     if (!connected) {
       throw new ClosedChannelException();
     }

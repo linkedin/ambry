@@ -37,8 +37,7 @@ public class InMemoryRouterFactory implements RouterFactory {
   }
 
   @Override
-  public Router getRouter()
-      throws InstantiationException {
+  public Router getRouter() throws InstantiationException {
     latestInstance = new InMemoryRouter(verifiableProperties, notificationSystem);
     return latestInstance;
   }

@@ -13,8 +13,8 @@
  */
 package com.github.ambry.store;
 
-import java.nio.ByteBuffer;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 
 /**
@@ -29,6 +29,5 @@ public interface Read {
    * @param position The position to start the read from
    * @throws IOException
    */
-  void readInto(ByteBuffer buffer, long position)
-      throws IOException;
+  void readInto(ByteBuffer buffer, long position) throws IOException;
 }

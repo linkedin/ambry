@@ -71,12 +71,14 @@ public class ClusterMapConfig {
         "com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory");
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
-    clusterMapFixedTimeoutDataNodeRetryBackoffMs = verifiableProperties
-        .getIntInRange("clustermap.fixedtimeout.datanode.retry.backoff.ms", 5 * 60 * 1000, 1, 20 * 60 * 1000);
+    clusterMapFixedTimeoutDataNodeRetryBackoffMs =
+        verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.retry.backoff.ms", 5 * 60 * 1000, 1,
+            20 * 60 * 1000);
     clusterMapFixedTimeoutDiskErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.error.threshold", 1, 1, 100);
-    clusterMapFixedTimeoutDiskRetryBackoffMs = verifiableProperties
-        .getIntInRange("clustermap.fixedtimeout.disk.retry.backoff.ms", 10 * 60 * 1000, 1, 30 * 60 * 1000);
+    clusterMapFixedTimeoutDiskRetryBackoffMs =
+        verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.retry.backoff.ms", 10 * 60 * 1000, 1,
+            30 * 60 * 1000);
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
   }
 }

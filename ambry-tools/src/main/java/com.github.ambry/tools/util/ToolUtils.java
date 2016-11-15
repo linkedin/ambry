@@ -30,8 +30,7 @@ public final class ToolUtils {
       ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt,
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt, ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
-      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt)
-      throws Exception {
+      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt) throws Exception {
     String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
     if (sslEnabledDatacenters.length() != 0) {
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();

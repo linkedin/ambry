@@ -39,8 +39,7 @@ public class ServerPlaintextTokenTest {
   private MockCluster plaintextCluster;
 
   @Before
-  public void initializeTests()
-      throws Exception {
+  public void initializeTests() throws Exception {
     routerProps = new Properties();
     notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
@@ -48,8 +47,7 @@ public class ServerPlaintextTokenTest {
   }
 
   @After
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     System.out.println("About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {

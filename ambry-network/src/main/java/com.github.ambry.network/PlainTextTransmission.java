@@ -38,8 +38,7 @@ public class PlainTextTransmission extends Transmission {
    * @throws IOException
    */
   @Override
-  public void prepare()
-      throws IOException {
+  public void prepare() throws IOException {
   }
 
   /**
@@ -58,8 +57,7 @@ public class PlainTextTransmission extends Transmission {
    * @throws IOException if some other I/O error occurs
    */
   @Override
-  public boolean read()
-      throws IOException {
+  public boolean read() throws IOException {
     if (!hasReceive()) {
       networkReceive = new NetworkReceive(getConnectionId(), new BoundedByteBufferReceive(), time);
     }
@@ -81,8 +79,7 @@ public class PlainTextTransmission extends Transmission {
    * @throws IOException If some other I/O error occurs
    */
   @Override
-  public boolean write()
-      throws IOException {
+  public boolean write() throws IOException {
     Send send = networkSend.getPayload();
     if (send == null) {
       throw new IllegalStateException("Registered for write interest but no response attached to key.");
@@ -90,8 +87,8 @@ public class PlainTextTransmission extends Transmission {
     long startTimeMs = SystemTime.getInstance().milliseconds();
     long bytesWritten = send.writeTo(socketChannel);
     long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    logger.trace("Bytes written {} to {} using key {} Time: {}",
-        bytesWritten, socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
+    logger.trace("Bytes written {} to {} using key {} Time: {}", bytesWritten,
+        socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     if (bytesWritten > 0) {
       metrics.plaintextSendTimePerKB.update(writeTimeMs * 1024 / bytesWritten);
     }

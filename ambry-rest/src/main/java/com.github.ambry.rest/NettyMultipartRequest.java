@@ -125,8 +125,7 @@ class NettyMultipartRequest extends NettyRequest {
    * @throws RestServiceException if request channel has been closed.
    */
   @Override
-  public void addContent(HttpContent httpContent)
-      throws RestServiceException {
+  public void addContent(HttpContent httpContent) throws RestServiceException {
     if (!isOpen()) {
       nettyMetrics.multipartRequestAlreadyClosedError.inc();
       throw new RestServiceException("The request has been closed and is not accepting content",
@@ -143,8 +142,7 @@ class NettyMultipartRequest extends NettyRequest {
    * @throws RestServiceException if request channel is closed or if the request could not be decoded/prepared.
    */
   @Override
-  public void prepare()
-      throws RestServiceException {
+  public void prepare() throws RestServiceException {
     if (!isOpen()) {
       nettyMetrics.multipartRequestAlreadyClosedError.inc();
       throw new RestServiceException("Request is closed", RestServiceErrorCode.RequestChannelClosed);
@@ -191,8 +189,7 @@ class NettyMultipartRequest extends NettyRequest {
    *                              the size obtained from the headers does not match the actual size of the blob part or
    *                              if {@code part} is not of the expected type ({@link FileUpload}).
    */
-  private void processPart(InterfaceHttpData part)
-      throws RestServiceException {
+  private void processPart(InterfaceHttpData part) throws RestServiceException {
     if (part.getHttpDataType() == InterfaceHttpData.HttpDataType.FileUpload) {
       FileUpload fileUpload = (FileUpload) part;
       if (fileUpload.getName().equals(RestUtils.MultipartPost.BLOB_PART)) {

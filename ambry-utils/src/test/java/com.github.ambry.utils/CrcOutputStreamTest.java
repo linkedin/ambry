@@ -25,8 +25,7 @@ import org.junit.Test;
  */
 public class CrcOutputStreamTest {
   @Test
-  public void testCrcOutputStream()
-      throws IOException {
+  public void testCrcOutputStream() throws IOException {
     byte[] buf = new byte[4000];
     ByteBufferOutputStream stream = new ByteBufferOutputStream(ByteBuffer.wrap(buf));
     CrcOutputStream crcStream = new CrcOutputStream(stream);

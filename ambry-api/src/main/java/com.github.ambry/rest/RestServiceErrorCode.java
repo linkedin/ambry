@@ -61,31 +61,25 @@ public enum RestServiceErrorCode {
   /**
    * Generic BadRequest error code when a client provides a request that is not fit for processing.
    */
-  BadRequest,
-  /**
+  BadRequest, /**
    * Client has sent arguments (whether in the URI or in the headers) that are not in the format that is expected or if
    * the number of values for an argument expected by the server does not match what the client sent.
    */
-  InvalidArgs,
-  /**
+  InvalidArgs, /**
    * Client has sent request content without sending request metadata first or has sent content when no content
    * was expected (for e.g. content with {@link RestMethod#GET}).
    */
-  InvalidRequestState,
-  /**
+  InvalidRequestState, /**
    * Client has sent a request that cannot be decoded using the REST protocol (usually HTTP).
    */
-  MalformedRequest,
-  /**
+  MalformedRequest, /**
    * Client has sent a request that is missing some arguments (whether in the URI or in the headers) necessary to
    * service the request.
    */
-  MissingArgs,
-  /**
+  MissingArgs, /**
    * Client is requesting a HTTP method that is not supported.
    */
-  UnsupportedHttpMethod,
-  /**
+  UnsupportedHttpMethod, /**
    * Range request is not satisfiable (because the provided range is invalid or outside of the bounds of an object.)
    */
   RangeNotSatisfiable,
@@ -94,24 +88,19 @@ public enum RestServiceErrorCode {
    * Generic InternalServerError that is a result of problems on the server side that is not caused by the client and
    * there is nothing that a client can do about it.
    */
-  InternalServerError,
-  /**
+  InternalServerError, /**
    * Indicates that {@link IdConverter} encountered some exception during ID conversion
    */
-  IdConverterServiceError,
-  /**
+  IdConverterServiceError, /**
    * Indicates that a {@link RestRequest} has been closed and an operation could not be performed on it.
    */
-  RequestChannelClosed,
-  /**
+  RequestChannelClosed, /**
    * Indicates that the submitted request or response could not be queued in the AsyncRequestResponseHandler.
    */
-  RequestResponseQueuingFailure,
-  /**
+  RequestResponseQueuingFailure, /**
    * Indicates that an internal service is unavailable either because it is not started, is shutdown or has crashed.
    */
-  ServiceUnavailable,
-  /**
+  ServiceUnavailable, /**
    * Indicates a {@link RestMethod} is not supported (May also indicate a bug where behaviour for a new
    * {@link RestMethod} has not been defined in the implementation).
    */

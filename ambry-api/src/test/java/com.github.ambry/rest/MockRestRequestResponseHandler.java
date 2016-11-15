@@ -43,8 +43,7 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
   private BlobStorageService blobStorageService = null;
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     if (blobStorageService == null) {
       throw new InstantiationException("BlobStorageService not set");
     }
@@ -103,8 +102,7 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
    */
   @Override
   public void handleResponse(RestRequest restRequest, final RestResponseChannel restResponseChannel,
-      final ReadableStreamChannel response, Exception exception)
-      throws RestServiceException {
+      final ReadableStreamChannel response, Exception exception) throws RestServiceException {
     if (shouldProceed(restRequest, restResponseChannel)) {
       if (exception != null || response == null) {
         onResponseComplete(restResponseChannel, response, exception);
@@ -166,8 +164,8 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
       throw new RestServiceException("MockRestRequestResponseHandler is not running",
           RestServiceErrorCode.ServiceUnavailable);
     } else if (failureProperties != null) {
-      if (failureProperties.containsKey(RUNTIME_EXCEPTION_ON_HANDLE) && failureProperties
-          .getBoolean(RUNTIME_EXCEPTION_ON_HANDLE)) {
+      if (failureProperties.containsKey(RUNTIME_EXCEPTION_ON_HANDLE) && failureProperties.getBoolean(
+          RUNTIME_EXCEPTION_ON_HANDLE)) {
         throw new RuntimeException(RUNTIME_EXCEPTION_ON_HANDLE);
       } else if (failureProperties.containsKey(REST_EXCEPTION_ON_HANDLE)) {
         RestServiceErrorCode errorCode = RestServiceErrorCode.InternalServerError;

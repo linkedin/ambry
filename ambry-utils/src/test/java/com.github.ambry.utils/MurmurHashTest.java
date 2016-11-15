@@ -15,8 +15,8 @@ package com.github.ambry.utils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import org.junit.Test;
 import org.junit.Assert;
+import org.junit.Test;
 
 
 /**
@@ -24,8 +24,7 @@ import org.junit.Assert;
  */
 public class MurmurHashTest {
   @Test
-  public void testCrcOutputStream()
-      throws IOException {
+  public void testCrcOutputStream() throws IOException {
     byte[] buf = new byte[1024];
     int hash1 = MurmurHash.hash32(ByteBuffer.wrap(buf), 0, 1024, 10);
     int hash2 = MurmurHash.hash32(ByteBuffer.wrap(buf), 0, 1024, 10);

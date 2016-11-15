@@ -78,8 +78,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
@@ -100,8 +99,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + Replica_Metadata_Request_Info_List_Size_In_Bytes +
-        replicaMetadataRequestInfoListSizeInBytes + Max_Entries_Size_In_Bytes;
+    return super.sizeInBytes() + Replica_Metadata_Request_Info_List_Size_In_Bytes
+        + replicaMetadataRequestInfoListSizeInBytes + Max_Entries_Size_In_Bytes;
   }
 
   @Override

@@ -23,10 +23,8 @@ import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
-
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -37,8 +35,7 @@ public class BloomFilterTest {
     bf = FilterFactory.getFilter(10000L, FilterTestHelper.MAX_FAILURE_RATE);
   }
 
-  public static IFilter testSerialize(IFilter f)
-      throws IOException {
+  public static IFilter testSerialize(IFilter f) throws IOException {
     f.add(ByteBuffer.wrap("a".getBytes()));
     ByteBuffer output = ByteBuffer.allocate(100000);
     DataOutputStream out = new DataOutputStream(new ByteBufferOutputStream(output));
@@ -94,13 +91,12 @@ public class BloomFilterTest {
     }
     IFilter bf2 = FilterFactory.getFilter(KeyGenerator.WordGenerator.WORDS / 2, FilterTestHelper.MAX_FAILURE_RATE);
     int skipEven = KeyGenerator.WordGenerator.WORDS % 2 == 0 ? 0 : 2;
-    FilterTestHelper
-        .testFalsePositives(bf2, new KeyGenerator.WordGenerator(skipEven, 2), new KeyGenerator.WordGenerator(1, 2));
+    FilterTestHelper.testFalsePositives(bf2, new KeyGenerator.WordGenerator(skipEven, 2),
+        new KeyGenerator.WordGenerator(1, 2));
   }
 
   @Test
-  public void testSerialize()
-      throws IOException {
+  public void testSerialize() throws IOException {
     BloomFilterTest.testSerialize(bf);
   }
 
@@ -126,8 +122,7 @@ public class BloomFilterTest {
   }
 
   @Test
-  public void testHugeBFSerialization()
-      throws IOException {
+  public void testHugeBFSerialization() throws IOException {
     ByteBuffer test = ByteBuffer.wrap(new byte[]{0, 1});
 
     File f = File.createTempFile("bloomFilterTest-", ".dat");

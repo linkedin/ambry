@@ -92,6 +92,5 @@ public interface Router extends Closeable {
    * if any.
    * @throws IOException if an I/O error occurs.
    */
-  public void close()
-      throws IOException;
+  public void close() throws IOException;
 }

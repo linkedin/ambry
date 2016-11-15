@@ -130,8 +130,7 @@ public class ConsistencyCheckerTool {
     }
   }
 
-  public boolean checkConsistency(String directoryForConsistencyCheck)
-      throws Exception {
+  public boolean checkConsistency(String directoryForConsistencyCheck) throws Exception {
     return false;
   }
 
@@ -145,8 +144,7 @@ public class ConsistencyCheckerTool {
     }
 
     @Override
-    public boolean checkConsistency(String directoryForConsistencyCheck)
-        throws Exception {
+    public boolean checkConsistency(String directoryForConsistencyCheck) throws Exception {
       File rootDir = new File(directoryForConsistencyCheck);
       logger.info("Root directory for Partition" + rootDir);
       ArrayList<String> replicaList = populateReplicaList(rootDir);
@@ -279,8 +277,7 @@ public class ConsistencyCheckerTool {
     }
 
     @Override
-    public boolean checkConsistency(String directoryForConsistencyCheck)
-        throws Exception {
+    public boolean checkConsistency(String directoryForConsistencyCheck) throws Exception {
       boolean isConsistent = true;
       File rootDir = new File(directoryForConsistencyCheck);
       logger.info("Root directory for Partition is " + rootDir);
@@ -294,8 +291,7 @@ public class ConsistencyCheckerTool {
       return isConsistent;
     }
 
-    public boolean checkSingleReplica(File replicaFolder)
-        throws Exception {
+    public boolean checkSingleReplica(File replicaFolder) throws Exception {
       boolean isConsistent = true;
       File[] indexFiles = replicaFolder.listFiles();
       Arrays.sort(indexFiles, new IndexFileNameComparator());
@@ -334,8 +330,7 @@ public class ConsistencyCheckerTool {
       return Long.parseLong(name.substring(0, name.indexOf("_")));
     }
 
-    private long getLogOffsetEnd(File indexFile)
-        throws Exception {
+    private long getLogOffsetEnd(File indexFile) throws Exception {
       long fileEndPointer;
       DataInputStream stream = new DataInputStream(new FileInputStream(indexFile));
       short version = stream.readShort();

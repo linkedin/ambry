@@ -33,15 +33,13 @@ import org.junit.Test;
 public class MessageSievingInputStreamTest {
 
   @Test
-  public void testValidBlobsAgainstCorruption()
-      throws IOException, MessageFormatException {
+  public void testValidBlobsAgainstCorruption() throws IOException, MessageFormatException {
     testValidBlobs(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
     testValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
     testValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
   }
 
-  public void testValidBlobs(short blobVersion, BlobType blobType)
-      throws IOException, MessageFormatException {
+  public void testValidBlobs(short blobVersion, BlobType blobType) throws IOException, MessageFormatException {
 
     // MessageSievingInputStream contains put records for 3 valid blobs
     // id1(put record for valid blob), id2(put record for valid blob) and id3(put record for valid blob)
@@ -127,11 +125,11 @@ public class MessageSievingInputStreamTest {
         new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
             + (int) messageFormatStream3.getSize()];
     messageFormatStream1.read(totalMessageStreamContent, 0, (int) messageFormatStream1.getSize());
-    messageFormatStream2
-        .read(totalMessageStreamContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
-    messageFormatStream3
-        .read(totalMessageStreamContent, (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
-            (int) messageFormatStream3.getSize());
+    messageFormatStream2.read(totalMessageStreamContent, (int) messageFormatStream1.getSize(),
+        (int) messageFormatStream2.getSize());
+    messageFormatStream3.read(totalMessageStreamContent,
+        (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
+        (int) messageFormatStream3.getSize());
 
     InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(totalMessageStreamContent));
 
@@ -174,15 +172,13 @@ public class MessageSievingInputStreamTest {
   }
 
   @Test
-  public void testInValidBlobsAgainstCorruption()
-      throws IOException, MessageFormatException {
+  public void testInValidBlobsAgainstCorruption() throws IOException, MessageFormatException {
     testInValidBlobs(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
     testInValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
     testInValidBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
   }
 
-  private void testInValidBlobs(short blobVersion, BlobType blobType)
-      throws IOException, MessageFormatException {
+  private void testInValidBlobs(short blobVersion, BlobType blobType) throws IOException, MessageFormatException {
 
     // MessageSievingInputStream contains put records for 2 valid blobs and 1 corrupt blob
     // id1(put record for valid blob), id2(corrupt) and id3(put record for valid blob)
@@ -275,11 +271,11 @@ public class MessageSievingInputStreamTest {
         new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
             + (int) messageFormatStream3.getSize()];
     messageFormatStream1.read(totalMessageStreamContent, 0, (int) messageFormatStream1.getSize());
-    corruptStream
-        .read(totalMessageStreamContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
-    messageFormatStream3
-        .read(totalMessageStreamContent, (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
-            (int) messageFormatStream3.getSize());
+    corruptStream.read(totalMessageStreamContent, (int) messageFormatStream1.getSize(),
+        (int) messageFormatStream2.getSize());
+    messageFormatStream3.read(totalMessageStreamContent,
+        (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
+        (int) messageFormatStream3.getSize());
 
     InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(totalMessageStreamContent));
 
@@ -318,15 +314,13 @@ public class MessageSievingInputStreamTest {
   }
 
   @Test
-  public void testDeletedBlobsAgainstCorruption()
-      throws IOException, MessageFormatException {
+  public void testDeletedBlobsAgainstCorruption() throws IOException, MessageFormatException {
     testDeletedBlobs(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
     testDeletedBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
     testDeletedBlobs(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
   }
 
-  private void testDeletedBlobs(short blobVersion, BlobType blobType)
-      throws IOException, MessageFormatException {
+  private void testDeletedBlobs(short blobVersion, BlobType blobType) throws IOException, MessageFormatException {
 
     // MessageSievingInputStream contains put records for 2 valid blobs and 1 deleted blob
     // id1(put record for valid blob), id2(delete record) and id3(put record for valid blob)
@@ -388,11 +382,11 @@ public class MessageSievingInputStreamTest {
       byte[] totalMessageContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()
           + (int) messageFormatStream3.getSize()];
       messageFormatStream1.read(totalMessageContent, 0, (int) messageFormatStream1.getSize());
-      messageFormatStream2
-          .read(totalMessageContent, (int) messageFormatStream1.getSize(), (int) messageFormatStream2.getSize());
-      messageFormatStream3
-          .read(totalMessageContent, (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
-              (int) messageFormatStream3.getSize());
+      messageFormatStream2.read(totalMessageContent, (int) messageFormatStream1.getSize(),
+          (int) messageFormatStream2.getSize());
+      messageFormatStream3.read(totalMessageContent,
+          (int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize(),
+          (int) messageFormatStream3.getSize());
 
       InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(totalMessageContent));
 
@@ -411,8 +405,7 @@ public class MessageSievingInputStreamTest {
 
   private boolean verifyBlob(MessageSievingInputStream validMessageDetectionInputStream, int headerSize,
       int blobPropertiesRecordSize, int userMetadataSize, int blobSize, StoreKey key, int blobPropertiesSize,
-      String serviceId, byte[] usermetadata, byte[] data, short blobVersion, BlobType blobType)
-      throws IOException {
+      String serviceId, byte[] usermetadata, byte[] data, short blobVersion, BlobType blobType) throws IOException {
     // verify header
     byte[] headerOutput = new byte[headerSize];
     validMessageDetectionInputStream.read(headerOutput);
@@ -422,8 +415,8 @@ public class MessageSievingInputStreamTest {
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
     Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize, headerBuf.getInt());
-    Assert
-        .assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize, headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize,
+        headerBuf.getInt());
     Crc32 crc = new Crc32();
     crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
@@ -441,8 +434,8 @@ public class MessageSievingInputStreamTest {
     ByteBuffer blobPropertiesBuf = ByteBuffer.wrap(blobPropertiesOutput);
     validMessageDetectionInputStream.read(blobPropertiesOutput);
     Assert.assertEquals(blobPropertiesBuf.getShort(), 1);
-    BlobProperties propOutput = BlobPropertiesSerDe
-        .getBlobPropertiesFromStream(new DataInputStream(new ByteBufferInputStream(blobPropertiesBuf)));
+    BlobProperties propOutput = BlobPropertiesSerDe.getBlobPropertiesFromStream(
+        new DataInputStream(new ByteBufferInputStream(blobPropertiesBuf)));
     Assert.assertEquals(blobPropertiesSize, propOutput.getBlobSize());
     Assert.assertEquals(serviceId, propOutput.getServiceId());
     crc = new Crc32();

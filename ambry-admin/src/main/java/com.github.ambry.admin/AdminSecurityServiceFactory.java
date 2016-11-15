@@ -35,8 +35,7 @@ public class AdminSecurityServiceFactory implements SecurityServiceFactory {
   }
 
   @Override
-  public SecurityService getSecurityService()
-      throws InstantiationException {
+  public SecurityService getSecurityService() throws InstantiationException {
     return new AdminSecurityService(adminConfig, adminMetrics);
   }
 }

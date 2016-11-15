@@ -95,8 +95,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
-        throws IOException {
+    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
       ByteBuffer bufferToWrite = bytebuffers.get(0);
       bufferToWrite.position((int) relativeOffset);
       bufferToWrite.limit((int) Math.min(maxSize, bufferToWrite.capacity()));
@@ -134,16 +133,14 @@ public class ReplicationTest {
       }
 
       @Override
-      public int appendFrom(ByteBuffer buffer)
-          throws IOException {
+      public int appendFrom(ByteBuffer buffer) throws IOException {
         buflist.get(index).put(buffer);
         index++;
         return buffer.capacity();
       }
 
       @Override
-      public void appendFrom(ReadableByteChannel channel, long size)
-          throws IOException {
+      public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
         int sizeRead = 0;
         while (sizeRead < size) {
           sizeRead += channel.read(buflist.get(index++));
@@ -186,14 +183,12 @@ public class ReplicationTest {
     }
 
     @Override
-    public void start()
-        throws StoreException {
+    public void start() throws StoreException {
 
     }
 
     @Override
-    public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> getOptions)
-        throws StoreException {
+    public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> getOptions) throws StoreException {
       List<MessageInfo> infoOutput = new ArrayList<MessageInfo>();
       List<ByteBuffer> buffers = new ArrayList<ByteBuffer>();
       List<StoreKey> keys = new ArrayList<StoreKey>();
@@ -212,8 +207,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void put(MessageWriteSet messageSetToWrite)
-        throws StoreException {
+    public void put(MessageWriteSet messageSetToWrite) throws StoreException {
       List<MessageInfo> messageInfoListTemp = messageSetToWrite.getMessageSetInfo();
       List<ByteBuffer> buffersToWrite = new ArrayList<ByteBuffer>();
       for (MessageInfo messageInfo : messageInfoListTemp) {
@@ -233,8 +227,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void delete(MessageWriteSet messageSetToDelete)
-        throws StoreException {
+    public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
       int index = 0;
       MessageInfo messageInfoFound = null;
       for (MessageInfo messageInfo : messageInfoList) {
@@ -249,8 +242,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries)
-        throws StoreException {
+    public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
       MockFindToken tokenmock = (MockFindToken) token;
       List<MessageInfo> entriesToReturn = new ArrayList<MessageInfo>();
       long currentSizeOfEntriesInBytes = 0;
@@ -272,8 +264,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public Set<StoreKey> findMissingKeys(List<StoreKey> keys)
-        throws StoreException {
+    public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
       Set<StoreKey> keysMissing = new HashSet<StoreKey>();
       for (StoreKey key : keys) {
         boolean found = false;
@@ -291,8 +282,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public boolean isKeyDeleted(StoreKey key)
-        throws StoreException {
+    public boolean isKeyDeleted(StoreKey key) throws StoreException {
       for (MessageInfo messageInfo : messageInfoList) {
         if (messageInfo.getStoreKey().equals(key) && messageInfo.isDeleted()) {
           return true;
@@ -307,8 +297,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void shutdown()
-        throws StoreException {
+    public void shutdown() throws StoreException {
     }
   }
 
@@ -330,8 +319,7 @@ public class ReplicationTest {
       }
 
       @Override
-      public long writeTo(WritableByteChannel channel)
-          throws IOException {
+      public long writeTo(WritableByteChannel channel) throws IOException {
         long written = channel.write(bufferList.get(index));
         index++;
         return written;
@@ -368,8 +356,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void send(Send request)
-        throws IOException {
+    public void send(Send request) throws IOException {
       if (request instanceof ReplicaMetadataRequest) {
         metadataRequest = (ReplicaMetadataRequest) request;
       }
@@ -397,14 +384,12 @@ public class ReplicationTest {
     }
 
     @Override
-    public ChannelOutput receive()
-        throws IOException {
+    public ChannelOutput receive() throws IOException {
       Response response = null;
       if (metadataRequest != null) {
         List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
             new ArrayList<ReplicaMetadataResponseInfo>();
-        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest
-            .getReplicaMetadataRequestInfoList()) {
+        for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : metadataRequest.getReplicaMetadataRequestInfoList()) {
           List<MessageInfo> messageInfoToReturn = new ArrayList<MessageInfo>();
           int startIndex = ((MockFindToken) (replicaMetadataRequestInfo.getToken())).getIndex();
           int endIndex = Math.min(messageInfoForPartition.get(replicaMetadataRequestInfo.getPartitionId()).size(),
@@ -496,8 +481,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaThreadTest()
-      throws InterruptedException, IOException {
+  public void replicaThreadTest() throws InterruptedException, IOException {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
@@ -697,8 +681,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaTokenTest()
-      throws InterruptedException {
+  public void replicaTokenTest() throws InterruptedException {
     final long tokenPersistInterval = 100;
     Time time = new MockTime();
     MockFindToken token1 = new MockFindToken(0, 0);
@@ -751,8 +734,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaThreadTestForExpiredBlobs()
-      throws InterruptedException, IOException {
+  public void replicaThreadTestForExpiredBlobs() throws InterruptedException, IOException {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
@@ -968,8 +950,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaThreadTestWithCorruptMessages()
-      throws InterruptedException, IOException {
+  public void replicaThreadTestWithCorruptMessages() throws InterruptedException, IOException {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();

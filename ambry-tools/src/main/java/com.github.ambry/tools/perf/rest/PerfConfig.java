@@ -80,8 +80,8 @@ class PerfConfig {
     perfNioServerChunkSize = verifiableProperties.getIntInRange("perf.nio.server.chunk.size", 8192, 1, 10485760);
     perfNioServerConcurrency =
         verifiableProperties.getIntInRange("perf.nio.server.concurrency", 1, 1, Integer.MAX_VALUE);
-    perfRequestRestMethod = RestMethod
-        .valueOf(verifiableProperties.getString("perf.request.rest.method", RestMethod.GET.toString()).toUpperCase());
+    perfRequestRestMethod = RestMethod.valueOf(
+        verifiableProperties.getString("perf.request.rest.method", RestMethod.GET.toString()).toUpperCase());
 
     // PerfRouter
     perfRouterChunkSize = verifiableProperties.getIntInRange("perf.router.chunk.size", 1048576, 1, 10485760);

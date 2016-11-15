@@ -14,14 +14,13 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.ByteBufferInputStream;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class SocketRequestResponseChannelTest {
@@ -39,8 +38,7 @@ public class SocketRequestResponseChannelTest {
     public int sendcall = 1;
 
     @Override
-    public long writeTo(WritableByteChannel channel)
-        throws IOException {
+    public long writeTo(WritableByteChannel channel) throws IOException {
       // no implementation
       return 0;
     }

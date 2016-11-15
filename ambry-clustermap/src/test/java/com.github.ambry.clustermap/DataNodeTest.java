@@ -22,10 +22,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 // TestDataNode permits DataNode to be constructed with a null Datacenter.
@@ -75,14 +72,12 @@ public class DataNodeTest {
   private static final int diskCount = 10;
   private static final long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
-  JSONArray getDisks()
-      throws JSONException {
+  JSONArray getDisks() throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
   }
 
   @Test
-  public void basics()
-      throws JSONException {
+  public void basics() throws JSONException {
 
     JSONObject jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
@@ -112,8 +107,7 @@ public class DataNodeTest {
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
   }
 
-  public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
-      throws JSONException {
+  public void failValidation(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     try {
       new TestDataNode("datacenter", jsonObject, clusterMapConfig);
       fail("Construction of TestDataNode should have failed validation.");
@@ -123,8 +117,7 @@ public class DataNodeTest {
   }
 
   @Test
-  public void validation()
-      throws JSONException {
+  public void validation() throws JSONException {
     JSONObject jsonObject;
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
 
@@ -174,8 +167,7 @@ public class DataNodeTest {
   }
 
   @Test
-  public void testSoftState()
-      throws JSONException, InterruptedException {
+  public void testSoftState() throws JSONException, InterruptedException {
     JSONObject jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
     Properties props = new Properties();
@@ -211,8 +203,7 @@ public class DataNodeTest {
    * @throws Exception
    */
   @Test
-  public void validateGetPort()
-      throws Exception {
+  public void validateGetPort() throws Exception {
     ClusterMapConfig clusterMapConfig;
     Properties props = new Properties();
     props.setProperty("clustermap.ssl.enabled.datacenters", "datacenter1,datacenter2,datacenter3");

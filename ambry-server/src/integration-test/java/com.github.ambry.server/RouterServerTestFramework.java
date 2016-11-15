@@ -79,8 +79,7 @@ class RouterServerTestFramework {
    * @throws Exception
    */
   RouterServerTestFramework(Properties routerProps, MockClusterMap clusterMap,
-      MockNotificationSystem notificationSystem)
-      throws Exception {
+      MockNotificationSystem notificationSystem) throws Exception {
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
 
@@ -92,8 +91,7 @@ class RouterServerTestFramework {
    * Close the instantiated routers.
    * @throws IOException
    */
-  void cleanup()
-      throws IOException {
+  void cleanup() throws IOException {
     if (router != null) {
       router.close();
     }
@@ -106,8 +104,7 @@ class RouterServerTestFramework {
    * @param opChains the {@link OperationChain}s to await and check.
    * @throws Exception
    */
-  void checkOperationChains(List<OperationChain> opChains)
-      throws Exception {
+  void checkOperationChains(List<OperationChain> opChains) throws Exception {
     Map<PartitionId, Integer> partitionCount = new HashMap<>();
     double blobsPut = 0;
     for (OperationChain opChain : opChains) {
@@ -258,8 +255,7 @@ class RouterServerTestFramework {
     Future<String> future = router.putBlob(opChain.properties, opChain.userMetadata, putChannel, callback);
     TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", false), opChain) {
       @Override
-      void check()
-          throws Exception {
+      void check() throws Exception {
         checkBlobId(get(), getOperationName());
       }
     };
@@ -274,13 +270,13 @@ class RouterServerTestFramework {
    */
   private void startGetBlobInfo(GetOption options, final boolean checkDeleted, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
-    Future<GetBlobResult> future = router
-        .getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, options, null), callback);
+    Future<GetBlobResult> future =
+        router.getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, options, null),
+            callback);
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlobInfo", checkDeleted), opChain) {
           @Override
-          void check()
-              throws Exception {
+          void check() throws Exception {
             if (checkDeleted) {
               checkDeleted();
             } else {
@@ -304,8 +300,7 @@ class RouterServerTestFramework {
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlob", checkDeleted), opChain) {
           @Override
-          void check()
-              throws Exception {
+          void check() throws Exception {
             if (checkDeleted) {
               checkDeleted();
             } else {
@@ -326,8 +321,7 @@ class RouterServerTestFramework {
     Future<Void> future = router.deleteBlob(opChain.blobId, callback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", false), opChain) {
       @Override
-      void check()
-          throws Exception {
+      void check() throws Exception {
         get();
       }
     };
@@ -405,45 +399,36 @@ class RouterServerTestFramework {
     /**
      * PutBlob with the nonblocking router
      */
-    PUT(false),
-    /**
+    PUT(false), /**
      * GetBlobInfo with the nonblocking router and check the blob info against what was put in.
      */
-    GET_INFO(false),
-    /**
+    GET_INFO(false), /**
      * GetBlob with the nonblocking router and check the blob contents against what was put in.
      */
-    GET(false),
-    /**
+    GET(false), /**
      * DeleteBlob with the nonblocking router
      */
-    DELETE(false),
-    /**
+    DELETE(false), /**
      * GetBlobInfo with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
-    GET_INFO_DELETED(true),
-    /**
+    GET_INFO_DELETED(true), /**
      * GetBlob with the nonblocking router. Expect an exception to occur because the blob should have already been
      * deleted
      */
-    GET_DELETED(true),
-    /**
+    GET_DELETED(true), /**
      * GetBlobInfo with the nonblocking router. Will use {@link GetOption#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
-    GET_INFO_DELETED_SUCCESS(false),
-    /**
+    GET_INFO_DELETED_SUCCESS(false), /**
      * GetBlob with the nonblocking router. Will use {@link GetOption#Include_Deleted_Blobs} and is expected to
      * succeed even though the blob is deleted.
      */
-    GET_DELETED_SUCCESS(false),
-    /**
+    GET_DELETED_SUCCESS(false), /**
      * Wait for the operation chain's blob ID to be reported as created on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
      */
-    AWAIT_CREATION(false),
-    /**
+    AWAIT_CREATION(false), /**
      * Wait for the operation chain's blob ID to be reported as deleted on all replicas. Continue with the remaining
      * actions in the operation chain afterwards.
      */
@@ -512,8 +497,7 @@ class RouterServerTestFramework {
      * occurred.
      * @return the value inside the future
      */
-    T get()
-        throws Exception {
+    T get() throws Exception {
       try {
         return future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
       } catch (Exception e) {
@@ -525,8 +509,7 @@ class RouterServerTestFramework {
      * Check that a requested blob is deleted.
      * @throws Exception
      */
-    void checkDeleted()
-        throws Exception {
+    void checkDeleted() throws Exception {
       try {
         future.get(AWAIT_TIMEOUT, TimeUnit.SECONDS);
         Assert.fail("Blob should have been deleted in operation: " + getOperationName());
@@ -544,8 +527,7 @@ class RouterServerTestFramework {
     /**
      * Implement any testing logic here.
      */
-    abstract void check()
-        throws Exception;
+    abstract void check() throws Exception;
   }
 
   /**

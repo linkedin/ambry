@@ -15,7 +15,6 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 
@@ -30,8 +29,7 @@ public class DeleteResponse extends Response {
     super(RequestOrResponseType.DeleteResponse, Delete_Response_Version_V1, correlationId, clientId, error);
   }
 
-  public static DeleteResponse readFrom(DataInputStream stream)
-      throws IOException {
+  public static DeleteResponse readFrom(DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.DeleteResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");

@@ -50,8 +50,7 @@ public abstract class Transmission {
    * its connection request.
    * @throws IOException
    */
-  public void finishConnect()
-      throws IOException {
+  public void finishConnect() throws IOException {
     socketChannel.finishConnect();
     key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
   }
@@ -74,8 +73,7 @@ public abstract class Transmission {
    * Prepare the channel to accept read and write calls
    * @throws IOException
    */
-  public abstract void prepare()
-      throws IOException;
+  public abstract void prepare() throws IOException;
 
   /**
    * To check if the channel is ready to accept read and write calls
@@ -88,8 +86,7 @@ public abstract class Transmission {
    * @return true if read is complete, false otherwise
    * @throws IOException if some other I/O error occurs
    */
-  public abstract boolean read()
-      throws IOException;
+  public abstract boolean read() throws IOException;
 
   /**
    * Writes a sequence of bytes to the channel from the payload in {@link NetworkSend}
@@ -98,8 +95,7 @@ public abstract class Transmission {
    * false otherwise
    * @throws IOException If some other I/O error occurs
    */
-  public abstract boolean write()
-      throws IOException;
+  public abstract boolean write() throws IOException;
 
   /**
    * Actions to be taken on completion of {@link Send} in {@link NetworkSend}
@@ -132,8 +128,7 @@ public abstract class Transmission {
   /**
    * Close the connection for the socket channel
    */
-  public abstract void close()
-      throws IOException;
+  public abstract void close() throws IOException;
 
   public String getConnectionId() {
     return connectionId;

@@ -41,8 +41,7 @@ public class ByteBufferInputStream extends InputStream {
    * @param size The size that needs to be read from the stream
    * @throws IOException
    */
-  public ByteBufferInputStream(InputStream stream, int size)
-      throws IOException {
+  public ByteBufferInputStream(InputStream stream, int size) throws IOException {
     this.byteBuffer = ByteBuffer.allocate(size);
     int read = 0;
     ReadableByteChannel readableByteChannel = Channels.newChannel(stream);
@@ -59,8 +58,7 @@ public class ByteBufferInputStream extends InputStream {
   }
 
   @Override
-  public int read()
-      throws IOException {
+  public int read() throws IOException {
     if (!byteBuffer.hasRemaining()) {
       return -1;
     }
@@ -68,8 +66,7 @@ public class ByteBufferInputStream extends InputStream {
   }
 
   @Override
-  public int read(byte[] bytes, int offset, int length)
-      throws IOException {
+  public int read(byte[] bytes, int offset, int length) throws IOException {
     int count = Math.min(byteBuffer.remaining(), length);
     if (count == 0) {
       return -1;
@@ -79,14 +76,12 @@ public class ByteBufferInputStream extends InputStream {
   }
 
   @Override
-  public int available()
-      throws IOException {
+  public int available() throws IOException {
     return byteBuffer.remaining();
   }
 
   @Override
-  public synchronized void reset()
-      throws IOException {
+  public synchronized void reset() throws IOException {
     if (readLimit == -1 || mark == -1) {
       throw new IOException("Mark not set before reset invoked.");
     }

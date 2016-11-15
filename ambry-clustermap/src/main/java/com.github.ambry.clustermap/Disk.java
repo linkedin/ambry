@@ -15,12 +15,11 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
 
 
 /**
@@ -39,16 +38,15 @@ public class Disk implements DiskId {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
-      throws JSONException {
+  public Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Disk " + jsonObject.toString());
     }
     this.dataNode = dataNode;
     this.mountPath = jsonObject.getString("mountPath");
     try {
-      ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
-          .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
+      ResourceStatePolicyFactory resourceStatePolicyFactory =
+          Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
               HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
       this.diskStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
@@ -114,11 +112,11 @@ public class Disk implements DiskId {
 
   protected void validateCapacity() {
     if (capacityInBytes < MinCapacityInBytes) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is less than " +
-          MinCapacityInBytes);
+      throw new IllegalStateException(
+          "Invalid disk capacity: " + capacityInBytes + " is less than " + MinCapacityInBytes);
     } else if (capacityInBytes > MaxCapacityInBytes) {
-      throw new IllegalStateException("Invalid disk capacity: " + capacityInBytes + " is more than " +
-          MaxCapacityInBytes);
+      throw new IllegalStateException(
+          "Invalid disk capacity: " + capacityInBytes + " is more than " + MaxCapacityInBytes);
     }
   }
 
@@ -130,9 +128,9 @@ public class Disk implements DiskId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject()
-      throws JSONException {
-    return new JSONObject().put("mountPath", mountPath).put("hardwareState", getHardState())
+  public JSONObject toJSONObject() throws JSONException {
+    return new JSONObject().put("mountPath", mountPath)
+        .put("hardwareState", getHardState())
         .put("capacityInBytes", capacityInBytes);
   }
 

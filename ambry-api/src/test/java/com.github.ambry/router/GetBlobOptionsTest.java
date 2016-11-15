@@ -17,8 +17,7 @@ package com.github.ambry.router;
 import com.github.ambry.protocol.GetOption;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.*;
 
 
 /**
@@ -30,8 +29,7 @@ public class GetBlobOptionsTest {
    * @throws Exception
    */
   @Test
-  public void testRangeOption()
-      throws Exception {
+  public void testRangeOption() throws Exception {
     long startOffset = 1;
     long endOffset = 2;
     ByteRange range = ByteRange.fromOffsetRange(startOffset, endOffset);

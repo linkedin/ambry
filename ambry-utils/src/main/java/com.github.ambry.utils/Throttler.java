@@ -13,7 +13,6 @@
  */
 package com.github.ambry.utils;
 
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,8 +55,7 @@ public class Throttler {
    * Throttle if required
    * @param observed the newly observed units since the last time this method was called.
    */
-  public void maybeThrottle(double observed)
-      throws InterruptedException {
+  public void maybeThrottle(double observed) throws InterruptedException {
     synchronized (lock) {
       observedSoFar += observed;
       long now = time.nanoseconds();

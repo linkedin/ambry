@@ -35,8 +35,7 @@ class RouterUtils {
    * @return BlobId
    * @throws RouterException If parsing a string blobId fails.
    */
-  static BlobId getBlobIdFromString(String blobIdString, ClusterMap clusterMap)
-      throws RouterException {
+  static BlobId getBlobIdFromString(String blobIdString, ClusterMap clusterMap) throws RouterException {
     BlobId blobId;
     try {
       blobId = new BlobId(blobIdString, clusterMap);

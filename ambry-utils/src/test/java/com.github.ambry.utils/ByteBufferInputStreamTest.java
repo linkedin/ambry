@@ -20,15 +20,13 @@ import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 public class ByteBufferInputStreamTest {
 
   @Test
-  public void byteBufferStreamTest()
-      throws IOException {
+  public void byteBufferStreamTest() throws IOException {
     byte[] buf = new byte[1024];
     new Random().nextBytes(buf);
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(buf));
@@ -81,8 +79,7 @@ public class ByteBufferInputStreamTest {
   }
 
   @Test
-  public void markResetTest()
-      throws IOException {
+  public void markResetTest() throws IOException {
     byte[] buf = new byte[1024];
     new Random().nextBytes(buf);
 

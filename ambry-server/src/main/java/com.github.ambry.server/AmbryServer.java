@@ -37,8 +37,8 @@ import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
-import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -73,22 +73,19 @@ public class AmbryServer {
   private ServerMetrics metrics = null;
   private Time time;
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, Time time)
-      throws IOException {
+  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, Time time) throws IOException {
     this(properties, clusterMap, new LoggingNotificationSystem(), time);
   }
 
   public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem,
-      Time time)
-      throws IOException {
+      Time time) throws IOException {
     this.properties = properties;
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
     this.time = time;
   }
 
-  public void startup()
-      throws InstantiationException {
+  public void startup() throws InstantiationException {
     try {
       logger.info("starting");
       logger.info("Setting up JMX.");
@@ -204,8 +201,7 @@ public class AmbryServer {
     }
   }
 
-  public void awaitShutdown()
-      throws InterruptedException {
+  public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 }

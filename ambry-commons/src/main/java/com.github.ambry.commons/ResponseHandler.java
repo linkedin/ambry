@@ -83,9 +83,7 @@ public class ResponseHandler {
    * @param e the {@link Exception} received.
    */
   private void onException(ReplicaId replicaId, Exception e) {
-    if (e instanceof SocketException ||
-        e instanceof IOException ||
-        e instanceof ConnectionPoolTimeoutException) {
+    if (e instanceof SocketException || e instanceof IOException || e instanceof ConnectionPoolTimeoutException) {
       clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Node_Timeout);
     }
   }

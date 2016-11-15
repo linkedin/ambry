@@ -53,8 +53,7 @@ public class StorageManager {
    */
   public StorageManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
       List<ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time)
-      throws StoreException {
+      MessageStoreHardDelete hardDelete, Time time) throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
 
@@ -85,8 +84,7 @@ public class StorageManager {
    * @param config the {@link StoreConfig} to verify.
    * @throws StoreException if the {@link StoreConfig} is invalid.
    */
-  private void verifyConfigs(StoreConfig config)
-      throws StoreException {
+  private void verifyConfigs(StoreConfig config) throws StoreException {
     /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed.
        We do this by making sure that the retention period for deleted messages (which determines the end point for hard
        deletes) is always greater than the log flush period. */
@@ -99,8 +97,7 @@ public class StorageManager {
   /**
    * Start the {@link DiskManager}s for all disks on this node.
    */
-  public void start()
-      throws InterruptedException {
+  public void start() throws InterruptedException {
     logger.info("Starting storage manager");
     List<Thread> startupThreads = new ArrayList<>();
     for (final DiskManager diskManager : diskManagers) {
@@ -138,8 +135,7 @@ public class StorageManager {
    * Shutdown the {@link DiskManager}s for the disks on this node.
    * @throws StoreException
    */
-  public void shutdown()
-      throws StoreException {
+  public void shutdown() throws StoreException {
     logger.info("Shutting down storage manager");
     for (DiskManager diskManager : diskManagers) {
       diskManager.shutdown();

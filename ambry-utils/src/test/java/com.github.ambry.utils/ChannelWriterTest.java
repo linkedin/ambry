@@ -13,20 +13,18 @@
  */
 package com.github.ambry.utils;
 
-import org.junit.Test;
-
-import java.nio.channels.Channels;
-import java.nio.channels.WritableByteChannel;
-import org.junit.Assert;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class ChannelWriterTest {
   @Test
-  public void ChannelWriteFunctionalityTest()
-      throws IOException {
+  public void ChannelWriteFunctionalityTest() throws IOException {
     byte[] buf = new byte[1000];
     new Random().nextBytes(buf);
     ByteBuffer buffer = ByteBuffer.wrap(buf);

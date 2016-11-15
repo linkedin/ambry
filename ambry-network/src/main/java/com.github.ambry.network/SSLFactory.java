@@ -53,8 +53,7 @@ public class SSLFactory {
   private boolean needClientAuth;
   private boolean wantClientAuth;
 
-  public SSLFactory(SSLConfig sslConfig)
-      throws GeneralSecurityException, IOException {
+  public SSLFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
 
     this.protocol = sslConfig.sslContextProtocol;
     if (sslConfig.sslContextProvider.length() > 0) {
@@ -62,8 +61,8 @@ public class SSLFactory {
     }
 
     ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
-    if (cipherSuitesList != null && cipherSuitesList.size() > 0 &&
-        !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
+    if (cipherSuitesList != null && cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1
+        && cipherSuitesList.get(0).equals(""))) {
       this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
     }
 
@@ -72,8 +71,8 @@ public class SSLFactory {
       this.enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
     }
 
-    if (sslConfig.sslEndpointIdentificationAlgorithm.length() > 0 && !sslConfig.sslEndpointIdentificationAlgorithm
-        .equals("")) {
+    if (sslConfig.sslEndpointIdentificationAlgorithm.length() > 0
+        && !sslConfig.sslEndpointIdentificationAlgorithm.equals("")) {
       this.endpointIdentification = sslConfig.sslEndpointIdentificationAlgorithm;
     }
 
@@ -105,8 +104,7 @@ public class SSLFactory {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private SSLContext createSSLContext()
-      throws GeneralSecurityException, IOException {
+  private SSLContext createSSLContext() throws GeneralSecurityException, IOException {
     SSLContext sslContext;
     if (provider != null) {
       sslContext = SSLContext.getInstance(protocol, provider);
@@ -193,8 +191,7 @@ public class SSLFactory {
       this.password = password;
     }
 
-    private KeyStore load()
-        throws GeneralSecurityException, IOException {
+    private KeyStore load() throws GeneralSecurityException, IOException {
       FileInputStream in = null;
       try {
         KeyStore ks = KeyStore.getInstance(type);

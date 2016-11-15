@@ -29,8 +29,7 @@ import java.io.IOException;
 import java.util.List;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -58,8 +57,7 @@ public class GetReplicasHandlerTest {
    * @throws Exception
    */
   @Test
-  public void getReplicasTest()
-      throws Exception {
+  public void getReplicasTest() throws Exception {
     List<PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
@@ -82,8 +80,7 @@ public class GetReplicasHandlerTest {
    * @throws Exception
    */
   @Test
-  public void getReplicasWithBadInputTest()
-      throws Exception {
+  public void getReplicasWithBadInputTest() throws Exception {
     // bad input - invalid blob id.
     try {
       getReplicasHandler.getReplicas("12345", new MockRestResponseChannel());

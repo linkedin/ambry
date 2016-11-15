@@ -36,8 +36,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 
 public class StorageManagerTest {
@@ -49,8 +48,7 @@ public class StorageManagerTest {
    * @throws IOException
    */
   @Before
-  public void initializeCluster()
-      throws IOException {
+  public void initializeCluster() throws IOException {
     clusterMap = new MockClusterMap(false, 1, 3, 3);
   }
 
@@ -59,8 +57,7 @@ public class StorageManagerTest {
    * @throws IOException
    */
   @After
-  public void cleanupCluster()
-      throws IOException {
+  public void cleanupCluster() throws IOException {
     clusterMap.cleanup();
   }
 
@@ -69,8 +66,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void mountPathNotFoundTest()
-      throws Exception {
+  public void mountPathNotFoundTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
@@ -94,8 +90,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void storeStartFailureTest()
-      throws Exception {
+  public void storeStartFailureTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     Set<Integer> badReplicaIndexes = new HashSet<>(Arrays.asList(2, 7));
@@ -121,8 +116,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void storeStartFailureOnOneDiskTest()
-      throws Exception {
+  public void storeStartFailureOnOneDiskTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
@@ -150,8 +144,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void successfulStartTest()
-      throws Exception {
+  public void successfulStartTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     StorageManager storageManager = createAndStartStoreManager(replicas);

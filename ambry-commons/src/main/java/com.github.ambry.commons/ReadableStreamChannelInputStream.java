@@ -50,8 +50,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
   }
 
   @Override
-  public int read()
-      throws IOException {
+  public int read() throws IOException {
     int data = -1;
     if (loadData()) {
       data = currentChunk.get() & 0xFF;
@@ -61,8 +60,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
   }
 
   @Override
-  public int read(byte b[], int off, int len)
-      throws IOException {
+  public int read(byte b[], int off, int len) throws IOException {
     if (b == null) {
       throw new NullPointerException();
     } else if (off < 0 || len < 0 || len > b.length - off) {
@@ -88,8 +86,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     readableStreamChannel.close();
     asyncWritableChannel.close();
   }
@@ -100,8 +97,7 @@ public class ReadableStreamChannelInputStream extends InputStream {
    * @throws IllegalStateException if the wait for the next chunk is interrupted.
    * @throws IOException if there is any problem with I/O.
    */
-  private boolean loadData()
-      throws IOException {
+  private boolean loadData() throws IOException {
     if (currentChunk == null || !currentChunk.hasRemaining()) {
       if (currentChunk != null) {
         asyncWritableChannel.resolveOldestChunk(null);

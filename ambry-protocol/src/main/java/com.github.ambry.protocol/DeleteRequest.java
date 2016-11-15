@@ -36,8 +36,7 @@ public class DeleteRequest extends RequestOrResponse {
     sizeSent = 0;
   }
 
-  public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map)
-      throws IOException {
+  public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.DeleteRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -52,8 +51,7 @@ public class DeleteRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());

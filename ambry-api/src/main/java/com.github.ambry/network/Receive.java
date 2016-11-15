@@ -35,6 +35,5 @@ public interface Receive {
    * @throws IOException
    */
 
-  long readFrom(ReadableByteChannel channel)
-      throws IOException;
+  long readFrom(ReadableByteChannel channel) throws IOException;
 }

@@ -21,16 +21,13 @@ public enum ResponseStatus {
   /**
    * 200 OK - Resource found and all good.
    */
-  Ok,
-  /**
+  Ok, /**
    * 201 - Resource was created.
    */
-  Created,
-  /**
+  Created, /**
    * 202 - Request was accepted.
    */
-  Accepted,
-  /**
+  Accepted, /**
    * 206 - Partial content.
    */
   PartialContent,
@@ -43,28 +40,22 @@ public enum ResponseStatus {
   /**
    * 400 - Request was not correct.
    */
-  BadRequest,
-  /**
+  BadRequest, /**
    * 401 - Request Unauthorized
    */
-  Unauthorized,
-  /**
+  Unauthorized, /**
    * 403 - Request forbidden
    */
-  Forbidden,
-  /**
+  Forbidden, /**
    * 404 Not Found - Resource was not found.
    */
-  NotFound,
-  /**
+  NotFound, /**
    * 407 - Proxy authentication required
    */
-  ProxyAuthenticationRequired,
-  /**
+  ProxyAuthenticationRequired, /**
    * 410 Gone - Resource has been deleted or has expired.
    */
-  Gone,
-  /**
+  Gone, /**
    * 416 Range Not Satisfiable - A range request is invalid or outside of the bounds of an object.
    */
   RangeNotSatisfiable,

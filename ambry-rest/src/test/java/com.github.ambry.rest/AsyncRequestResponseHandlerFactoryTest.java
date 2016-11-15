@@ -20,9 +20,7 @@ import com.github.ambry.router.Router;
 import java.util.Properties;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -37,8 +35,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
    * @throws InstantiationException
    */
   @Test
-  public void getAsyncRequestResponseHandlerTest()
-      throws InstantiationException {
+  public void getAsyncRequestResponseHandlerTest() throws InstantiationException {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     Router router = new InMemoryRouter(verifiableProperties);

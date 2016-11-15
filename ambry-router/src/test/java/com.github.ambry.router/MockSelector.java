@@ -54,8 +54,7 @@ class MockSelector extends Selector {
    * @param time the Time instance to use.
    * @throws IOException if {@link Selector} throws.
    */
-  MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time)
-      throws IOException {
+  MockSelector(MockServerLayout serverLayout, AtomicReference<MockSelectorState> state, Time time) throws IOException {
     super(new NetworkMetrics(new MetricRegistry()), time, null);
     // we don't need the actual selector, close it.
     super.close();
@@ -97,8 +96,7 @@ class MockSelector extends Selector {
    *
    */
   @Override
-  public void poll(long timeoutMs, List<NetworkSend> sends)
-      throws IOException {
+  public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
     this.sends = sends;
     if (sends != null) {
       for (NetworkSend send : sends) {
@@ -205,25 +203,20 @@ enum MockSelectorState {
   /**
    * The Good state.
    */
-  Good,
-  /**
+  Good, /**
    * A state that causes all connect calls to throw an IOException.
    */
-  ThrowExceptionOnConnect,
-  /**
+  ThrowExceptionOnConnect, /**
    * A state that causes disconnections of connections on which a send is attempted.
    */
-  DisconnectOnSend,
-  /**
+  DisconnectOnSend, /**
    * A state that causes all poll calls to throw an IOException if there is anything to send.
    */
-  ThrowExceptionOnSend,
-  /**
+  ThrowExceptionOnSend, /**
    * A state that causes all poll calls to throw an IOException regardless of whether there are sends to perform or
    * not.
    */
-  ThrowExceptionOnAllPoll,
-  /**
+  ThrowExceptionOnAllPoll, /**
    * Throw a throwable during poll that sends.
    */
   ThrowThrowableOnSend,

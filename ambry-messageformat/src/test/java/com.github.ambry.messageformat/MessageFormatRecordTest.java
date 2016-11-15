@@ -148,8 +148,7 @@ public class MessageFormatRecordTest {
   }
 
   @Test
-  public void testMetadataContentRecordV2()
-      throws IOException, MessageFormatException {
+  public void testMetadataContentRecordV2() throws IOException, MessageFormatException {
     // Test Metadata Blob V2
     List<StoreKey> keys = getKeys(60, 5);
     int[] chunkSizes = {ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE), 15};
@@ -182,8 +181,8 @@ public class MessageFormatRecordTest {
     int size =
         MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     ByteBuffer metadataContent = ByteBuffer.allocate(size);
-    MessageFormatRecord.Metadata_Content_Format_V2
-        .serializeMetadataContentRecord(metadataContent, chunkSize, totalSize, keys);
+    MessageFormatRecord.Metadata_Content_Format_V2.serializeMetadataContentRecord(metadataContent, chunkSize, totalSize,
+        keys);
     metadataContent.flip();
     return metadataContent;
   }
@@ -195,8 +194,8 @@ public class MessageFormatRecordTest {
     short metadataContentVersion = inputStream.readShort();
     Assert.assertEquals("Metadata Content Version mismatch ", MessageFormatRecord.Metadata_Content_Version_V2,
         metadataContentVersion);
-    return MessageFormatRecord.Metadata_Content_Format_V2
-        .deserializeMetadataContentRecord(inputStream, storeKeyFactory);
+    return MessageFormatRecord.Metadata_Content_Format_V2.deserializeMetadataContentRecord(inputStream,
+        storeKeyFactory);
   }
 
   private List<StoreKey> getKeys(int keySize, int numberOfKeys) {
@@ -209,8 +208,7 @@ public class MessageFormatRecordTest {
   }
 
   @Test
-  public void testBlobRecordV2()
-      throws IOException, MessageFormatException {
+  public void testBlobRecordV2() throws IOException, MessageFormatException {
     // Test blob record V2 for Data Blob
     testBlobRecordV2(2000, BlobType.DataBlob);
 
@@ -228,8 +226,7 @@ public class MessageFormatRecordTest {
    * @throws IOException
    * @throws MessageFormatException
    */
-  private void testBlobRecordV2(int blobSize, BlobType blobType)
-      throws IOException, MessageFormatException {
+  private void testBlobRecordV2(int blobSize, BlobType blobType) throws IOException, MessageFormatException {
 
     ByteBuffer blobContent = ByteBuffer.allocate(blobSize);
     new Random().nextBytes(blobContent.array());
@@ -276,8 +273,7 @@ public class MessageFormatRecordTest {
   }
 
   @Test
-  public void testBlobRecordWithMetadataContentV2()
-      throws IOException, MessageFormatException {
+  public void testBlobRecordWithMetadataContentV2() throws IOException, MessageFormatException {
     // Test Blob V2 with actual metadata blob V2
     // construct metadata blob
     List<StoreKey> keys = getKeys(60, 5);
@@ -307,8 +303,7 @@ public class MessageFormatRecordTest {
     }
   }
 
-  private void testBlobCorruption(ByteBuffer blob, long blobSize, int metadataContentSize)
-      throws IOException {
+  private void testBlobCorruption(ByteBuffer blob, long blobSize, int metadataContentSize) throws IOException {
     // test corruption cases
     blob.rewind();
     // case 1: corrupt blob record version

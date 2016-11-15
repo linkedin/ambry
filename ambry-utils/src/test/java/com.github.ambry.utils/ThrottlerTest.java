@@ -22,8 +22,7 @@ import org.junit.Test;
  */
 public class ThrottlerTest {
   @Test
-  public void throttlerTest()
-      throws InterruptedException {
+  public void throttlerTest() throws InterruptedException {
     MockThrottlerTime time = new MockThrottlerTime();
     time.currentMilliseconds = 0;
     time.currentNanoSeconds = 0;
@@ -46,8 +45,7 @@ public class ThrottlerTest {
     long sleepTimeExpected;
 
     @Override
-    public void sleep(long ms)
-        throws InterruptedException {
+    public void sleep(long ms) throws InterruptedException {
       currentMilliseconds += ms;
       if (sleepTimeExpected != ms) {
         throw new IllegalArgumentException();

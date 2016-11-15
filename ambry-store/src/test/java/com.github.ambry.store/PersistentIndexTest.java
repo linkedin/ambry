@@ -47,16 +47,14 @@ public class PersistentIndexTest {
   /**
    * Create a temporary file
    */
-  File tempFile()
-      throws IOException {
+  File tempFile() throws IOException {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;
   }
 
   @Test
-  public void testSegmentInfo()
-      throws IOException {
+  public void testSegmentInfo() throws IOException {
     MockClusterMap map = null;
     try {
       // create a new index
@@ -74,8 +72,7 @@ public class PersistentIndexTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       IndexSegment info = new IndexSegment(tempFile().getParent(), 0, factory, blobId1.sizeInBytes(),
-          IndexValue.Index_Value_Size_In_Bytes, config,
-          new StoreMetrics(tempFile().getParent(), new MetricRegistry()));
+          IndexValue.Index_Value_Size_In_Bytes, config, new StoreMetrics(tempFile().getParent(), new MetricRegistry()));
       IndexValue value = new IndexValue(1000, 0, (byte) 0);
       info.addEntry(new IndexEntry(blobId1, value), 1000);
       value = new IndexValue(1000, 1000, (byte) 0);
@@ -194,8 +191,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testIndexBasic()
-      throws IOException {
+  public void testIndexBasic() throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -240,8 +236,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testIndexRestore()
-      throws IOException {
+  public void testIndexRestore() throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -450,8 +445,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testIndexBatch()
-      throws IOException {
+  public void testIndexBatch() throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -504,8 +498,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testIndexRead()
-      throws IOException {
+  public void testIndexRead() throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -583,8 +576,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testMissingEntries()
-      throws IOException {
+  public void testMissingEntries() throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -629,8 +621,7 @@ public class PersistentIndexTest {
   }
 
   //@Test
-  public void testRollingIndex()
-      throws IOException {
+  public void testRollingIndex() throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -763,8 +754,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testExistsWithFileSpan()
-      throws IOException {
+  public void testExistsWithFileSpan() throws IOException {
     MockClusterMap map = null;
     try {
       String logFile = tempFile().getParent();
@@ -906,8 +896,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testFindEntries()
-      throws IOException {
+  public void testFindEntries() throws IOException {
     // provide empty token and ensure we get everything till max
     StoreFindToken token = new StoreFindToken();
     MockClusterMap map = null;
@@ -1061,8 +1050,7 @@ public class PersistentIndexTest {
    * read from the latest segment.
    */
   @Test
-  public void testFindEntriesAdditional()
-      throws IOException {
+  public void testFindEntriesAdditional() throws IOException {
     // provide token referencing an offset from before
     MockClusterMap map = null;
     try {
@@ -1422,8 +1410,7 @@ public class PersistentIndexTest {
   }
 
   @Test
-  public void testFindDeletedEntries()
-      throws IOException {
+  public void testFindDeletedEntries() throws IOException {
     // provide empty token and ensure we get everything till max
     StoreFindToken token = new StoreFindToken();
     MockClusterMap map = null;
@@ -1687,21 +1674,18 @@ public class PersistentIndexTest {
 
 class MockIndex extends PersistentIndex {
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time)
-      throws StoreException {
+      StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time) throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
         new StoreMetrics(datadir, new MetricRegistry()), time);
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory)
-      throws StoreException {
+      StoreKeyFactory factory) throws StoreException {
     this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance());
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, Journal journal)
-      throws StoreException {
+      StoreKeyFactory factory, Journal journal) throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
         new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance());
   }
@@ -1710,8 +1694,7 @@ class MockIndex extends PersistentIndex {
     super.hardDeleter.running.set(status);
   }
 
-  public boolean hardDelete()
-      throws StoreException {
+  public boolean hardDelete() throws StoreException {
     return super.hardDeleter.hardDelete();
   }
 
@@ -1725,20 +1708,17 @@ class MockIndex extends PersistentIndex {
     super.hardDeleter.pruneHardDeleteRecoveryRange();
   }
 
-  public void performHardDeleteRecovery()
-      throws StoreException {
+  public void performHardDeleteRecovery() throws StoreException {
     super.hardDeleter.performRecovery();
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup)
-      throws StoreException {
-    super(datadir, scheduler, log, config, factory, recovery, cleanup,
-        new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup) throws StoreException {
+    super(datadir, scheduler, log, config, factory, recovery, cleanup, new StoreMetrics(datadir, new MetricRegistry()),
+        SystemTime.getInstance());
   }
 
-  IndexValue getValue(StoreKey key)
-      throws StoreException {
+  IndexValue getValue(StoreKey key) throws StoreException {
     return findKey(key);
   }
 
@@ -1746,8 +1726,7 @@ class MockIndex extends PersistentIndex {
     indexes.clear();
   }
 
-  public void stopScheduler()
-      throws InterruptedException {
+  public void stopScheduler() throws InterruptedException {
     scheduler.shutdown();
     scheduler.awaitTermination(2, TimeUnit.MINUTES);
   }

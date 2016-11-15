@@ -55,8 +55,7 @@ public class ByteBufferChannel implements WritableByteChannel {
    * @throws ClosedChannelException if the channel is closed when this function was called.
    */
   @Override
-  public int write(ByteBuffer src)
-      throws ClosedChannelException {
+  public int write(ByteBuffer src) throws ClosedChannelException {
     if (!isOpen()) {
       throw new ClosedChannelException();
     }

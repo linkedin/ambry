@@ -52,8 +52,7 @@ public class ResponseHandlerTest {
     }
 
     @Override
-    public PartitionId getPartitionIdFromStream(DataInputStream stream)
-        throws IOException {
+    public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
       return null;
     }
 
@@ -116,15 +115,14 @@ public class ResponseHandlerTest {
 
     expectedEventTypes.put(new SocketException(), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
     expectedEventTypes.put(new IOException(), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
-    expectedEventTypes
-        .put(new ConnectionPoolTimeoutException(""), new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
+    expectedEventTypes.put(new ConnectionPoolTimeoutException(""),
+        new ReplicaEventType[]{ReplicaEventType.Node_Timeout});
     expectedEventTypes.put(ServerErrorCode.IO_Error,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
     expectedEventTypes.put(ServerErrorCode.Disk_Unavailable,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Error});
     expectedEventTypes.put(ServerErrorCode.Partition_ReadOnly,
-        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok,
-            ReplicaEventType.Partition_ReadOnly});
+        new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok, ReplicaEventType.Partition_ReadOnly});
     expectedEventTypes.put(ServerErrorCode.Unknown_Error,
         new ReplicaEventType[]{ReplicaEventType.Node_Response, ReplicaEventType.Disk_Ok});
     expectedEventTypes.put(ServerErrorCode.No_Error,

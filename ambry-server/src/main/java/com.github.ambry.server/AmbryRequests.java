@@ -57,13 +57,13 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -95,8 +95,8 @@ public class AmbryRequests implements RequestAPI {
   private final ReplicationManager replicationManager;
   private final StoreKeyFactory storeKeyFactory;
 
-  public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
-      DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
+  public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
+      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
       NotificationSystem operationNotification, ReplicationManager replicationManager,
       StoreKeyFactory storeKeyFactory) {
     this.storageManager = storageManager;
@@ -111,8 +111,7 @@ public class AmbryRequests implements RequestAPI {
     this.storeKeyFactory = storeKeyFactory;
   }
 
-  public void handleRequests(Request request)
-      throws InterruptedException {
+  public void handleRequests(Request request) throws InterruptedException {
     try {
       DataInputStream stream = new DataInputStream(request.getInputStream());
       RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
@@ -138,8 +137,7 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  public void handlePutRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handlePutRequest(Request request) throws IOException, InterruptedException {
     PutRequest.ReceivedPutRequest receivedRequest =
         PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -158,8 +156,8 @@ public class AmbryRequests implements RequestAPI {
             new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobProperties(),
                 receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(), receivedRequest.getBlobSize(),
                 receivedRequest.getBlobType());
-        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), Utils
-            .addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
+        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(),
+            Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
                 receivedRequest.getBlobProperties().getTimeToLiveInSeconds()));
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
@@ -176,8 +174,8 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger
-          .error("Store exception on a put with error code " + e.getErrorCode() + " for request " + receivedRequest, e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode() + " for request " + receivedRequest,
+          e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
@@ -202,8 +200,7 @@ public class AmbryRequests implements RequestAPI {
         metrics);
   }
 
-  public void handleGetRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handleGetRequest(Request request) throws IOException, InterruptedException {
     GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     Histogram responseQueueTime = null;
     Histogram responseSendTime = null;
@@ -341,8 +338,7 @@ public class AmbryRequests implements RequestAPI {
         totalTimeSpent, response.sizeInBytes(), getRequest.getMessageFormatFlag(), metrics);
   }
 
-  public void handleDeleteRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
@@ -366,31 +362,26 @@ public class AmbryRequests implements RequestAPI {
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
-          notification
-              .onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), deleteRequest.getBlobId().getID(),
-                  BlobReplicaSourceType.PRIMARY);
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
+              deleteRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        logger
-            .trace("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
-                e);
+        logger.trace(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        logger
-            .trace("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
-                e);
+        logger.trace(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.ttlExpiredError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        logger
-            .trace("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
-                e);
+        logger.trace(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.idDeletedError.inc();
       } else {
-        logger
-            .error("Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest,
-                e);
+        logger.error(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.unExpectedStoreDeleteError.inc();
       }
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
@@ -411,8 +402,7 @@ public class AmbryRequests implements RequestAPI {
             metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
   }
 
-  public void handleReplicaMetadataRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest =
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -506,8 +496,7 @@ public class AmbryRequests implements RequestAPI {
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
       Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
-      long blobSize, ServerMetrics metrics)
-      throws InterruptedException {
+      long blobSize, ServerMetrics metrics) throws InterruptedException {
     if (response.getError() == ServerErrorCode.No_Error) {
       metrics.markPutBlobRequestRateBySize(blobSize);
       if (blobSize <= ServerMetrics.smallBlob) {
@@ -532,8 +521,7 @@ public class AmbryRequests implements RequestAPI {
 
   private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
       Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
-      long blobSize, MessageFormatFlags flags, ServerMetrics metrics)
-      throws InterruptedException {
+      long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
 
     if (blobSize <= ServerMetrics.smallBlob) {
       if (flags == MessageFormatFlags.Blob) {

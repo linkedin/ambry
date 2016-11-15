@@ -27,8 +27,7 @@ public class MockNioServer implements NioServer {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     if (isFaulty) {
       throw new InstantiationException("This is a faulty MockNioServer");
     }

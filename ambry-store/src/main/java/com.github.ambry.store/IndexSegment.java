@@ -108,8 +108,8 @@ class IndexSegment {
     this.factory = factory;
     this.keySize = keySize;
     this.valueSize = valueSize;
-    bloomFilter = FilterFactory
-        .getFilter(config.storeIndexMaxNumberOfInmemElements, config.storeIndexBloomMaxFalsePositiveProbability);
+    bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
+        config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);
     this.metrics = metrics;
     this.lastModifiedTimeSec = new AtomicLong(0);
@@ -127,8 +127,7 @@ class IndexSegment {
    * @throws StoreException
    */
   public IndexSegment(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config,
-      StoreMetrics metrics, Journal journal)
-      throws StoreException {
+      StoreMetrics metrics, Journal journal) throws StoreException {
     try {
       int startIndex = indexFile.getName().indexOf("_", 0);
       String startOffsetValue = indexFile.getName().substring(0, startIndex);
@@ -161,8 +160,8 @@ class IndexSegment {
         stream.close();
       } else {
         index = new ConcurrentSkipListMap<StoreKey, IndexValue>();
-        bloomFilter = FilterFactory
-            .getFilter(config.storeIndexMaxNumberOfInmemElements, config.storeIndexBloomMaxFalsePositiveProbability);
+        bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
+            config.storeIndexBloomMaxFalsePositiveProbability);
         bloomFile = new File(indexFile.getParent(), startOffset + "_" + PersistentIndex.Bloom_File_Name_Suffix);
         try {
           readFromFile(indexFile, journal);
@@ -179,8 +178,9 @@ class IndexSegment {
         }
       }
     } catch (Exception e) {
-      throw new StoreException("Index Segment : " + indexFile.getAbsolutePath() +
-          " error while loading index from file Exception: " + e.getMessage(), StoreErrorCodes.Index_Creation_Failure);
+      throw new StoreException(
+          "Index Segment : " + indexFile.getAbsolutePath() + " error while loading index from file Exception: "
+              + e.getMessage(), StoreErrorCodes.Index_Creation_Failure);
     }
     this.metrics = metrics;
   }
@@ -248,8 +248,7 @@ class IndexSegment {
    * @return The blob index value that represents the key or null if not found
    * @throws StoreException
    */
-  public IndexValue find(StoreKey keyToFind)
-      throws StoreException {
+  public IndexValue find(StoreKey keyToFind) throws StoreException {
     try {
       rwLock.readLock().lock();
       if (!(mapped.get())) {
@@ -299,16 +298,14 @@ class IndexSegment {
     return (mmap.capacity() - Index_Size_Excluding_Entries) / (keySize + valueSize);
   }
 
-  private StoreKey getKeyAt(ByteBuffer mmap, int index)
-      throws IOException {
+  private StoreKey getKeyAt(ByteBuffer mmap, int index) throws IOException {
     mmap.position(
         Version_Field_Length + Key_Size_Field_Length + Value_Size_Field_Length + Log_End_Offset_Field_Length + (index
             * (keySize + valueSize)));
     return factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
   }
 
-  private int findIndex(StoreKey keyToFind, ByteBuffer mmap)
-      throws IOException {
+  private int findIndex(StoreKey keyToFind, ByteBuffer mmap) throws IOException {
     // binary search on the mapped file
     int low = 0;
     int high = numberOfEntries(mmap) - 1;
@@ -335,13 +332,12 @@ class IndexSegment {
    * @param fileEndOffset The file end offset that this entry represents.
    * @throws StoreException
    */
-  public void addEntry(IndexEntry entry, long fileEndOffset)
-      throws StoreException {
+  public void addEntry(IndexEntry entry, long fileEndOffset) throws StoreException {
     try {
       rwLock.readLock().lock();
       if (mapped.get()) {
-        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
-            " cannot add to a mapped index ", StoreErrorCodes.Illegal_Index_Operation);
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a mapped index ",
+            StoreErrorCodes.Illegal_Index_Operation);
       }
       logger.trace("IndexSegment {} inserting key - {} value - offset {} size {} ttl {} "
               + "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
@@ -376,8 +372,7 @@ class IndexSegment {
    * @param fileEndOffset The file end offset of the last entry in the entries list
    * @throws StoreException
    */
-  public void addEntries(ArrayList<IndexEntry> entries, long fileEndOffset)
-      throws StoreException {
+  public void addEntries(ArrayList<IndexEntry> entries, long fileEndOffset) throws StoreException {
     try {
       rwLock.readLock().lock();
       if (mapped.get()) {
@@ -385,8 +380,8 @@ class IndexSegment {
             StoreErrorCodes.Illegal_Index_Operation);
       }
       if (entries.size() == 0) {
-        throw new IllegalArgumentException("IndexSegment : " + indexFile.getAbsolutePath() +
-            " no entries to add to the index. The entries provided is empty");
+        throw new IllegalArgumentException("IndexSegment : " + indexFile.getAbsolutePath()
+            + " no entries to add to the index. The entries provided is empty");
       }
       for (IndexEntry entry : entries) {
         logger.trace("IndexSegment {} Inserting key - {} value - offset {} size {} ttl {} "
@@ -465,12 +460,12 @@ class IndexSegment {
    * @throws IOException
    * @throws StoreException
    */
-  public void writeIndexToFile(long safeEndPoint)
-      throws IOException, StoreException {
+  public void writeIndexToFile(long safeEndPoint) throws IOException, StoreException {
     if (prevSegmentEndOffset != safeEndPoint) {
       if (safeEndPoint > getEndOffset()) {
-        throw new StoreException("SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " +
-            "index segment " + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
+        throw new StoreException(
+            "SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " + "index segment "
+                + getEndOffset(), StoreErrorCodes.Illegal_Index_Operation);
       }
       File temp = new File(getFile().getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
@@ -505,8 +500,9 @@ class IndexSegment {
         // swap temp file with the original file
         temp.renameTo(getFile());
       } catch (IOException e) {
-        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
-            " IO error while persisting index to disk", e, StoreErrorCodes.IOError);
+        throw new StoreException(
+            "IndexSegment : " + indexFile.getAbsolutePath() + " IO error while persisting index to disk", e,
+            StoreErrorCodes.IOError);
       } finally {
         writer.close();
         rwLock.readLock().unlock();
@@ -521,8 +517,7 @@ class IndexSegment {
    * @throws IOException
    * @throws StoreException
    */
-  public void map(boolean persistBloom)
-      throws IOException, StoreException {
+  public void map(boolean persistBloom) throws IOException, StoreException {
     RandomAccessFile raf = new RandomAccessFile(indexFile, "r");
     rwLock.writeLock().lock();
     try {
@@ -536,8 +531,8 @@ class IndexSegment {
           this.endOffset.set(mmap.getLong());
           break;
         default:
-          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
-              " unknown version in index file", StoreErrorCodes.Index_Version_Error);
+          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " unknown version in index file",
+              StoreErrorCodes.Index_Version_Error);
       }
       mapped.set(true);
       index = null;
@@ -563,8 +558,7 @@ class IndexSegment {
    * @throws StoreException
    * @throws IOException
    */
-  private void readFromFile(File fileToRead, Journal journal)
-      throws StoreException, IOException {
+  private void readFromFile(File fileToRead, Journal journal) throws StoreException, IOException {
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
@@ -626,12 +620,12 @@ class IndexSegment {
           }
           break;
         default:
-          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
-              " invalid version in index file", StoreErrorCodes.Index_Version_Error);
+          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " invalid version in index file",
+              StoreErrorCodes.Index_Version_Error);
       }
     } catch (IOException e) {
-      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() +
-          " IO error while reading from file ", e, StoreErrorCodes.IOError);
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while reading from file ",
+          e, StoreErrorCodes.IOError);
     } finally {
       stream.close();
     }
@@ -649,8 +643,7 @@ class IndexSegment {
    * @throws IOException
    */
   public boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
-      AtomicLong currentTotalSizeOfEntriesInBytes)
-      throws IOException {
+      AtomicLong currentTotalSizeOfEntriesInBytes) throws IOException {
     int entriesSizeAtStart = entries.size();
     if (mapped.get()) {
       int index = 0;
@@ -677,8 +670,7 @@ class IndexSegment {
           index++;
         }
       } else {
-        logger.error("IndexSegment : " + indexFile.getAbsolutePath() +
-            " index not found for key " + key);
+        logger.error("IndexSegment : " + indexFile.getAbsolutePath() + " index not found for key " + key);
       }
     } else {
       ConcurrentNavigableMap<StoreKey, IndexValue> tempMap = index;

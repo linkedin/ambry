@@ -16,8 +16,8 @@ package com.github.ambry.utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
-import org.junit.Test;
 import org.junit.Assert;
+import org.junit.Test;
 
 
 /**
@@ -25,8 +25,7 @@ import org.junit.Assert;
  */
 public class CrcInputStreamTest {
   @Test
-  public void testCrcInputStream()
-      throws IOException {
+  public void testCrcInputStream() throws IOException {
     byte[] buf = new byte[4000];
     new Random().nextBytes(buf);
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(buf));

@@ -21,7 +21,7 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.router.RouterTestHelpers.ErrorCodeChecker;
+import com.github.ambry.router.RouterTestHelpers.*;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
@@ -42,10 +42,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import static com.github.ambry.router.RouterTestHelpers.setServerErrorCodes;
-import static com.github.ambry.router.RouterTestHelpers.testWithErrorCodes;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static com.github.ambry.router.RouterTestHelpers.*;
+import static org.junit.Assert.*;
 
 
 /**
@@ -69,8 +67,7 @@ public class DeleteManagerTest {
    */
   private final ErrorCodeChecker deleteErrorCodeChecker = new ErrorCodeChecker() {
     @Override
-    public void testAndAssert(RouterErrorCode expectedError)
-        throws Exception {
+    public void testAndAssert(RouterErrorCode expectedError) throws Exception {
       future = router.deleteBlob(blobIdString);
       if (expectedError == null) {
         future.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -91,8 +88,7 @@ public class DeleteManagerTest {
    * Initializes ClusterMap, Router, mock servers, and an {@code BlobId} to be deleted.
    */
   @Before
-  public void init()
-      throws Exception {
+  public void init() throws Exception {
     VerifiableProperties vProps = new VerifiableProperties(getNonBlockingRouterProperties());
     mockTime = new MockTime();
     mockSelectorState = new AtomicReference<MockSelectorState>(MockSelectorState.Good);
@@ -119,8 +115,7 @@ public class DeleteManagerTest {
    * Test a basic delete operation that will succeed.
    */
   @Test
-  public void testBasicDeletion()
-      throws Exception {
+  public void testBasicDeletion() throws Exception {
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null,
         deleteErrorCodeChecker);
   }
@@ -130,13 +125,11 @@ public class DeleteManagerTest {
    * @throws Exception
    */
   @Test
-  public void testBadCallback()
-      throws Exception {
+  public void testBadCallback() throws Exception {
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null,
         new ErrorCodeChecker() {
           @Override
-          public void testAndAssert(RouterErrorCode expectedError)
-              throws Exception {
+          public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             final CountDownLatch callbackCalled = new CountDownLatch(1);
             List<Future> futures = new ArrayList<>();
             for (int i = 0; i < 5; i++) {
@@ -169,8 +162,7 @@ public class DeleteManagerTest {
    * Test the cases for invalid blobId strings.
    */
   @Test
-  public void testBlobIdNotValid()
-      throws Exception {
+  public void testBlobIdNotValid() throws Exception {
     String[] input = {"123", "abcd", "", "/"};
     for (String s : input) {
       future = router.deleteBlob(s);
@@ -185,8 +177,7 @@ public class DeleteManagerTest {
    * defined in {@code serverErrorCodes}.
    */
   @Test
-  public void testBlobExpired()
-      throws Exception {
+  public void testBlobExpired() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
     serverErrorCodes[5] = ServerErrorCode.Blob_Expired;
@@ -197,15 +188,14 @@ public class DeleteManagerTest {
    * Test if the {@link RouterErrorCode} is as expected for different {@link ServerErrorCode}.
    */
   @Test
-  public void testVariousServerErrorCode()
-      throws Exception {
+  public void testVariousServerErrorCode() throws Exception {
     HashMap<ServerErrorCode, RouterErrorCode> map = new HashMap<>();
     map.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
     map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
-      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted && !map
-          .containsKey(serverErrorCode)) {
+      if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted
+          && !map.containsKey(serverErrorCode)) {
         map.put(serverErrorCode, RouterErrorCode.UnexpectedInternalError);
       }
     }
@@ -222,8 +212,7 @@ public class DeleteManagerTest {
    * same as defined in {@code serverErrorCodes}.
    */
   @Test
-  public void testBlobNotFoundWithLastResponseNotBlobNotFound()
-      throws Exception {
+  public void testBlobNotFoundWithLastResponseNotBlobNotFound() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
     serverErrorCodes[8] = ServerErrorCode.IO_Error;
@@ -238,8 +227,7 @@ public class DeleteManagerTest {
    * The order of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test
-  public void testBlobNotFoundWithTwoBlobDeleted()
-      throws Exception {
+  public void testBlobNotFoundWithTwoBlobDeleted() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.IO_Error);
     serverErrorCodes[5] = ServerErrorCode.Blob_Deleted;
@@ -253,8 +241,7 @@ public class DeleteManagerTest {
    * of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test
-  public void testSingleBlobDeletedReturned()
-      throws Exception {
+  public void testSingleBlobDeletedReturned() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Unknown_Error);
     serverErrorCodes[7] = ServerErrorCode.Blob_Deleted;
@@ -269,8 +256,7 @@ public class DeleteManagerTest {
    * is the same as defined in {@code serverErrorCodes}.
    */
   @Test
-  public void testVariousServerErrorCodes()
-      throws Exception {
+  public void testVariousServerErrorCodes() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
     serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
@@ -294,8 +280,7 @@ public class DeleteManagerTest {
    * is the same as defined in {@code serverErrorCodes}.
    */
   @Test
-  public void testVariousServerErrorCodesForThreeParallelism()
-      throws Exception {
+  public void testVariousServerErrorCodesForThreeParallelism() throws Exception {
     assertCloseCleanup();
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "3");
@@ -324,14 +309,12 @@ public class DeleteManagerTest {
    * in {@code serverErrorCodes}.
    */
   @Test
-  public void testResponseTimeout()
-      throws Exception {
+  public void testResponseTimeout() throws Exception {
     setServerResponse(false);
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.OperationTimedOut, new ErrorCodeChecker() {
           @Override
-          public void testAndAssert(RouterErrorCode expectedError)
-              throws Exception {
+          public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             CountDownLatch operationCompleteLatch = new CountDownLatch(1);
             future = router.deleteBlob(blobIdString, new ClientCallback(operationCompleteLatch));
             do {
@@ -348,8 +331,7 @@ public class DeleteManagerTest {
    * experiences various exceptions. The order of received responses is the same as defined in {@code serverErrorCodes}.
    */
   @Test
-  public void testSelectorError()
-      throws Exception {
+  public void testSelectorError() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
     HashMap<MockSelectorState, RouterErrorCode> errorCodeHashMap = new HashMap<>();
@@ -379,13 +361,11 @@ public class DeleteManagerTest {
    * operations. Setting servers to not respond any requests, so {@link DeleteOperation} can be "in flight".
    */
   @Test
-  public void testRouterClosedDuringOperation()
-      throws Exception {
+  public void testRouterClosedDuringOperation() throws Exception {
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
           @Override
-          public void testAndAssert(RouterErrorCode expectedError)
-              throws Exception {
+          public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             future = router.deleteBlob(blobIdString);
             router.close();
             assertFailureAndCheckErrorCode(future, expectedError);

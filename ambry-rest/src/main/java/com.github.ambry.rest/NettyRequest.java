@@ -106,8 +106,7 @@ class NettyRequest implements RestRequest {
    * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
    *                                {@link RestMethod} or if the {@link RestUtils.Headers#BLOB_SIZE} header is invalid.
    */
-  public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics)
-      throws RestServiceException {
+  public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics) throws RestServiceException {
     if (request == null || channel == null) {
       throw new IllegalArgumentException("Received null argument(s)");
     }
@@ -224,8 +223,7 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
-  public void prepare()
-      throws RestServiceException {
+  public void prepare() throws RestServiceException {
     // no op.
   }
 
@@ -326,8 +324,7 @@ class NettyRequest implements RestRequest {
    * @throws IllegalStateException if {@link #readInto(AsyncWritableChannel, Callback)} has already been called.
    */
   @Override
-  public void setDigestAlgorithm(String digestAlgorithm)
-      throws NoSuchAlgorithmException {
+  public void setDigestAlgorithm(String digestAlgorithm) throws NoSuchAlgorithmException {
     if (callbackWrapper != null) {
       throw new IllegalStateException("Cannot create a digest because some content may have been consumed");
     }
@@ -364,8 +361,7 @@ class NettyRequest implements RestRequest {
    * @throws IllegalStateException if content is being added when it is not expected (GET, DELETE, HEAD).
    * @throws RestServiceException if request channel has been closed.
    */
-  protected void addContent(HttpContent httpContent)
-      throws RestServiceException {
+  protected void addContent(HttpContent httpContent) throws RestServiceException {
     if (!getRestMethod().equals(RestMethod.POST) && (!(httpContent instanceof LastHttpContent)
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
@@ -519,8 +515,7 @@ class NettyRequest implements RestRequest {
    * @throws RestServiceException if {@code httpContent} is the last piece of content and the size of data does
    *                              not match the size in the header.
    */
-  private void validateState(HttpContent httpContent)
-      throws RestServiceException {
+  private void validateState(HttpContent httpContent) throws RestServiceException {
     long bytesReceivedTillNow = bytesReceived.addAndGet(httpContent.content().readableBytes());
     if (size > 0) {
       if (bytesReceivedTillNow > size) {

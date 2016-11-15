@@ -13,8 +13,8 @@
  */
 package com.github.ambry.store;
 
-import java.io.IOException;
 import java.io.DataInputStream;
+import java.io.IOException;
 
 
 /**
@@ -27,7 +27,6 @@ public interface StoreKeyFactory {
    * @param stream The stream used to create the store key
    * @return The store key created from the stream
    */
-  StoreKey getStoreKey(DataInputStream stream)
-      throws IOException;
+  StoreKey getStoreKey(DataInputStream stream) throws IOException;
 }
 

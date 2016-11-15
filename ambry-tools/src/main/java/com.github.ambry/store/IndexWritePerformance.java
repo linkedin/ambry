@@ -22,11 +22,6 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.store.BlobIndexMetrics;
-import com.github.ambry.store.Log;
-import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreMetrics;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
@@ -56,28 +51,43 @@ public class IndexWritePerformance {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<Integer> numberOfIndexesOpt =
-          parser.accepts("numberOfIndexes", "The number of indexes to create").withRequiredArg()
-              .describedAs("number_of_indexes").ofType(Integer.class);
+          parser.accepts("numberOfIndexes", "The number of indexes to create")
+              .withRequiredArg()
+              .describedAs("number_of_indexes")
+              .ofType(Integer.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfWritersOpt =
           parser.accepts("numberOfWriters", "The number of writers that write to a random index concurrently")
-              .withRequiredArg().describedAs("The number of writers").ofType(Integer.class).defaultsTo(4);
+              .withRequiredArg()
+              .describedAs("The number of writers")
+              .ofType(Integer.class)
+              .defaultsTo(4);
 
       ArgumentAcceptingOptionSpec<Integer> writesPerSecondOpt =
-          parser.accepts("writesPerSecond", "The rate at which writes need to be performed").withRequiredArg()
-              .describedAs("The number of writes per second").ofType(Integer.class).defaultsTo(1000);
+          parser.accepts("writesPerSecond", "The rate at which writes need to be performed")
+              .withRequiredArg()
+              .describedAs("The number of writes per second")
+              .ofType(Integer.class)
+              .defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
-              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging")
+              .withOptionalArg()
+              .describedAs("Enable verbose logging")
+              .ofType(Boolean.class)
+              .defaultsTo(false);
 
       OptionSet options = parser.parse(args);
 

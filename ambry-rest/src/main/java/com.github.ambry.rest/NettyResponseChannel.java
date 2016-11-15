@@ -137,8 +137,8 @@ class NettyResponseChannel implements RestResponseChannel {
         }
       }
       writeFuture.addListener(new CleanupCallback(exception));
-    } else if (HttpHeaders.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpHeaders
-        .getContentLength(finalResponseMetadata)) {
+    } else if (HttpHeaders.isContentLengthSet(finalResponseMetadata)
+        && totalBytesReceived.get() > HttpHeaders.getContentLength(finalResponseMetadata)) {
       Exception exception = new IllegalStateException(
           "Size of provided content [" + totalBytesReceived.get() + "] is greater than Content-Length set ["
               + HttpHeaders.getContentLength(finalResponseMetadata) + "]");
@@ -226,8 +226,7 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setStatus(ResponseStatus status)
-      throws RestServiceException {
+  public void setStatus(ResponseStatus status) throws RestServiceException {
     responseMetadata.setStatus(getHttpResponseStatus(status));
     responseStatus = status;
     logger.trace("Set status to {} for response on channel {}", responseMetadata.getStatus(), ctx.channel());
@@ -239,8 +238,7 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setHeader(String headerName, Object headerValue)
-      throws RestServiceException {
+  public void setHeader(String headerName, Object headerValue) throws RestServiceException {
     setResponseHeader(headerName, headerValue);
   }
 
@@ -525,8 +523,8 @@ class NettyResponseChannel implements RestResponseChannel {
       onResponseComplete(exception);
       cleanupChunks(exception);
     } finally {
-      nettyMetrics.channelWriteFailureProcessingTimeInMs
-          .update(System.currentTimeMillis() - writeFailureProcessingStartTime);
+      nettyMetrics.channelWriteFailureProcessingTimeInMs.update(
+          System.currentTimeMillis() - writeFailureProcessingStartTime);
     }
   }
 
@@ -663,8 +661,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(chunkWriteTime);
       nettyMetrics.chunkResolutionProcessingTimeInMs.update(chunkResolutionProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker
-            .addToResponseProcessingTime(chunkWriteTime + chunkResolutionProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(
+            chunkWriteTime + chunkResolutionProcessingTime);
       }
     }
   }
@@ -751,8 +749,8 @@ class NettyResponseChannel implements RestResponseChannel {
     @Override
     public void operationProgressed(ChannelProgressiveFuture future, long progress, long total) {
       logger.trace("{} bytes of response written on channel {}", progress, ctx.channel());
-      while (chunksAwaitingCallback.peek() != null && progress >= chunksAwaitingCallback
-          .peek().writeCompleteThreshold) {
+      while (chunksAwaitingCallback.peek() != null
+          && progress >= chunksAwaitingCallback.peek().writeCompleteThreshold) {
         chunksAwaitingCallback.poll().resolveChunk(null);
       }
     }
@@ -809,8 +807,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
       nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker
-            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(
+            channelWriteTime + responseAfterWriteProcessingTime);
       }
     }
   }
@@ -822,8 +820,7 @@ class NettyResponseChannel implements RestResponseChannel {
     private final long responseWriteStartTime = System.currentTimeMillis();
 
     @Override
-    public void operationComplete(ChannelFuture future)
-        throws Exception {
+    public void operationComplete(ChannelFuture future) throws Exception {
       long writeFinishTime = System.currentTimeMillis();
       long channelWriteTime = writeFinishTime - responseWriteStartTime;
       if (future.isSuccess()) {
@@ -835,8 +832,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
       nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker
-            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(
+            channelWriteTime + responseAfterWriteProcessingTime);
       }
     }
   }
@@ -861,8 +858,7 @@ class NettyResponseChannel implements RestResponseChannel {
     }
 
     @Override
-    public void operationComplete(ChannelFuture future)
-        throws Exception {
+    public void operationComplete(ChannelFuture future) throws Exception {
       Throwable cause = future.cause() == null ? exception : future.cause();
       if (cause != null) {
         handleChannelWriteFailure(cause, false);

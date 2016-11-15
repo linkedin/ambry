@@ -59,8 +59,7 @@ public class AdminTestUtils {
    * @return the response decoded into a {@link JSONObject}.
    * @throws Exception
    */
-  static JSONObject getJsonizedResponseBody(ReadableStreamChannel channel)
-      throws Exception {
+  static JSONObject getJsonizedResponseBody(ReadableStreamChannel channel) throws Exception {
     CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel((int) channel.getSize());
     channel.readInto(asyncWritableChannel, null).get();
     return new JSONObject(new String(asyncWritableChannel.getData()));

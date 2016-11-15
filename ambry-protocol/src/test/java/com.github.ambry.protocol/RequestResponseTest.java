@@ -44,8 +44,7 @@ import org.junit.Test;
 class MockFindTokenFactory implements FindTokenFactory {
 
   @Override
-  public FindToken getFindToken(DataInputStream stream)
-      throws IOException {
+  public FindToken getFindToken(DataInputStream stream) throws IOException {
     return new MockFindToken(stream);
   }
 
@@ -64,8 +63,7 @@ class MockFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
-  public MockFindToken(DataInputStream stream)
-      throws IOException {
+  public MockFindToken(DataInputStream stream) throws IOException {
     this.index = stream.readInt();
     this.bytesRead = stream.readLong();
   }
@@ -145,8 +143,7 @@ public class RequestResponseTest {
   }
 
   private void testPutRequestInvalidVersion(MockClusterMap clusterMap, int correlationId, String clientId,
-      BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, byte[] blob)
-      throws IOException {
+      BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, byte[] blob) throws IOException {
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     PutRequest request =
         new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
@@ -167,8 +164,7 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void putRequestResponseTest()
-      throws IOException {
+  public void putRequestResponseTest() throws IOException {
     Random rnd = new Random();
     MockClusterMap clusterMap = new MockClusterMap();
 
@@ -224,8 +220,7 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void getRequestResponseTest()
-      throws IOException {
+  public void getRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
@@ -276,13 +271,15 @@ public class RequestResponseTest {
         deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getSize(), 1000);
     Assert.assertEquals(
         deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getStoreKey(), id1);
-    Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0)
+    Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList()
+        .get(0)
+        .getMessageInfoList()
+        .get(0)
         .getExpirationTimeInMs(), 1000);
   }
 
   @Test
-  public void deleteRequestResponseTest()
-      throws IOException {
+  public void deleteRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     DeleteRequest deleteRequest = new DeleteRequest(1234, "client", id1);
@@ -310,8 +307,7 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void replicaMetadataRequestTest()
-      throws IOException {
+  public void replicaMetadataRequestTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -327,8 +323,8 @@ public class RequestResponseTest {
     buffer.flip();
     buffer.getLong();
     buffer.getShort();
-    ReplicaMetadataRequest replicaMetadataRequestFromBytes = ReplicaMetadataRequest
-        .readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(),
+    ReplicaMetadataRequest replicaMetadataRequestFromBytes =
+        ReplicaMetadataRequest.readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(),
             new MockFindTokenFactory());
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);

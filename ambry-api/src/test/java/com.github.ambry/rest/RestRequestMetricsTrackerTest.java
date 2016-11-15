@@ -19,8 +19,7 @@ import java.util.Map;
 import java.util.Random;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -144,23 +143,29 @@ class TestMetrics {
   protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry) {
     Map<String, Histogram> histograms = metricRegistry.getHistograms();
     assertEquals("NIO request processing time unequal", nioLayerRequestProcessingTime,
-        histograms.get(metricPrefix + RestRequestMetrics.NIO_REQUEST_PROCESSING_TIME_SUFFIX).getSnapshot()
+        histograms.get(metricPrefix + RestRequestMetrics.NIO_REQUEST_PROCESSING_TIME_SUFFIX)
+            .getSnapshot()
             .getValues()[0]);
     assertEquals("NIO response processing time unequal", nioLayerResponseProcessingTime,
-        histograms.get(metricPrefix + RestRequestMetrics.NIO_RESPONSE_PROCESSING_TIME_SUFFIX).getSnapshot()
+        histograms.get(metricPrefix + RestRequestMetrics.NIO_RESPONSE_PROCESSING_TIME_SUFFIX)
+            .getSnapshot()
             .getValues()[0]);
 
     assertEquals("SC request processing time unequal", scRequestProcessingTime,
-        histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_TIME_SUFFIX).getSnapshot()
+        histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_TIME_SUFFIX)
+            .getSnapshot()
             .getValues()[0]);
     assertEquals("SC request processing wait time unequal", scRequestProcessingWaitTime,
-        histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX).getSnapshot()
+        histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX)
+            .getSnapshot()
             .getValues()[0]);
     assertEquals("SC response processing time unequal", scResponseProcessingTime,
-        histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_PROCESSING_TIME_SUFFIX).getSnapshot()
+        histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_PROCESSING_TIME_SUFFIX)
+            .getSnapshot()
             .getValues()[0]);
     assertEquals("SC response processing wait time unequal", scResponseProcessingWaitTime,
-        histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX).getSnapshot()
+        histograms.get(metricPrefix + RestRequestMetrics.SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX)
+            .getSnapshot()
             .getValues()[0]);
 
     assertEquals("Rate metric has not fired", 1,

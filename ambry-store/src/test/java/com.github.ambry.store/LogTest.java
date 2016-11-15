@@ -42,8 +42,7 @@ public class LogTest {
   private static final long SEGMENT_CAPACITY = 1024;
   private static final Appender BUFFER_APPENDER = new Appender() {
     @Override
-    public void append(Log log, ByteBuffer buffer)
-        throws IOException {
+    public void append(Log log, ByteBuffer buffer) throws IOException {
       int writeSize = buffer.remaining();
       int written = log.appendFrom(buffer);
       assertEquals("Size written did not match size of buffer provided", writeSize, written);
@@ -51,8 +50,7 @@ public class LogTest {
   };
   private static final Appender CHANNEL_APPENDER = new Appender() {
     @Override
-    public void append(Log log, ByteBuffer buffer)
-        throws IOException {
+    public void append(Log log, ByteBuffer buffer) throws IOException {
       int writeSize = buffer.remaining();
       log.appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), writeSize);
       assertFalse("The buffer was not completely written", buffer.hasRemaining());
@@ -66,8 +64,7 @@ public class LogTest {
    * Creates a temporary directory to store the segment files.
    * @throws IOException
    */
-  public LogTest()
-      throws IOException {
+  public LogTest() throws IOException {
     tempDir = Files.createTempDirectory("logDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     metrics = new StoreMetrics(tempDir.getName(), new MetricRegistry());
@@ -94,8 +91,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void comprehensiveTest()
-      throws IOException {
+  public void comprehensiveTest() throws IOException {
     Appender[] appenders = {BUFFER_APPENDER, CHANNEL_APPENDER};
     for (Appender appender : appenders) {
       // for single segment log
@@ -111,8 +107,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void constructionBadArgsTest()
-      throws IOException {
+  public void constructionBadArgsTest() throws IOException {
     List<Pair<Long, Long>> logAndSegmentSizes = new ArrayList<>();
     // <=0 values for capacities
     logAndSegmentSizes.add(new Pair<>(-1L, SEGMENT_CAPACITY));
@@ -146,8 +141,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void appendErrorCasesTest()
-      throws IOException {
+  public void appendErrorCasesTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     try {
       // write exceeds size of a single segment.
@@ -177,8 +171,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void setActiveSegmentBadArgsTest()
-      throws IOException {
+  public void setActiveSegmentBadArgsTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
     try {
@@ -197,8 +190,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void getDifferenceBadArgsTest()
-      throws IOException {
+  public void getDifferenceBadArgsTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
     Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(numSegments + 1, 0), 0);
@@ -214,8 +206,8 @@ public class LogTest {
       for (Pair<Offset, Offset> pairToCheck : pairsToCheck) {
         try {
           log.getDifference(pairToCheck.getFirst(), pairToCheck.getSecond());
-          fail("Should have failed to get difference with invalid offset input. Input was [" + pairToCheck.getFirst() +
-              ", " + pairToCheck.getSecond() + "]");
+          fail("Should have failed to get difference with invalid offset input. Input was [" + pairToCheck.getFirst()
+              + ", " + pairToCheck.getSecond() + "]");
         } catch (IllegalArgumentException e) {
           // expected. Nothing to do.
         }
@@ -231,8 +223,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void getNextSegmentBadArgsTest()
-      throws IOException {
+  public void getNextSegmentBadArgsTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)));
     LogSegment segment = new LogSegment(LogSegmentNameHelper.getName(1, 1), file, 1, metrics, false);
@@ -249,8 +240,7 @@ public class LogTest {
    * @throws IOException
    */
   @Test
-  public void getViewTest()
-      throws IOException {
+  public void getViewTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     try {
       long writeStartOffset = log.getEndOffset().getOffset();
@@ -367,8 +357,7 @@ public class LogTest {
    * @return a {@link File} instance pointing the newly created file named {@code filename}.
    * @throws IOException
    */
-  private File create(String filename)
-      throws IOException {
+  private File create(String filename) throws IOException {
     File file = new File(tempDir, filename);
     if (file.exists()) {
       assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
@@ -395,8 +384,7 @@ public class LogTest {
    * @throws IOException
    */
   private void doComprehensiveTest(long logCapacity, long segmentCapacity, long writeSize,
-      List<String> expectedSegmentNames, int segmentIdxToMarkActive, Appender appender)
-      throws IOException {
+      List<String> expectedSegmentNames, int segmentIdxToMarkActive, Appender appender) throws IOException {
     long numSegments = (logCapacity - 1) / segmentCapacity + 1;
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segmentCapacity, metrics);
     try {
@@ -463,8 +451,7 @@ public class LogTest {
    * @throws IOException
    */
   private void writeAndCheckLog(Log log, long logCapacity, long segmentCapacity, long segmentsLeft, long writeSize,
-      List<String> segmentNames, int activeSegmentIdx, Appender appender)
-      throws IOException {
+      List<String> segmentNames, int activeSegmentIdx, Appender appender) throws IOException {
     byte[] buf = TestUtils.getRandomBytes((int) writeSize);
     long expectedUsedCapacity = logCapacity - segmentCapacity * segmentsLeft;
     int nextSegmentIdx = activeSegmentIdx + 1;
@@ -630,8 +617,7 @@ public class LogTest {
    * @param log the {@link Log} intance to flush and close.
    * @throws IOException
    */
-  private void flushCloseAndValidate(Log log)
-      throws IOException {
+  private void flushCloseAndValidate(Log log) throws IOException {
     // flush should not throw any exceptions
     log.flush();
     // close log and ensure segments are closed
@@ -653,7 +639,6 @@ public class LogTest {
      * @param buffer the data to append to {@code log}.
      * @throws IOException
      */
-    void append(Log log, ByteBuffer buffer)
-        throws IOException;
+    void append(Log log, ByteBuffer buffer) throws IOException;
   }
 }

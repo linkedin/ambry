@@ -79,8 +79,8 @@ public class RestRequestMetrics {
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX));
     scResponseProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_PROCESSING_TIME_SUFFIX));
-    scResponseProcessingWaitTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX));
+    scResponseProcessingWaitTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(ownerClass, requestType + SC_RESPONSE_PROCESSING_WAIT_TIME_SUFFIX));
     scRoundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_ROUND_TRIP_TIME_SUFFIX));
 

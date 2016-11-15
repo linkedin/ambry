@@ -49,8 +49,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object obj)
-      throws Exception {
+  public void channelRead(ChannelHandlerContext ctx, Object obj) throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     long startTimeInMs = System.currentTimeMillis();
     if (obj instanceof HttpRequest) {
@@ -71,18 +70,16 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
     } else if (obj instanceof LastHttpContent) {
       requestLastChunkArrivalTimeInMs = System.currentTimeMillis();
     } else if (!(obj instanceof HttpContent)) {
-      logger.error("Receiving request (messageReceived) that is not of type HttpRequest or HttpContent. " +
-          "Receiving request from " + ctx.channel().remoteAddress() + ". " +
-          "Request is of type " + obj.getClass() + ". " +
-          "No action being taken other than logging this unexpected state.");
+      logger.error("Receiving request (messageReceived) that is not of type HttpRequest or HttpContent. "
+          + "Receiving request from " + ctx.channel().remoteAddress() + ". " + "Request is of type " + obj.getClass()
+          + ". " + "No action being taken other than logging this unexpected state.");
     }
     nettyMetrics.publicAccessLogRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
     super.channelRead(ctx, obj);
   }
 
   @Override
-  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-      throws Exception {
+  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
     long startTimeInMs = System.currentTimeMillis();
     boolean shouldReset = msg instanceof LastHttpContent;
     if (request != null) {
@@ -114,8 +111,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void disconnect(ChannelHandlerContext ctx, ChannelPromise future)
-      throws Exception {
+  public void disconnect(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
     if (request != null) {
       logError(" : Channel disconnected while request in progress.");
     }
@@ -123,8 +119,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void close(ChannelHandlerContext ctx, ChannelPromise future)
-      throws Exception {
+  public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
     if (request != null) {
       logError(" : Channel closed while request in progress.");
     }
@@ -157,7 +152,8 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
     long nowMs = System.currentTimeMillis();
     logMessage.append("duration=").append(nowMs - requestArrivalTimeInMs).append("ms ");
     if (requestLastChunkArrivalTimeInMs != INIT_TIME) {
-      logMessage.append("(chunked request receive=").append(requestLastChunkArrivalTimeInMs - requestArrivalTimeInMs)
+      logMessage.append("(chunked request receive=")
+          .append(requestLastChunkArrivalTimeInMs - requestArrivalTimeInMs)
           .append("ms) ");
     }
     if (responseFirstChunkStartTimeInMs != INIT_TIME) {

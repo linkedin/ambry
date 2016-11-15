@@ -23,7 +23,7 @@ import java.io.IOException;
 import java.util.Properties;
 import org.junit.Test;
 
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -36,8 +36,7 @@ public class RestServerTest {
    * @throws Exception
    */
   @Test
-  public void startShutdownTest()
-      throws Exception {
+  public void startShutdownTest() throws Exception {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = getVProps(properties);
     ClusterMap clusterMap = new MockClusterMap();
@@ -55,8 +54,7 @@ public class RestServerTest {
    * @throws Exception
    */
   @Test
-  public void shutdownWithoutStartTest()
-      throws Exception {
+  public void shutdownWithoutStartTest() throws Exception {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = getVProps(properties);
     ClusterMap clusterMap = new MockClusterMap();
@@ -73,8 +71,7 @@ public class RestServerTest {
    * @throws IOException
    */
   @Test
-  public void serverCreationWithBadInputTest()
-      throws Exception {
+  public void serverCreationWithBadInputTest() throws Exception {
     badArgumentsTest();
     badFactoriesTest();
   }
@@ -85,8 +82,7 @@ public class RestServerTest {
    * @throws Exception
    */
   @Test
-  public void startShutdownTestWithBadComponent()
-      throws Exception {
+  public void startShutdownTestWithBadComponent() throws Exception {
     Properties properties = new Properties();
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
     // makes MockNioServer throw exceptions.
@@ -137,8 +133,7 @@ public class RestServerTest {
    * @throws Exception
    * @throws IOException
    */
-  private void badArgumentsTest()
-      throws Exception {
+  private void badArgumentsTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -174,8 +169,7 @@ public class RestServerTest {
    * Tests for bad factory class names in {@link RestServer}.
    * @throws Exception
    */
-  private void badFactoriesTest()
-      throws Exception {
+  private void badFactoriesTest() throws Exception {
     doBadFactoryClassTest("rest.server.nio.server.factory");
     doBadFactoryClassTest("rest.server.blob.storage.service.factory");
     doBadFactoryClassTest("rest.server.router.factory");
@@ -188,8 +182,7 @@ public class RestServerTest {
    * @param configKey the property whose value is the bad factory class
    * @throws Exception
    */
-  private void doBadFactoryClassTest(String configKey)
-      throws Exception {
+  private void doBadFactoryClassTest(String configKey) throws Exception {
     Properties properties = new Properties();
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     properties.setProperty("rest.server.response.handler.factory",

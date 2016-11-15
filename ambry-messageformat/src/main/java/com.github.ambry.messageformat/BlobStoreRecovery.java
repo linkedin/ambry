@@ -19,15 +19,14 @@ import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.io.IOException;
-import java.io.InputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -79,8 +78,9 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               MessageFormatRecord.deserializeUserMetadata(stream);
               MessageFormatRecord.deserializeBlob(stream);
               MessageInfo info =
-                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), Utils
-                      .addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                      Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(),
+                          properties.getTimeToLiveInSeconds()));
               messageRecovered.add(info);
             } else {
               boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
@@ -106,9 +106,8 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
       logger.error("Trying to read more than the available bytes");
     }
     for (MessageInfo messageInfo : messageRecovered) {
-      logger
-          .info("Message Recovered key {} size {} ttl {} deleted {}", messageInfo.getStoreKey(), messageInfo.getSize(),
-              messageInfo.getExpirationTimeInMs(), messageInfo.isDeleted());
+      logger.info("Message Recovered key {} size {} ttl {} deleted {}", messageInfo.getStoreKey(),
+          messageInfo.getSize(), messageInfo.getExpirationTimeInMs(), messageInfo.isDeleted());
     }
     return messageRecovered;
   }
@@ -127,8 +126,7 @@ class ReadInputStream extends InputStream {
   }
 
   @Override
-  public int read()
-      throws IOException {
+  public int read() throws IOException {
     if (currentPosition + 1 > endPosition) {
       throw new IndexOutOfBoundsException("Trying to read outside the available read window");
     }
@@ -140,8 +138,7 @@ class ReadInputStream extends InputStream {
   }
 
   @Override
-  public int read(byte b[], int off, int len)
-      throws IOException {
+  public int read(byte b[], int off, int len) throws IOException {
     if (b == null) {
       throw new NullPointerException();
     } else if (off < 0 || len < 0 || len > b.length - off) {

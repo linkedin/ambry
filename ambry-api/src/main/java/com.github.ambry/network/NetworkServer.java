@@ -26,8 +26,7 @@ public interface NetworkServer {
    * @throws IOException
    * @throws InterruptedException
    */
-  void start()
-      throws IOException, InterruptedException;
+  void start() throws IOException, InterruptedException;
 
   /**
    * Shuts down the network server

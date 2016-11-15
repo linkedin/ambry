@@ -77,8 +77,7 @@ public class NettyMessageProcessorTest {
    * @throws InstantiationException
    * @throws IOException
    */
-  public NettyMessageProcessorTest()
-      throws InstantiationException, IOException {
+  public NettyMessageProcessorTest() throws InstantiationException, IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
     router = new InMemoryRouter(verifiableProperties, notificationSystem);
@@ -93,8 +92,7 @@ public class NettyMessageProcessorTest {
    * Clean up task.
    */
   @After
-  public void cleanUp()
-      throws IOException {
+  public void cleanUp() throws IOException {
     blobStorageService.shutdown();
     router.close();
     notificationSystem.close();
@@ -105,8 +103,7 @@ public class NettyMessageProcessorTest {
    * @throws IOException
    */
   @Test
-  public void requestHandleWithGoodInputTest()
-      throws IOException {
+  public void requestHandleWithGoodInputTest() throws IOException {
     doRequestHandleWithoutKeepAlive(HttpMethod.GET, RestMethod.GET);
     doRequestHandleWithoutKeepAlive(HttpMethod.DELETE, RestMethod.DELETE);
     doRequestHandleWithoutKeepAlive(HttpMethod.HEAD, RestMethod.HEAD);
@@ -122,8 +119,7 @@ public class NettyMessageProcessorTest {
    * @throws InterruptedException
    */
   @Test
-  public void rawBytesPostTest()
-      throws InterruptedException {
+  public void rawBytesPostTest() throws InterruptedException {
     Random random = new Random();
     // request also contains content.
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(random.nextInt(128) + 128));
@@ -156,8 +152,7 @@ public class NettyMessageProcessorTest {
    * @throws Exception
    */
   @Test
-  public void multipartPostTest()
-      throws Exception {
+  public void multipartPostTest() throws Exception {
     Random random = new Random();
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(random.nextInt(128) + 128));
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
@@ -178,8 +173,7 @@ public class NettyMessageProcessorTest {
    * Tests for error handling flow when bad input streams are provided to the {@link NettyMessageProcessor}.
    */
   @Test
-  public void requestHandleWithBadInputTest()
-      throws IOException {
+  public void requestHandleWithBadInputTest() throws IOException {
     String content = "@@randomContent@@@";
     // content without request.
     EmbeddedChannel channel = createChannel();
@@ -294,8 +288,7 @@ public class NettyMessageProcessorTest {
    * @throws IOException
    */
   private void sendRequestCheckResponse(EmbeddedChannel channel, HttpMethod httpMethod, RestMethod restMethod,
-      boolean isKeepAlive)
-      throws IOException {
+      boolean isKeepAlive) throws IOException {
     long requestId = REQUEST_ID_GENERATOR.getAndIncrement();
     String uri = MockBlobStorageService.ECHO_REST_METHOD + requestId;
     HttpRequest httpRequest = RestTestUtils.createRequest(httpMethod, uri, null);
@@ -319,8 +312,7 @@ public class NettyMessageProcessorTest {
    * @return the data stored in the {@link InMemoryRouter} as a result of the POST.
    * @throws InterruptedException
    */
-  private ByteBuffer doPostTest(HttpRequest postRequest, List<ByteBuffer> contentToSend)
-      throws InterruptedException {
+  private ByteBuffer doPostTest(HttpRequest postRequest, List<ByteBuffer> contentToSend) throws InterruptedException {
     EmbeddedChannel channel = createChannel();
 
     // POST
@@ -367,8 +359,7 @@ public class NettyMessageProcessorTest {
    *                   response.
    * @throws IOException
    */
-  private void doRequestHandleWithoutKeepAlive(HttpMethod httpMethod, RestMethod restMethod)
-      throws IOException {
+  private void doRequestHandleWithoutKeepAlive(HttpMethod httpMethod, RestMethod restMethod) throws IOException {
     EmbeddedChannel channel = createChannel();
     sendRequestCheckResponse(channel, httpMethod, restMethod, false);
     assertFalse("Channel not closed", channel.isOpen());

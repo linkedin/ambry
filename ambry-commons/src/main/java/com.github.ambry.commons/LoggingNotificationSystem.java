@@ -28,8 +28,7 @@ public class LoggingNotificationSystem implements NotificationSystem {
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     // No op
   }
 
