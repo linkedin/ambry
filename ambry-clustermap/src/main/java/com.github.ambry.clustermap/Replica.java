@@ -13,14 +13,13 @@
  */
 package com.github.ambry.clustermap;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
 
 /**
@@ -44,11 +43,10 @@ public class Replica implements ReplicaId {
     validate();
   }
 
-  public Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject)
-      throws JSONException {
+  public Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject) throws JSONException {
     this.partition = partition;
-    this.disk = hardwareLayout
-        .findDisk(jsonObject.getString("hostname"), jsonObject.getInt("port"), jsonObject.getString("mountPath"));
+    this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"), jsonObject.getInt("port"),
+        jsonObject.getString("mountPath"));
     validate();
   }
 
@@ -127,10 +125,10 @@ public class Replica implements ReplicaId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject()
-      throws JSONException {
+  public JSONObject toJSONObject() throws JSONException {
     // Effectively serializes the "foreign key" into hardwareLayout to find Disk.
-    return new JSONObject().put("hostname", disk.getDataNode().getHostname()).put("port", disk.getDataNode().getPort())
+    return new JSONObject().put("hostname", disk.getDataNode().getHostname())
+        .put("port", disk.getDataNode().getPort())
         .put("mountPath", disk.getMountPath());
   }
 

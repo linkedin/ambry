@@ -26,10 +26,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -69,8 +66,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testReadStrings()
-      throws IOException {
+  public void testReadStrings() throws IOException {
     // good case
     ByteBuffer buffer = ByteBuffer.allocate(10);
     buffer.putShort((short) 8);
@@ -142,8 +138,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testReadBuffers()
-      throws IOException {
+  public void testReadBuffers() throws IOException {
     byte[] buf = new byte[40004];
     new Random().nextBytes(buf);
     ByteBuffer inputBuf = ByteBuffer.wrap(buf);
@@ -204,8 +199,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testReadWriteStringToFile()
-      throws IOException {
+  public void testReadWriteStringToFile() throws IOException {
     File file = File.createTempFile("test", "1");
     file.deleteOnExit();
     Utils.writeStringToFile("Test", file.getPath());
@@ -344,8 +338,8 @@ public class UtilsTest {
       mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object());
       Assert.assertNotNull(mockObj);
       Assert.assertTrue(mockObj.threeArgConstructorInvoked);
-      mockObj = Utils
-          .getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object(), new Object());
+      mockObj = Utils.getObj("com.github.ambry.utils.MockClassForTesting", new Object(), new Object(), new Object(),
+          new Object());
       Assert.assertNotNull(mockObj);
       Assert.assertTrue(mockObj.fourArgConstructorInvoked);
     } catch (Exception e) {
@@ -374,8 +368,7 @@ public class UtilsTest {
    * Test {@link Utils#newScheduler(int, String, boolean)}
    */
   @Test
-  public void newSchedulerTest()
-      throws Exception {
+  public void newSchedulerTest() throws Exception {
     ScheduledExecutorService scheduler = Utils.newScheduler(2, false);
     Future<String> future = scheduler.schedule(new Callable<String>() {
       @Override

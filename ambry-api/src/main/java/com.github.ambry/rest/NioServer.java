@@ -29,8 +29,7 @@ public interface NioServer {
    * Do startup tasks for the NioServer. When the function returns, startup is FULLY complete.
    * @throws InstantiationException if the NioServer is unable to start.
    */
-  public void start()
-      throws InstantiationException;
+  public void start() throws InstantiationException;
 
   /**
    * Do shutdown tasks for the NioServer. When the function returns, shutdown is FULLY complete.

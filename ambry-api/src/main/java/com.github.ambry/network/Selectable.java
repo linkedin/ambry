@@ -68,16 +68,14 @@ public interface Selectable {
    * @param sends The new sends to initiate
    * @throws IOException
    */
-  public void poll(long timeoutMs, List<NetworkSend> sends)
-      throws IOException;
+  public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException;
 
   /**
    * Make progress on any I/O operations in-flight (connections, disconnections, existing sends, and receives)
    * @param timeoutMs The amount of time to block if there is nothing to do in ms
    * @throws IOException
    */
-  public void poll(long timeoutMs)
-      throws IOException;
+  public void poll(long timeoutMs) throws IOException;
 
   /**
    * The list of sends that completed on the last {@link #poll(long, List) poll()} call.

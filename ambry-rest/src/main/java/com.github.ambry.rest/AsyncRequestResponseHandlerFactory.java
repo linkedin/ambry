@@ -199,8 +199,8 @@ class RequestResponseHandlerMetrics {
     responsePreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "ResponsePreProcessingTimeInMs"));
     // AsyncRequestResponseHandler
-    requestWorkerSelectionTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerSelectionTimeInMs"));
+    requestWorkerSelectionTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerSelectionTimeInMs"));
 
     // Errors
     // AsyncRequestWorker
@@ -230,8 +230,8 @@ class RequestResponseHandlerMetrics {
     responseHandlerCloseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "CloseTimeInMs"));
     // AsyncRequestResponseHandler
-    requestWorkerShutdownTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerShutdownTimeInMs"));
+    requestWorkerShutdownTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerShutdownTimeInMs"));
     requestWorkerStartTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerStartTimeInMs"));
     requestResponseHandlerShutdownTimeInMs =
@@ -280,8 +280,8 @@ class RequestResponseHandlerMetrics {
         return asyncRequestResponseHandler.getResponseSetSize();
       }
     };
-    metricRegistry
-        .register(MetricRegistry.name(AsyncRequestResponseHandler.class, "TotalResponseSetSize"), totalResponseSetSize);
+    metricRegistry.register(MetricRegistry.name(AsyncRequestResponseHandler.class, "TotalResponseSetSize"),
+        totalResponseSetSize);
 
     Gauge<Integer> asyncHandlerWorkersAlive = new Gauge<Integer>() {
       @Override

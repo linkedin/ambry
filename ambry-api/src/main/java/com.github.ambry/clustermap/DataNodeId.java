@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.network.Port;
-import java.util.ArrayList;
 
 
 /**

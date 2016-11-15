@@ -99,8 +99,7 @@ public class AmbryBlobStorageServiceTest {
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
    * @throws InstantiationException
    */
-  public AmbryBlobStorageServiceTest()
-      throws InstantiationException {
+  public AmbryBlobStorageServiceTest() throws InstantiationException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
@@ -118,8 +117,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws IOException
    */
   @After
-  public void shutdownAmbryBlobStorageService()
-      throws IOException {
+  public void shutdownAmbryBlobStorageService() throws IOException {
     ambryBlobStorageService.shutdown();
     responseHandler.shutdown();
     router.close();
@@ -131,8 +129,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws IOException
    */
   @Test
-  public void startShutDownTest()
-      throws InstantiationException, IOException {
+  public void startShutDownTest() throws InstantiationException, IOException {
     ambryBlobStorageService.start();
     ambryBlobStorageService.shutdown();
   }
@@ -146,8 +143,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws IOException
    */
   @Test
-  public void shutdownWithoutStartTest()
-      throws IOException {
+  public void shutdownWithoutStartTest() throws IOException {
     AmbryBlobStorageService ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.shutdown();
   }
@@ -158,8 +154,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void useServiceWithoutStartTest()
-      throws Exception {
+  public void useServiceWithoutStartTest() throws Exception {
     ambryBlobStorageService = getAmbryBlobStorageService();
     // not fine to use without start.
     try {
@@ -175,8 +170,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void nullInputsForFunctionsTest()
-      throws Exception {
+  public void nullInputsForFunctionsTest() throws Exception {
     doNullInputsForFunctionsTest("handleGet");
     doNullInputsForFunctionsTest("handlePost");
     doNullInputsForFunctionsTest("handleDelete");
@@ -189,8 +183,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void runtimeExceptionRouterTest()
-      throws Exception {
+  public void runtimeExceptionRouterTest() throws Exception {
     // set InMemoryRouter up to throw RuntimeException
     Properties properties = new Properties();
     properties.setProperty(InMemoryRouter.OPERATION_THROW_EARLY_RUNTIME_EXCEPTION, "true");
@@ -208,8 +201,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void badResponseHandlerAndRestRequestTest()
-      throws Exception {
+  public void badResponseHandlerAndRestRequestTest() throws Exception {
     RestRequest restRequest = new BadRestRequest();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
 
@@ -259,8 +251,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws URISyntaxException
    */
   @Test
-  public void submitResponseTest()
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+  public void submitResponseTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String exceptionMsg = UtilsTest.getRandomString(10);
     responseHandler.shutdown();
     // handleResponse of FrontendTestResponseHandler throws exception because it has been shutdown.
@@ -269,8 +260,8 @@ public class AmbryBlobStorageServiceTest {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-      ambryBlobStorageService
-          .submitResponse(restRequest, restResponseChannel, null, new RuntimeException(exceptionMsg));
+      ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, null,
+          new RuntimeException(exceptionMsg));
       assertEquals("Unexpected exception message", exceptionMsg, restResponseChannel.getException().getMessage());
 
       // there is no exception and exception thrown when the response is submitted.
@@ -295,8 +286,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws URISyntaxException
    */
   @Test
-  public void releaseResourcesTest()
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+  public void releaseResourcesTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     responseHandler.shutdown();
     // handleResponse of FrontendTestResponseHandler throws exception because it has been shutdown.
     try {
@@ -335,8 +325,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void postGetHeadDeleteTest()
-      throws Exception {
+  public void postGetHeadDeleteTest() throws Exception {
     final int CONTENT_LENGTH = 1024;
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(CONTENT_LENGTH));
     String serviceId = "postGetHeadDeleteServiceID";
@@ -381,8 +370,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void oldStyleUserMetadataTest()
-      throws Exception {
+  public void oldStyleUserMetadataTest() throws Exception {
     ByteBuffer content = ByteBuffer.allocate(0);
     BlobProperties blobProperties = new BlobProperties(0, "userMetadataTestOldStyleServiceID");
     byte[] usermetadata = RestTestUtils.getRandomBytes(25);
@@ -409,8 +397,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws JSONException
    */
   @Test
-  public void misbehavingIdConverterTest()
-      throws InstantiationException, JSONException {
+  public void misbehavingIdConverterTest() throws InstantiationException, JSONException {
     FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
     String exceptionMsg = UtilsTest.getRandomString(10);
     converterFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
@@ -423,8 +410,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws JSONException
    */
   @Test
-  public void idConverterExceptionPipelineTest()
-      throws InstantiationException, JSONException {
+  public void idConverterExceptionPipelineTest() throws InstantiationException, JSONException {
     FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
     String exceptionMsg = UtilsTest.getRandomString(10);
     converterFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
@@ -437,8 +423,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws JSONException
    */
   @Test
-  public void misbehavingSecurityServiceTest()
-      throws InstantiationException, JSONException {
+  public void misbehavingSecurityServiceTest() throws InstantiationException, JSONException {
     FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
     String exceptionMsg = UtilsTest.getRandomString(10);
     securityFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
@@ -451,8 +436,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws JSONException
    */
   @Test
-  public void securityServiceExceptionPipelineTest()
-      throws InstantiationException, JSONException {
+  public void securityServiceExceptionPipelineTest() throws InstantiationException, JSONException {
     FrontendTestSecurityServiceFactory securityFactory = new FrontendTestSecurityServiceFactory();
     String exceptionMsg = UtilsTest.getRandomString(10);
     securityFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
@@ -464,8 +448,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void misbehavingRouterTest()
-      throws Exception {
+  public void misbehavingRouterTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     String exceptionMsg = UtilsTest.getRandomString(10);
     testRouter.exceptionToThrow = new IllegalStateException(exceptionMsg);
@@ -478,8 +461,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws JSONException
    */
   @Test
-  public void routerExceptionPipelineTest()
-      throws Exception {
+  public void routerExceptionPipelineTest() throws Exception {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     String exceptionMsg = UtilsTest.getRandomString(10);
     testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.UnexpectedInternalError);
@@ -491,8 +473,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void badRangeHeaderTest()
-      throws Exception {
+  public void badRangeHeaderTest() throws Exception {
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.Headers.RANGE, "adsfksakdfsdfkdaklf");
     try {
@@ -517,8 +498,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws URISyntaxException
    */
   private RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers,
-      List<ByteBuffer> contents)
-      throws JSONException, UnsupportedEncodingException, URISyntaxException {
+      List<ByteBuffer> contents) throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject request = new JSONObject();
     request.put(MockRestRequest.REST_METHOD_KEY, restMethod);
     request.put(MockRestRequest.URI_KEY, uri);
@@ -545,8 +525,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws JSONException
    */
   private void setAmbryHeaders(JSONObject headers, long contentLength, long ttlInSecs, boolean isPrivate,
-      String serviceId, String contentType, String ownerId)
-      throws JSONException {
+      String serviceId, String contentType, String ownerId) throws JSONException {
     if (headers != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       headers.put(RestUtils.Headers.BLOB_SIZE, contentLength);
       headers.put(RestUtils.Headers.TTL, ttlInSecs);
@@ -568,8 +547,7 @@ public class AmbryBlobStorageServiceTest {
    * @param restResponseChannel the {@link RestResponseChannel} to use to return the response.
    * @throws Exception
    */
-  private void doOperation(RestRequest restRequest, RestResponseChannel restResponseChannel)
-      throws Exception {
+  private void doOperation(RestRequest restRequest, RestResponseChannel restResponseChannel) throws Exception {
     responseHandler.reset();
     switch (restRequest.getRestMethod()) {
       case POST:
@@ -614,8 +592,7 @@ public class AmbryBlobStorageServiceTest {
    * @param methodName the name of the method to invoke.
    * @throws Exception
    */
-  private void doNullInputsForFunctionsTest(String methodName)
-      throws Exception {
+  private void doNullInputsForFunctionsTest(String methodName) throws Exception {
     Method method =
         AmbryBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null, null);
@@ -646,8 +623,7 @@ public class AmbryBlobStorageServiceTest {
    * @param restMethod used to determine the method to invoke in {@link AmbryBlobStorageService}.
    * @throws Exception
    */
-  private void doRuntimeExceptionRouterTest(RestMethod restMethod)
-      throws Exception {
+  private void doRuntimeExceptionRouterTest(RestMethod restMethod) throws Exception {
     RestRequest restRequest = createRestRequest(restMethod, "/", null, null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     try {
@@ -682,8 +658,7 @@ public class AmbryBlobStorageServiceTest {
    * @return the blob ID of the blob.
    * @throws Exception
    */
-  public String postBlobAndVerify(JSONObject headers, ByteBuffer content)
-      throws Exception {
+  public String postBlobAndVerify(JSONObject headers, ByteBuffer content) throws Exception {
     List<ByteBuffer> contents = new LinkedList<ByteBuffer>();
     contents.add(content);
     contents.add(null);
@@ -749,8 +724,7 @@ public class AmbryBlobStorageServiceTest {
    * @param blobId the blob ID of the blob to GET.
    * @throws Exception
    */
-  public void getNotModifiedBlobAndVerify(String blobId)
-      throws Exception {
+  public void getNotModifiedBlobAndVerify(String blobId) throws Exception {
     JSONObject headers = new JSONObject();
     SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
     dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -778,8 +752,7 @@ public class AmbryBlobStorageServiceTest {
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getUserMetadataAndVerify(String blobId, JSONObject expectedHeaders)
-      throws Exception {
+  private void getUserMetadataAndVerify(String blobId, JSONObject expectedHeaders) throws Exception {
     RestRequest restRequest =
         createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -799,8 +772,7 @@ public class AmbryBlobStorageServiceTest {
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getBlobInfoAndVerify(String blobId, JSONObject expectedHeaders)
-      throws Exception {
+  private void getBlobInfoAndVerify(String blobId, JSONObject expectedHeaders) throws Exception {
     RestRequest restRequest =
         createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -822,8 +794,7 @@ public class AmbryBlobStorageServiceTest {
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getHeadAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders)
-      throws Exception {
+  private void getHeadAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, createRequestHeaders(range), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
@@ -905,8 +876,7 @@ public class AmbryBlobStorageServiceTest {
    * @param blobId the blob ID of the blob to DELETE.
    * @throws Exception
    */
-  private void deleteBlobAndVerify(String blobId)
-      throws Exception {
+  private void deleteBlobAndVerify(String blobId) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
     verifyDeleteAccepted(restRequest);
   }
@@ -916,8 +886,7 @@ public class AmbryBlobStorageServiceTest {
    * @param blobId the ID of the blob that was deleted.
    * @throws Exception
    */
-  private void verifyOperationsAfterDelete(String blobId)
-      throws Exception {
+  private void verifyOperationsAfterDelete(String blobId) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
     verifyGone(restRequest);
 
@@ -932,8 +901,7 @@ public class AmbryBlobStorageServiceTest {
    * Verifies that a blob is GONE after it is deleted.
    * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
    */
-  private void verifyGone(RestRequest restRequest)
-      throws Exception {
+  private void verifyGone(RestRequest restRequest) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     try {
       doOperation(restRequest, restResponseChannel);
@@ -949,8 +917,7 @@ public class AmbryBlobStorageServiceTest {
    * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
    * @throws Exception
    */
-  private void verifyDeleteAccepted(RestRequest restRequest)
-      throws Exception {
+  private void verifyDeleteAccepted(RestRequest restRequest) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Accepted, restResponseChannel.getStatus());
@@ -1051,8 +1018,7 @@ public class AmbryBlobStorageServiceTest {
    * @param exceptionMsg the expected exception message.
    * @throws Exception
    */
-  private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg)
-      throws Exception {
+  private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, idConverterFactory,
             securityServiceFactory);
@@ -1091,8 +1057,7 @@ public class AmbryBlobStorageServiceTest {
    * @param restRequest the {@link RestRequest} to submit to {@link AmbryBlobStorageService}.
    * @throws Exception
    */
-  private void checkRouterExceptionPipeline(String expectedExceptionMsg, RestRequest restRequest)
-      throws Exception {
+  private void checkRouterExceptionPipeline(String expectedExceptionMsg, RestRequest restRequest) throws Exception {
     try {
       doOperation(restRequest, new MockRestResponseChannel());
       fail("Operation " + restRequest.getRestMethod()
@@ -1113,8 +1078,7 @@ public class AmbryBlobStorageServiceTest {
    * @return the {@link JSONObject} with a range header, or null if {@code range} is null.
    * @throws Exception
    */
-  private JSONObject createRequestHeaders(ByteRange range)
-      throws Exception {
+  private JSONObject createRequestHeaders(ByteRange range) throws Exception {
     if (range == null) {
       return null;
     }
@@ -1147,8 +1111,7 @@ class FrontendTestResponseHandler implements RestResponseHandler {
 
   @Override
   public void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      ReadableStreamChannel response, Exception exception)
-      throws RestServiceException {
+      ReadableStreamChannel response, Exception exception) throws RestServiceException {
     if (serviceRunning) {
       this.response = response;
       this.exception = exception;
@@ -1173,8 +1136,7 @@ class FrontendTestResponseHandler implements RestResponseHandler {
    * @return {@code true} if response was submitted within {@code timeout}. {@code false} otherwise.
    * @throws InterruptedException
    */
-  public boolean awaitResponseSubmission(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
+  public boolean awaitResponseSubmission(long timeout, TimeUnit timeUnit) throws InterruptedException {
     return responseSubmitted.await(timeout, timeUnit);
   }
 
@@ -1215,8 +1177,7 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     /**
      * Works in {@link SecurityService#processRequest(RestRequest, Callback)}.
      */
-    Request,
-    /**
+    Request, /**
      * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
      */
     Response
@@ -1399,8 +1360,7 @@ class BadRSC implements ReadableStreamChannel {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     throw new IOException("Not implemented");
   }
 }
@@ -1415,9 +1375,7 @@ class FrontendTestRouter implements Router {
    * Enumerates the different operation types in the router.
    */
   enum OpType {
-    DeleteBlob,
-    GetBlob,
-    PutBlob
+    DeleteBlob, GetBlob, PutBlob
   }
 
   public OpType exceptionOpType = null;

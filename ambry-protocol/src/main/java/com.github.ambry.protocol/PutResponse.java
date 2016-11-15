@@ -15,7 +15,6 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 
@@ -30,8 +29,7 @@ public class PutResponse extends Response {
     super(RequestOrResponseType.PutResponse, Put_Response_Version_V1, correlationId, clientId, error);
   }
 
-  public static PutResponse readFrom(DataInputStream stream)
-      throws IOException {
+  public static PutResponse readFrom(DataInputStream stream) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.PutResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible: " + type);

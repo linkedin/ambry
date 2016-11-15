@@ -70,8 +70,7 @@ public class PutOperationTest {
   private final int successTarget = 1;
   private final Random random = new Random();
 
-  public PutOperationTest()
-      throws Exception {
+  public PutOperationTest() throws Exception {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
@@ -89,8 +88,7 @@ public class PutOperationTest {
    * after the associated chunk is complete, the buffer is not reused even though the PutChunk is reused.
    */
   @Test
-  public void testSendIncomplete()
-      throws Exception {
+  public void testSendIncomplete() throws Exception {
     int numChunks = NonBlockingRouter.MAX_IN_MEM_CHUNKS + 1;
     BlobProperties blobProperties =
         new BlobProperties(chunkSize * numChunks, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
@@ -126,8 +124,8 @@ public class PutOperationTest {
 
     // 1.
     ResponseInfo responseInfo = getResponseInfo(requestInfos.get(0));
-    PutResponse putResponse = responseInfo.getError() == null ? PutResponse
-        .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+    PutResponse putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+        new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
     op.handleResponse(responseInfo, putResponse);
     // 2.
     PutRequest putRequest = (PutRequest) requestInfos.get(1).getRequest();
@@ -144,8 +142,8 @@ public class PutOperationTest {
     // succeed all the other requests.
     for (int i = 3; i < requestInfos.size(); i++) {
       responseInfo = getResponseInfo(requestInfos.get(i));
-      putResponse = responseInfo.getError() == null ? PutResponse
-          .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+      putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
       op.handleResponse(responseInfo, putResponse);
     }
     // fill the first PutChunk with the last chunk.
@@ -164,16 +162,16 @@ public class PutOperationTest {
     // reset the correlation id as they will be different between the two requests.
     resetCorrelationId(expectedRequestContent);
     resetCorrelationId(savedRequestContent);
-    Assert
-        .assertArrayEquals("Underlying buffer should not have be reused", expectedRequestContent, savedRequestContent);
+    Assert.assertArrayEquals("Underlying buffer should not have be reused", expectedRequestContent,
+        savedRequestContent);
 
     // now that all the requests associated with the original buffer have been read,
     // the next poll will free this buffer. We cannot actually verify it via the tests directly, as this is very
     // internal to the chunk (though this can be verified via coverage).
     for (int i = 0; i < requestInfos.size(); i++) {
       responseInfo = getResponseInfo(requestInfos.get(i));
-      putResponse = responseInfo.getError() == null ? PutResponse
-          .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+      putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
       op.handleResponse(responseInfo, putResponse);
     }
     requestInfos.clear();
@@ -183,8 +181,8 @@ public class PutOperationTest {
     Assert.assertFalse("Operation should not be complete yet", op.isOperationComplete());
     // once the metadata request succeeds, it should complete the operation.
     responseInfo = getResponseInfo(requestInfos.get(0));
-    putResponse = responseInfo.getError() == null ? PutResponse
-        .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
+    putResponse = responseInfo.getError() == null ? PutResponse.readFrom(
+        new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse()))) : null;
     op.handleResponse(responseInfo, putResponse);
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
   }
@@ -205,8 +203,7 @@ public class PutOperationTest {
    * @return the {@link ResponseInfo} the response for the request.
    * @throws IOException if there is an error sending the request.
    */
-  private ResponseInfo getResponseInfo(RequestInfo requestInfo)
-      throws IOException {
+  private ResponseInfo getResponseInfo(RequestInfo requestInfo) throws IOException {
     NetworkReceive networkReceive = new NetworkReceive(null, mockServer.send(requestInfo.getRequest()), time);
     return new ResponseInfo(requestInfo, null, networkReceive.getReceivedBytes().getPayload());
   }

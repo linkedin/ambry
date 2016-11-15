@@ -380,42 +380,45 @@ public class ReplicationMetrics {
   }
 
   public void createRemoteReplicaErrorMetrics(RemoteReplicaInfo remoteReplicaInfo) {
-    String metadataRequestErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
-        remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-metadataRequestError";
+    String metadataRequestErrorMetricName =
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" + remoteReplicaInfo.getReplicaId()
+            .getDataNodeId()
+            .getPort() + "-" + remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-metadataRequestError";
     Counter metadataRequestError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, metadataRequestErrorMetricName));
     metadataRequestErrorMap.put(metadataRequestErrorMetricName, metadataRequestError);
-    String getRequestErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
-        remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-getRequestError";
+    String getRequestErrorMetricName =
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" + remoteReplicaInfo.getReplicaId()
+            .getDataNodeId()
+            .getPort() + "-" + remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-getRequestError";
     Counter getRequestError = registry.counter(MetricRegistry.name(ReplicaThread.class, getRequestErrorMetricName));
     getRequestErrorMap.put(getRequestErrorMetricName, getRequestError);
-    String localStoreErrorMetricName = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" +
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() + "-" +
-        remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-localStoreError";
+    String localStoreErrorMetricName =
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname() + "-" + remoteReplicaInfo.getReplicaId()
+            .getDataNodeId()
+            .getPort() + "-" + remoteReplicaInfo.getReplicaId().getPartitionId().toString() + "-localStoreError";
     Counter localStoreError = registry.counter(MetricRegistry.name(ReplicaThread.class, localStoreErrorMetricName));
     localStoreErrorMap.put(localStoreErrorMetricName, localStoreError);
   }
 
   public void updateMetadataRequestError(ReplicaId remoteReplica) {
-    String metadataRequestErrorMetricName = remoteReplica.getDataNodeId().getHostname() + "-" +
-        remoteReplica.getDataNodeId().getPort() + "-" +
-        remoteReplica.getPartitionId().toString() + "-metadataRequestError";
+    String metadataRequestErrorMetricName =
+        remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
+            + remoteReplica.getPartitionId().toString() + "-metadataRequestError";
     metadataRequestErrorMap.get(metadataRequestErrorMetricName).inc();
   }
 
   public void updateGetRequestError(ReplicaId remoteReplica) {
-    String getRequestErrorMetricName = remoteReplica.getDataNodeId().getHostname() + "-" +
-        remoteReplica.getDataNodeId().getPort() + "-" +
-        remoteReplica.getPartitionId().toString() + "-getRequestError";
+    String getRequestErrorMetricName =
+        remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
+            + remoteReplica.getPartitionId().toString() + "-getRequestError";
     getRequestErrorMap.get(getRequestErrorMetricName).inc();
   }
 
   public void updateLocalStoreError(ReplicaId remoteReplica) {
-    String localStoreErrorMetricName = remoteReplica.getDataNodeId().getHostname() + "-" +
-        remoteReplica.getDataNodeId().getPort() + "-" +
-        remoteReplica.getPartitionId().toString() + "-localStoreError";
+    String localStoreErrorMetricName =
+        remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
+            + remoteReplica.getPartitionId().toString() + "-localStoreError";
     localStoreErrorMap.get(localStoreErrorMetricName).inc();
   }
 

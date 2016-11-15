@@ -56,16 +56,15 @@ public class RouterFactoryTest {
    * @throws IOException
    */
   @Test
-  public void testRouterFactory()
-      throws Exception {
+  public void testRouterFactory() throws Exception {
     VerifiableProperties verifiableProperties = getVerifiableProperties();
     List<FactoryAndRouter> factoryAndRouters = new ArrayList<FactoryAndRouter>();
     factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.NonBlockingRouterFactory",
         "com.github.ambry.router.NonBlockingRouter"));
 
     for (FactoryAndRouter factoryAndRouter : factoryAndRouters) {
-      RouterFactory routerFactory = Utils
-          .getObj(factoryAndRouter.factoryStr, verifiableProperties, new MockClusterMap(),
+      RouterFactory routerFactory =
+          Utils.getObj(factoryAndRouter.factoryStr, verifiableProperties, new MockClusterMap(),
               new LoggingNotificationSystem());
       Router router = routerFactory.getRouter();
       Assert.assertEquals("Did not receive expected Router instance", factoryAndRouter.routerStr,

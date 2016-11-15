@@ -13,7 +13,14 @@
  */
 package com.github.ambry.tools.admin;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 
 
 class Disk {
@@ -237,8 +244,9 @@ public class TestPartitionAlloc {
         replicas.add(i);
         diskmap.put(partitions.get(i).disks.get(j).id + ":" + partitions.get(i).disks.get(j).node.id, replicas);
 
-        System.out.print(" ReplicaId " + partitions.get(i).disks.get(j).id + ":" +
-            partitions.get(i).disks.get(j).node.id + " - " + partitions.get(i).disks.get(j).freeCapacity);
+        System.out.print(
+            " ReplicaId " + partitions.get(i).disks.get(j).id + ":" + partitions.get(i).disks.get(j).node.id + " - "
+                + partitions.get(i).disks.get(j).freeCapacity);
       }
       System.out.println();
     }

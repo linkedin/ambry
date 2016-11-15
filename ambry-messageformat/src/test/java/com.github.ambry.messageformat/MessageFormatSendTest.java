@@ -18,15 +18,14 @@ import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
-import java.nio.ByteBuffer;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class MessageFormatSendTest {
@@ -42,8 +41,7 @@ public class MessageFormatSendTest {
     }
 
     @Override
-    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
-        throws IOException {
+    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
       buffers.get(index).position((int) relativeOffset);
       buffers.get(index).limit((int) Math.min(buffers.get(index).limit(), relativeOffset + maxSize));
       int written = channel.write(buffers.get(index));
@@ -68,8 +66,7 @@ public class MessageFormatSendTest {
   }
 
   @Test
-  public void sendWriteTest()
-      throws IOException, MessageFormatException {
+  public void sendWriteTest() throws IOException, MessageFormatException {
     try {
       // create one buffer of size 1004
 
@@ -217,8 +214,7 @@ public class MessageFormatSendTest {
   }
 
   @Test
-  public void sendWriteTestWithBadId()
-      throws IOException, MessageFormatException {
+  public void sendWriteTestWithBadId() throws IOException, MessageFormatException {
     try {
       // create one buffer of size 1004
 

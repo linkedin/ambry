@@ -14,15 +14,14 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 
 /**
@@ -114,8 +113,8 @@ public class Datacenter {
       boolean hasRackId = (dataNodeIter.next().getRackId() >= 0);
       while (dataNodeIter.hasNext()) {
         if (hasRackId != (dataNodeIter.next().getRackId() >= 0)) {
-          throw new IllegalStateException("dataNodes in datacenter: " + name
-              + " must all have defined rack IDs or none at all");
+          throw new IllegalStateException(
+              "dataNodes in datacenter: " + name + " must all have defined rack IDs or none at all");
         }
       }
       this.rackAware = hasRackId;
@@ -130,8 +129,7 @@ public class Datacenter {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject()
-      throws JSONException {
+  public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject().put("name", name).put("dataNodes", new JSONArray());
     for (DataNode dataNode : dataNodes) {
       jsonObject.accumulate("dataNodes", dataNode.toJSONObject());

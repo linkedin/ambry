@@ -14,10 +14,9 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.network.Send;
+import java.nio.ByteBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.nio.ByteBuffer;
 
 
 /**
@@ -75,9 +74,8 @@ public abstract class RequestOrResponse implements Send {
 
   public long sizeInBytes() {
     // size + type + versionId + correlationId + clientId
-    return Request_Response_Size_In_Bytes + Request_Response_Type_Size_In_Bytes +
-        Request_Response_Version_Size_In_Bytes + Correlation_Id_Size_In_Bytes +
-        ClientId_Field_Size_In_Bytes + clientId.length();
+    return Request_Response_Size_In_Bytes + Request_Response_Type_Size_In_Bytes + Request_Response_Version_Size_In_Bytes
+        + Correlation_Id_Size_In_Bytes + ClientId_Field_Size_In_Bytes + clientId.length();
   }
 }
 

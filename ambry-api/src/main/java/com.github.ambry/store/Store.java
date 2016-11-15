@@ -27,8 +27,7 @@ public interface Store {
    * Starts the store
    * @throws StoreException
    */
-  void start()
-      throws StoreException;
+  void start() throws StoreException;
 
   /**
    * Returns the store info for the given ids
@@ -37,24 +36,21 @@ public interface Store {
    * @return The store info for the given ids
    * @throws StoreException
    */
-  StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions)
-      throws StoreException;
+  StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException;
 
   /**
    * Puts a set of messages into the store
    * @param messageSetToWrite The message set to write to the store
    * @throws StoreException
    */
-  void put(MessageWriteSet messageSetToWrite)
-      throws StoreException;
+  void put(MessageWriteSet messageSetToWrite) throws StoreException;
 
   /**
    * Deletes all the messages that are part of the message set
    * @param messageSetToDelete The list of messages that need to be deleted
    * @throws StoreException
    */
-  void delete(MessageWriteSet messageSetToDelete)
-      throws StoreException;
+  void delete(MessageWriteSet messageSetToDelete) throws StoreException;
 
   /**
    * Finds all the entries from the store given a find token
@@ -64,8 +60,7 @@ public interface Store {
    * @return The FindInfo instance that contains the entries found and the new token for future searches
    * @throws StoreException
    */
-  FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
-      throws StoreException;
+  FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException;
 
   /**
    * Finds all the keys that are not present in the store from the input keys
@@ -73,8 +68,7 @@ public interface Store {
    * @return The list of keys that are not present in the store
    * @throws StoreException
    */
-  Set<StoreKey> findMissingKeys(List<StoreKey> keys)
-      throws StoreException;
+  Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
 
   /**
    * Checks if the key is deleted. Returns true is the key is deleted. Returns false if the
@@ -83,8 +77,7 @@ public interface Store {
    * @return True, if the key is deleted, false otherwise
    * @throws StoreException
    */
-  boolean isKeyDeleted(StoreKey key)
-      throws StoreException;
+  boolean isKeyDeleted(StoreKey key) throws StoreException;
 
   /**
    * Returns the size of the store in bytes
@@ -95,6 +88,5 @@ public interface Store {
   /**
    * Shutsdown the store
    */
-  void shutdown()
-      throws StoreException;
+  void shutdown() throws StoreException;
 }

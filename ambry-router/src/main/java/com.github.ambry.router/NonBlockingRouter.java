@@ -77,8 +77,7 @@ class NonBlockingRouter implements Router {
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
-      Time time)
-      throws IOException {
+      Time time) throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.networkClientFactory = networkClientFactory;
@@ -317,8 +316,7 @@ class NonBlockingRouter implements Router {
      * @param index the index of this OperationController in the NonBlockingRouter's list.
      * @throws IOException if the network components could not be created.
      */
-    OperationController(int index)
-        throws IOException {
+    OperationController(int index) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       readyForPollCallback = new ReadyForPollCallback(networkClient);
       putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,

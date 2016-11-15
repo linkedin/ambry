@@ -32,16 +32,14 @@ public class StoreMessageReadSetTest {
   /**
    * Create a temporary file
    */
-  File tempFile()
-      throws IOException {
+  File tempFile() throws IOException {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;
   }
 
   @Test
-  public void testMessageRead()
-      throws IOException {
+  public void testMessageRead() throws IOException {
     File tempFile = tempFile();
     try {
       BlobReadOptions readOptions1 = new BlobReadOptions(500, 30, 1, null);

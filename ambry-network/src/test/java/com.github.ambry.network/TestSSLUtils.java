@@ -101,15 +101,13 @@ public class TestSSLUtils {
     }
   }
 
-  public static KeyPair generateKeyPair(String algorithm)
-      throws NoSuchAlgorithmException {
+  public static KeyPair generateKeyPair(String algorithm) throws NoSuchAlgorithmException {
     KeyPairGenerator keyGen = KeyPairGenerator.getInstance(algorithm);
     keyGen.initialize(1024);
     return keyGen.genKeyPair();
   }
 
-  private static KeyStore createEmptyKeyStore()
-      throws GeneralSecurityException, IOException {
+  private static KeyStore createEmptyKeyStore() throws GeneralSecurityException, IOException {
     KeyStore ks = KeyStore.getInstance("JKS");
     ks.load(null, null); // initialize
     return ks;
@@ -138,8 +136,7 @@ public class TestSSLUtils {
    * @throws IOException if there is an I/O error saving the file
    */
   public static void createKeyStore(String filename, String password, String keyPassword, String alias, Key privateKey,
-      Certificate cert)
-      throws GeneralSecurityException, IOException {
+      Certificate cert) throws GeneralSecurityException, IOException {
     KeyStore ks = createEmptyKeyStore();
     ks.setKeyEntry(alias, privateKey, keyPassword.toCharArray(), new Certificate[]{cert});
     saveKeyStore(ks, filename, password);
@@ -162,8 +159,7 @@ public class TestSSLUtils {
   }
 
   public static void addSSLProperties(Properties props, String sslEnabledDatacenters, SSLFactory.Mode mode,
-      File trustStoreFile, String certAlias)
-      throws IOException, GeneralSecurityException {
+      File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
     Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
     File keyStoreFile;
     String password;
@@ -217,8 +213,7 @@ public class TestSSLUtils {
    * @throws GeneralSecurityException
    */
   public static VerifiableProperties createSslProps(String sslEnabledDatacenters, SSLFactory.Mode mode,
-      File trustStoreFile, String certAlias)
-      throws IOException, GeneralSecurityException {
+      File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
     Properties props = new Properties();
     addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias);
     return new VerifiableProperties(props);

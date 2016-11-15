@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
+
 /**
  * Represents the blob value stored in the index for a key.
  */
@@ -31,11 +32,9 @@ class IndexValue {
   private static int Time_To_Live_Size_In_Bytes = 8;
   private static int Original_Message_Offset_Size_In_Bytes = 8;
 
-  public static int Index_Value_Size_In_Bytes = Blob_Size_In_Bytes +
-      Offset_Size_In_Bytes +
-      Flag_Size_In_Bytes +
-      Time_To_Live_Size_In_Bytes +
-      Original_Message_Offset_Size_In_Bytes;
+  public static int Index_Value_Size_In_Bytes =
+      Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Time_To_Live_Size_In_Bytes
+          + Original_Message_Offset_Size_In_Bytes;
 
   private ByteBuffer value;
 

@@ -47,13 +47,12 @@ public class RouterServerSSLTest {
   private static long sslReceiveBytesCountBeforeTest;
 
   @BeforeClass
-  public static void initializeTests()
-      throws Exception {
+  public static void initializeTests() throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
     String sslEnabledDataCentersStr = "DC1,DC2,DC3";
     Properties serverSSLProps = new Properties();
-    TestSSLUtils
-        .addSSLProperties(serverSSLProps, sslEnabledDataCentersStr, SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    TestSSLUtils.addSSLProperties(serverSSLProps, sslEnabledDataCentersStr, SSLFactory.Mode.SERVER, trustStoreFile,
+        "server");
     Properties routerProps = getRouterProperties("DC1");
     TestSSLUtils.addSSLProperties(routerProps, sslEnabledDataCentersStr, SSLFactory.Mode.CLIENT, trustStoreFile,
         "router-client");
@@ -70,8 +69,7 @@ public class RouterServerSSLTest {
   }
 
   @AfterClass
-  public static void cleanup()
-      throws IOException {
+  public static void cleanup() throws IOException {
     testFramework.cleanup();
     long start = System.currentTimeMillis();
     System.out.println("About to invoke cluster.cleanup()");
@@ -107,8 +105,7 @@ public class RouterServerSSLTest {
    * @throws Exception
    */
   @Test
-  public void interleavedOperationsTest()
-      throws Exception {
+  public void interleavedOperationsTest() throws Exception {
     List<OperationChain> opChains = new ArrayList<>();
     Random random = new Random();
     for (int i = 0; i < 10; i++) {

@@ -46,7 +46,7 @@ public class MetricsConfig {
   }
 
   public MetricsConfig(VerifiableProperties verifiableProperties) {
-    metricsFactoryClasses = verifiableProperties
-        .getString("metrics.reporters.factory.classes", "com.github.ambry.metrics.JmxReporterFactory");
+    metricsFactoryClasses = verifiableProperties.getString("metrics.reporters.factory.classes",
+        "com.github.ambry.metrics.JmxReporterFactory");
   }
 }

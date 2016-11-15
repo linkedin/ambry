@@ -51,8 +51,7 @@ public class NetworkClientTest {
    * Test the {@link NetworkClientFactory}
    */
   @Test
-  public void testNetworkClientFactory()
-      throws IOException {
+  public void testNetworkClientFactory() throws IOException {
     Properties props = new Properties();
     props.setProperty("router.connection.checkout.timeout.ms", "1000");
     VerifiableProperties vprops = new VerifiableProperties(props);
@@ -64,8 +63,7 @@ public class NetworkClientTest {
     Assert.assertNotNull("NetworkClient returned should be non-null", networkClientFactory.getNetworkClient());
   }
 
-  public NetworkClientTest()
-      throws IOException {
+  public NetworkClientTest() throws IOException {
     Properties props = new Properties();
     VerifiableProperties vprops = new VerifiableProperties(props);
     NetworkConfig networkConfig = new NetworkConfig(vprops);
@@ -80,8 +78,7 @@ public class NetworkClientTest {
    * tests basic request sending, polling and receiving responses correctly associated with the requests.
    */
   @Test
-  public void testBasicSendAndPoll()
-      throws IOException {
+  public void testBasicSendAndPoll() throws IOException {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     List<ResponseInfo> responseInfoList;
     requestInfoList.add(new RequestInfo(host1, port1, new MockSend(1)));
@@ -115,8 +112,7 @@ public class NetworkClientTest {
    * Tests a failure scenario where requests remain too long in the {@link NetworkClient}'s pending requests queue.
    */
   @Test
-  public void testConnectionUnavailable()
-      throws IOException, InterruptedException {
+  public void testConnectionUnavailable() throws IOException, InterruptedException {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     List<ResponseInfo> responseInfoList;
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(3)));
@@ -155,8 +151,7 @@ public class NetworkClientTest {
    * Tests a failure scenario where connections get disconnected after requests are sent out.
    */
   @Test
-  public void testNetworkError()
-      throws IOException, InterruptedException {
+  public void testNetworkError() throws IOException, InterruptedException {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     List<ResponseInfo> responseInfoList;
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(5)));
@@ -210,8 +205,7 @@ public class NetworkClientTest {
    * immediately failed.
    */
   @Test
-  public void testConnectionInitializationFailures()
-      throws Exception {
+  public void testConnectionInitializationFailures() throws Exception {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(0)));
     selector.setState(MockSelectorState.IdlePoll);
@@ -265,8 +259,7 @@ public class NetworkClientTest {
    * @throws Exception
    */
   @Test
-  public void testOutOfOrderConnectionEstablishment()
-      throws Exception {
+  public void testOutOfOrderConnectionEstablishment() throws Exception {
     selector.setState(MockSelectorState.DelayFailAlternateConnect);
     List<RequestInfo> requestInfoList = new ArrayList<>();
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(2)));
@@ -296,8 +289,7 @@ public class NetworkClientTest {
    * @throws Exception
    */
   @Test
-  public void testPendingRequestTimeOutWithDisconnection()
-      throws Exception {
+  public void testPendingRequestTimeOutWithDisconnection() throws Exception {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     selector.setState(MockSelectorState.IdlePoll);
     requestInfoList.add(new RequestInfo(host2, port2, new MockSend(4)));
@@ -347,8 +339,7 @@ public class NetworkClientTest {
    * Test to ensure subsequent operations after a close throw an {@link IllegalStateException}.
    */
   @Test
-  public void testClose()
-      throws IOException {
+  public void testClose() throws IOException {
     List<RequestInfo> requestInfoList = new ArrayList<RequestInfo>();
     networkClient.close();
     try {
@@ -389,8 +380,7 @@ class MockSend implements Send {
    * {@inheritDoc}
    */
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     long written = channel.write(buf);
     return written;
   }
@@ -446,30 +436,24 @@ enum MockSelectorState {
   /**
    * The Good state.
    */
-  Good,
-  /**
+  Good, /**
    * A state that causes all connect calls to throw an IOException.
    */
-  ThrowExceptionOnConnect,
-  /**
+  ThrowExceptionOnConnect, /**
    * A state that causes disconnections of connections on which a send is attempted.
    */
-  DisconnectOnSend,
-  /**
+  DisconnectOnSend, /**
    * A state that causes all poll calls to throw an IOException.
    */
-  ThrowExceptionOnPoll,
-  /**
+  ThrowExceptionOnPoll, /**
    * A state that causes all connections initiated to fail during poll.
    */
-  FailConnectionInitiationOnPoll,
-  /**
+  FailConnectionInitiationOnPoll, /**
    * A state that simulates inactivity during a poll. The poll itself may do work,
    * but as long as this state is set, calls to connected(), disconnected(), completedReceives() etc.
    * will return empty lists.
    */
-  IdlePoll,
-  /**
+  IdlePoll, /**
    * Fail every other connect.
    */
   DelayFailAlternateConnect;
@@ -497,8 +481,7 @@ class MockSelector extends Selector {
    * Create a MockSelector
    * @throws IOException if {@link Selector} throws.
    */
-  MockSelector()
-      throws IOException {
+  MockSelector() throws IOException {
     super(new NetworkMetrics(new MetricRegistry()), new MockTime(), null);
     super.close();
   }
@@ -555,8 +538,7 @@ class MockSelector extends Selector {
    *
    */
   @Override
-  public void poll(long timeoutMs, List<NetworkSend> sends)
-      throws IOException {
+  public void poll(long timeoutMs, List<NetworkSend> sends) throws IOException {
     if (state == MockSelectorState.ThrowExceptionOnPoll) {
       throw new IOException("Mock exception on poll");
     }

@@ -13,10 +13,9 @@
  */
 package com.github.ambry.store;
 
+import java.util.List;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.List;
 
 
 public class JournalTest {

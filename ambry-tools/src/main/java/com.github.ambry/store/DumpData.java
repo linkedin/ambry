@@ -93,8 +93,8 @@ public class DumpData {
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
-          "The type of operation to be performed - DumpLog or DumpIndex or DumpIndexesForReplica or " +
-              "or DumpNRandomActiveBlobsForReplica or DumpReplicaToken or CompareIndexToLog or "
+          "The type of operation to be performed - DumpLog or DumpIndex or DumpIndexesForReplica or "
+              + "or DumpNRandomActiveBlobsForReplica or DumpReplicaToken or CompareIndexToLog or "
               + "CompareReplicaIndexesToLog or CompareLogToIndex")
           .withRequiredArg()
           .describedAs("The type of Operation to be " + "performed")
@@ -553,8 +553,7 @@ public class DumpData {
    * @param logFile the log file that needs to be parsed
    * @throws Exception
    */
-  public void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory, String logFile)
-      throws Exception {
+  public void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory, String logFile) throws Exception {
     if (logFile == null) {
       logger.error("logFile needs to be set for compareIndexToLog");
       System.exit(0);
@@ -606,8 +605,7 @@ public class DumpData {
    * @param logFile the log file that needs to be parsed
    * @throws Exception
    */
-  public void compareIndexEntriestoLogContentHelper(String indexFile, String logFile)
-      throws Exception {
+  public void compareIndexEntriestoLogContentHelper(String indexFile, String logFile) throws Exception {
     if (logFile == null) {
       logger.error("logFile needs to be set for compareIndexToLog");
       System.exit(0);
@@ -663,9 +661,9 @@ public class DumpData {
           byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
           stream.read(value);
           IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
-          String msg = "key :" + key + ": value - offset " + blobValue.getOffset() + " size " +
-              blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset() +
-              " Flag " + blobValue.getFlags() + "\n";
+          String msg = "key :" + key + ": value - offset " + blobValue.getOffset() + " size " + blobValue.getSize()
+              + " Original Message Offset " + blobValue.getOriginalMessageOffset() + " Flag " + blobValue.getFlags()
+              + "\n";
           boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           if (deletedMsgInfo != null && isDeleted) {
             deletedMsgInfo.put(blobValue.getOriginalMessageOffset(), blobValue.getOffset());
@@ -701,8 +699,7 @@ public class DumpData {
    * @throws Exception
    */
   public void compareLogEntriestoIndex(String logFile, ArrayList<String> blobList, String replicaRootDirectory,
-      boolean filter, boolean generateBlobStatusReport)
-      throws Exception {
+      boolean filter, boolean generateBlobStatusReport) throws Exception {
     if (logFile == null || replicaRootDirectory == null) {
       logger.error("logFile and replicaRootDirectory needs to be set for compareLogToIndex");
       System.exit(0);

@@ -31,11 +31,9 @@ public class AdminSecurityServiceFactoryTest {
    * @throws InstantiationException
    */
   @Test
-  public void getAdminSecurityServiceFactoryTest()
-      throws InstantiationException {
-    SecurityService securityService =
-        new AdminSecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry())
-            .getSecurityService();
+  public void getAdminSecurityServiceFactoryTest() throws InstantiationException {
+    SecurityService securityService = new AdminSecurityServiceFactory(new VerifiableProperties(new Properties()),
+        new MetricRegistry()).getSecurityService();
     Assert.assertNotNull(securityService);
   }
 }

@@ -92,8 +92,7 @@ class LogSegment implements Read, Write {
    * @param metrics he {@link StoreMetrics} instance to use.
    * @throws IOException
    */
-  LogSegment(String name, File file, StoreMetrics metrics)
-      throws IOException {
+  LogSegment(String name, File file, StoreMetrics metrics) throws IOException {
     if (!file.exists() || !file.isFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
     }
@@ -135,8 +134,7 @@ class LogSegment implements Read, Write {
    * @throws IOException if data could not be written to the file because of I/O errors
    */
   @Override
-  public int appendFrom(ByteBuffer buffer)
-      throws IOException {
+  public int appendFrom(ByteBuffer buffer) throws IOException {
     int bytesWritten = 0;
     if (endOffset.get() + buffer.remaining() > capacityInBytes) {
       metrics.overflowWriteError.inc();
@@ -165,8 +163,7 @@ class LogSegment implements Read, Write {
    * @throws IOException if data could not be written to the file because of I/O errors
    */
   @Override
-  public void appendFrom(ReadableByteChannel channel, long size)
-      throws IOException {
+  public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
     if (endOffset.get() + size > capacityInBytes) {
       metrics.overflowWriteError.inc();
       throw new IllegalArgumentException(
@@ -192,8 +189,7 @@ class LogSegment implements Read, Write {
    * {@code buffer} size is greater than the data available for read.
    */
   @Override
-  public void readInto(ByteBuffer buffer, long position)
-      throws IOException {
+  public void readInto(ByteBuffer buffer, long position) throws IOException {
     if (position < startOffset || position >= getEndOffset()) {
       throw new IndexOutOfBoundsException(
           "Provided position [" + position + "] is out of bounds for the segment [" + file.getAbsolutePath()
@@ -201,8 +197,9 @@ class LogSegment implements Read, Write {
     }
     if (position + buffer.remaining() > getEndOffset()) {
       metrics.overflowReadError.inc();
-      throw new IndexOutOfBoundsException("Cannot read from segment [" + file.getAbsolutePath() + "] from position [" +
-          position + "] for size [" + buffer.remaining() + "] because it exceeds the end offset [" + endOffset + "]");
+      throw new IndexOutOfBoundsException(
+          "Cannot read from segment [" + file.getAbsolutePath() + "] from position [" + position + "] for size ["
+              + buffer.remaining() + "] because it exceeds the end offset [" + endOffset + "]");
     }
     long bytesRead = 0;
     int size = buffer.remaining();
@@ -223,8 +220,7 @@ class LogSegment implements Read, Write {
    * {@code offset } + {@code size} data.
    *
    */
-  void writeFrom(ReadableByteChannel channel, long offset, long size)
-      throws IOException {
+  void writeFrom(ReadableByteChannel channel, long offset, long size) throws IOException {
     if (offset < startOffset || offset >= capacityInBytes) {
       throw new IndexOutOfBoundsException(
           "Provided offset [" + offset + "] is out of bounds for the segment [" + file.getAbsolutePath()
@@ -232,8 +228,9 @@ class LogSegment implements Read, Write {
     }
     if (offset + size > capacityInBytes) {
       metrics.overflowWriteError.inc();
-      throw new IndexOutOfBoundsException("Cannot write to segment [" + file.getAbsolutePath() + "] from offset [" +
-          offset + "] for size [" + size + "] because it exceeds the capacity [" + capacityInBytes + "]");
+      throw new IndexOutOfBoundsException(
+          "Cannot write to segment [" + file.getAbsolutePath() + "] from offset [" + offset + "] for size [" + size
+              + "] because it exceeds the capacity [" + capacityInBytes + "]");
     }
     long bytesWritten = 0;
     while (bytesWritten < size) {
@@ -266,8 +263,7 @@ class LogSegment implements Read, Write {
    * @return size of the backing file on disk.
    * @throws IOException if the size could not be obtained due to I/O error.
    */
-  long sizeInBytes()
-      throws IOException {
+  long sizeInBytes() throws IOException {
     return fileChannel.size();
   }
 
@@ -286,12 +282,11 @@ class LogSegment implements Read, Write {
    * @throws IllegalArgumentException if {@code endOffset} < header size or {@code endOffset} > the size of the file.
    * @throws IOException if there is any I/O error.
    */
-  void setEndOffset(long endOffset)
-      throws IOException {
+  void setEndOffset(long endOffset) throws IOException {
     long fileSize = sizeInBytes();
     if (endOffset < startOffset || endOffset > fileSize) {
-      throw new IllegalArgumentException(file.getAbsolutePath() + ": EndOffset [" + endOffset +
-          "] outside the file size [" + fileSize + "]");
+      throw new IllegalArgumentException(
+          file.getAbsolutePath() + ": EndOffset [" + endOffset + "] outside the file size [" + fileSize + "]");
     }
     fileChannel.position(endOffset);
     this.endOffset.set(endOffset);
@@ -329,16 +324,14 @@ class LogSegment implements Read, Write {
    * Flushes the backing file to disk.
    * @throws IOException if there is an I/O error while flushing.
    */
-  void flush()
-      throws IOException {
+  void flush() throws IOException {
     fileChannel.force(true);
   }
 
   /**
    * Closes this log segment
    */
-  void close()
-      throws IOException {
+  void close() throws IOException {
     if (open.compareAndSet(true, false)) {
       fileChannel.close();
     }
@@ -349,8 +342,7 @@ class LogSegment implements Read, Write {
    * @param capacityInBytes the intended capacity of the segment.
    * @throws IOException if there is any I/O error writing to the file.
    */
-  private void writeHeader(long capacityInBytes)
-      throws IOException {
+  private void writeHeader(long capacityInBytes) throws IOException {
     Crc32 crc = new Crc32();
     ByteBuffer buffer = ByteBuffer.allocate(HEADER_SIZE);
     buffer.putShort(VERSION);

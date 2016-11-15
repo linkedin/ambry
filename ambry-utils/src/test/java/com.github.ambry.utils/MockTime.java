@@ -41,18 +41,16 @@ public class MockTime extends Time {
 
   @Override
   public long seconds() {
-    return currentMilliseconds/MsPerSec;
+    return currentMilliseconds / MsPerSec;
   }
 
   @Override
-  public void sleep(long ms)
-      throws InterruptedException {
+  public void sleep(long ms) throws InterruptedException {
     currentMilliseconds += ms;
   }
 
   @Override
-  public void wait(Object o, long ms)
-    throws InterruptedException {
+  public void wait(Object o, long ms) throws InterruptedException {
     sleep(ms);
   }
 }

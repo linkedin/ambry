@@ -56,8 +56,7 @@ public class PartitionRequestInfo {
     return blobIds;
   }
 
-  public static PartitionRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap)
-      throws IOException {
+  public static PartitionRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     int blobCount = stream.readInt();
     ArrayList<BlobId> ids = new ArrayList<BlobId>(blobCount);
     PartitionId partitionId = null;

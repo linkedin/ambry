@@ -25,14 +25,12 @@ import java.nio.channels.WritableByteChannel;
 public class ByteBufferSend implements Send {
   private final ByteBuffer buffer;
 
-  public ByteBufferSend(ByteBuffer byteBuffer)
-      throws IOException {
+  public ByteBufferSend(ByteBuffer byteBuffer) throws IOException {
     this.buffer = byteBuffer.duplicate();
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     return isSendComplete() ? 0 : channel.write(buffer);
   }
 

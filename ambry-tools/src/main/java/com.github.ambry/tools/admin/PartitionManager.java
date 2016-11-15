@@ -20,15 +20,14 @@ import com.github.ambry.clustermap.PartitionLayout;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
+import java.io.FileNotFoundException;
+import java.util.ArrayList;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import org.json.JSONObject;
-
-import java.io.FileNotFoundException;
-import java.util.ArrayList;
 
 
 /**
@@ -81,10 +80,10 @@ public class PartitionManager {
               .withOptionalArg()
               .ofType(Long.class);
 
-      ArgumentAcceptingOptionSpec<String> partitionIdsToAddReplicasToOpt =
-          parser.accepts("partitionIdToAddReplicasTo", "The partitionIds to add replicas to. This can either take a " +
-              "comma separated list of partitions to add replicas to or '.' to add replicas to all partitions in " +
-              "the partitionLayout ").withOptionalArg().ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> partitionIdsToAddReplicasToOpt = parser.accepts("partitionIdToAddReplicasTo",
+          "The partitionIds to add replicas to. This can either take a "
+              + "comma separated list of partitions to add replicas to or '.' to add replicas to all partitions in "
+              + "the partitionLayout ").withOptionalArg().ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> datacenterToAddReplicasToOpt =
           parser.accepts("datacenterToAddReplicasTo", "The data center to which replicas need to be added to")

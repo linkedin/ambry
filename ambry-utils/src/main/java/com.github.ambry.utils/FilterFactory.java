@@ -16,7 +16,6 @@ package com.github.ambry.utils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,13 +25,11 @@ public class FilterFactory {
   private static final Logger logger = LoggerFactory.getLogger(FilterFactory.class);
   private static final long BITSET_EXCESS = 20;
 
-  public static void serialize(IFilter bf, DataOutput output)
-      throws IOException {
+  public static void serialize(IFilter bf, DataOutput output) throws IOException {
     Murmur3BloomFilter.serializer.serialize((Murmur3BloomFilter) bf, output);
   }
 
-  public static IFilter deserialize(DataInput input)
-      throws IOException {
+  public static IFilter deserialize(DataInput input) throws IOException {
     return Murmur3BloomFilter.serializer.deserialize(input);
   }
 
@@ -44,9 +41,8 @@ public class FilterFactory {
     int maxBucketsPerElement = Math.max(1, BloomCalculations.maxBucketsPerElement(numElements));
     int bucketsPerElement = Math.min(targetBucketsPerElem, maxBucketsPerElement);
     if (bucketsPerElement < targetBucketsPerElem) {
-      logger.warn(String
-          .format("Cannot provide an optimal BloomFilter for %d elements (%d/%d buckets per element).", numElements,
-              bucketsPerElement, targetBucketsPerElem));
+      logger.warn(String.format("Cannot provide an optimal BloomFilter for %d elements (%d/%d buckets per element).",
+          numElements, bucketsPerElement, targetBucketsPerElem));
     }
     BloomCalculations.BloomSpecification spec = BloomCalculations.computeBloomSpec(bucketsPerElement);
     return createFilter(spec.K, numElements, spec.bucketsPerElement);

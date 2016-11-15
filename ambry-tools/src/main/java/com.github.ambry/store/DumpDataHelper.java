@@ -122,8 +122,7 @@ public class DumpDataHelper {
    * @throws IOException
    */
   public void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter,
-      ConcurrentHashMap<String, LogBlobRecord> blobIdToLogRecord)
-      throws IOException {
+      ConcurrentHashMap<String, LogBlobRecord> blobIdToLogRecord) throws IOException {
     logger.info("Dumping log file " + file.getAbsolutePath());
     long currentOffset = 0;
     RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
@@ -181,16 +180,17 @@ public class DumpDataHelper {
         currentOffset += (blobRecordInfo.totalRecordSize);
       } catch (IllegalArgumentException e) {
         if (!lastBlobFailed) {
-          logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
-              "while reading blob starting at offset " + tempCurrentOffset + "with exception: " + e.getStackTrace());
+          logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
+              + "while reading blob starting at offset " + tempCurrentOffset + "with exception: " + e.getStackTrace());
         }
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
         lastBlobFailed = true;
       } catch (MessageFormatException e) {
         if (!lastBlobFailed) {
-          logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
-              " while reading blob starting at offset " + tempCurrentOffset + " with exception: " + e.getStackTrace());
+          logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
+              + " while reading blob starting at offset " + tempCurrentOffset + " with exception: "
+              + e.getStackTrace());
         }
         randomAccessFile.seek(++tempCurrentOffset);
         currentOffset = tempCurrentOffset;
@@ -274,12 +274,11 @@ public class DumpDataHelper {
       randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
       buffer.clear();
       MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
-      messageheader = " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() +
-          " currentOffset " + currentOffset +
-          " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset() +
-          " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() +
-          " dataRelativeOffset " + header.getBlobRecordRelativeOffset() +
-          " crc " + header.getCrc();
+      messageheader =
+          " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
+              + currentOffset + " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset()
+              + " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
+              + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
       totalRecordSize += header.getMessageSize() + buffer.capacity();
       // read blob id
       InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
@@ -290,8 +289,8 @@ public class DumpDataHelper {
         BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
         timeToLiveInSeconds = props.getTimeToLiveInSeconds();
         isExpired = timeToLiveInSeconds != -1 ? isExpired(TimeUnit.SECONDS.toMillis(timeToLiveInSeconds)) : false;
-        blobProperty = " Blob properties - blobSize  " + props.getBlobSize() +
-            " serviceId " + props.getServiceId() + ", isExpired " + isExpired;
+        blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
+            + ", isExpired " + isExpired;
         ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
         usermetadata = " Metadata - size " + metadata.capacity();
         BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
@@ -313,8 +312,7 @@ public class DumpDataHelper {
    * @param replicaTokenFile the file that needs to be parsed for
    * @throws Exception
    */
-  public void dumpReplicaToken(File replicaTokenFile)
-      throws Exception {
+  public void dumpReplicaToken(File replicaTokenFile) throws Exception {
     logger.info("Dumping replica token");
     DataInputStream stream = new DataInputStream(new FileInputStream(replicaTokenFile));
     short version = stream.readShort();
@@ -355,8 +353,7 @@ public class DumpDataHelper {
    * @throws IOException
    */
   public boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, long offset, String blobId,
-      IndexValue indexValue, DumpData.MergedIntervals coveredRangeInLog)
-      throws Exception {
+      IndexValue indexValue, DumpData.MergedIntervals coveredRangeInLog) throws Exception {
     try {
       randomAccessFile.seek(offset);
       BlobRecordInfo blobRecordInfo = readSingleRecordFromLog(randomAccessFile, offset);
@@ -375,11 +372,11 @@ public class DumpDataHelper {
       }
       return true;
     } catch (IllegalArgumentException e) {
-      logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", " +
-          "while reading blob starting at offset " + offset + " with exception: " + e.getStackTrace());
+      logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
+          + "while reading blob starting at offset " + offset + " with exception: " + e.getStackTrace());
     } catch (MessageFormatException e) {
-      logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position() +
-          " while reading blob starting at offset " + offset + " with exception: " + e.getStackTrace());
+      logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
+          + " while reading blob starting at offset " + offset + " with exception: " + e.getStackTrace());
     } catch (EOFException e) {
       logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + " " + e.getStackTrace());
       throw (e);

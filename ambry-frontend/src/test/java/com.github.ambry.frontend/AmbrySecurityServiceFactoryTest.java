@@ -31,11 +31,9 @@ public class AmbrySecurityServiceFactoryTest {
    * @throws InstantiationException
    */
   @Test
-  public void getAmbrySecurityServiceFactoryTest()
-      throws InstantiationException {
-    SecurityService securityService =
-        new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry())
-            .getSecurityService();
+  public void getAmbrySecurityServiceFactoryTest() throws InstantiationException {
+    SecurityService securityService = new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()),
+        new MetricRegistry()).getSecurityService();
     Assert.assertNotNull(securityService);
   }
 }

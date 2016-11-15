@@ -27,8 +27,7 @@ public interface RestRequestHandler {
    * Does startup tasks for the RestRequestHandler. When the function returns, startup is FULLY complete.
    * @throws InstantiationException if the RestRequestHandler is unable to start.
    */
-  public void start()
-      throws InstantiationException;
+  public void start() throws InstantiationException;
 
   /**
    * Does shutdown tasks for the RestRequestHandler. When the function returns, shutdown is FULLY complete.

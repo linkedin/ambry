@@ -66,8 +66,7 @@ class GetBlobInfoOperation extends GetOperation {
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
       FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
-      OperationCompleteCallback operationCompleteCallback, Time time)
-      throws RouterException {
+      OperationCompleteCallback operationCompleteCallback, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
@@ -171,8 +170,8 @@ class GetBlobInfoOperation extends GetOperation {
     }
     long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-    routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestLatencyMs
-        .update(requestLatencyMs);
+    routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestLatencyMs.update(
+        requestLatencyMs);
     if (responseInfo.getError() != null) {
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
       onErrorResponse(getRequestInfo.replicaId);
@@ -273,8 +272,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @throws IOException if there is an IOException while deserializing the body.
    * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
    */
-  private void handleBody(InputStream payload)
-      throws IOException, MessageFormatException {
+  private void handleBody(InputStream payload) throws IOException, MessageFormatException {
     if (operationResult == null) {
       operationResult = new GetBlobResult(new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
           MessageFormatRecord.deserializeUserMetadata(payload).array()), null);

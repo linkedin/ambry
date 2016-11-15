@@ -98,9 +98,8 @@ class PersistentIndex {
    * @throws StoreException
    */
   public PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      StoreMetrics metrics, Time time)
-      throws StoreException {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
+      Time time) throws StoreException {
     /*
     If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
     whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
@@ -127,9 +126,8 @@ class PersistentIndex {
    * @throws StoreException
    */
   protected PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      StoreMetrics metrics, Journal journal, Time time)
-      throws StoreException {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
+      Journal journal, Time time) throws StoreException {
     try {
       this.time = time;
       this.scheduler = scheduler;
@@ -174,9 +172,8 @@ class PersistentIndex {
           map = true;
         }
         IndexSegment info = new IndexSegment(indexFiles[i], map, factory, config, metrics, journal);
-        logger
-            .info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir, indexFiles[i],
-                info.getStartOffset(), info.getEndOffset());
+        logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
+            indexFiles[i], info.getStartOffset(), info.getEndOffset());
         indexes.put(info.getStartOffset(), info);
       }
       this.dataDir = datadir;
@@ -216,9 +213,9 @@ class PersistentIndex {
 
       // start scheduler thread to persist index in the background
       this.scheduler = scheduler;
-      this.scheduler
-          .scheduleAtFixedRate(persistor, config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
-              config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+      this.scheduler.scheduleAtFixedRate(persistor,
+          config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
+          config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
 
       if (config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
@@ -291,8 +288,8 @@ class PersistentIndex {
         validateFileSpan(new FileSpan(runningOffset, runningOffset + info.getSize()));
         segmentToRecover.addEntry(new IndexEntry(info.getStoreKey(), value), runningOffset + info.getSize());
         journal.addEntry(runningOffset, info.getStoreKey());
-        if (value.getOriginalMessageOffset() != runningOffset && value.getOriginalMessageOffset() >= segmentToRecover
-            .getStartOffset()) {
+        if (value.getOriginalMessageOffset() != runningOffset
+            && value.getOriginalMessageOffset() >= segmentToRecover.getStartOffset()) {
           journal.addEntry(value.getOriginalMessageOffset(), info.getStoreKey());
         }
         logger.info("Index : {} updated message with key {} size {} ttl {} deleted {}", dataDir, info.getStoreKey(),
@@ -316,8 +313,7 @@ class PersistentIndex {
    * @param fileSpan The file span that this entry represents in the log
    * @throws StoreException
    */
-  public void addToIndex(IndexEntry entry, FileSpan fileSpan)
-      throws StoreException {
+  public void addToIndex(IndexEntry entry, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
@@ -336,8 +332,7 @@ class PersistentIndex {
    * @param fileSpan The file span that the entries represent in the log
    * @throws StoreException
    */
-  public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan)
-      throws StoreException {
+  public void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan);
     for (IndexEntry entry : entries) {
       long entryStartOffset = entry.getValue().getOffset();
@@ -375,9 +370,9 @@ class PersistentIndex {
       return true;
     }
     if (lastSegment.getValueSize() != IndexValue.Index_Value_Size_In_Bytes) {
-      logger
-          .info("Index: {} Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}",
-              dataDir, IndexValue.Index_Value_Size_In_Bytes);
+      logger.info(
+          "Index: {} Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}",
+          dataDir, IndexValue.Index_Value_Size_In_Bytes);
       return true;
     }
     return false;
@@ -409,8 +404,7 @@ class PersistentIndex {
    * @return The blob index value associated with the key. Null if the key is not found.
    * @throws StoreException
    */
-  public IndexValue findKey(StoreKey key)
-      throws StoreException {
+  public IndexValue findKey(StoreKey key) throws StoreException {
     return findKey(key, null);
   }
 
@@ -422,8 +416,7 @@ class PersistentIndex {
    * @return The associated IndexValue if one exists within the fileSpan, null otherwise.
    * @throws StoreException
    */
-  public IndexValue findKey(StoreKey key, FileSpan fileSpan)
-      throws StoreException {
+  public IndexValue findKey(StoreKey key, FileSpan fileSpan) throws StoreException {
     final Timer.Context context = metrics.findTime.time();
     try {
       ConcurrentNavigableMap<Long, IndexSegment> segmentsMapToSearch = null;
@@ -434,9 +427,9 @@ class PersistentIndex {
         logger.trace(
             "Searching for " + key + " in index with filespan ranging from " + fileSpan.getStartOffset() + " to "
                 + fileSpan.getEndOffset());
-        segmentsMapToSearch = indexes
-            .subMap(indexes.floorKey(fileSpan.getStartOffset()), true, indexes.floorKey(fileSpan.getEndOffset()), true)
-            .descendingMap();
+        segmentsMapToSearch =
+            indexes.subMap(indexes.floorKey(fileSpan.getStartOffset()), true, indexes.floorKey(fileSpan.getEndOffset()),
+                true).descendingMap();
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
       for (Map.Entry<Long, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
@@ -460,8 +453,7 @@ class PersistentIndex {
    * @param fileSpan The file span represented by this entry in the log
    * @throws StoreException
    */
-  public void markAsDeleted(StoreKey id, FileSpan fileSpan)
-      throws StoreException {
+  public void markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan);
     IndexValue value = findKey(id);
     if (value == null) {
@@ -484,8 +476,7 @@ class PersistentIndex {
    * @return The blob read info that contains the information for the given key
    * @throws StoreException
    */
-  public BlobReadOptions getBlobReadInfo(StoreKey id, EnumSet<StoreGetOptions> getOptions)
-      throws StoreException {
+  public BlobReadOptions getBlobReadInfo(StoreKey id, EnumSet<StoreGetOptions> getOptions) throws StoreException {
     IndexValue value = findKey(id);
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
@@ -526,8 +517,7 @@ class PersistentIndex {
    * @return The list of keys that are not found in the index
    * @throws StoreException
    */
-  public Set<StoreKey> findMissingKeys(List<StoreKey> keys)
-      throws StoreException {
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     Set<StoreKey> missingKeys = new HashSet<StoreKey>();
     for (StoreKey key : keys) {
       if (findKey(key) == null) {
@@ -545,8 +535,7 @@ class PersistentIndex {
    *                              return a list of entries whose total size is close to this value.
    * @return The FindInfo state that contains both the list of entries and the new findtoken to start the next iteration
    */
-  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
-      throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     long startTimeInMs = time.milliseconds();
     try {
       boolean tokenWasReset = false;
@@ -674,13 +663,13 @@ class PersistentIndex {
 
         startTimeInMs = time.milliseconds();
         updateDeleteStateForMessages(messageEntries);
-        logger
-            .trace("Segment based token, Time used to update delete state: {}", (time.milliseconds() - startTimeInMs));
+        logger.trace("Segment based token, Time used to update delete state: {}",
+            (time.milliseconds() - startTimeInMs));
 
         startTimeInMs = time.milliseconds();
         eliminateDuplicates(messageEntries);
-        logger
-            .trace("Segment based token, Time used to eliminate duplicates: {}", (time.milliseconds() - startTimeInMs));
+        logger.trace("Segment based token, Time used to eliminate duplicates: {}",
+            (time.milliseconds() - startTimeInMs));
 
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind);
         newToken.setBytesRead(totalBytesRead);
@@ -724,8 +713,7 @@ class PersistentIndex {
    * @return A token representing the position in the segment/journal up to which entries have been read and returned.
    */
   private StoreFindToken findEntriesFromSegmentStartOffset(long initialSegmentStartOffset, StoreKey key,
-      List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition)
-      throws IOException, StoreException {
+      List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition) throws IOException, StoreException {
     long segmentStartOffset = initialSegmentStartOffset;
     if (segmentStartOffset == indexes.lastKey()) {
       // We would never have given away a token with a segmentStartOffset of the latest segment.
@@ -853,8 +841,7 @@ class PersistentIndex {
    * from the new index segment
    * @param messageEntries The message entries that needs to be updated with the delete state
    */
-  private void updateDeleteStateForMessages(List<MessageInfo> messageEntries)
-      throws StoreException {
+  private void updateDeleteStateForMessages(List<MessageInfo> messageEntries) throws StoreException {
     ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator();
     while (messageEntriesIterator.hasNext()) {
       MessageInfo messageInfo = messageEntriesIterator.next();
@@ -888,8 +875,7 @@ class PersistentIndex {
    * Closes the index
    * @throws StoreException
    */
-  public void close()
-      throws StoreException {
+  public void close() throws StoreException {
     persistor.write();
     try {
       hardDeleter.shutdown();
@@ -980,8 +966,8 @@ class PersistentIndex {
             IndexValue value = findKey(entry.getKey());
             boolean deleteEntry = value.isFlagSet(IndexValue.Flags.Delete_Index);
             if (deleteEntry) {
-              messageEntries
-                  .add(new MessageInfo(entry.getKey(), value.getSize(), deleteEntry, value.getTimeToLiveInMs()));
+              messageEntries.add(
+                  new MessageInfo(entry.getKey(), value.getSize(), deleteEntry, value.getTimeToLiveInMs()));
             }
             offsetEnd = entry.getOffset();
           }
@@ -1019,8 +1005,7 @@ class PersistentIndex {
      * The last index segment is flushed whenever write is invoked.
      * @throws StoreException
      */
-    public void write()
-        throws StoreException {
+    public void write() throws StoreException {
       final Timer.Context context = metrics.indexFlushTime.time();
       try {
         if (indexes.size() > 0) {
@@ -1124,8 +1109,7 @@ class StoreFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
-  public static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory)
-      throws IOException {
+  public static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory) throws IOException {
     // read version
     short version = stream.readShort();
     // read sessionId

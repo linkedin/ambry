@@ -38,18 +38,23 @@ public class InvocationOptions {
    * @throws InstantiationException if all required arguments were not provided.
    * @throws IOException if help text could not be printed.
    */
-  public InvocationOptions(String args[])
-      throws InstantiationException, IOException {
+  public InvocationOptions(String args[]) throws InstantiationException, IOException {
     OptionParser parser = new OptionParser();
     ArgumentAcceptingOptionSpec<String> hardwareLayoutFilePath =
-        parser.accepts("hardwareLayoutFilePath", "Path to hardware layout file").withRequiredArg()
-            .describedAs("hardwareLayoutFilePath").ofType(String.class);
+        parser.accepts("hardwareLayoutFilePath", "Path to hardware layout file")
+            .withRequiredArg()
+            .describedAs("hardwareLayoutFilePath")
+            .ofType(String.class);
     ArgumentAcceptingOptionSpec<String> partitionLayoutFilePath =
-        parser.accepts("partitionLayoutFilePath", "Path to partition layout file").withRequiredArg()
-            .describedAs("partitionLayoutFilePath").ofType(String.class);
+        parser.accepts("partitionLayoutFilePath", "Path to partition layout file")
+            .withRequiredArg()
+            .describedAs("partitionLayoutFilePath")
+            .ofType(String.class);
     ArgumentAcceptingOptionSpec<String> serverPropsFilePath =
-        parser.accepts("serverPropsFilePath", "Path to server properties file").withRequiredArg()
-            .describedAs("serverPropsFilePath").ofType(String.class);
+        parser.accepts("serverPropsFilePath", "Path to server properties file")
+            .withRequiredArg()
+            .describedAs("serverPropsFilePath")
+            .ofType(String.class);
 
     ArrayList<OptionSpec<?>> requiredArgs = new ArrayList<>();
     requiredArgs.add(hardwareLayoutFilePath);

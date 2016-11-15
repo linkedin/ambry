@@ -117,8 +117,7 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
    * @throws IOException
    */
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     if (channelOpen.compareAndSet(true, false)) {
       inputStream.close();
     }
@@ -164,8 +163,7 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
    * @return the number of bytes read from the {@link InputStream}.
    * @throws IOException if there were any problems reading the {@link InputStream}.
    */
-  private int fillBuffer()
-      throws IOException {
+  private int fillBuffer() throws IOException {
     int totalRead = 0;
     int currentRead;
     do {

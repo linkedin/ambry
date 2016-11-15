@@ -43,8 +43,7 @@ public abstract class Response extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();

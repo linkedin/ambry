@@ -20,8 +20,7 @@ public class FixedBackoffResourceStatePolicyFactory implements ResourceStatePoli
   private ResourceStatePolicy resourceStatePolicy;
 
   public FixedBackoffResourceStatePolicyFactory(Resource resource, HardwareState initialState,
-      ClusterMapConfig clusterMapConfig)
-      throws InstantiationError {
+      ClusterMapConfig clusterMapConfig) throws InstantiationError {
     resourceStatePolicy = null;
     if (resource instanceof DataNodeId) {
       resourceStatePolicy = new FixedBackoffResourceStatePolicy(resource, initialState == HardwareState.UNAVAILABLE,

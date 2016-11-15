@@ -59,8 +59,7 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    * @throws IOException if there was a problem closing the channel.
    */
   @Override
-  public void close()
-      throws IOException;
+  public void close() throws IOException;
 
   /**
    * Notifies that response handling for the request is complete (whether the request succeeded or not) and tasks that
@@ -93,8 +92,7 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    * @param status the response status.
    * @throws RestServiceException if there is an error setting the header.
    */
-  public void setStatus(ResponseStatus status)
-      throws RestServiceException;
+  public void setStatus(ResponseStatus status) throws RestServiceException;
 
   /**
    * Gets the current {@link ResponseStatus}.
@@ -108,8 +106,7 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    * @param headerValue the value of the header with name {@code headerName}.
    * @throws RestServiceException if there is an error setting the header.
    */
-  public void setHeader(String headerName, Object headerValue)
-      throws RestServiceException;
+  public void setHeader(String headerName, Object headerValue) throws RestServiceException;
 
   /**
    * Gets the current value of the header with {@code headerName}.

@@ -28,9 +28,7 @@ import java.util.concurrent.ExecutionException;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -44,8 +42,7 @@ public class AmbryIdConverterFactoryTest {
    * @throws Exception
    */
   @Test
-  public void ambryIdConverterTest()
-      throws Exception {
+  public void ambryIdConverterTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);

@@ -28,16 +28,14 @@ public interface ConnectedChannel {
    * @param request The request that needs to be sent
    * @throws IOException
    */
-  void send(Send request)
-      throws IOException;
+  void send(Send request) throws IOException;
 
   /**
    * Receives a response from the remote host
    * @return The input stream that can be used to consume data from the remote host
    * @throws IOException
    */
-  ChannelOutput receive()
-      throws IOException;
+  ChannelOutput receive() throws IOException;
 
   /**
    * Gets the remote host that this channel is connected to

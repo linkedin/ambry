@@ -54,8 +54,7 @@ public class RequestHandler implements Runnable {
     }
   }
 
-  public void shutdown()
-      throws InterruptedException {
+  public void shutdown() throws InterruptedException {
     requestChannel.sendRequest(EmptyRequest.getInstance());
   }
 }

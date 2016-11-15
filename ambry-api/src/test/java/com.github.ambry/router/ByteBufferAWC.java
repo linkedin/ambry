@@ -78,8 +78,7 @@ public class ByteBufferAWC implements AsyncWritableChannel {
    *         channel is closed.
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
-  public ByteBuffer getNextChunk()
-      throws InterruptedException {
+  public ByteBuffer getNextChunk() throws InterruptedException {
     ByteBuffer chunkBuf = null;
     if (isOpen()) {
       chunkBuf = getChunkBuffer(chunks.take());
@@ -98,8 +97,7 @@ public class ByteBufferAWC implements AsyncWritableChannel {
    *          expires.
    * @throws InterruptedException if the wait for a chunk is interrupted.
    */
-  public ByteBuffer getNextChunk(long timeoutInMs)
-      throws InterruptedException {
+  public ByteBuffer getNextChunk(long timeoutInMs) throws InterruptedException {
     ByteBuffer chunkBuf = null;
     if (isOpen()) {
       chunkBuf = getChunkBuffer(chunks.poll(timeoutInMs, TimeUnit.MILLISECONDS));

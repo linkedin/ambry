@@ -51,8 +51,7 @@ public class RestTestUtils {
    * @return content that is inside {@code httpContent} as a human readable string.
    * @throws IOException
    */
-  public static String getContentString(HttpContent httpContent)
-      throws IOException {
+  public static String getContentString(HttpContent httpContent) throws IOException {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     httpContent.content().readBytes(out, httpContent.content().readableBytes());
     return out.toString(StandardCharsets.UTF_8.name());

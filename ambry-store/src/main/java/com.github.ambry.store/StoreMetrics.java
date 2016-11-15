@@ -71,8 +71,7 @@ public class StoreMetrics {
     recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexRecoveryTime"));
     findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFindTime"));
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));
-    cleanupTokenFlushTime =
-        registry.timer(MetricRegistry.name(PersistentIndex.class, name + "CleanupTokenFlushTime"));
+    cleanupTokenFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "CleanupTokenFlushTime"));
     hardDeleteTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteTime"));
     nonzeroMessageRecovery =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "NonZeroMessageRecovery"));

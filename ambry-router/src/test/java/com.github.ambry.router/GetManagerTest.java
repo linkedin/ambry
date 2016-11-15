@@ -65,8 +65,7 @@ public class GetManagerTest {
   /**
    * Pre-initialization common to all tests.
    */
-  public GetManagerTest()
-      throws Exception {
+  public GetManagerTest() throws Exception {
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
@@ -92,8 +91,7 @@ public class GetManagerTest {
    * @throws Exception
    */
   @Test
-  public void testSimpleBlobGetSuccess()
-      throws Exception {
+  public void testSimpleBlobGetSuccess() throws Exception {
     testGetSuccess(chunkSize, new GetBlobOptions());
   }
 
@@ -102,8 +100,7 @@ public class GetManagerTest {
    * @throws Exception
    */
   @Test
-  public void testCompositeBlobGetSuccess()
-      throws Exception {
+  public void testCompositeBlobGetSuccess() throws Exception {
     testGetSuccess(chunkSize * 6 + 11, new GetBlobOptions());
   }
 
@@ -112,8 +109,7 @@ public class GetManagerTest {
    * @throws Exception
    */
   @Test
-  public void testRangeRequest()
-      throws Exception {
+  public void testRangeRequest() throws Exception {
     testGetSuccess(chunkSize * 6 + 11, new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.None,
         ByteRange.fromOffsetRange(chunkSize * 2 + 3, chunkSize * 5 + 4)));
   }
@@ -123,8 +119,7 @@ public class GetManagerTest {
    * @param blobSize the size of the blob to put/get.
    * @param options the {@link GetBlobOptions} for the get request.
    */
-  private void testGetSuccess(int blobSize, GetBlobOptions options)
-      throws Exception {
+  private void testGetSuccess(int blobSize, GetBlobOptions options) throws Exception {
     router = getNonBlockingRouter();
     setOperationParams(blobSize, options);
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
@@ -140,8 +135,7 @@ public class GetManagerTest {
    * @throws Exception
    */
   @Test
-  public void testCallbackRuntimeException()
-      throws Exception {
+  public void testCallbackRuntimeException() throws Exception {
     final CountDownLatch getBlobCallbackCalled = new CountDownLatch(1);
     testBadCallback(new Callback<GetBlobResult>() {
       @Override
@@ -157,8 +151,7 @@ public class GetManagerTest {
    * operation should get completed.
    */
   @Test
-  public void testAsyncWriteException()
-      throws Exception {
+  public void testAsyncWriteException() throws Exception {
     final CountDownLatch getBlobCallbackCalled = new CountDownLatch(1);
     testBadCallback(new Callback<GetBlobResult>() {
       @Override
@@ -178,8 +171,7 @@ public class GetManagerTest {
           }
 
           @Override
-          public void close()
-              throws IOException {
+          public void close() throws IOException {
             open = false;
           }
         };
@@ -197,8 +189,7 @@ public class GetManagerTest {
    * @throws Exception
    */
   private void testBadCallback(Callback<GetBlobResult> getBlobCallback, CountDownLatch getBlobCallbackCalled,
-      Boolean checkBadCallbackBlob)
-      throws Exception {
+      Boolean checkBadCallbackBlob) throws Exception {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize * 6 + 11, new GetBlobOptions());
     final CountDownLatch getBlobInfoCallbackCalled = new CountDownLatch(1);
@@ -252,8 +243,7 @@ public class GetManagerTest {
    * @throws Exception
    */
   @Test
-  public void testFailureOnAllPollThatSends()
-      throws Exception {
+  public void testFailureOnAllPollThatSends() throws Exception {
     router = getNonBlockingRouter();
     setOperationParams(chunkSize, new GetBlobOptions());
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
@@ -292,8 +282,7 @@ public class GetManagerTest {
    * @param blobId the id of the blob (simple or composite) that needs to be fetched and compared.
    * @throws Exception
    */
-  private void getBlobAndCompareContent(String blobId)
-      throws Exception {
+  private void getBlobAndCompareContent(String blobId) throws Exception {
     GetBlobResult result = router.getBlob(blobId, options).get();
     switch (options.getOperationType()) {
       case All:
@@ -326,8 +315,7 @@ public class GetManagerTest {
    * the original put content.
    * @param readableStreamChannel the {@link ReadableStreamChannel} that is the candidate for comparison.
    */
-  private void compareContent(ReadableStreamChannel readableStreamChannel)
-      throws Exception {
+  private void compareContent(ReadableStreamChannel readableStreamChannel) throws Exception {
     ByteBuffer putContentBuf = ByteBuffer.wrap(putContent);
     // If a range is set, compare the result against the specified byte range.
     if (options.getRange() != null) {
@@ -357,8 +345,7 @@ public class GetManagerTest {
   /**
    * @return Return a {@link NonBlockingRouter} created with default {@link VerifiableProperties}
    */
-  private NonBlockingRouter getNonBlockingRouter()
-      throws IOException {
+  private NonBlockingRouter getNonBlockingRouter() throws IOException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");

@@ -103,8 +103,7 @@ public class FrontendIntegrationTest {
    * @throws Exception
    */
   @BeforeClass
-  public static void setup()
-      throws Exception {
+  public static void setup() throws Exception {
     ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem());
     ambryRestServer.start();
     nettyClient = new NettyClient("localhost", SERVER_PORT);
@@ -128,8 +127,7 @@ public class FrontendIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void postGetHeadDeleteTest()
-      throws Exception {
+  public void postGetHeadDeleteTest() throws Exception {
     doPostGetHeadDeleteTest(0, false);
     doPostGetHeadDeleteTest(1024, false);
     doPostGetHeadDeleteTest(8192, false);
@@ -141,8 +139,7 @@ public class FrontendIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void multipartPostGetHeadTest()
-      throws Exception {
+  public void multipartPostGetHeadTest() throws Exception {
     doPostGetHeadDeleteTest(0, true);
     doPostGetHeadDeleteTest(1024, true);
   }
@@ -154,8 +151,7 @@ public class FrontendIntegrationTest {
    * @throws IOException
    */
   @Test
-  public void healthCheckRequestTest()
-      throws ExecutionException, InterruptedException, IOException {
+  public void healthCheckRequestTest() throws ExecutionException, InterruptedException, IOException {
     FullHttpRequest httpRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/healthCheck", Unpooled.buffer(0));
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -253,8 +249,8 @@ public class FrontendIntegrationTest {
    */
   private static VerifiableProperties buildFrontendVProps() {
     Properties properties = new Properties();
-    properties
-        .put("rest.server.blob.storage.service.factory", "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
+    properties.put("rest.server.blob.storage.service.factory",
+        "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
     properties.put("netty.server.port", Integer.toString(SERVER_PORT));
     // to test that backpressure does not impede correct operation.
@@ -270,8 +266,7 @@ public class FrontendIntegrationTest {
    * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
    * @throws Exception
    */
-  private void doPostGetHeadDeleteTest(int contentSize, boolean multipartPost)
-      throws Exception {
+  private void doPostGetHeadDeleteTest(int contentSize, boolean multipartPost) throws Exception {
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(contentSize));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
@@ -424,8 +419,7 @@ public class FrontendIntegrationTest {
    * @param blobId the blob ID of the blob to GET.
    * @throws Exception
    */
-  private void getNotModifiedBlobAndVerify(String blobId)
-      throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId) throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
@@ -588,8 +582,7 @@ public class FrontendIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void deleteBlobAndVerify(String blobId)
-      throws ExecutionException, InterruptedException {
+  private void deleteBlobAndVerify(String blobId) throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.ACCEPTED);
   }
@@ -600,8 +593,7 @@ public class FrontendIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void verifyOperationsAfterDelete(String blobId)
-      throws ExecutionException, InterruptedException {
+  private void verifyOperationsAfterDelete(String blobId) throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
 

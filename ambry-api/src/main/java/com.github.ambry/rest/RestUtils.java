@@ -181,8 +181,7 @@ public class RestUtils {
    * @throws RestServiceException if required arguments aren't present or if they aren't in the format or number
    *                                    expected.
    */
-  public static BlobProperties buildBlobProperties(Map<String, Object> args)
-      throws RestServiceException {
+  public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
     String blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
     long blobSize;
     try {
@@ -265,8 +264,7 @@ public class RestUtils {
    * @return the user metadata extracted from arguments.
    * @throws RestServiceException if usermetadata arguments have null values.
    */
-  public static byte[] buildUsermetadata(Map<String, Object> args)
-      throws RestServiceException {
+  public static byte[] buildUsermetadata(Map<String, Object> args) throws RestServiceException {
     ByteBuffer userMetadata;
     if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
       userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
@@ -322,8 +320,7 @@ public class RestUtils {
    * @return the user metadata that is read from the byte array, or {@code null} if the {@code userMetadata} cannot be
    * parsed in expected format
    */
-  public static Map<String, String> buildUserMetadata(byte[] userMetadata)
-      throws RestServiceException {
+  public static Map<String, String> buildUserMetadata(byte[] userMetadata) throws RestServiceException {
     Map<String, String> toReturn = null;
     if (userMetadata.length > 0) {
       try {
@@ -377,8 +374,7 @@ public class RestUtils {
    * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
    */
   public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource,
-      GetOption getOption)
-      throws RestServiceException {
+      GetOption getOption) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
     if (subResource != null && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources.", RestServiceErrorCode.InvalidArgs);
@@ -501,8 +497,7 @@ public class RestUtils {
    * @return the required {@link GetOption}. Defaults to {@link GetOption#None}.
    * @throws RestServiceException if the {@link RestUtils.Headers#GET_OPTION} is present but not recognized.
    */
-  public static GetOption getGetOption(RestRequest restRequest)
-      throws RestServiceException {
+  public static GetOption getGetOption(RestRequest restRequest) throws RestServiceException {
     GetOption options = GetOption.None;
     Map<String, Object> args = restRequest.getArgs();
     Object value = args.get(RestUtils.Headers.GET_OPTION);
@@ -567,8 +562,7 @@ public class RestUtils {
    * @throws RestServiceException if no range header was found, or if a valid range could not be parsed from the header
    *                              value,
    */
-  private static ByteRange buildByteRange(String rangeHeaderValue)
-      throws RestServiceException {
+  private static ByteRange buildByteRange(String rangeHeaderValue) throws RestServiceException {
     if (!rangeHeaderValue.startsWith(BYTE_RANGE_PREFIX)) {
       throw new RestServiceException("Invalid byte range syntax; does not start with '" + BYTE_RANGE_PREFIX + "'",
           RestServiceErrorCode.InvalidArgs);

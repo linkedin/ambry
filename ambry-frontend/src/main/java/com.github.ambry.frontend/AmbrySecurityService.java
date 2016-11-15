@@ -188,8 +188,7 @@ class AmbrySecurityService implements SecurityService {
    * @throws RestServiceException if there was any problem setting the headers.
    */
   private void setHeadResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
-      RestResponseChannel restResponseChannel)
-      throws RestServiceException {
+      RestResponseChannel restResponseChannel) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
@@ -213,8 +212,7 @@ class AmbrySecurityService implements SecurityService {
    * @throws RestServiceException if there was any problem setting the headers.
    */
   private void setGetBlobResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
-      RestResponseChannel restResponseChannel)
-      throws RestServiceException {
+      RestResponseChannel restResponseChannel) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
@@ -241,8 +239,8 @@ class AmbrySecurityService implements SecurityService {
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
           new Date(System.currentTimeMillis() + frontendConfig.frontendCacheValiditySeconds * Time.MsPerSec));
-      restResponseChannel
-          .setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.frontendCacheValiditySeconds);
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
+          "max-age=" + frontendConfig.frontendCacheValiditySeconds);
     }
   }
 

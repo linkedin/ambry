@@ -16,14 +16,12 @@ package com.github.ambry.clustermap;
 import org.json.JSONException;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 public class PartitionLayoutTest {
   @Test
-  public void basics()
-      throws JSONException {
+  public void basics() throws JSONException {
     TestUtils.TestPartitionLayout testPartitionLayout =
         new TestUtils.TestPartitionLayout(new TestUtils.TestHardwareLayout("Alpha"));
 
@@ -44,8 +42,7 @@ public class PartitionLayoutTest {
   }
 
   @Test
-  public void validation()
-      throws JSONException {
+  public void validation() throws JSONException {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
 
     try {

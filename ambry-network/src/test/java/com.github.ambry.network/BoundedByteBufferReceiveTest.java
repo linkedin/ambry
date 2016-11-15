@@ -14,12 +14,11 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.ByteBufferInputStream;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class BoundedByteBufferReceiveTest {

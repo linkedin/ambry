@@ -30,8 +30,7 @@ public interface MessageStoreHardDelete {
    * @return iterator over the HardDeleteInfo for the messages in the readSet.
    */
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-      List<byte[]> recoveryInfoList)
-      throws IOException;
+      List<byte[]> recoveryInfoList) throws IOException;
 
   /**
    * Returns the message info of message at the given offset from the given Read interface.
@@ -40,6 +39,5 @@ public interface MessageStoreHardDelete {
    * @param factory the store key factory.
    * @return a MessageInfo object for the message at the offset.
    */
-  public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory)
-      throws IOException;
+  public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) throws IOException;
 }

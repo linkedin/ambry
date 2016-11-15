@@ -46,8 +46,7 @@ public class ServerSSLTokenTest {
   private static MockCluster sslCluster;
 
   @Before
-  public void initializeTests()
-      throws Exception {
+  public void initializeTests() throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     clientSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1"));
@@ -65,8 +64,7 @@ public class ServerSSLTokenTest {
   }
 
   @After
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.

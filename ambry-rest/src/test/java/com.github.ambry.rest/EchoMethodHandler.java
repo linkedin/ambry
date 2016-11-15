@@ -54,8 +54,7 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
   public static final String RESPONSE_HEADER_KEY_2 = RESPONSE_HEADER_KEY_PREFIX + "_2";
 
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
-      throws Exception {
+  public void channelRead0(ChannelHandlerContext ctx, HttpObject obj) throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     if (obj instanceof HttpRequest) {
       HttpRequest request = (HttpRequest) obj;

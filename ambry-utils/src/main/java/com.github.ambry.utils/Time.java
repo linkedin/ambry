@@ -40,10 +40,8 @@ public abstract class Time {
 
   public abstract long seconds();
 
-  public abstract void sleep(long ms)
-      throws InterruptedException;
+  public abstract void sleep(long ms) throws InterruptedException;
 
-  public abstract void wait(Object o, long ms)
-      throws InterruptedException;
+  public abstract void wait(Object o, long ms) throws InterruptedException;
 }
 

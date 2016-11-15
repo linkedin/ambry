@@ -31,8 +31,7 @@ public interface ByteBufferPool {
    * @throws TimeoutException if request cannot be served within {@code timeToBlockMs}
    * @throws InterruptedException if the current thread is interrupted while waiting
    */
-  ByteBuffer allocate(int size, long timeToBlockInMs)
-      throws TimeoutException, InterruptedException;
+  ByteBuffer allocate(int size, long timeToBlockInMs) throws TimeoutException, InterruptedException;
 
   /**
    * Reclaim a {@link ByteBuffer} to the pool.

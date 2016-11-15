@@ -14,15 +14,15 @@
 package com.github.ambry.store;
 
 import java.io.DataInputStream;
-import java.nio.ByteBuffer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Collections;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -89,10 +89,9 @@ class BlobReadOptions implements Comparable<BlobReadOptions> {
     return buf;
   }
 
-  public static BlobReadOptions fromBytes(DataInputStream stream, StoreKeyFactory factory)
-      throws IOException {
+  public static BlobReadOptions fromBytes(DataInputStream stream, StoreKeyFactory factory) throws IOException {
     short version = stream.readShort();
-    switch(version) {
+    switch (version) {
       case 0:
         long offset = stream.readLong();
         long size = stream.readLong();
@@ -132,8 +131,7 @@ class StoreMessageReadSet implements MessageReadSet {
   }
 
   @Override
-  public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
-      throws IOException {
+  public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
     if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }

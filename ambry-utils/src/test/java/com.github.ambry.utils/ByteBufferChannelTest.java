@@ -19,8 +19,7 @@ import java.util.Arrays;
 import java.util.Random;
 import org.junit.Test;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 
 /**
@@ -37,8 +36,7 @@ public class ByteBufferChannelTest {
    * @throws ClosedChannelException
    */
   @Test
-  public void commonCaseTest()
-      throws ClosedChannelException {
+  public void commonCaseTest() throws ClosedChannelException {
     byte[] in = new byte[1024];
     byte[] out = new byte[1024];
     ByteBuffer inBuf = ByteBuffer.wrap(in);
@@ -56,8 +54,7 @@ public class ByteBufferChannelTest {
    * @throws ClosedChannelException
    */
   @Test
-  public void unequalSrcChannelBufferTest()
-      throws ClosedChannelException {
+  public void unequalSrcChannelBufferTest() throws ClosedChannelException {
     sourceLargerThanChannelBufferTest();
     sourceSmallerThanChannelBufferTest();
   }
@@ -67,8 +64,7 @@ public class ByteBufferChannelTest {
    * @throws ClosedChannelException
    */
   @Test
-  public void useAfterCloseTest()
-      throws ClosedChannelException {
+  public void useAfterCloseTest() throws ClosedChannelException {
     ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(5));
     channel.write(ByteBuffer.wrap(new byte[1]));
     channel.close();
@@ -80,8 +76,7 @@ public class ByteBufferChannelTest {
   }
 
   // unequalSrcChannelBufferTest() helpers.
-  private void sourceLargerThanChannelBufferTest()
-      throws ClosedChannelException {
+  private void sourceLargerThanChannelBufferTest() throws ClosedChannelException {
     byte[] in = new byte[2048];
     byte[] out = new byte[1024];
     ByteBuffer inBuf = ByteBuffer.wrap(in);
@@ -101,8 +96,7 @@ public class ByteBufferChannelTest {
     assertEquals("No data should have been written into the channel", 0, channel.write(inBuf));
   }
 
-  private void sourceSmallerThanChannelBufferTest()
-      throws ClosedChannelException {
+  private void sourceSmallerThanChannelBufferTest() throws ClosedChannelException {
     byte[] in = new byte[1024];
     byte[] out = new byte[2048];
     ByteBuffer inBuf = ByteBuffer.wrap(in);

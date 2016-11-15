@@ -20,8 +20,7 @@ import com.github.ambry.commons.BlobId;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 public class RouterUtilsTest {
@@ -65,8 +64,7 @@ public class RouterUtilsTest {
   }
 
   @Test
-  public void testGoodCase()
-      throws Exception {
+  public void testGoodCase() throws Exception {
     initialize();
     BlobId convertedBlobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
     assertEquals("The converted BlobId should be the same as the original.", originalBlobId, convertedBlobId);

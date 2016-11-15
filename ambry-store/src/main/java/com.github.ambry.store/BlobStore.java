@@ -72,8 +72,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public void start()
-      throws StoreException {
+  public void start() throws StoreException {
     synchronized (lock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
@@ -118,8 +117,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions)
-      throws StoreException {
+  public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
     checkStarted();
     // allows concurrent gets
     final Timer.Context context = metrics.getResponse.time();
@@ -151,8 +149,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public void put(MessageWriteSet messageSetToWrite)
-      throws StoreException {
+  public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.putResponse.time();
     try {
@@ -209,8 +206,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public void delete(MessageWriteSet messageSetToDelete)
-      throws StoreException {
+  public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.deleteResponse.time();
     try {
@@ -265,8 +261,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries)
-      throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.findEntriesSinceResponse.time();
     try {
@@ -277,8 +272,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public Set<StoreKey> findMissingKeys(List<StoreKey> keys)
-      throws StoreException {
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.findMissingKeysResponse.time();
     try {
@@ -289,8 +283,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public boolean isKeyDeleted(StoreKey key)
-      throws StoreException {
+  public boolean isKeyDeleted(StoreKey key) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.isKeyDeletedResponse.time();
     try {
@@ -311,8 +304,7 @@ class BlobStore implements Store {
   }
 
   @Override
-  public void shutdown()
-      throws StoreException {
+  public void shutdown() throws StoreException {
     synchronized (lock) {
       checkStarted();
       try {
@@ -339,8 +331,7 @@ class BlobStore implements Store {
     return started;
   }
 
-  private void checkStarted()
-      throws StoreException {
+  private void checkStarted() throws StoreException {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
     }
@@ -350,8 +341,7 @@ class BlobStore implements Store {
    * Sets the end offsets and states for all the segments (by setting the active segment).
    * @throws IOException if there is an I/O error while setting the end offsets.
    */
-  private void setSegmentStatesAndEndOffsets()
-      throws IOException {
+  private void setSegmentStatesAndEndOffsets() throws IOException {
     // TODO (Index Changes): Since the index works under the assumption that there is only one log segment, the code
     // TODO (Index Changes): here does the same. Once the index can handle multiple segments, this will change.
     LogSegment firstSegment = log.getFirstSegment();

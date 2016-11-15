@@ -77,8 +77,7 @@ public class PutManagerTest {
   /**
    * Pre-initialization common to all tests.
    */
-  public PutManagerTest()
-      throws Exception {
+  public PutManagerTest() throws Exception {
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
@@ -104,8 +103,7 @@ public class PutManagerTest {
    * @throws Exception
    */
   @Test
-  public void testSimpleBlobPutSuccess()
-      throws Exception {
+  public void testSimpleBlobPutSuccess() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize));
     submitPutsAndAssertSuccess(true);
@@ -122,8 +120,7 @@ public class PutManagerTest {
    * the chunk size.
    */
   @Test
-  public void testCompositeBlobChunkSizeMultiplePutSuccess()
-      throws Exception {
+  public void testCompositeBlobChunkSizeMultiplePutSuccess() throws Exception {
     for (int i = 1; i < 10; i++) {
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * i));
@@ -135,8 +132,7 @@ public class PutManagerTest {
    * Tests put of a composite blob where the blob size is not a multiple of the chunk size.
    */
   @Test
-  public void testCompositeBlobNotChunkSizeMultiplePutSuccess()
-      throws Exception {
+  public void testCompositeBlobNotChunkSizeMultiplePutSuccess() throws Exception {
     for (int i = 1; i < 10; i++) {
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * i + random.nextInt(chunkSize - 1) + 1));
@@ -149,8 +145,7 @@ public class PutManagerTest {
    * @throws Exception
    */
   @Test
-  public void testBadCallback()
-      throws Exception {
+  public void testBadCallback() throws Exception {
     RequestAndResult req = new RequestAndResult(chunkSize * 5 + random.nextInt(chunkSize - 1) + 1);
     router = getNonBlockingRouter();
     final CountDownLatch callbackCalled = new CountDownLatch(1);
@@ -184,8 +179,7 @@ public class PutManagerTest {
    * Tests put of a blob with blob size 0.
    */
   @Test
-  public void testZeroSizedBlobPutSuccess()
-      throws Exception {
+  public void testZeroSizedBlobPutSuccess() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(0));
     submitPutsAndAssertSuccess(true);
@@ -195,8 +189,7 @@ public class PutManagerTest {
    * Tests a failure scenario where connects to server nodes throw exceptions.
    */
   @Test
-  public void testFailureOnAllConnects()
-      throws Exception {
+  public void testFailureOnAllConnects() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnConnect);
@@ -211,8 +204,7 @@ public class PutManagerTest {
    * Tests a failure scenario where all sends to server nodes result in disconnections.
    */
   @Test
-  public void testFailureOnAllSends()
-      throws Exception {
+  public void testFailureOnAllSends() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     mockSelectorState.set(MockSelectorState.DisconnectOnSend);
@@ -227,8 +219,7 @@ public class PutManagerTest {
    * Tests a failure scenario where selector poll throws an exception when there is anything to send.
    */
   @Test
-  public void testFailureOnAllPollThatSends()
-      throws Exception {
+  public void testFailureOnAllPollThatSends() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnSend);
@@ -249,8 +240,7 @@ public class PutManagerTest {
    * Tests multiple concurrent puts; and puts in succession on the same router.
    */
   @Test
-  public void testConcurrentPutsSuccess()
-      throws Exception {
+  public void testConcurrentPutsSuccess() throws Exception {
     requestAndResultsList.clear();
     for (int i = 0; i < 5; i++) {
       requestAndResultsList.add(new RequestAndResult(chunkSize + random.nextInt(5) * random.nextInt(chunkSize)));
@@ -269,8 +259,7 @@ public class PutManagerTest {
    * Test ensures failure when all server nodes encounter an error.
    */
   @Test
-  public void testPutWithAllNodesFailure()
-      throws Exception {
+  public void testPutWithAllNodesFailure() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
@@ -288,8 +277,7 @@ public class PutManagerTest {
    * Test ensures success in the presence of a single node failure.
    */
   @Test
-  public void testOneNodeFailurePutSuccess()
-      throws Exception {
+  public void testOneNodeFailurePutSuccess() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
@@ -315,8 +303,7 @@ public class PutManagerTest {
    * Test ensures failure when two out of three nodes fail.
    */
   @Test
-  public void testPutWithTwoNodesFailure()
-      throws Exception {
+  public void testPutWithTwoNodesFailure() throws Exception {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
@@ -339,8 +326,7 @@ public class PutManagerTest {
    * but a second attempt is made by the PutManager which results in a success.
    */
   @Test
-  public void testSlippedPutsSuccess()
-      throws Exception {
+  public void testSlippedPutsSuccess() throws Exception {
     // choose a simple blob, one that will result in a single chunk. This is to ensure setting state properly
     // to test things correctly. Note that slipped puts concern a chunk and not an operation (that is,
     // every chunk is slipped put on its own), so testing for simple blobs is sufficient.
@@ -366,8 +352,7 @@ public class PutManagerTest {
    * such a scenario.
    */
   @Test
-  public void testLaterChunkFailure()
-      throws Exception {
+  public void testLaterChunkFailure() throws Exception {
     // choose a blob with two chunks, first one will succeed and second will fail.
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize * 2));
@@ -392,15 +377,15 @@ public class PutManagerTest {
    * Tests put of a blob with a channel that does not have all the data at once.
    */
   @Test
-  public void testDelayedChannelPutSuccess()
-      throws Exception {
+  public void testDelayedChannelPutSuccess() throws Exception {
     router = getNonBlockingRouter();
     int blobSize = chunkSize * random.nextInt(10) + 1;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future = (FutureResult<String>) router
-        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    FutureResult<String> future =
+        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+            putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     int pushedSoFar = 0;
     while (pushedSoFar < blobSize && !future.isDone()) {
@@ -422,15 +407,15 @@ public class PutManagerTest {
    * completes and with failure.
    */
   @Test
-  public void testBadChannelPutFailure()
-      throws Exception {
+  public void testBadChannelPutFailure() throws Exception {
     router = getNonBlockingRouter();
     int blobSize = chunkSize * random.nextInt(10) + 1;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future = (FutureResult<String>) router
-        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    FutureResult<String> future =
+        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+            putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     int pushedSoFar = 0;
 
@@ -456,8 +441,7 @@ public class PutManagerTest {
    * A bad arguments test, where the channel size is different from the size in BlobProperties.
    */
   @Test
-  public void testChannelSizeNotSizeInPropertiesPutFailure()
-      throws Exception {
+  public void testChannelSizeNotSizeInPropertiesPutFailure() throws Exception {
     requestAndResultsList.clear();
     int blobSize = chunkSize;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
@@ -472,8 +456,7 @@ public class PutManagerTest {
    * A bad arguments test, where the blob size is very large.
    */
   @Test
-  public void testBlobTooLargePutFailure()
-      throws Exception {
+  public void testBlobTooLargePutFailure() throws Exception {
     // A blob size of 4G.
     // A chunkSize of 1 byte.
     // The max blob size that can be supported is a function of the chunk size. With the given parameters,
@@ -487,8 +470,9 @@ public class PutManagerTest {
     requestAndResult.putBlobProperties =
         new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future = (FutureResult<String>) router
-        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    FutureResult<String> future =
+        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+            putChannel, null);
     future.await();
     requestAndResult.result = future;
     Exception expectedException = new RouterException("", RouterErrorCode.BlobTooLarge);
@@ -502,8 +486,7 @@ public class PutManagerTest {
    * @throws Exception
    */
   @Test
-  public void testChunkFillerSleep()
-      throws Exception {
+  public void testChunkFillerSleep() throws Exception {
     router = getNonBlockingRouter();
     // At this time there are no put operations, so the ChunkFillerThread will eventually go into WAITING state.
     Thread chunkFillerThread = TestUtils.getThreadByThisName("ChunkFillerThread");
@@ -513,8 +496,9 @@ public class PutManagerTest {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future = (FutureResult<String>) router
-        .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+    FutureResult<String> future =
+        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
+            putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
@@ -532,11 +516,11 @@ public class PutManagerTest {
     putChannel.write(buf);
     // At this time all writes have finished, so the ChunkFiller thread will eventually go (or will have already gone)
     // to WAITING due to this write.
-    Assert
-        .assertTrue("ChunkFillerThread should have gone to WAITING state as the only active operation is now complete",
-            waitForThreadState(chunkFillerThread, Thread.State.WAITING));
-    Assert
-        .assertTrue("Operation should not take too long to complete", future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS));
+    Assert.assertTrue(
+        "ChunkFillerThread should have gone to WAITING state as the only active operation is now complete",
+        waitForThreadState(chunkFillerThread, Thread.State.WAITING));
+    Assert.assertTrue("Operation should not take too long to complete",
+        future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS));
     requestAndResult.result = future;
     assertSuccess();
     assertCloseCleanup();
@@ -565,8 +549,7 @@ public class PutManagerTest {
   /**
    * @return Return a {@link NonBlockingRouter} created with default {@link VerifiableProperties}
    */
-  private NonBlockingRouter getNonBlockingRouter()
-      throws IOException {
+  private NonBlockingRouter getNonBlockingRouter() throws IOException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
@@ -585,8 +568,7 @@ public class PutManagerTest {
    * Submits put blob operations that are expected to succeed, waits for completion, and asserts success.
    * @param shouldCloseRouterAfter whether the router should be closed after the operation.
    */
-  private void submitPutsAndAssertSuccess(boolean shouldCloseRouterAfter)
-      throws Exception {
+  private void submitPutsAndAssertSuccess(boolean shouldCloseRouterAfter) throws Exception {
     submitPut().await();
     assertSuccess();
     if (shouldCloseRouterAfter) {
@@ -605,8 +587,7 @@ public class PutManagerTest {
    *                       for the operation to complete.
    */
   private void submitPutsAndAssertFailure(Exception expectedException, boolean shouldCloseRouterAfter,
-      boolean incrementTimer)
-      throws Exception {
+      boolean incrementTimer) throws Exception {
     CountDownLatch doneLatch = submitPut();
     if (incrementTimer) {
       do {
@@ -627,8 +608,7 @@ public class PutManagerTest {
    * {@link #submitPutsAndAssertFailure(Exception, boolean, boolean)} methods.
    * @return a {@link CountDownLatch} to await on for operation completion.
    */
-  private CountDownLatch submitPut()
-      throws Exception {
+  private CountDownLatch submitPut() throws Exception {
     final CountDownLatch doneLatch = new CountDownLatch(requestAndResultsList.size());
     // This check is here for certain tests (like testConcurrentPuts) that require using the same router.
     if (instantiateNewRouterForPuts) {
@@ -641,8 +621,8 @@ public class PutManagerTest {
           try {
             ReadableStreamChannel putChannel =
                 new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
-            requestAndResult.result = (FutureResult<String>) router
-                .putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata, putChannel, null);
+            requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
+                requestAndResult.putUserMetadata, putChannel, null);
             requestAndResult.result.await();
           } catch (Exception e) {
             requestAndResult.result = new FutureResult<>();
@@ -659,8 +639,7 @@ public class PutManagerTest {
   /**
    * Go through all the requests and ensure all of them have succeeded.
    */
-  private void assertSuccess()
-      throws Exception {
+  private void assertSuccess() throws Exception {
     // Go through all the requests received by all the servers and ensure that all requests for the same blob id are
     // identical. In the process also fill in the map of blobId to serializedPutRequests.
     HashMap<String, ByteBuffer> allChunks = new HashMap<String, ByteBuffer>();
@@ -699,8 +678,8 @@ public class PutManagerTest {
     PutRequest.ReceivedPutRequest request = deserializePutRequest(serializedRequest);
     if (request.getBlobType() == BlobType.MetadataBlob) {
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
-      CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe
-          .deserializeMetadataContentRecord(ByteBuffer.wrap(data), new BlobIdFactory(mockClusterMap));
+      CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
+          new BlobIdFactory(mockClusterMap));
       Assert.assertEquals("Wrong max chunk size in metadata", chunkSize, compositeBlobInfo.getChunkSize());
       Assert.assertEquals("Wrong total size in metadata", originalPutContent.length, compositeBlobInfo.getTotalSize());
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
@@ -724,8 +703,7 @@ public class PutManagerTest {
    * @param serialized the serialized ByteBuffer.
    * @return returns the deserialized output.
    */
-  private PutRequest.ReceivedPutRequest deserializePutRequest(ByteBuffer serialized)
-      throws IOException {
+  private PutRequest.ReceivedPutRequest deserializePutRequest(ByteBuffer serialized) throws IOException {
     serialized.getLong();
     serialized.getShort();
     return PutRequest.readFrom(new DataInputStream(new ByteBufferInputStream(serialized)), mockClusterMap);
@@ -818,8 +796,7 @@ public class PutManagerTest {
 }
 
 /**
- * A {@link ReadableStreamChannel} implementation whose {@link #readInto(AsyncWritableChannel,
- * Callback)} method reads into the {@link AsyncWritableChannel} passed into it as and when data is written to it and
+ * A {@link ReadableStreamChannel} implementation whose {@link #readInto(AsyncWritableChannel, * Callback)} method reads into the {@link AsyncWritableChannel} passed into it as and when data is written to it and
  * not at once. Also if the beBad state is set, the callback is called with an exception.
  */
 class MockReadableStreamChannel implements ReadableStreamChannel {
@@ -852,8 +829,7 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
    * @param buf the buf to write.
    * @throws Exception if the future await throws an exception.
    */
-  void write(ByteBuffer buf)
-      throws Exception {
+  void write(ByteBuffer buf) throws Exception {
     // This is a mock class, that is going to be used for very specific tests. The tests should not call this method
     // before readInto() is called nor should it call it with a buffer with invalid size. However, this method guards
     // against these situations anyway to fail the tests immediately when this class is incorrectly used.
@@ -907,8 +883,7 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
    * {@inheritDoc}
    */
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     // no op.
   }
 }

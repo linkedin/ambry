@@ -44,8 +44,7 @@ public class BlobStoreTest {
   /**
    * Create a temporary file
    */
-  File tempFile()
-      throws IOException {
+  File tempFile() throws IOException {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;
@@ -62,8 +61,7 @@ public class BlobStoreTest {
     }
 
     @Override
-    public long writeTo(Write writeChannel)
-        throws IOException {
+    public long writeTo(Write writeChannel) throws IOException {
       return writeChannel.appendFrom(bufToWrite);
     }
 
@@ -74,8 +72,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storePutTest()
-      throws IOException {
+  public void storePutTest() throws IOException {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -148,8 +145,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeGetTest()
-      throws IOException {
+  public void storeGetTest() throws IOException {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -209,8 +205,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeDeleteTest()
-      throws IOException {
+  public void storeDeleteTest() throws IOException {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -291,8 +286,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeGetDeletedTest()
-      throws IOException {
+  public void storeGetDeletedTest() throws IOException {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -433,8 +427,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeShutdownTest()
-      throws IOException {
+  public void storeShutdownTest() throws IOException {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);
@@ -497,8 +490,7 @@ public class BlobStoreTest {
   }
 
   @Test
-  public void storeTTLTest()
-      throws Exception {
+  public void storeTTLTest() throws Exception {
     MockClusterMap map = null;
     try {
       ScheduledExecutorService scheduler = Utils.newScheduler(4, "thread", false);

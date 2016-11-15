@@ -25,9 +25,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import static java.util.Arrays.asList;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static java.util.Arrays.*;
+import static org.junit.Assert.*;
 
 
 /**
@@ -40,16 +39,14 @@ public class SelectorTest {
   private Selector selector;
 
   @Before
-  public void setup()
-      throws Exception {
+  public void setup() throws Exception {
     this.server = new EchoServer(18283);
     this.server.start();
     this.selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), null);
   }
 
   @After
-  public void teardown()
-      throws Exception {
+  public void teardown() throws Exception {
     this.selector.close();
     this.server.close();
   }
@@ -58,8 +55,7 @@ public class SelectorTest {
    * Validate that when the server disconnects, a client send ends up with that node in the disconnected list.
    */
   @Test
-  public void testServerDisconnect()
-      throws Exception {
+  public void testServerDisconnect() throws Exception {
     // connect and do a simple request
     String connectionId = blockingConnect();
     assertEquals("hello", blockingRequest(connectionId, "hello"));
@@ -79,8 +75,7 @@ public class SelectorTest {
    * Validate that the client can intentionally disconnect and reconnect
    */
   @Test
-  public void testClientDisconnect()
-      throws Exception {
+  public void testClientDisconnect() throws Exception {
     String connectionId = blockingConnect();
     selector.disconnect(connectionId);
     selector.poll(10, asList(createSend(connectionId, "hello1")));
@@ -95,8 +90,7 @@ public class SelectorTest {
    * Validate that a closed connectionId is returned via disconnected list after close
    */
   @Test
-  public void testDisconnectedListOnClose()
-      throws Exception {
+  public void testDisconnectedListOnClose() throws Exception {
     String connectionId = blockingConnect();
     assertEquals("Disconnect list should be empty", 0, selector.disconnected().size());
     selector.close(connectionId);
@@ -113,8 +107,7 @@ public class SelectorTest {
    * Sending a request with one already in flight should result in an exception
    */
   @Test(expected = IllegalStateException.class)
-  public void testCantSendWithInProgress()
-      throws Exception {
+  public void testCantSendWithInProgress() throws Exception {
     String connectionId = blockingConnect();
     selector.poll(1000L, asList(createSend(connectionId, "test1"), createSend(connectionId, "test2")));
   }
@@ -123,8 +116,7 @@ public class SelectorTest {
    * Sending a request to a node without an existing connection should result in an exception
    */
   @Test(expected = IllegalStateException.class)
-  public void testCantSendWithoutConnecting()
-      throws Exception {
+  public void testCantSendWithoutConnecting() throws Exception {
     selector.poll(1000L, asList(createSend("testCantSendWithoutConnecting_test", "test")));
   }
 
@@ -132,8 +124,7 @@ public class SelectorTest {
    * Sending a request to a node with a bad hostname should result in an exception during connect
    */
   @Test(expected = IOException.class)
-  public void testNoRouteToHost()
-      throws Exception {
+  public void testNoRouteToHost() throws Exception {
     selector.connect(new InetSocketAddress("asdf.asdf.dsc", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
   }
 
@@ -141,8 +132,7 @@ public class SelectorTest {
    * Sending a request to a node not listening on that port should result in disconnection
    */
   @Test
-  public void testConnectionRefused()
-      throws Exception {
+  public void testConnectionRefused() throws Exception {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", 6668), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
     while (selector.disconnected().contains(connectionId)) {
@@ -155,8 +145,7 @@ public class SelectorTest {
    * requests were sent.
    */
   @Test
-  public void testNormalOperation()
-      throws Exception {
+  public void testNormalOperation() throws Exception {
     int conns = 5;
     int reqs = 500;
 
@@ -216,8 +205,7 @@ public class SelectorTest {
    * Validate that we can send and receive a message larger than the receive and send buffer size
    */
   @Test
-  public void testSendLargeRequest()
-      throws Exception {
+  public void testSendLargeRequest() throws Exception {
     String connectionId = blockingConnect();
     String big = randomString(10 * BUFFER_SIZE, new Random());
     assertEquals(big, blockingRequest(connectionId, big));
@@ -227,14 +215,12 @@ public class SelectorTest {
    * Test sending an empty string
    */
   @Test
-  public void testEmptyRequest()
-      throws Exception {
+  public void testEmptyRequest() throws Exception {
     String connectionId = blockingConnect();
     assertEquals("", blockingRequest(connectionId, ""));
   }
 
-  private String blockingRequest(String connectionId, String s)
-      throws Exception {
+  private String blockingRequest(String connectionId, String s) throws Exception {
     selector.poll(1000L, asList(createSend(connectionId, s)));
     while (true) {
       selector.poll(1000L);
@@ -247,8 +233,7 @@ public class SelectorTest {
   }
 
   /* connect and wait for the connection to complete */
-  private String blockingConnect()
-      throws IOException {
+  private String blockingConnect() throws IOException {
     String connectionId =
         selector.connect(new InetSocketAddress("localhost", server.port), BUFFER_SIZE, BUFFER_SIZE, PortType.PLAINTEXT);
     while (!selector.connected().contains(connectionId)) {

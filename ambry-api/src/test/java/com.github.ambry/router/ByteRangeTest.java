@@ -16,9 +16,7 @@ package com.github.ambry.router;
 
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -30,8 +28,7 @@ public class ByteRangeTest {
    * @throws Exception
    */
   @Test
-  public void testValidRange()
-      throws Exception {
+  public void testValidRange() throws Exception {
     testByteRangeCreationOffsetRange(0, 0, true);
     testByteRangeCreationFromStartOffset(0, true);
     testByteRangeCreationFromStartOffset(15, true);
@@ -46,8 +43,7 @@ public class ByteRangeTest {
    * @throws Exception
    */
   @Test
-  public void testInvalidRanges()
-      throws Exception {
+  public void testInvalidRanges() throws Exception {
     // negative indices
     testByteRangeCreationOffsetRange(-2, 1, false);
     testByteRangeCreationOffsetRange(5, -1, false);
@@ -67,8 +63,7 @@ public class ByteRangeTest {
    * @throws Exception
    */
   @Test
-  public void testResolvedByteRange()
-      throws Exception {
+  public void testResolvedByteRange() throws Exception {
     // 0-0 (0th byte)
     ByteRange range = ByteRange.fromOffsetRange(0, 0);
     assertRangeResolutionFailure(range, 0);
@@ -174,8 +169,7 @@ public class ByteRangeTest {
    * @param expectSuccess {@code true} if the {@link ByteRange} creation should succeed.
    * @throws Exception
    */
-  private void testByteRangeCreationFromStartOffset(long startOffset, boolean expectSuccess)
-      throws Exception {
+  private void testByteRangeCreationFromStartOffset(long startOffset, boolean expectSuccess) throws Exception {
     if (expectSuccess) {
       ByteRange byteRange = ByteRange.fromStartOffset(startOffset);
       assertEquals("Wrong range type", ByteRange.ByteRangeType.FROM_START_OFFSET, byteRange.getType());
@@ -202,8 +196,7 @@ public class ByteRangeTest {
    * @param expectSuccess {@code true} if the {@link ByteRange} creation should succeed.
    * @throws Exception
    */
-  private void testByteRangeCreationLastNBytes(long lastNBytes, boolean expectSuccess)
-      throws Exception {
+  private void testByteRangeCreationLastNBytes(long lastNBytes, boolean expectSuccess) throws Exception {
     if (expectSuccess) {
       ByteRange byteRange = ByteRange.fromLastNBytes(lastNBytes);
       assertEquals("Wrong range type", ByteRange.ByteRangeType.LAST_N_BYTES, byteRange.getType());

@@ -38,8 +38,7 @@ public interface IBitSet extends Closeable {
    */
   public void clear(long index);
 
-  public void serialize(DataOutput out)
-      throws IOException;
+  public void serialize(DataOutput out) throws IOException;
 
   public void clear();
 }

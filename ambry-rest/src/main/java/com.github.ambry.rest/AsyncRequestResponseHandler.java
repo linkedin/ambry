@@ -173,8 +173,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    */
   @Override
   public void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      ReadableStreamChannel response, Exception exception)
-      throws RestServiceException {
+      ReadableStreamChannel response, Exception exception) throws RestServiceException {
     if (isRunning()) {
       asyncResponseHandler.submitResponse(restRequest, restResponseChannel, response, exception);
     } else {
@@ -335,8 +334,7 @@ class AsyncRequestWorker implements Runnable {
    * @return {@code true} if shutdown succeeded within the {@code timeout}. {@code false} otherwise.
    * @throws InterruptedException if the wait for shutdown is interrupted.
    */
-  protected boolean shutdown(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
+  protected boolean shutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
     logger.trace("Shutting down AsyncRequestWorker");
     running.set(false);
     requests.offer(new AsyncRequestInfo(null, null));
@@ -411,8 +409,7 @@ class AsyncRequestWorker implements Runnable {
    * @param asyncRequestInfo the currently dequeued {@link AsyncRequestInfo}.
    * @throws RestServiceException if the request cannot be prepared for hand-off to the {@link BlobStorageService}.
    */
-  private void processRequest(AsyncRequestInfo asyncRequestInfo)
-      throws RestServiceException {
+  private void processRequest(AsyncRequestInfo asyncRequestInfo) throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     // needed to avoid double counting.
     long blobStorageProcessingTime = 0;
@@ -445,8 +442,8 @@ class AsyncRequestWorker implements Runnable {
       }
       blobStorageProcessingTime = System.currentTimeMillis() - blobStorageProcessingStartTime;
     } finally {
-      restRequest.getMetricsTracker().scalingMetricsTracker
-          .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime - blobStorageProcessingTime);
+      restRequest.getMetricsTracker().scalingMetricsTracker.addToRequestProcessingTime(
+          System.currentTimeMillis() - processingStartTime - blobStorageProcessingTime);
     }
   }
 
@@ -565,8 +562,7 @@ class AsyncResponseHandler implements Closeable {
    * @throws RestServiceException if there is any error while processing the response.
    */
   protected void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      ReadableStreamChannel response, Exception exception)
-      throws RestServiceException {
+      ReadableStreamChannel response, Exception exception) throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     if (restRequest == null || restResponseChannel == null) {
       throw new IllegalArgumentException("Received one or more null arguments");

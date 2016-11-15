@@ -70,60 +70,96 @@ public class ServerReadPerformance {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
-          parser.accepts("logToRead", "The log that needs to be replayed for traffic").withRequiredArg()
-              .describedAs("log_to_read").ofType(String.class);
+          parser.accepts("logToRead", "The log that needs to be replayed for traffic")
+              .withRequiredArg()
+              .describedAs("log_to_read")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> readsPerSecondOpt =
-          parser.accepts("readsPerSecond", "The rate at which reads need to be performed").withRequiredArg()
-              .describedAs("The number of reads per second").ofType(Integer.class).defaultsTo(1000);
+          parser.accepts("readsPerSecond", "The rate at which reads need to be performed")
+              .withRequiredArg()
+              .describedAs("The number of reads per second")
+              .ofType(Integer.class)
+              .defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
-          parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The CPU time spent for getting blobs, not wall time").ofType(Long.class).defaultsTo(300L);
+          parser.accepts("measurementInterval", "The interval in second to report performance result")
+              .withOptionalArg()
+              .describedAs("The CPU time spent for getting blobs, not wall time")
+              .ofType(Long.class)
+              .defaultsTo(300L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
-              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging")
+              .withOptionalArg()
+              .describedAs("Enable verbose logging")
+              .ofType(Boolean.class)
+              .defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
-              .describedAs("Comma separated list").ofType(String.class).defaultsTo("");
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .ofType(String.class)
+              .defaultsTo("");
 
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
-          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
-              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt = parser.accepts("sslKeystorePath", "SSL key store path")
+          .withOptionalArg()
+          .describedAs("The file path of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
-          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
-              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt = parser.accepts("sslKeystoreType", "SSL key store type")
+          .withOptionalArg()
+          .describedAs("The type of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
-          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
-              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePath", "SSL trust store path")
+              .withOptionalArg()
+              .describedAs("The file path of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
-          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
-              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslKeystorePassword", "SSL key store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL key store")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
-          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
-              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt = parser.accepts("sslKeyPassword", "SSL key password")
+          .withOptionalArg()
+          .describedAs("The password of SSL private key")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
-          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
-              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePassword", "SSL trust store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
-          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA")
+              .ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -239,8 +275,8 @@ public class ServerReadPerformance {
             totalNumberOfGetBlobs++;
             totalLatencyForGetBlobs += latencyPerBlob;
             if (enableVerboseLogging) {
-              System.out
-                  .println("Time taken to get blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
+              System.out.println(
+                  "Time taken to get blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
             }
             if (latencyPerBlob > maxLatencyForGetBlobs) {
               maxLatencyForGetBlobs = latencyPerBlob;

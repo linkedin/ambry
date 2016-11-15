@@ -30,12 +30,7 @@ public class ByteBufferRSC implements ReadableStreamChannel {
    * List of "events" (function calls) that can occur inside ByteBufferRSC.
    */
   public enum Event {
-    GetSize,
-    ReadInto,
-    SetDigestAlgorithm,
-    GetDigest,
-    IsOpen,
-    Close
+    GetSize, ReadInto, SetDigestAlgorithm, GetDigest, IsOpen, Close
   }
 
   /**
@@ -104,8 +99,7 @@ public class ByteBufferRSC implements ReadableStreamChannel {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     channelOpen.set(false);
     onEventComplete(Event.Close);
   }

@@ -45,8 +45,7 @@ public class MockClusterMap implements ClusterMap {
    * is going to be used to start a cluster, use it judiciously to avoid resource consumption issues on the test
    * machine.
    */
-  public MockClusterMap()
-      throws IOException {
+  public MockClusterMap() throws IOException {
     this(false, 9, 3, 3);
   }
 
@@ -132,8 +131,7 @@ public class MockClusterMap implements ClusterMap {
     throw new IllegalArgumentException("No PlainText port found ");
   }
 
-  private MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter)
-      throws IOException {
+  private MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter) throws IOException {
     File f = null;
     int port = getPlainTextPort(ports);
     try {
@@ -154,8 +152,7 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream)
-      throws IOException {
+  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
     short version = stream.readShort();
     long id = stream.readLong();
     return partitions.get(id);
@@ -228,8 +225,7 @@ public class MockClusterMap implements ClusterMap {
     createNewRegistry = false;
   }
 
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     for (PartitionId partitionId : partitions.values()) {
       MockPartitionId mockPartition = (MockPartitionId) partitionId;
       mockPartition.cleanUp();
@@ -244,8 +240,7 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  private static boolean deleteFileOrDirectory(File f)
-      throws IOException {
+  private static boolean deleteFileOrDirectory(File f) throws IOException {
     if (f.exists()) {
       if (f.isDirectory()) {
         File[] children = f.listFiles();

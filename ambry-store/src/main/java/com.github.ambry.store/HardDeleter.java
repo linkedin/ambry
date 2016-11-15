@@ -149,8 +149,7 @@ public class HardDeleter implements Runnable {
    *
    * @throws StoreException on version mismatch.
    */
-  void performRecovery()
-      throws StoreException {
+  void performRecovery() throws StoreException {
     try {
       readCleanupTokenAndPopulateRecoveryRange();
       if (hardDeleteRecoveryRange.getSize() == 0) {
@@ -245,8 +244,7 @@ public class HardDeleter implements Runnable {
    *
    * @return true if the token moved forward, false otherwise.
    */
-  boolean hardDelete()
-      throws StoreException {
+  boolean hardDelete() throws StoreException {
     if (index.getCurrentEndOffset() > 0) {
       final Timer.Context context = metrics.hardDeleteTime.time();
       try {
@@ -321,8 +319,7 @@ public class HardDeleter implements Runnable {
     return isCaughtUp;
   }
 
-  void shutdown()
-      throws InterruptedException, StoreException, IOException {
+  void shutdown() throws InterruptedException, StoreException, IOException {
     if (running.get()) {
       running.set(false);
       synchronized (lock) {
@@ -347,8 +344,7 @@ public class HardDeleter implements Runnable {
    * stream.
    * @throws StoreException on version mismatch.
    */
-  private void readCleanupTokenAndPopulateRecoveryRange()
-      throws IOException, StoreException {
+  private void readCleanupTokenAndPopulateRecoveryRange() throws IOException, StoreException {
     File cleanupTokenFile = new File(dataDir, Cleanup_Token_Filename);
     StoreFindToken recoveryStartToken = recoveryEndToken = new StoreFindToken();
     startToken = startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = new StoreFindToken();
@@ -391,8 +387,7 @@ public class HardDeleter implements Runnable {
     startToken = startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = recoveryStartToken;
   }
 
-  private void persistCleanupToken()
-      throws IOException, StoreException {
+  private void persistCleanupToken() throws IOException, StoreException {
         /* The cleanup token format is as follows:
            --
            token_version
@@ -452,8 +447,7 @@ public class HardDeleter implements Runnable {
    * records, and then replaces the records in the log with the corresponding replacement records.
    * @param messageInfoList: The messages to be hard deleted in the log.
    */
-  private void performHardDeletes(List<MessageInfo> messageInfoList)
-      throws StoreException {
+  private void performHardDeletes(List<MessageInfo> messageInfoList) throws StoreException {
     try {
       EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
       List<BlobReadOptions> readOptionsList = new ArrayList<BlobReadOptions>(messageInfoList.size());
@@ -556,8 +550,7 @@ public class HardDeleter implements Runnable {
       this.messageStoreRecoveryInfoList = new ArrayList<byte[]>();
     }
 
-    HardDeletePersistInfo(DataInputStream stream, StoreKeyFactory storeKeyFactory)
-        throws IOException {
+    HardDeletePersistInfo(DataInputStream stream, StoreKeyFactory storeKeyFactory) throws IOException {
       this();
       int numBlobsToRecover = stream.readInt();
       for (int i = 0; i < numBlobsToRecover; i++) {
@@ -591,8 +584,7 @@ public class HardDeleter implements Runnable {
     /**
      * @return A serialized byte array containing the information required for hard delete recovery.
      */
-    byte[] toBytes()
-        throws IOException {
+    byte[] toBytes() throws IOException {
       ByteArrayOutputStream outStream = new ByteArrayOutputStream();
       DataOutputStream dataOutputStream = new DataOutputStream(outStream);
 

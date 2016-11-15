@@ -84,8 +84,7 @@ class GetReplicasHandler {
    * @throws RestServiceException if there were missing or invalid arguments or if there was a {@link JSONException}
    *                                or any other while building the response
    */
-  private JSONObject getReplicas(String blobId)
-      throws RestServiceException {
+  private JSONObject getReplicas(String blobId) throws RestServiceException {
     try {
       PartitionId partitionId = new BlobId(blobId, clusterMap).getPartition();
       if (partitionId == null) {
@@ -112,8 +111,7 @@ class GetReplicasHandler {
    * @return A {@link JSONObject} that wraps the replica list.
    * @throws JSONException if there was an error building the {@link JSONObject}.
    */
-  private static JSONObject packageResult(List<ReplicaId> replicaIds)
-      throws JSONException {
+  private static JSONObject packageResult(List<ReplicaId> replicaIds) throws JSONException {
     JSONObject result = new JSONObject();
     if (replicaIds != null) {
       for (ReplicaId replicaId : replicaIds) {

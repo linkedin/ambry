@@ -13,8 +13,8 @@
  */
 package com.github.ambry.store;
 
-import java.util.List;
 import java.io.IOException;
+import java.util.List;
 
 
 /**
@@ -33,6 +33,5 @@ public interface MessageStoreRecovery {
    * @return A list of messages that were successfully recovered
    * @throws IOException
    */
-  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-      throws IOException;
+  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException;
 }

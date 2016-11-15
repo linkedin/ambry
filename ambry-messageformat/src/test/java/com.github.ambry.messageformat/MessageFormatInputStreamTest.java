@@ -28,8 +28,7 @@ import org.junit.Test;
 public class MessageFormatInputStreamTest {
 
   @Test
-  public void messageFormatBlobPropertiesTest()
-      throws IOException, MessageFormatException {
+  public void messageFormatBlobPropertiesTest() throws IOException, MessageFormatException {
     messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
     messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
     messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
@@ -69,8 +68,8 @@ public class MessageFormatInputStreamTest {
     int userMetadataSize =
         MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata));
 
-    Assert.assertEquals(messageFormatStream.getSize(), headerSize + blobPropertiesRecordSize +
-        userMetadataSize + blobSize + key.sizeInBytes());
+    Assert.assertEquals(messageFormatStream.getSize(),
+        headerSize + blobPropertiesRecordSize + userMetadataSize + blobSize + key.sizeInBytes());
 
     // verify header
     byte[] headerOutput = new byte[headerSize];
@@ -81,8 +80,8 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
     Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
     Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize, headerBuf.getInt());
-    Assert
-        .assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize, headerBuf.getInt());
+    Assert.assertEquals(headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize,
+        headerBuf.getInt());
     Crc32 crc = new Crc32();
     crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
@@ -101,8 +100,8 @@ public class MessageFormatInputStreamTest {
     ByteBuffer blobPropertiesBuf = ByteBuffer.wrap(blobPropertiesOutput);
     messageFormatStream.read(blobPropertiesOutput);
     Assert.assertEquals(blobPropertiesBuf.getShort(), 1);
-    BlobProperties propOutput = BlobPropertiesSerDe
-        .getBlobPropertiesFromStream(new DataInputStream(new ByteBufferInputStream(blobPropertiesBuf)));
+    BlobProperties propOutput = BlobPropertiesSerDe.getBlobPropertiesFromStream(
+        new DataInputStream(new ByteBufferInputStream(blobPropertiesBuf)));
     Assert.assertEquals(10, propOutput.getBlobSize());
     Assert.assertEquals("servid", propOutput.getServiceId());
     crc = new Crc32();
@@ -138,8 +137,7 @@ public class MessageFormatInputStreamTest {
   }
 
   @Test
-  public void messageFormatDeleteRecordTest()
-      throws IOException, MessageFormatException {
+  public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
     MessageFormatInputStream messageFormatStream = new DeleteMessageFormatInputStream(key);
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();

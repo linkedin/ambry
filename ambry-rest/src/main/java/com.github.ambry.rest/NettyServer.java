@@ -66,8 +66,7 @@ public class NettyServer implements NioServer {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     long startupBeginTime = System.currentTimeMillis();
     try {
       logger.trace("Starting NettyServer deployment");
@@ -76,9 +75,11 @@ public class NettyServer implements NioServer {
       ServerBootstrap b = new ServerBootstrap();
       // Netty creates a new instance of every class in the pipeline for every connection
       // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
-      b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
+      b.group(bossGroup, workerGroup)
+          .channel(NioServerSocketChannel.class)
           .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)
-          .handler(new LoggingHandler(LogLevel.DEBUG)).childHandler(channelInitializer);
+          .handler(new LoggingHandler(LogLevel.DEBUG))
+          .childHandler(channelInitializer);
       b.bind(nettyConfig.nettyServerPort).sync();
       logger.info("NettyServer now listening on port {}", nettyConfig.nettyServerPort);
     } catch (InterruptedException e) {

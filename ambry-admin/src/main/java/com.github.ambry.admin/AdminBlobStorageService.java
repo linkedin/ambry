@@ -101,8 +101,7 @@ class AdminBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     long startupBeginTime = System.currentTimeMillis();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
@@ -288,8 +287,7 @@ class AdminBlobStorageService implements BlobStorageService {
    * Checks if {@link AdminBlobStorageService} is available to serve requests.
    * @throws RestServiceException if {@link AdminBlobStorageService} is not available to serve requests.
    */
-  private void checkAvailable()
-      throws RestServiceException {
+  private void checkAvailable() throws RestServiceException {
     if (!isUp) {
       throw new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     }
@@ -355,8 +353,8 @@ class AdminBlobStorageService implements BlobStorageService {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
               GetOption getOption = RestUtils.getGetOption(restRequest);
-              if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource
-                  .equals(RestUtils.SubResource.UserMetadata)) {
+              if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource.equals(
+                  RestUtils.SubResource.UserMetadata)) {
                 getCallback.markStartTime();
                 GetBlobOptions.OperationType getOperationType =
                     subresource != null ? GetBlobOptions.OperationType.BlobInfo : GetBlobOptions.OperationType.All;
@@ -573,8 +571,8 @@ class AdminBlobStorageService implements BlobStorageService {
               new CallbackTracker(restRequest, OPERATION_TYPE_GET_RESPONSE_SECURITY,
                   adminMetrics.getSecurityResponseTimeInMs, adminMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   securityCallbackTracker.markOperationEnd();
@@ -587,8 +585,8 @@ class AdminBlobStorageService implements BlobStorageService {
                         Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
                         if (userMetadata == null) {
                           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-                          restResponseChannel
-                              .setHeader(RestUtils.Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
+                              blobInfo.getUserMetadata().length);
                           response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                         } else {
                           setUserMetadataHeaders(userMetadata, restResponseChannel);
@@ -743,8 +741,8 @@ class AdminBlobStorageService implements BlobStorageService {
                   adminMetrics.headSecurityResponseTimeInMs,
                   adminMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   callbackTracker.markOperationEnd();

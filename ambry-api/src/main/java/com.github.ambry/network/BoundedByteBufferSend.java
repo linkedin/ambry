@@ -29,8 +29,7 @@ public class BoundedByteBufferSend implements Send {
 
   private final ByteBuffer buffer;
 
-  public BoundedByteBufferSend(Send request)
-      throws IOException {
+  public BoundedByteBufferSend(Send request) throws IOException {
     // Avoid possibility of overflow for 2GB-4 byte buffer
     if (request.sizeInBytes() > Integer.MAX_VALUE - 4) {
       throw new IllegalStateException(
@@ -53,8 +52,7 @@ public class BoundedByteBufferSend implements Send {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     return isSendComplete() ? 0 : channel.write(buffer);
   }
 

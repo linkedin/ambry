@@ -28,8 +28,7 @@ public interface RequestAPI {
    * @throws IOException
    * @throws InterruptedException
    */
-  void handlePutRequest(Request request)
-      throws IOException, InterruptedException;
+  void handlePutRequest(Request request) throws IOException, InterruptedException;
 
   /**
    * Gets blob property, user metadata or the blob from the specified partition
@@ -38,8 +37,7 @@ public interface RequestAPI {
    * @throws IOException
    * @throws InterruptedException
    */
-  void handleGetRequest(Request request)
-      throws IOException, InterruptedException;
+  void handleGetRequest(Request request) throws IOException, InterruptedException;
 
   /**
    * Deletes the blob from the store
@@ -47,8 +45,7 @@ public interface RequestAPI {
    * @throws IOException
    * @throws InterruptedException
    */
-  void handleDeleteRequest(Request request)
-      throws IOException, InterruptedException;
+  void handleDeleteRequest(Request request) throws IOException, InterruptedException;
 
   /**
    * Gets the metadata required for replication
@@ -56,6 +53,5 @@ public interface RequestAPI {
    * @throws IOException
    * @throws InterruptedException
    */
-  public void handleReplicaMetadataRequest(Request request)
-      throws IOException, InterruptedException;
+  public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException;
 }

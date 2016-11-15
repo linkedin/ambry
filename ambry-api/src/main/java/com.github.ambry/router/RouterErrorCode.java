@@ -23,29 +23,24 @@ public enum RouterErrorCode {
    * operation. An operation that changes the state of an existing blob (delete) may have partially completed and so may
    * eventually complete in the future.
    */
-  AmbryUnavailable,
-  /**
+  AmbryUnavailable, /**
    * Caller passed in an invalid blob id and so operation could not be attempted. May occur for
    * {@link Router#getBlob(String, GetBlobOptions)}, {@link Router#deleteBlob(String)} (and their variants) operations.
    */
-  InvalidBlobId,
-  /**
+  InvalidBlobId, /**
    * Caller passed in an illegal argument for
    * {@link Router#putBlob(com.github.ambry.messageformat.BlobProperties, byte[], ReadableStreamChannel)}
    * operation (and its variant).
    */
-  InvalidPutArgument,
-  /**
+  InvalidPutArgument, /**
    * Operation did not complete within specified time out. The caller should retry the operation. An operation that
    * changes the state of an existing blob (delete) may have partially completed and so may eventually complete in the
    * future.
    */
-  OperationTimedOut,
-  /**
+  OperationTimedOut, /**
    * Thrown when an operation is attempted after the {@link Router} is closed.
    */
-  RouterClosed,
-  /**
+  RouterClosed, /**
    * Router experienced an unexpected internal error. The caller should retry the operation. An operation that
    * changes the state of an existing blob (delete) may have partially completed and so may eventually complete in the
    * future.
@@ -56,12 +51,10 @@ public enum RouterErrorCode {
   /**
    * Blob is too large. Cannot store blob of such size.
    */
-  BlobTooLarge,
-  /**
+  BlobTooLarge, /**
    * Unexpected error reading from the input channel for puts.
    */
-  BadInputChannel,
-  /**
+  BadInputChannel, /**
    * Insufficient capacity available in Ambry for object to be stored.
    */
   InsufficientCapacity,
@@ -70,20 +63,16 @@ public enum RouterErrorCode {
   /**
    * Blob has been deleted and so cannot be retrieved.
    */
-  BlobDeleted,
-  /**
+  BlobDeleted, /**
    * No Blob could be found for specified blob id.
    */
-  BlobDoesNotExist,
-  /**
+  BlobDoesNotExist, /**
    * TTL of Blob has expired and so Blob cannot be retrieved.
    */
-  BlobExpired,
-  /**
+  BlobExpired, /**
    * The range offsets provided for a getBlob operation are invalid for the specified blob.
    */
-  RangeNotSatisfiable,
-  /**
+  RangeNotSatisfiable, /**
    * The channel returned to the user in a getBlob operation has been closed before operation completion.
    */
   ChannelClosed

@@ -21,10 +21,6 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.store.BlobIndexMetrics;
-import com.github.ambry.store.Log;
-import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.store.StoreMetrics;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
@@ -77,28 +73,43 @@ public class IndexReadPerformance {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
-          parser.accepts("logToRead", "The log that needs to be replayed for traffic").withRequiredArg()
-              .describedAs("log_to_read").ofType(String.class);
+          parser.accepts("logToRead", "The log that needs to be replayed for traffic")
+              .withRequiredArg()
+              .describedAs("log_to_read")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfReadersOpt =
           parser.accepts("numberOfReaders", "The number of readers that read to a random index concurrently")
-              .withRequiredArg().describedAs("The number of readers").ofType(Integer.class).defaultsTo(4);
+              .withRequiredArg()
+              .describedAs("The number of readers")
+              .ofType(Integer.class)
+              .defaultsTo(4);
 
       ArgumentAcceptingOptionSpec<Integer> readsPerSecondOpt =
-          parser.accepts("readsPerSecond", "The rate at which reads need to be performed").withRequiredArg()
-              .describedAs("The number of reads per second").ofType(Integer.class).defaultsTo(1000);
+          parser.accepts("readsPerSecond", "The rate at which reads need to be performed")
+              .withRequiredArg()
+              .describedAs("The number of reads per second")
+              .ofType(Integer.class)
+              .defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
-              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging")
+              .withOptionalArg()
+              .describedAs("Enable verbose logging")
+              .ofType(Boolean.class)
+              .defaultsTo(false);
 
       OptionSet options = parser.parse(args);
 

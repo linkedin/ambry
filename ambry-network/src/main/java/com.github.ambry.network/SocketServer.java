@@ -145,8 +145,7 @@ public class SocketServer implements NetworkServer {
     }
   }
 
-  public void start()
-      throws IOException, InterruptedException {
+  public void start() throws IOException, InterruptedException {
     logger.info("Starting {} processor threads", numProcessorThreads);
     for (int i = 0; i < numProcessorThreads; i++) {
       processors.add(i, new Processor(i, maxRequestSize, requestResponseChannel, metrics, sslFactory));
@@ -206,8 +205,7 @@ abstract class AbstractServerThread implements Runnable {
   private final AtomicBoolean alive;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
-  public AbstractServerThread()
-      throws IOException {
+  public AbstractServerThread() throws IOException {
     startupLatch = new CountDownLatch(1);
     shutdownLatch = new CountDownLatch(1);
     alive = new AtomicBoolean(false);
@@ -216,8 +214,7 @@ abstract class AbstractServerThread implements Runnable {
   /**
    * Initiates a graceful shutdown by signaling to stop and waiting for the shutdown to complete
    */
-  public void shutdown()
-      throws InterruptedException {
+  public void shutdown() throws InterruptedException {
     alive.set(false);
     shutdownLatch.await();
   }
@@ -225,8 +222,7 @@ abstract class AbstractServerThread implements Runnable {
   /**
    * Wait for the thread to completely start up
    */
-  public void awaitStartup()
-      throws InterruptedException {
+  public void awaitStartup() throws InterruptedException {
     startupLatch.await();
   }
 
@@ -269,8 +265,7 @@ class Acceptor extends AbstractServerThread {
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
   public Acceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
-      ServerNetworkMetrics metrics)
-      throws IOException {
+      ServerNetworkMetrics metrics) throws IOException {
     this.host = host;
     this.port = port;
     this.processors = processors;
@@ -329,8 +324,7 @@ class Acceptor extends AbstractServerThread {
   /*
    * Create a server socket to listen for connections on.
    */
-  private ServerSocketChannel openServerSocket(String host, int port)
-      throws IOException {
+  private ServerSocketChannel openServerSocket(String host, int port) throws IOException {
     InetSocketAddress address = null;
     if (host == null || host.trim().isEmpty()) {
       address = new InetSocketAddress(port);
@@ -347,14 +341,12 @@ class Acceptor extends AbstractServerThread {
   /*
    * Accept a new connection
    */
-  protected void accept(SelectionKey key, Processor processor)
-      throws SocketException, IOException {
+  protected void accept(SelectionKey key, Processor processor) throws SocketException, IOException {
     SocketChannel socketChannel = acceptConnection(key);
     processor.accept(socketChannel, PortType.PLAINTEXT);
   }
 
-  protected SocketChannel acceptConnection(SelectionKey key)
-      throws SocketException, IOException {
+  protected SocketChannel acceptConnection(SelectionKey key) throws SocketException, IOException {
     ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
     serverSocketChannel.socket().setReceiveBufferSize(recvBufferSize);
     SocketChannel socketChannel = serverSocketChannel.accept();
@@ -362,15 +354,14 @@ class Acceptor extends AbstractServerThread {
     socketChannel.socket().setTcpNoDelay(true);
     socketChannel.socket().setSendBufferSize(sendBufferSize);
     logger.trace("Accepted connection from {} on {}. sendBufferSize "
-        + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
+            + "[actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
         socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),
         socketChannel.socket().getSendBufferSize(), sendBufferSize, socketChannel.socket().getReceiveBufferSize(),
         recvBufferSize);
     return socketChannel;
   }
 
-  public void shutdown()
-      throws InterruptedException {
+  public void shutdown() throws InterruptedException {
     nioSelector.wakeup();
     super.shutdown();
   }
@@ -382,8 +373,7 @@ class Acceptor extends AbstractServerThread {
 class SSLAcceptor extends Acceptor {
 
   public SSLAcceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
-      ServerNetworkMetrics metrics)
-      throws IOException {
+      ServerNetworkMetrics metrics) throws IOException {
     super(host, port, processors, sendBufferSize, recvBufferSize, metrics);
   }
 
@@ -391,8 +381,7 @@ class SSLAcceptor extends Acceptor {
    * Accept a new connection
    */
   @Override
-  protected void accept(SelectionKey key, Processor processor)
-      throws SocketException, IOException {
+  protected void accept(SelectionKey key, Processor processor) throws SocketException, IOException {
     SocketChannel socketChannel = acceptConnection(key);
     processor.accept(socketChannel, PortType.SSL);
   }
@@ -414,8 +403,7 @@ class Processor extends AbstractServerThread {
   private static final long pollTimeoutMs = 300;
 
   Processor(int id, int maxRequestSize, RequestResponseChannel channel, ServerNetworkMetrics metrics,
-      SSLFactory sslFactory)
-      throws IOException {
+      SSLFactory sslFactory) throws IOException {
     this.maxRequestSize = maxRequestSize;
     this.channel = (SocketRequestResponseChannel) channel;
     this.id = id;
@@ -458,8 +446,7 @@ class Processor extends AbstractServerThread {
     }
   }
 
-  private void processNewResponses()
-      throws InterruptedException, IOException {
+  private void processNewResponses() throws InterruptedException, IOException {
     SocketServerResponse curr = (SocketServerResponse) channel.receiveResponse(id);
     while (curr != null) {
       curr.onDequeueFromResponseQueue();
@@ -503,8 +490,7 @@ class Processor extends AbstractServerThread {
   /**
    * Register any new connections that have been queued up
    */
-  private void configureNewConnections()
-      throws ClosedChannelException, IOException {
+  private void configureNewConnections() throws ClosedChannelException, IOException {
     while (newConnections.size() > 0) {
       SocketChannelPortTypePair socketChannelPortTypePair = newConnections.poll();
       logger.debug("Processor {} listening to new connection from {}", id,
@@ -520,8 +506,7 @@ class Processor extends AbstractServerThread {
   /**
    * Initiates a graceful shutdown by signaling to stop and waiting for the shutdown to complete
    */
-  public void shutdown()
-      throws InterruptedException {
+  public void shutdown() throws InterruptedException {
     selector.wakeup();
     super.shutdown();
   }

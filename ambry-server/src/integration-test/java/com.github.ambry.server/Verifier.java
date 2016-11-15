@@ -101,13 +101,15 @@ class Verifier implements Runnable {
                 try {
                   BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
                   if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
-                    System.out.println("blob size not matching " + " expected " +
-                        payload.blobProperties.getBlobSize() + " actual " + propertyOutput.getBlobSize());
+                    System.out.println(
+                        "blob size not matching " + " expected " + payload.blobProperties.getBlobSize() + " actual "
+                            + propertyOutput.getBlobSize());
                     throw new IllegalStateException();
                   }
                   if (!propertyOutput.getServiceId().equals(payload.blobProperties.getServiceId())) {
-                    System.out.println("service id not matching " + " expected " +
-                        payload.blobProperties.getServiceId() + " actual " + propertyOutput.getBlobSize());
+                    System.out.println(
+                        "service id not matching " + " expected " + payload.blobProperties.getServiceId() + " actual "
+                            + propertyOutput.getBlobSize());
                     throw new IllegalStateException();
                   }
                 } catch (MessageFormatException e) {

@@ -60,8 +60,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @throws IOException if the SSL configs could not be initialized.
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem)
-      throws GeneralSecurityException, IOException {
+      NotificationSystem notificationSystem) throws GeneralSecurityException, IOException {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
       routerConfig = new RouterConfig(verifiableProperties);
       if (!clusterMap.hasDatacenter(routerConfig.routerDatacenterName)) {
@@ -93,8 +92,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @throws InstantiationException
    */
   @Override
-  public Router getRouter()
-      throws InstantiationException {
+  public Router getRouter() throws InstantiationException {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
           time);

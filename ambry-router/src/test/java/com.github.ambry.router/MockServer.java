@@ -74,8 +74,7 @@ class MockServer {
    * @return the response.
    * @throws IOException if there was an error in interpreting the request.
    */
-  public BoundedByteBufferReceive send(Send send)
-      throws IOException {
+  public BoundedByteBufferReceive send(Send send) throws IOException {
     if (!shouldRespond) {
       return null;
     }
@@ -113,8 +112,7 @@ class MockServer {
    * @return the created {@link PutResponse}
    * @throws IOException if there was an error constructing the response.
    */
-  PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError)
-      throws IOException {
+  PutResponse makePutResponse(PutRequest putRequest, ServerErrorCode putError) throws IOException {
     if (putError == ServerErrorCode.No_Error) {
       updateBlobMap(putRequest);
     }
@@ -130,8 +128,7 @@ class MockServer {
    * @return the constructed {@link GetResponse}
    * @throws IOException if there was an error constructing the response.
    */
-  GetResponse makeGetResponse(GetRequest getRequest, ServerErrorCode getError)
-      throws IOException {
+  GetResponse makeGetResponse(GetRequest getRequest, ServerErrorCode getError) throws IOException {
     GetResponse getResponse;
     if (getError == ServerErrorCode.No_Error) {
       List<PartitionRequestInfo> infos = getRequest.getPartitionInfoList();
@@ -194,16 +191,15 @@ class MockServer {
                 byteBufferSize =
                     (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
                 byteBuffer = ByteBuffer.allocate(byteBufferSize);
-                MessageFormatRecord.Blob_Format_V2
-                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize(),
-                        originalBlobPutReq.getBlobType());
+                MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
                 break;
               case MessageFormatRecord.Blob_Version_V1:
                 byteBufferSize =
                     (int) MessageFormatRecord.Blob_Format_V1.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
                 byteBuffer = ByteBuffer.allocate(byteBufferSize);
-                MessageFormatRecord.Blob_Format_V1
-                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize());
+                MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize());
                 break;
               default:
                 throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
@@ -238,11 +234,10 @@ class MockServer {
             byteBufferSize = blobHeaderSize + key.sizeInBytes() + blobInfoSize + blobRecordSize;
             byteBuffer = ByteBuffer.allocate(byteBufferSize);
             try {
-              MessageFormatRecord.MessageHeader_Format_V1
-                  .serializeHeader(byteBuffer, blobInfoSize + blobRecordSize, blobHeaderSize + key.sizeInBytes(),
-                      MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-                      blobHeaderSize + key.sizeInBytes() + blobPropertiesSize,
-                      blobHeaderSize + key.sizeInBytes() + blobInfoSize);
+              MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(byteBuffer, blobInfoSize + blobRecordSize,
+                  blobHeaderSize + key.sizeInBytes(), MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+                  blobHeaderSize + key.sizeInBytes() + blobPropertiesSize,
+                  blobHeaderSize + key.sizeInBytes() + blobInfoSize);
             } catch (MessageFormatException e) {
               e.printStackTrace();
             }
@@ -252,13 +247,12 @@ class MockServer {
             int blobRecordStart = byteBuffer.position();
             switch (blobFormatVersion) {
               case MessageFormatRecord.Blob_Version_V2:
-                MessageFormatRecord.Blob_Format_V2
-                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize(),
-                        originalBlobPutReq.getBlobType());
+                MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize(), originalBlobPutReq.getBlobType());
                 break;
               case MessageFormatRecord.Blob_Version_V1:
-                MessageFormatRecord.Blob_Format_V1
-                    .serializePartialBlobRecord(byteBuffer, (int) originalBlobPutReq.getBlobSize());
+                MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(byteBuffer,
+                    (int) originalBlobPutReq.getBlobSize());
                 break;
               default:
                 throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
@@ -308,8 +302,7 @@ class MockServer {
    * @return the constructed {@link DeleteResponse}
    * @throws IOException if there was an error constructing the response.
    */
-  DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError)
-      throws IOException {
+  DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) throws IOException {
     return new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), deleteError);
   }
 
@@ -318,8 +311,7 @@ class MockServer {
    * @param putRequest the PutRequest
    * @throws IOException if there was an error reading the contents of the given PutRequest.
    */
-  private void updateBlobMap(PutRequest putRequest)
-      throws IOException {
+  private void updateBlobMap(PutRequest putRequest) throws IOException {
     StoredBlob blob = new StoredBlob(putRequest, clusterMap);
     blobs.put(blob.id, blob);
   }
@@ -406,8 +398,7 @@ class StoredBlob {
   final ByteBuffer serializedSentPutRequest;
   final PutRequest.ReceivedPutRequest receivedPutRequest;
 
-  StoredBlob(PutRequest putRequest, ClusterMap clusterMap)
-      throws IOException {
+  StoredBlob(PutRequest putRequest, ClusterMap clusterMap) throws IOException {
     serializedSentPutRequest = ByteBuffer.allocate((int) putRequest.sizeInBytes());
     ByteBufferChannel bufChannel = new ByteBufferChannel(serializedSentPutRequest);
     putRequest.writeTo(bufChannel);

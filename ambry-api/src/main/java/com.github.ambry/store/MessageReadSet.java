@@ -33,8 +33,7 @@ public interface MessageReadSet {
    * @return The total bytes that was written into the channel
    * @throws IOException
    */
-  long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
-      throws IOException;
+  long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException;
 
   /**
    * Returns the total number of messages in this set

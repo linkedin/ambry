@@ -14,12 +14,11 @@
 package com.github.ambry.network;
 
 import java.io.EOFException;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.ByteBuffer;
 
 
 /**
@@ -45,8 +44,7 @@ public class BoundedByteBufferReceive implements Receive {
   }
 
   @Override
-  public long readFrom(ReadableByteChannel channel)
-      throws IOException {
+  public long readFrom(ReadableByteChannel channel) throws IOException {
     long bytesRead = 0;
     if (buffer == null) {
       bytesRead = channel.read(sizeBuffer);

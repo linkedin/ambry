@@ -33,8 +33,7 @@ public class SimpleByteBufferPoolTest {
    * error should occur during this test.
    */
   @Test
-  public void testSingleRequestAllocateDeallocate()
-      throws Exception {
+  public void testSingleRequestAllocateDeallocate() throws Exception {
     final long capacity = 2 * 1024;
     final int size = 1024;
     long maxBlockTimeInMs = 200;
@@ -52,8 +51,7 @@ public class SimpleByteBufferPoolTest {
    * than its capacity. This operation should result in an {@link IllegalArgumentException}.
    */
   @Test
-  public void testRequestExceedPoolCapacity()
-      throws Exception {
+  public void testRequestExceedPoolCapacity() throws Exception {
     final long capacity = 1024;
     final long maxBlockTimeInMs = 200;
     SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
@@ -70,8 +68,7 @@ public class SimpleByteBufferPoolTest {
    * set the pool's available memory the same as its capacity.
    */
   @Test
-  public void testDeallocateExceedPoolCapacity()
-      throws Exception {
+  public void testDeallocateExceedPoolCapacity() throws Exception {
     final int capacity = 1024;
     SimpleByteBufferPool pool = new SimpleByteBufferPool(capacity);
     ByteBuffer singleBuffer = ByteBuffer.allocate(1);
@@ -85,8 +82,7 @@ public class SimpleByteBufferPoolTest {
    * until eventually be timed out and throw {@link TimeoutException}.
    */
   @Test
-  public void testNotEnoughMemory()
-      throws Exception {
+  public void testNotEnoughMemory() throws Exception {
     final int size = 1024;
     final long capacity = 1024;
     final long maxBlockTimeInMs = 10;
@@ -104,8 +100,7 @@ public class SimpleByteBufferPoolTest {
    * parameter set in {@link SimpleByteBufferPool#allocate(int, long)} is zero or a negative value.
    */
   @Test
-  public void testNegativeBlockTime()
-      throws Exception {
+  public void testNegativeBlockTime() throws Exception {
     final int size = 1024;
     final long capacity = 1024;
     final long maxBlockTimeInMs = 20;
@@ -133,8 +128,7 @@ public class SimpleByteBufferPoolTest {
    * No exception should occur during this test.
    */
   @Test
-  public void testFirstBlockedThenSucceed()
-      throws Exception {
+  public void testFirstBlockedThenSucceed() throws Exception {
     final int size = 1024;
     final long capacity = 1024;
     final long maxBlockTimeInMs = 200;
@@ -174,8 +168,7 @@ public class SimpleByteBufferPoolTest {
    * the n requests can be served successfully. There should be no exception during the test.
    */
   @Test
-  public void testMultipleRequestedServedAfterBlocked()
-      throws Exception {
+  public void testMultipleRequestedServedAfterBlocked() throws Exception {
     final int n = 3;
     final int smallSize = 1024;
     final int largeSize = n * smallSize;
@@ -230,8 +223,7 @@ public class SimpleByteBufferPoolTest {
    * At time t2 + delta: R2 gets served.
    */
   @Test
-  public void testOneExpiredAnotherServed()
-      throws Exception {
+  public void testOneExpiredAnotherServed() throws Exception {
     final int size = 1024;
     final long capacity = 1024;
     final int numOfRequests = 3;

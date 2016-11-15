@@ -14,17 +14,16 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -42,8 +41,7 @@ public class HardwareLayout {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public HardwareLayout(JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
-      throws JSONException {
+  public HardwareLayout(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("HardwareLayout " + jsonObject.toString());
     }
@@ -52,8 +50,8 @@ public class HardwareLayout {
 
     this.datacenters = new ArrayList<Datacenter>(jsonObject.getJSONArray("datacenters").length());
     for (int i = 0; i < jsonObject.getJSONArray("datacenters").length(); ++i) {
-      this.datacenters
-          .add(i, new Datacenter(this, jsonObject.getJSONArray("datacenters").getJSONObject(i), clusterMapConfig));
+      this.datacenters.add(i,
+          new Datacenter(this, jsonObject.getJSONArray("datacenters").getJSONObject(i), clusterMapConfig));
     }
 
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
@@ -246,8 +244,7 @@ public class HardwareLayout {
   }
 
   // Validate each hardware component (Datacenter, DataNode, and Disk) are unique
-  protected void validateUniqueness()
-      throws IllegalStateException {
+  protected void validateUniqueness() throws IllegalStateException {
     logger.trace("begin validateUniqueness.");
     HashSet<Datacenter> datacenterSet = new HashSet<Datacenter>();
     HashSet<DataNode> dataNodeSet = new HashSet<DataNode>();
@@ -278,8 +275,7 @@ public class HardwareLayout {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject()
-      throws JSONException {
+  public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject =
         new JSONObject().put("clusterName", clusterName).put("version", version).put("datacenters", new JSONArray());
     for (Datacenter datacenter : datacenters) {

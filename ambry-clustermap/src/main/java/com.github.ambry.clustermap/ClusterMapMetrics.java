@@ -171,8 +171,7 @@ class ClusterMapMetrics {
         return isMajorityOfReplicasDown();
       }
     };
-    registry.register(MetricRegistry.name(ClusterMap.class, "isMajorityReplicasDown"),
-        isMajorityReplicasDown);
+    registry.register(MetricRegistry.name(ClusterMap.class, "isMajorityReplicasDown"), isMajorityReplicasDown);
 
     this.rawCapacityInBytes = new Gauge<Long>() {
       @Override
@@ -193,8 +192,8 @@ class ClusterMapMetrics {
       }
     };
     registry.register(MetricRegistry.name(ClusterMap.class, "rawCapacityInBytes"), rawCapacityInBytes);
-    registry
-        .register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"), allocatedRawCapacityInBytes);
+    registry.register(MetricRegistry.name(ClusterMap.class, "allocatedRawCapacityInBytes"),
+        allocatedRawCapacityInBytes);
     registry.register(MetricRegistry.name(ClusterMap.class, "allocatedUsableCapacityInBytes"),
         allocatedUsableCapacityInBytes);
 

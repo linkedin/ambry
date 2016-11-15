@@ -21,9 +21,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 
 public class DiskIOSchedulerTest {
@@ -32,8 +30,7 @@ public class DiskIOSchedulerTest {
    * @throws Exception
    */
   @Test
-  public void basicTest()
-      throws Exception {
+  public void basicTest() throws Exception {
     final int numJobTypes = 5;
     Map<String, Throttler> throttlers = new HashMap<>();
     for (int i = 0; i < numJobTypes; i++) {
@@ -50,8 +47,8 @@ public class DiskIOSchedulerTest {
           scheduler.getSlice(jobType, "job", usedSinceLastCall));
       MockThrottler throttler = (MockThrottler) throttlers.get(jobType);
       assertTrue("maybeThrottle should have been called for this jobType", throttler.called);
-      assertEquals("observed units passed to throttler not as expected", usedSinceLastCall,
-          throttler.observedUnits, 0.0);
+      assertEquals("observed units passed to throttler not as expected", usedSinceLastCall, throttler.observedUnits,
+          0.0);
     }
     for (Throttler throttler : throttlers.values()) {
       ((MockThrottler) throttler).reset();
@@ -76,8 +73,7 @@ public class DiskIOSchedulerTest {
    * @throws Exception
    */
   @Test
-  public void nullThrottlersTest()
-      throws Exception {
+  public void nullThrottlersTest() throws Exception {
     DiskIOScheduler scheduler = new DiskIOScheduler(null);
     assertEquals("Unexpected i/o slice availability returned", Long.MAX_VALUE, scheduler.getSlice("jobType", "job", 0));
     scheduler.close();

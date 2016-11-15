@@ -14,12 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.Utils;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -27,6 +21,11 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -59,13 +58,11 @@ public class Partition extends PartitionId {
     validate();
   }
 
-  public Partition(PartitionLayout partitionLayout, JSONObject jsonObject)
-      throws JSONException {
+  public Partition(PartitionLayout partitionLayout, JSONObject jsonObject) throws JSONException {
     this(partitionLayout.getHardwareLayout(), jsonObject);
   }
 
-  public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject)
-      throws JSONException {
+  public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Partition " + jsonObject.toString());
     }
@@ -80,8 +77,7 @@ public class Partition extends PartitionId {
     validate();
   }
 
-  public static byte[] readPartitionBytesFromStream(DataInputStream stream)
-      throws IOException {
+  public static byte[] readPartitionBytesFromStream(DataInputStream stream) throws IOException {
     byte[] partitionBytes = Utils.readBytesFromStream(stream, Partition_Size_In_Bytes);
     return partitionBytes;
   }
@@ -176,10 +172,11 @@ public class Partition extends PartitionId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject()
-      throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("id", id).put("partitionState", partitionState)
-        .put("replicaCapacityInBytes", replicaCapacityInBytes).put("replicas", new JSONArray());
+  public JSONObject toJSONObject() throws JSONException {
+    JSONObject jsonObject = new JSONObject().put("id", id)
+        .put("partitionState", partitionState)
+        .put("replicaCapacityInBytes", replicaCapacityInBytes)
+        .put("replicas", new JSONArray());
     for (Replica replica : replicas) {
       jsonObject.accumulate("replicas", replica.toJSONObject());
     }

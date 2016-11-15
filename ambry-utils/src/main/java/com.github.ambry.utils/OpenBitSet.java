@@ -13,10 +13,10 @@
  */
 package com.github.ambry.utils;
 
-import java.util.Arrays;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
 
 
 /**
@@ -398,13 +398,11 @@ public class OpenBitSet implements IBitSet {
     return (int) ((h >> 32) ^ h) + 0x98761234;
   }
 
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     // noop, let GC do the cleanup.
   }
 
-  public void serialize(DataOutput out)
-      throws IOException {
+  public void serialize(DataOutput out) throws IOException {
     int bitLength = getNumWords();
     int pageSize = getPageSize();
     int pageCount = getPageCount();
@@ -422,8 +420,7 @@ public class OpenBitSet implements IBitSet {
     clear(0, capacity());
   }
 
-  public static OpenBitSet deserialize(DataInput in)
-      throws IOException {
+  public static OpenBitSet deserialize(DataInput in) throws IOException {
     long bitLength = in.readInt();
 
     OpenBitSet bs = new OpenBitSet(bitLength << 6);

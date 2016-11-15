@@ -45,8 +45,7 @@ public class SocketServerTest {
    * Run only once for all tests
    */
   @BeforeClass
-  public static void initializeTests()
-      throws Exception {
+  public static void initializeTests() throws Exception {
     File trustStoreFile = File.createTempFile("truststore", ".jks");
     serverSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
@@ -57,8 +56,7 @@ public class SocketServerTest {
     clientSSLSocketFactory = sslContext.getSocketFactory();
   }
 
-  public SocketServerTest()
-      throws Exception {
+  public SocketServerTest() throws Exception {
     Properties props = new Properties();
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
@@ -75,19 +73,16 @@ public class SocketServerTest {
   }
 
   @Test
-  public void simpleRequest()
-      throws IOException, InterruptedException {
+  public void simpleRequest() throws IOException, InterruptedException {
     simpleRequest(new Port(server.getPort(), PortType.PLAINTEXT));
   }
 
   @Test
-  public void simpleSSLRequest()
-      throws IOException, InterruptedException {
+  public void simpleSSLRequest() throws IOException, InterruptedException {
     simpleRequest(new Port(server.getSSLPort(), PortType.SSL));
   }
 
-  private void simpleRequest(Port targetPort)
-      throws IOException, InterruptedException {
+  private void simpleRequest(Port targetPort) throws IOException, InterruptedException {
     byte[] bytesToSend = new byte[1028];
     new Random().nextBytes(bytesToSend);
     ByteBuffer byteBufferToSend = ByteBuffer.wrap(bytesToSend);
@@ -131,8 +126,7 @@ public class SocketServerTest {
   /**
    * Choose a number of random available ports
    */
-  ArrayList<Integer> choosePorts(int count)
-      throws IOException {
+  ArrayList<Integer> choosePorts(int count) throws IOException {
     ArrayList<Integer> sockets = new ArrayList<Integer>();
     for (int i = 0; i < count; i++) {
       ServerSocket socket = new ServerSocket(0);
@@ -145,8 +139,7 @@ public class SocketServerTest {
   /**
    * Choose an available port
    */
-  public int choosePort()
-      throws IOException {
+  public int choosePort() throws IOException {
     return choosePorts(1).get(0);
   }
 }

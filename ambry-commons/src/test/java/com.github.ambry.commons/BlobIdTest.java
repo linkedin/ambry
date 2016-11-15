@@ -28,14 +28,12 @@ import java.util.UUID;
 import org.apache.commons.codec.binary.Base64;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 public class BlobIdTest {
   @Test
-  public void basicTest()
-      throws Exception {
+  public void basicTest() throws Exception {
     final long id = 99;
     final long replicaCapacityInBytes = 1024 * 1024 * 1024;
     PartitionId partitionId = new Partition(id, PartitionState.READ_WRITE, replicaCapacityInBytes);
@@ -51,8 +49,7 @@ public class BlobIdTest {
    * @throws Exception
    */
   @Test
-  public void goodIdTest()
-      throws Exception {
+  public void goodIdTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     short goodVersion = 1;
     PartitionId goodPartitionId = clusterMap.getWritablePartitionIds().get(0);
@@ -73,8 +70,7 @@ public class BlobIdTest {
    * @throws Exception
    */
   @Test
-  public void badIdTest()
-      throws Exception {
+  public void badIdTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
     List<String> blobIdLikes = new ArrayList<>();
 

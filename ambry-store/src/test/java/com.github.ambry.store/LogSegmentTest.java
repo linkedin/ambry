@@ -49,8 +49,7 @@ public class LogSegmentTest {
    * Sets up a temporary directory that can be used.
    * @throws IOException
    */
-  public LogSegmentTest()
-      throws IOException {
+  public LogSegmentTest() throws IOException {
     tempDir = Files.createTempDirectory("logSegmentDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     metrics = new StoreMetrics(tempDir.getName(), new MetricRegistry());
@@ -75,8 +74,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void basicWriteAndReadTest()
-      throws IOException {
+  public void basicWriteAndReadTest() throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -128,8 +126,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void viewAndRefCountTest()
-      throws IOException {
+  public void viewAndRefCountTest() throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -156,8 +153,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void endOffsetTest()
-      throws IOException {
+  public void endOffsetTest() throws IOException {
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -195,13 +191,11 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void appendTest()
-      throws IOException {
+  public void appendTest() throws IOException {
     // buffer append
     doAppendTest(new Appender() {
       @Override
-      public void append(LogSegment segment, ByteBuffer buffer)
-          throws IOException {
+      public void append(LogSegment segment, ByteBuffer buffer) throws IOException {
         int writeSize = buffer.remaining();
         int written = segment.appendFrom(buffer);
         assertEquals("Size written did not match size of buffer provided", writeSize, written);
@@ -211,8 +205,7 @@ public class LogSegmentTest {
     // channel append
     doAppendTest(new Appender() {
       @Override
-      public void append(LogSegment segment, ByteBuffer buffer)
-          throws IOException {
+      public void append(LogSegment segment, ByteBuffer buffer) throws IOException {
         int writeSize = buffer.remaining();
         segment.appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), writeSize);
         assertFalse("The buffer was not completely written", buffer.hasRemaining());
@@ -225,8 +218,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void readTest()
-      throws IOException {
+  public void readTest() throws IOException {
     Random random = new Random();
     String segmentName = "log_current";
     LogSegment segment = getSegment(segmentName, STANDARD_SEGMENT_SIZE, true);
@@ -285,8 +277,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void writeFromTest()
-      throws IOException {
+  public void writeFromTest() throws IOException {
     String currSegmentName = "log_current";
     LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -316,10 +307,10 @@ public class LogSegmentTest {
 
       // write at random locations
       for (int i = 0; i < 10; i++) {
-        long offset = writeStartOffset + Utils
-            .getRandomLong(TestUtils.RANDOM, segment.getCapacityInBytes() - bufOne.length - writeStartOffset);
-        segment
-            .writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), offset, bufOne.length);
+        long offset = writeStartOffset + Utils.getRandomLong(TestUtils.RANDOM,
+            segment.getCapacityInBytes() - bufOne.length - writeStartOffset);
+        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), offset,
+            bufOne.length);
         readAndEnsureMatch(segment, offset, bufOne);
       }
 
@@ -328,8 +319,8 @@ public class LogSegmentTest {
           ByteBuffer.wrap(TestUtils.getRandomBytes((int) (STANDARD_SEGMENT_SIZE - writeStartOffset + 1)));
       long writeOverFlowCount = metrics.overflowWriteError.getCount();
       try {
-        segment
-            .writeFrom(Channels.newChannel(new ByteBufferInputStream(failBuf)), writeStartOffset, failBuf.remaining());
+        segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(failBuf)), writeStartOffset,
+            failBuf.remaining());
         fail("WriteFrom should have failed because data won't fit");
       } catch (IndexOutOfBoundsException e) {
         assertEquals("Write overflow should have been reported", writeOverFlowCount + 1,
@@ -367,8 +358,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void constructorTest()
-      throws IOException {
+  public void constructorTest() throws IOException {
     LogSegment segment = getSegment("log_current", STANDARD_SEGMENT_SIZE, false);
     assertEquals("Start offset should be 0 when no headers are written", 0, segment.getStartOffset());
   }
@@ -378,8 +368,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   @Test
-  public void badConstructionTest()
-      throws IOException {
+  public void badConstructionTest() throws IOException {
     // try to construct with a file that does not exist.
     String name = "log_non_existent";
     File file = new File(tempDir, name);
@@ -445,16 +434,14 @@ public class LogSegmentTest {
     closeSegmentAndDeleteFile(segment);
   }
 
-  private byte[] getHeader(LogSegment segment)
-      throws IOException {
+  private byte[] getHeader(LogSegment segment) throws IOException {
     FileChannel channel = segment.getView().getSecond();
     ByteBuffer header = ByteBuffer.allocate(LogSegment.HEADER_SIZE);
     channel.read(header, 0);
     return header.array();
   }
 
-  private void writeHeader(LogSegment segment, byte[] buf)
-      throws IOException {
+  private void writeHeader(LogSegment segment, byte[] buf) throws IOException {
     FileChannel channel = segment.getView().getSecond();
     ByteBuffer buffer = ByteBuffer.wrap(buf);
     while (buffer.hasRemaining()) {
@@ -474,8 +461,7 @@ public class LogSegmentTest {
    * {@code capacityInBytes}.
    * @throws IOException
    */
-  private LogSegment getSegment(String segmentName, long capacityInBytes, boolean writeHeaders)
-      throws IOException {
+  private LogSegment getSegment(String segmentName, long capacityInBytes, boolean writeHeaders) throws IOException {
     File file = new File(tempDir, segmentName);
     if (file.exists()) {
       assertTrue(file.getAbsolutePath() + " already exists and could not be deleted", file.delete());
@@ -495,8 +481,7 @@ public class LogSegmentTest {
    * @return the data that was appended.
    * @throws IOException
    */
-  private byte[] appendRandomData(LogSegment segment, int size)
-      throws IOException {
+  private byte[] appendRandomData(LogSegment segment, int size) throws IOException {
     byte[] buf = TestUtils.getRandomBytes(size);
     segment.appendFrom(ByteBuffer.wrap(buf));
     return buf;
@@ -509,8 +494,7 @@ public class LogSegmentTest {
    * @param original the byte array to compare against.
    * @throws IOException
    */
-  private void readAndEnsureMatch(LogSegment segment, long offsetToStartRead, byte[] original)
-      throws IOException {
+  private void readAndEnsureMatch(LogSegment segment, long offsetToStartRead, byte[] original) throws IOException {
     ByteBuffer readBuf = ByteBuffer.wrap(new byte[original.length]);
     segment.readInto(readBuf, offsetToStartRead);
     assertArrayEquals("Data read does not match data written", original, readBuf.array());
@@ -521,8 +505,7 @@ public class LogSegmentTest {
    * @param segment the {@link LogSegment} that needs to be closed and whose backing file needs to be deleted.
    * @throws IOException
    */
-  private void closeSegmentAndDeleteFile(LogSegment segment)
-      throws IOException {
+  private void closeSegmentAndDeleteFile(LogSegment segment) throws IOException {
     segment.close();
     assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
     File segmentFile = new File(tempDir, segment.getName());
@@ -543,8 +526,7 @@ public class LogSegmentTest {
    * @throws IOException
    */
   private void getAndVerifyView(LogSegment segment, long writeStartOffset, int offset, byte[] dataInSegment,
-      long expectedRefCount)
-      throws IOException {
+      long expectedRefCount) throws IOException {
     Random random = new Random();
     Pair<File, FileChannel> view = segment.getView();
     assertNotNull("File object received in view is null", view.getFirst());
@@ -565,8 +547,7 @@ public class LogSegmentTest {
    * @param appender the {@link Appender} to use
    * @throws IOException
    */
-  private void doAppendTest(Appender appender)
-      throws IOException {
+  private void doAppendTest(Appender appender) throws IOException {
     String currSegmentName = "log_current";
     LogSegment segment = getSegment(currSegmentName, STANDARD_SEGMENT_SIZE, true);
     try {
@@ -622,8 +603,7 @@ public class LogSegmentTest {
      * @param buffer the data to append to {@code segment}.
      * @throws IOException
      */
-    void append(LogSegment segment, ByteBuffer buffer)
-        throws IOException;
+    void append(LogSegment segment, ByteBuffer buffer) throws IOException;
   }
 }
 

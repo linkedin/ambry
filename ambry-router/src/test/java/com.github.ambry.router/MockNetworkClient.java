@@ -39,8 +39,7 @@ class MockNetworkClient extends NetworkClient {
   /**
    * Construct a MockNetworkClient with mock components.
    */
-  MockNetworkClient()
-      throws IOException {
+  MockNetworkClient() throws IOException {
     super(new MockSelector(new MockServerLayout(new MockClusterMap()), null, new MockTime()), null,
         new NetworkMetrics(new MetricRegistry()), 0, 0, 0, new MockTime());
   }

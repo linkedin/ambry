@@ -92,8 +92,8 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
         blobRecordSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobStreamSize);
         serializedBlobPartialRecord =
             ByteBuffer.allocate((int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
-        MessageFormatRecord.Blob_Format_V2
-            .serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize, blobType);
+        MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize,
+            blobType);
         serializedBlobPartialRecord.flip();
         break;
       default:
@@ -101,8 +101,8 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
 
-    buffer = ByteBuffer
-        .allocate(userMetadataRecordSize + (int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
+    buffer = ByteBuffer.allocate(
+        userMetadataRecordSize + (int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
 
     buffer.put(serializedUserMetadata);
     int bufferBlobStart = buffer.position();

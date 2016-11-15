@@ -194,8 +194,8 @@ class AdminSecurityService implements SecurityService {
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
           new Date(System.currentTimeMillis() + adminConfig.adminCacheValiditySeconds * Time.MsPerSec));
-      restResponseChannel
-          .setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + adminConfig.adminCacheValiditySeconds);
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
+          "max-age=" + adminConfig.adminCacheValiditySeconds);
     }
   }
 

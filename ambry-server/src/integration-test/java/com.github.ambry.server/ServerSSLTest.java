@@ -50,8 +50,7 @@ public class ServerSSLTest {
   private static MockCluster sslCluster;
 
   @BeforeClass
-  public static void initializeTests()
-      throws Exception {
+  public static void initializeTests() throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
     clientSSLConfig1 =
         new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1"));
@@ -78,13 +77,11 @@ public class ServerSSLTest {
     clientSSLSocketFactory3 = sslContext.getSocketFactory();
   }
 
-  public ServerSSLTest()
-      throws Exception {
+  public ServerSSLTest() throws Exception {
   }
 
   @AfterClass
-  public static void cleanup()
-      throws IOException {
+  public static void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
@@ -96,17 +93,15 @@ public class ServerSSLTest {
   }
 
   @Test
-  public void startStopTest()
-      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void startStopTest() throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
   }
 
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
-    ServerTestUtil
-        .endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster, clientSSLConfig1,
-            clientSSLSocketFactory1, routerProps);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
+        clientSSLConfig1, clientSSLSocketFactory1, routerProps);
   }
 
   @Test
@@ -123,10 +118,8 @@ public class ServerSSLTest {
   }
 
   @Test
-  public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest()
-      throws Exception {
-    ServerTestUtil
-        .endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL, sslCluster,
-            notificationSystem, routerProps);
+  public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
+    ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
+        sslCluster, notificationSystem, routerProps);
   }
 }

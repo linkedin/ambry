@@ -34,8 +34,7 @@ import static org.junit.Assert.*;
 public class ByteBufferAsyncWritableChannelTest {
 
   @Test
-  public void commonCaseTest()
-      throws Exception {
+  public void commonCaseTest() throws Exception {
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     assertTrue("Channel is not open", channel.isOpen());
     assertNull("There should have been no chunk returned", channel.getNextChunk(0));
@@ -65,8 +64,7 @@ public class ByteBufferAsyncWritableChannelTest {
   }
 
   @Test
-  public void checkoutMultipleChunksAndResolveTest()
-      throws Exception {
+  public void checkoutMultipleChunksAndResolveTest() throws Exception {
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     ChannelWriter channelWriter = new ChannelWriter(channel);
     channelWriter.writeToChannel(5);
@@ -86,8 +84,7 @@ public class ByteBufferAsyncWritableChannelTest {
   }
 
   @Test
-  public void closeBeforeFullReadTest()
-      throws Exception {
+  public void closeBeforeFullReadTest() throws Exception {
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     assertTrue("Channel is not open", channel.isOpen());
     ChannelWriter channelWriter = new ChannelWriter(channel);
@@ -115,8 +112,7 @@ public class ByteBufferAsyncWritableChannelTest {
   }
 
   @Test
-  public void writeExceptionsTest()
-      throws Exception {
+  public void writeExceptionsTest() throws Exception {
     // null input.
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     try {
@@ -147,8 +143,7 @@ public class ByteBufferAsyncWritableChannelTest {
    * @throws Exception
    */
   @Test
-  public void useAfterCloseTest()
-      throws Exception {
+  public void useAfterCloseTest() throws Exception {
     ByteBufferAsyncWritableChannel channel = new ByteBufferAsyncWritableChannel();
     channel.write(ByteBuffer.allocate(5), null);
     channel.getNextChunk();
@@ -181,8 +176,7 @@ public class ByteBufferAsyncWritableChannelTest {
    * Test to verify notification for all channel events.
    */
   @Test
-  public void testChannelEventNotification()
-      throws Exception {
+  public void testChannelEventNotification() throws Exception {
     final AtomicBoolean writeNotified = new AtomicBoolean(false);
     final AtomicBoolean closeNotified = new AtomicBoolean(false);
     ByteBufferAsyncWritableChannel channel =

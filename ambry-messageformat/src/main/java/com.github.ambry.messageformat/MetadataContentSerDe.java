@@ -37,8 +37,8 @@ public class MetadataContentSerDe {
     int bufSize =
         MessageFormatRecord.Metadata_Content_Format_V2.getMetadataContentSize(keys.get(0).sizeInBytes(), keys.size());
     ByteBuffer outputBuf = ByteBuffer.allocate(bufSize);
-    MessageFormatRecord.Metadata_Content_Format_V2
-        .serializeMetadataContentRecord(outputBuf, chunkSize, totalSize, keys);
+    MessageFormatRecord.Metadata_Content_Format_V2.serializeMetadataContentRecord(outputBuf, chunkSize, totalSize,
+        keys);
     return outputBuf;
   }
 
@@ -56,8 +56,8 @@ public class MetadataContentSerDe {
     int version = buf.getShort();
     switch (version) {
       case MessageFormatRecord.Metadata_Content_Version_V2:
-        return MessageFormatRecord.Metadata_Content_Format_V2
-            .deserializeMetadataContentRecord(new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
+        return MessageFormatRecord.Metadata_Content_Format_V2.deserializeMetadataContentRecord(
+            new DataInputStream(new ByteBufferInputStream(buf)), storeKeyFactory);
       default:
         throw new MessageFormatException("Unknown version encountered for MetadataContent: " + version,
             MessageFormatErrorCodes.Unknown_Format_Version);

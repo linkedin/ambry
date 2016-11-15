@@ -98,8 +98,7 @@ public class GetBlobInfoOperationTest {
   private final AtomicInteger operationsCount = new AtomicInteger(0);
   private final OperationCompleteCallback operationCompleteCallback = new OperationCompleteCallback(operationsCount);
 
-  public GetBlobInfoOperationTest()
-      throws Exception {
+  public GetBlobInfoOperationTest() throws Exception {
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
@@ -135,8 +134,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testInstantiation()
-      throws Exception {
+  public void testInstantiation() throws Exception {
     String blobIdStr = (new BlobId(mockClusterMap.getWritablePartitionIds().get(0))).getID();
     Callback<GetBlobResult> operationCallback = new Callback<GetBlobResult>() {
       @Override
@@ -151,9 +149,8 @@ public class GetBlobInfoOperationTest {
           operationFuture, operationCallback, operationCompleteCallback, time);
       Assert.fail("Instantiation of GetBlobInfo operation with an invalid blob id must fail");
     } catch (RouterException e) {
-      Assert
-          .assertEquals("Unexpected exception received on creating GetBlobInfoOperation", RouterErrorCode.InvalidBlobId,
-              e.getErrorCode());
+      Assert.assertEquals("Unexpected exception received on creating GetBlobInfoOperation",
+          RouterErrorCode.InvalidBlobId, e.getErrorCode());
     }
 
     // test a good case
@@ -171,8 +168,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testPollAndResponseHandling()
-      throws Exception {
+  public void testPollAndResponseHandling() throws Exception {
     operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
@@ -185,8 +181,8 @@ public class GetBlobInfoOperationTest {
 
     List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
     for (ResponseInfo responseInfo : responses) {
-      GetResponse getResponse = responseInfo.getError() == null ? GetResponse
-          .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+      GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
       op.handleResponse(responseInfo, getResponse);
       if (op.isOperationComplete()) {
         break;
@@ -201,8 +197,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testRouterRequestTimeoutAllFailure()
-      throws Exception {
+  public void testRouterRequestTimeoutAllFailure() throws Exception {
     operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
@@ -227,8 +222,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testNetworkClientTimeoutAllFailure()
-      throws Exception {
+  public void testNetworkClientTimeoutAllFailure() throws Exception {
     operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
@@ -263,8 +257,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testBlobNotFoundCase()
-      throws Exception {
+  public void testBlobNotFoundCase() throws Exception {
     operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
@@ -280,9 +273,8 @@ public class GetBlobInfoOperationTest {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
       for (ResponseInfo responseInfo : responses) {
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
-            : null;
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
         if (op.isOperationComplete()) {
           break;
@@ -303,8 +295,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testErrorPrecedenceWithBlobDeletedAndExpiredCase()
-      throws Exception {
+  public void testErrorPrecedenceWithBlobDeletedAndExpiredCase() throws Exception {
     ServerErrorCode[] serverErrorCodesToTest = {ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired};
     RouterErrorCode[] routerErrorCodesToExpect = {RouterErrorCode.BlobDeleted, RouterErrorCode.BlobExpired};
     for (int i = 0; i < serverErrorCodesToTest.length; i++) {
@@ -345,9 +336,8 @@ public class GetBlobInfoOperationTest {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
       for (ResponseInfo responseInfo : responses) {
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
-            : null;
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
         if (op.isOperationComplete()) {
           break;
@@ -365,8 +355,7 @@ public class GetBlobInfoOperationTest {
    * @throws Exception
    */
   @Test
-  public void testSuccessInThePresenceOfVariousErrors()
-      throws Exception {
+  public void testSuccessInThePresenceOfVariousErrors() throws Exception {
     // The put for the blob being requested happened.
     String dcWherePutHappened = routerConfig.routerDatacenterName;
 
@@ -387,8 +376,7 @@ public class GetBlobInfoOperationTest {
     testVariousErrors(dcWherePutHappened);
   }
 
-  private void testVariousErrors(String dcWherePutHappened)
-      throws Exception {
+  private void testVariousErrors(String dcWherePutHappened) throws Exception {
     operationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
@@ -421,9 +409,8 @@ public class GetBlobInfoOperationTest {
       op.poll(requestRegistrationCallback);
       List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
       for (ResponseInfo responseInfo : responses) {
-        GetResponse getResponse = responseInfo.getError() == null ? GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap)
-            : null;
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
         if (op.isOperationComplete()) {
           break;
@@ -442,8 +429,7 @@ public class GetBlobInfoOperationTest {
    * @return the list of responses from the network client.
    * @throws IOException
    */
-  private List<ResponseInfo> sendAndWaitForResponses(List<RequestInfo> requestList)
-      throws IOException {
+  private List<ResponseInfo> sendAndWaitForResponses(List<RequestInfo> requestList) throws IOException {
     List<ResponseInfo> responseList = new ArrayList<>();
     int sendCount = requestList.size();
     Collections.shuffle(requestList);

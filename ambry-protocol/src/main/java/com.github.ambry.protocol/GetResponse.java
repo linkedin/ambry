@@ -14,10 +14,9 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.network.Send;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.network.Send;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -76,8 +75,7 @@ public class GetResponse extends Response {
     return partitionResponseInfoList;
   }
 
-  public static GetResponse readFrom(DataInputStream stream, ClusterMap map)
-      throws IOException {
+  public static GetResponse readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     short typeval = stream.readShort();
     RequestOrResponseType type = RequestOrResponseType.values()[typeval];
     if (type != RequestOrResponseType.GetResponse) {
@@ -104,12 +102,11 @@ public class GetResponse extends Response {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0;
     if (bufferToSend == null) {
-      bufferToSend = ByteBuffer
-          .allocate((int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
+      bufferToSend = ByteBuffer.allocate(
+          (int) super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize));
       writeHeader();
       if (partitionResponseInfoList != null) {
         bufferToSend.putInt(partitionResponseInfoList.size());
@@ -135,8 +132,8 @@ public class GetResponse extends Response {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize) +
-        ((toSend == null) ? 0 : toSend.sizeInBytes());
+    return super.sizeInBytes() + (Partition_Response_Info_List_Size + partitionResponseInfoSize) + ((toSend == null) ? 0
+        : toSend.sizeInBytes());
   }
 
   @Override

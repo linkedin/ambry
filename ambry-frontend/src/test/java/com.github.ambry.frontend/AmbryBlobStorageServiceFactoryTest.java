@@ -24,9 +24,7 @@ import com.github.ambry.router.Router;
 import java.util.Properties;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -40,8 +38,7 @@ public class AmbryBlobStorageServiceFactoryTest {
    * @throws Exception
    */
   @Test
-  public void getAmbryBlobStorageServiceTest()
-      throws Exception {
+  public void getAmbryBlobStorageServiceTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -60,8 +57,7 @@ public class AmbryBlobStorageServiceFactoryTest {
    * @throws Exception
    */
   @Test
-  public void getAmbryBlobStorageServiceFactoryWithBadInputTest()
-      throws Exception {
+  public void getAmbryBlobStorageServiceFactoryWithBadInputTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);

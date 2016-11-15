@@ -17,8 +17,12 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.json.JSONArray;
@@ -26,11 +30,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.List;
 
 
 /**
@@ -65,8 +64,8 @@ public class DataNode extends DataNodeId {
     this.hostname = getFullyQualifiedDomainName(jsonObject.getString("hostname"));
     this.portNum = jsonObject.getInt("port");
     try {
-      ResourceStatePolicyFactory resourceStatePolicyFactory = Utils
-          .getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
+      ResourceStatePolicyFactory resourceStatePolicyFactory =
+          Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this,
               HardwareState.valueOf(jsonObject.getString("hardwareState")), clusterMapConfig);
       this.dataNodeStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     } catch (Exception e) {
@@ -96,8 +95,7 @@ public class DataNode extends DataNodeId {
     validate();
   }
 
-  private void populatePorts(JSONObject jsonObject)
-      throws JSONException {
+  private void populatePorts(JSONObject jsonObject) throws JSONException {
     if (jsonObject.has("sslport")) {
       int sslPortNum = jsonObject.getInt("sslport");
       this.ports.put(PortType.SSL, new Port(sslPortNum, PortType.SSL));
@@ -262,15 +260,14 @@ public class DataNode extends DataNodeId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject()
-      throws JSONException {
+  public JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", portNum);
     addSSLPortToJson(jsonObject);
     if (rackId >= 0) {
       jsonObject.put("rackId", getRackId());
     }
-    jsonObject
-        .put("hardwareState", dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
+    jsonObject.put("hardwareState",
+        dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());
     for (Disk disk : disks) {
       jsonObject.accumulate("disks", disk.toJSONObject());
@@ -278,8 +275,7 @@ public class DataNode extends DataNodeId {
     return jsonObject;
   }
 
-  private void addSSLPortToJson(JSONObject jsonObject)
-      throws JSONException {
+  private void addSSLPortToJson(JSONObject jsonObject) throws JSONException {
     for (PortType portType : ports.keySet()) {
       if (portType == PortType.SSL) {
         jsonObject.put("sslport", ports.get(portType).getPort());

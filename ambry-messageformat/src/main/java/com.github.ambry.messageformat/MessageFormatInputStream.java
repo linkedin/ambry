@@ -14,12 +14,11 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.CrcInputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -41,8 +40,7 @@ public abstract class MessageFormatInputStream extends InputStream {
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
-  public int read()
-      throws IOException {
+  public int read() throws IOException {
     if (buffer != null && buffer.remaining() > 0) {
       return buffer.get() & 0xFF;
     }
@@ -64,8 +62,7 @@ public abstract class MessageFormatInputStream extends InputStream {
 
   // keep reading. the caller will decide when to end
   @Override
-  public int read(byte b[], int off, int len)
-      throws IOException {
+  public int read(byte b[], int off, int len) throws IOException {
     if (b == null) {
       throw new NullPointerException();
     } else if (off < 0 || len < 0 || len > b.length - off) {

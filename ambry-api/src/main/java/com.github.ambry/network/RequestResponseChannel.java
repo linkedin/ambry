@@ -36,24 +36,21 @@ public interface RequestResponseChannel {
    * @return The request that was queued by the network layer into the channel
    * @throws InterruptedException
    */
-  public Request receiveRequest()
-      throws InterruptedException;
+  public Request receiveRequest() throws InterruptedException;
 
   /**
    * Sends a request over the network. The request gets queued by the channel.
    * @param request The request to be queued by the channel
    * @throws InterruptedException
    */
-  public void sendRequest(Request request)
-      throws InterruptedException;
+  public void sendRequest(Request request) throws InterruptedException;
 
   /**
    * Closes the connection on which the original request came
    * @param request The request whose connection needs to be closed
    * @throws InterruptedException
    */
-  public void closeConnection(Request request)
-      throws InterruptedException;
+  public void closeConnection(Request request) throws InterruptedException;
 
   /**
    * Shuts down the request response channel

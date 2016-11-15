@@ -55,13 +55,12 @@ public class MessageSievingInputStream extends InputStream {
    * @throws java.io.IOException
    */
   public MessageSievingInputStream(InputStream stream, List<MessageInfo> messageInfoList,
-      StoreKeyFactory storeKeyFactory, MetricRegistry metricRegistry)
-      throws IOException {
+      StoreKeyFactory storeKeyFactory, MetricRegistry metricRegistry) throws IOException {
     this.logger = LoggerFactory.getLogger(getClass());
     messageFormatValidationTime =
         metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "MessageFormatValidationTime"));
-    messageFormatBatchValidationTime = metricRegistry
-        .histogram(MetricRegistry.name(MessageSievingInputStream.class, "MessageFormatBatchValidationTime"));
+    messageFormatBatchValidationTime = metricRegistry.histogram(
+        MetricRegistry.name(MessageSievingInputStream.class, "MessageFormatBatchValidationTime"));
     validSize = 0;
     hasInvalidMessages = false;
     validMessageInfoList = new ArrayList<MessageInfo>();
@@ -119,8 +118,7 @@ public class MessageSievingInputStream extends InputStream {
   }
 
   @Override
-  public int read()
-      throws IOException {
+  public int read() throws IOException {
     if (!byteBuffer.hasRemaining()) {
       return -1;
     }
@@ -128,8 +126,7 @@ public class MessageSievingInputStream extends InputStream {
   }
 
   @Override
-  public int read(byte[] bytes, int offset, int length)
-      throws IOException {
+  public int read(byte[] bytes, int offset, int length) throws IOException {
     if (bytes == null) {
       throw new IllegalArgumentException("Byte array cannot be null");
     } else if (offset < 0 || length < 0 || length > bytes.length - offset) {
@@ -167,8 +164,7 @@ public class MessageSievingInputStream extends InputStream {
    * @throws IOException
    */
   private boolean checkForMessageValidity(ByteArrayInputStream byteArrayInputStream, int currentOffset, long size,
-      StoreKeyFactory storeKeyFactory, MessageInfo msgInfo)
-      throws IOException {
+      StoreKeyFactory storeKeyFactory, MessageInfo msgInfo) throws IOException {
     boolean isValid = false;
     BlobProperties props = null;
     ByteBuffer metadata = null;
@@ -225,9 +221,8 @@ public class MessageSievingInputStream extends InputStream {
             MessageFormatErrorCodes.Data_Corrupt);
       }
     } catch (MessageFormatException e) {
-      logger
-          .error("MessageFormat exception thrown for a blob starting at offset " + currentOffset + " with exception: ",
-              e);
+      logger.error(
+          "MessageFormat exception thrown for a blob starting at offset " + currentOffset + " with exception: ", e);
     } finally {
       messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
     }

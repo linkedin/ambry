@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -29,8 +28,7 @@ public class MockId extends StoreKey {
     this.id = id;
   }
 
-  public MockId(DataInputStream stream)
-      throws IOException {
+  public MockId(DataInputStream stream) throws IOException {
     id = Utils.readShortString(stream);
   }
 

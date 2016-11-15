@@ -70,8 +70,7 @@ public interface RestRequest extends ReadableStreamChannel {
    * bound thread. Calling this from an I/O bound thread will impact throughput.
    * @throws RestServiceException if request channel is closed or if the request could not be prepared for reading.
    */
-  public void prepare()
-      throws RestServiceException;
+  public void prepare() throws RestServiceException;
 
   /**
    * Closes this request channel and releases all of the resources associated with it. Also records some metrics via
@@ -84,8 +83,7 @@ public interface RestRequest extends ReadableStreamChannel {
    * @throws IOException if there is an I/O error while closing the request channel.
    */
   @Override
-  public void close()
-      throws IOException;
+  public void close() throws IOException;
 
   /**
    * Gets the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
@@ -104,8 +102,7 @@ public interface RestRequest extends ReadableStreamChannel {
    * @throws NoSuchAlgorithmException if the {@code digestAlgorithm} does not exist or is not supported.
    * @throws IllegalStateException if {@link #readInto(AsyncWritableChannel, Callback)} has already been called.
    */
-  public void setDigestAlgorithm(String digestAlgorithm)
-      throws NoSuchAlgorithmException;
+  public void setDigestAlgorithm(String digestAlgorithm) throws NoSuchAlgorithmException;
 
   /**
    * Gets the digest as specified by the digest algorithm set through {@link #setDigestAlgorithm(String)}. If none was

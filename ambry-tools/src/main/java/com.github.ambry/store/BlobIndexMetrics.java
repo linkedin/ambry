@@ -18,16 +18,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
-import com.github.ambry.store.FileSpan;
-import com.github.ambry.store.IndexEntry;
-import com.github.ambry.store.IndexValue;
-import com.github.ambry.store.Log;
-import com.github.ambry.store.PersistentIndex;
-import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyFactory;
-
-import com.github.ambry.store.StoreMetrics;
 import com.github.ambry.utils.SystemTime;
 import java.io.FileWriter;
 import java.util.ArrayList;
@@ -49,8 +39,7 @@ class BlobIndexMetrics extends PersistentIndex {
 
   public BlobIndexMetrics(String datadir, ScheduledExecutorService scheduler, Log log, boolean enableVerboseLogging,
       AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads, StoreConfig config, FileWriter writer,
-      StoreKeyFactory factory)
-      throws StoreException {
+      StoreKeyFactory factory) throws StoreException {
     super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
         new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
     this.enableVerboseLogging = enableVerboseLogging;
@@ -62,8 +51,7 @@ class BlobIndexMetrics extends PersistentIndex {
     this.datadir = datadir;
   }
 
-  public void addToIndexRandomData(BlobId id)
-      throws StoreException {
+  public void addToIndexRandomData(BlobId id) throws StoreException {
 
     synchronized (lock) {
       long startTimeInMs = System.currentTimeMillis();
@@ -95,8 +83,7 @@ class BlobIndexMetrics extends PersistentIndex {
     }
   }
 
-  public void addToIndexRandomData(List<BlobId> ids)
-      throws StoreException {
+  public void addToIndexRandomData(List<BlobId> ids) throws StoreException {
     ArrayList<IndexEntry> list = new ArrayList<IndexEntry>(ids.size());
     for (int i = 0; i < list.size(); i++) {
       IndexEntry entry = new IndexEntry(ids.get(i), new IndexValue(1000, 1000, (byte) 1, 1000));
@@ -117,8 +104,7 @@ class BlobIndexMetrics extends PersistentIndex {
     System.out.println("Time taken to add to the index all the entries - " + (endTimeInMs - startTimeInMs));
   }
 
-  public boolean exists(StoreKey key)
-      throws StoreException {
+  public boolean exists(StoreKey key) throws StoreException {
     System.out.println("data dir " + datadir + " searching id " + key);
     long startTimeMs = System.currentTimeMillis();
     boolean exist = super.findKey(key) != null;
@@ -129,8 +115,7 @@ class BlobIndexMetrics extends PersistentIndex {
     return exist;
   }
 
-  public void markAsDeleted(StoreKey id, long logEndOffset)
-      throws StoreException {
+  public void markAsDeleted(StoreKey id, long logEndOffset) throws StoreException {
     long startTimeMs = System.currentTimeMillis();
     super.markAsDeleted(id, new FileSpan(0, logEndOffset));
     long endTimeMs = System.currentTimeMillis();

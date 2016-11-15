@@ -59,10 +59,10 @@ public class FrontendConfig {
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
-    frontendIdConverterFactory = verifiableProperties
-        .getString("frontend.id.converter.factory", "com.github.ambry.frontend.AmbryIdConverterFactory");
-    frontendSecurityServiceFactory = verifiableProperties
-        .getString("frontend.security.service.factory", "com.github.ambry.frontend.AmbrySecurityServiceFactory");
+    frontendIdConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
+        "com.github.ambry.frontend.AmbryIdConverterFactory");
+    frontendSecurityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",
+        "com.github.ambry.frontend.AmbrySecurityServiceFactory");
     frontendPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =

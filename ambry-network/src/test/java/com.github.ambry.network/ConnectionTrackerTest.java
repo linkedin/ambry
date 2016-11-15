@@ -43,8 +43,7 @@ public class ConnectionTrackerTest {
   private ArrayList<String> connIds = new ArrayList<String>();
 
   @Before
-  public void initialize()
-      throws IOException {
+  public void initialize() throws IOException {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "DC1");

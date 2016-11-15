@@ -101,8 +101,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     long startupBeginTime = System.currentTimeMillis();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
@@ -296,8 +295,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * Checks if {@link AmbryBlobStorageService} is available to serve requests.
    * @throws RestServiceException if {@link AmbryBlobStorageService} is not available to serve requests.
    */
-  private void checkAvailable()
-      throws RestServiceException {
+  private void checkAvailable() throws RestServiceException {
     if (!isUp) {
       throw new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     }
@@ -461,8 +459,8 @@ class AmbryBlobStorageService implements BlobStorageService {
           logger.trace("Forwarding {} to the IdConverter/Router", restMethod);
           switch (restMethod) {
             case GET:
-              String receivedId = RestUtils
-                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+              String receivedId =
+                  RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
                       frontendConfig.frontendPathPrefixesToRemove);
               InboundIdConverterCallback idConverterCallback =
                   new InboundIdConverterCallback(restRequest, restResponseChannel, getCallback);
@@ -607,8 +605,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.getSecurityResponseTimeInMs,
                   frontendMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   securityCallbackTracker.markOperationEnd();
@@ -621,8 +619,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                         Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
                         if (userMetadata == null) {
                           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-                          restResponseChannel
-                              .setHeader(RestUtils.Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
+                              blobInfo.getUserMetadata().length);
                           response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                         } else {
                           setUserMetadataHeaders(userMetadata, restResponseChannel);
@@ -875,8 +873,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.headSecurityResponseTimeInMs,
                   frontendMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   callbackTracker.markOperationEnd();

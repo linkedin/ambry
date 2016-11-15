@@ -45,32 +45,27 @@ public class FaultyFactory implements BlobStorageServiceFactory, NioServerFactor
   }
 
   @Override
-  public BlobStorageService getBlobStorageService()
-      throws InstantiationException {
+  public BlobStorageService getBlobStorageService() throws InstantiationException {
     return null;
   }
 
   @Override
-  public NioServer getNioServer()
-      throws InstantiationException {
+  public NioServer getNioServer() throws InstantiationException {
     return null;
   }
 
   @Override
-  public Router getRouter()
-      throws InstantiationException {
+  public Router getRouter() throws InstantiationException {
     return null;
   }
 
   @Override
-  public RestResponseHandler getRestResponseHandler()
-      throws InstantiationException {
+  public RestResponseHandler getRestResponseHandler() throws InstantiationException {
     return null;
   }
 
   @Override
-  public RestRequestHandler getRestRequestHandler()
-      throws InstantiationException {
+  public RestRequestHandler getRestRequestHandler() throws InstantiationException {
     return null;
   }
 }

@@ -30,8 +30,7 @@ public interface RestResponseHandler {
    * Does startup tasks for the RestResponseHandler. When the function returns, startup is FULLY complete.
    * @throws InstantiationException if the RestResponseHandler is unable to start.
    */
-  public void start()
-      throws InstantiationException;
+  public void start() throws InstantiationException;
 
   /**
    * Does shutdown tasks for the RestResponseHandler. When the function returns, shutdown is FULLY complete.
@@ -58,6 +57,5 @@ public interface RestResponseHandler {
    * @throws RestServiceException if there is any error while processing the response.
    */
   public void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      ReadableStreamChannel response, Exception exception)
-      throws RestServiceException;
+      ReadableStreamChannel response, Exception exception) throws RestServiceException;
 }

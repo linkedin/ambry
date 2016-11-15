@@ -68,57 +68,89 @@ public class AdminTool {
       OptionParser parser = new OptionParser();
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
           "The type of operation to execute - LIST_REPLICAS/GET_BLOB/GET_BLOB_PROPERTIES/GET_USERMETADATA")
-          .withRequiredArg().describedAs("The type of file").ofType(String.class).defaultsTo("GET");
+          .withRequiredArg()
+          .describedAs("The type of file")
+          .ofType(String.class)
+          .defaultsTo("GET");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdOpt =
-          parser.accepts("ambryBlobId", "The blob id to execute get on").withRequiredArg().describedAs("The blob id")
+          parser.accepts("ambryBlobId", "The blob id to execute get on")
+              .withRequiredArg()
+              .describedAs("The blob id")
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> includeExpiredBlobsOpt =
-          parser.accepts("includeExpiredBlob", "Included expired blobs too").withRequiredArg()
-              .describedAs("Whether to include expired blobs while querying or not").defaultsTo("false")
+          parser.accepts("includeExpiredBlob", "Included expired blobs too")
+              .withRequiredArg()
+              .describedAs("Whether to include expired blobs while querying or not")
+              .defaultsTo("false")
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("").ofType(String.class);
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
-          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
-              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt = parser.accepts("sslKeystorePath", "SSL key store path")
+          .withOptionalArg()
+          .describedAs("The file path of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
-          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
-              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt = parser.accepts("sslKeystoreType", "SSL key store type")
+          .withOptionalArg()
+          .describedAs("The type of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
-          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
-              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePath", "SSL trust store path")
+              .withOptionalArg()
+              .describedAs("The file path of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
-          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
-              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslKeystorePassword", "SSL key store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL key store")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
-          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
-              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt = parser.accepts("sslKeyPassword", "SSL key password")
+          .withOptionalArg()
+          .describedAs("The password of SSL private key")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
-          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
-              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePassword", "SSL trust store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
-          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA")
+              .ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -240,10 +272,9 @@ public class AdminTool {
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       System.out.println("Get Response from Stream to verify replica blob properties : " + getResponse.getError());
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("getBlobProperties error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println("getBlobProperties error on response " + getResponse.getError() + " error code on partition "
+            + serverResponseCode + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port "
+            + port.toString() + " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
@@ -255,9 +286,8 @@ public class AdminTool {
         BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         System.out.println(
             "Blob Properties : Content Type : " + properties.getContentType() + ", OwnerId : " + properties.getOwnerId()
-                +
-                ", Size : " + properties.getBlobSize() + ", CreationTimeInMs : " + properties.getCreationTimeInMs() +
-                ", ServiceId : " + properties.getServiceId() + ", TTL : " + properties.getTimeToLiveInSeconds());
+                + ", Size : " + properties.getBlobSize() + ", CreationTimeInMs : " + properties.getCreationTimeInMs()
+                + ", ServiceId : " + properties.getServiceId() + ", TTL : " + properties.getTimeToLiveInSeconds());
         return properties;
       }
     } catch (MessageFormatException mfe) {
@@ -323,10 +353,10 @@ public class AdminTool {
       System.out.println("Get Response to get blob : " + getResponse.getError());
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("blob get error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println(
+            "blob get error on response " + getResponse.getError() + " error code on partition " + serverResponseCode
+                + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() + " blobId "
+                + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
@@ -402,10 +432,9 @@ public class AdminTool {
 
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("usermetadata get error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println("usermetadata get error on response " + getResponse.getError() + " error code on partition "
+            + serverResponseCode + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port "
+            + port.toString() + " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {

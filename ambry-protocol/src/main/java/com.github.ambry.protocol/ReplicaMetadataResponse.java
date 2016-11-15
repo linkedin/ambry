@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -40,7 +39,8 @@ public class ReplicaMetadataResponse extends Response {
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, Replica_Metadata_Response_Version_V1, correlationId, clientId, error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, Replica_Metadata_Response_Version_V1, correlationId, clientId,
+        error);
     this.replicaMetadataResponseInfoList = replicaMetadataResponseInfoList;
     this.replicaMetadataResponseInfoListSizeInBytes = 0;
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
@@ -49,7 +49,8 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, Replica_Metadata_Response_Version_V1, correlationId, clientId, error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, Replica_Metadata_Response_Version_V1, correlationId, clientId,
+        error);
     replicaMetadataResponseInfoList = null;
     replicaMetadataResponseInfoListSizeInBytes = 0;
   }
@@ -59,8 +60,7 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   public static ReplicaMetadataResponse readFrom(DataInputStream stream, FindTokenFactory factory,
-      ClusterMap clusterMap)
-      throws IOException {
+      ClusterMap clusterMap) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
     if (type != RequestOrResponseType.ReplicaMetadataResponse) {
       throw new IllegalArgumentException("The type of request response is not compatible");
@@ -86,8 +86,7 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();

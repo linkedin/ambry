@@ -86,8 +86,7 @@ public class NonBlockingRouterTest {
    * Initialize parameters common to all tests.
    * @throws Exception
    */
-  public NonBlockingRouterTest()
-      throws Exception {
+  public NonBlockingRouterTest() throws Exception {
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap();
   }
@@ -117,8 +116,7 @@ public class NonBlockingRouterTest {
    * Construct {@link Properties} and {@link MockServerLayout} and initialize and set the
    * router with them.
    */
-  private void setRouter()
-      throws IOException {
+  private void setRouter() throws IOException {
     setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap));
   }
 
@@ -127,8 +125,7 @@ public class NonBlockingRouterTest {
    * @param props the {@link Properties}
    * @param mockServerLayout the {@link MockServerLayout}
    */
-  private void setRouter(Properties props, MockServerLayout mockServerLayout)
-      throws IOException {
+  private void setRouter(Properties props, MockServerLayout mockServerLayout) throws IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
@@ -150,8 +147,7 @@ public class NonBlockingRouterTest {
    * Test the {@link NonBlockingRouterFactory}
    */
   @Test
-  public void testNonBlockingRouterFactory()
-      throws Exception {
+  public void testNonBlockingRouterFactory() throws Exception {
     Properties props = getNonBlockingRouterProperties("NotInClusterMap");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     try {
@@ -174,8 +170,7 @@ public class NonBlockingRouterTest {
    * Test Router with a single scaling unit.
    */
   @Test
-  public void testRouterBasic()
-      throws Exception {
+  public void testRouterBasic() throws Exception {
     setRouter();
     assertExpectedThreadCounts(1);
     setOperationParams();
@@ -198,8 +193,7 @@ public class NonBlockingRouterTest {
    * @throws Exception
    */
   @Test
-  public void testNullArguments()
-      throws Exception {
+  public void testNullArguments() throws Exception {
     setRouter();
     assertExpectedThreadCounts(1);
     setOperationParams();
@@ -242,8 +236,7 @@ public class NonBlockingRouterTest {
    * Test router put operation in a scenario where there are no partitions available.
    */
   @Test
-  public void testRouterPartitionsUnavailable()
-      throws Exception {
+  public void testRouterPartitionsUnavailable() throws Exception {
     setRouter();
     setOperationParams();
     mockClusterMap.markAllPartitionsUnavailable();
@@ -266,8 +259,7 @@ public class NonBlockingRouterTest {
    * just error out these operations.
    */
   @Test
-  public void testRouterNoPartitionInLocalDC()
-      throws Exception {
+  public void testRouterNoPartitionInLocalDC() throws Exception {
     // set the local DC to invalid, so that for puts, no partitions are available locally.
     Properties props = getNonBlockingRouterProperties("invalidDC");
     setRouter(props, new MockServerLayout(mockClusterMap));
@@ -289,8 +281,7 @@ public class NonBlockingRouterTest {
    * Throwable), then the router gets closed immediately along with the completion of all the operations.
    */
   @Test
-  public void testRequestResponseHandlerThreadExitFlow()
-      throws Exception {
+  public void testRequestResponseHandlerThreadExitFlow() throws Exception {
     Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     MockClusterMap mockClusterMap = new MockClusterMap();
@@ -344,8 +335,7 @@ public class NonBlockingRouterTest {
    * Test that if a composite blob put fails, the successfully put data chunks are deleted.
    */
   @Test
-  public void testUnsuccessfulPutDataChunkDelete()
-      throws Exception {
+  public void testUnsuccessfulPutDataChunkDelete() throws Exception {
     // Ensure there are 4 chunks.
     maxPutChunkSize = PUT_CONTENT_SIZE / 4;
     Properties props = getNonBlockingRouterProperties("DC1");
@@ -408,8 +398,7 @@ public class NonBlockingRouterTest {
    * Test that multiple scaling units can be instantiated, exercised and closed.
    */
   @Test
-  public void testMultipleScalingUnit()
-      throws Exception {
+  public void testMultipleScalingUnit() throws Exception {
     final int SCALING_UNITS = 3;
     Properties props = getNonBlockingRouterProperties("DC1");
     props.setProperty("router.scaling.unit.count", Integer.toString(SCALING_UNITS));
@@ -433,8 +422,7 @@ public class NonBlockingRouterTest {
    * Response handling related tests for all operation managers.
    */
   @Test
-  public void testResponseHandling()
-      throws Exception {
+  public void testResponseHandling() throws Exception {
     Properties props = getNonBlockingRouterProperties("DC1");
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     setOperationParams();
@@ -540,8 +528,7 @@ public class NonBlockingRouterTest {
    */
   private void testFailureDetectorNotification(OperationHelper opHelper, NetworkClient networkClient,
       List<ReplicaId> failedReplicaIds, String blobId, AtomicInteger successfulResponseCount,
-      AtomicBoolean invalidResponse, int indexToFail)
-      throws Exception {
+      AtomicBoolean invalidResponse, int indexToFail) throws Exception {
     failedReplicaIds.clear();
     successfulResponseCount.set(0);
     invalidResponse.set(false);
@@ -604,8 +591,7 @@ public class NonBlockingRouterTest {
    * @param invalidResponse the AtomicBoolean that will contain whether an unexpected failure was notified.
    */
   private void testNoResponseNoNotification(OperationHelper opHelper, List<ReplicaId> failedReplicaIds, String blobId,
-      AtomicInteger successfulResponseCount, AtomicBoolean invalidResponse)
-      throws Exception {
+      AtomicInteger successfulResponseCount, AtomicBoolean invalidResponse) throws Exception {
     failedReplicaIds.clear();
     successfulResponseCount.set(0);
     invalidResponse.set(false);
@@ -679,8 +665,8 @@ public class NonBlockingRouterTest {
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
     if (expectedCount == 0) {
       Assert.assertFalse("Router should be closed if there are no worker threads running", router.isOpen());
-      Assert
-          .assertEquals("All operations should have completed if the router is closed", 0, router.getOperationsCount());
+      Assert.assertEquals("All operations should have completed if the router is closed", 0,
+          router.getOperationsCount());
     }
   }
 
@@ -699,9 +685,7 @@ public class NonBlockingRouterTest {
    * Enum for the three operation types.
    */
   private enum OperationType {
-    PUT,
-    GET,
-    DELETE,
+    PUT, GET, DELETE,
   }
 
   /**

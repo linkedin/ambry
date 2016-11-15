@@ -15,7 +15,6 @@ package com.github.ambry.replication;
 
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -24,8 +23,7 @@ import java.nio.ByteBuffer;
 public class MockFindTokenFactory implements FindTokenFactory {
 
   @Override
-  public FindToken getFindToken(DataInputStream stream)
-      throws IOException {
+  public FindToken getFindToken(DataInputStream stream) throws IOException {
     return new MockFindToken(stream);
   }
 
@@ -44,8 +42,7 @@ class MockFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
-  public MockFindToken(DataInputStream stream)
-      throws IOException {
+  public MockFindToken(DataInputStream stream) throws IOException {
     this.index = stream.readInt();
     this.bytesRead = stream.readLong();
   }

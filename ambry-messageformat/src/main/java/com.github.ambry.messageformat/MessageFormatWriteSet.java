@@ -47,8 +47,7 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   }
 
   @Override
-  public long writeTo(Write writeChannel)
-      throws IOException {
+  public long writeTo(Write writeChannel) throws IOException {
     ReadableByteChannel readableByteChannel = Channels.newChannel(streamToWrite);
     long sizeWritten = 0;
     for (MessageInfo info : streamInfo) {

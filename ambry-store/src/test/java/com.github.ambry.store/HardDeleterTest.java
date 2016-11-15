@@ -75,8 +75,7 @@ public class HardDeleterTest {
         this.log = log;
       }
 
-      void add(MockId id)
-          throws IOException, StoreException {
+      void add(MockId id) throws IOException, StoreException {
         index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, nextOffset, (byte) 0, 12345)),
             new FileSpan(nextOffset, nextOffset + sizeOfEntry));
         ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
@@ -85,8 +84,7 @@ public class HardDeleterTest {
         nextOffset += sizeOfEntry;
       }
 
-      void delete(MockId id)
-          throws IOException, StoreException {
+      void delete(MockId id) throws IOException, StoreException {
         index.markAsDeleted(id, new FileSpan(nextOffset, nextOffset + sizeOfEntry));
         ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
         log.appendFrom(byteBuffer);
@@ -285,8 +283,7 @@ public class HardDeleterTest {
   /**
    * Create a temporary file
    */
-  File tempFile()
-      throws IOException {
+  File tempFile() throws IOException {
     File f = File.createTempFile("ambry", ".tmp");
     f.deleteOnExit();
     return f;

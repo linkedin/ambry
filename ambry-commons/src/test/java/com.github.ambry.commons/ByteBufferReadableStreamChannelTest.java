@@ -45,8 +45,7 @@ public class ByteBufferReadableStreamChannelTest {
    * @throws Exception
    */
   @Test
-  public void commonCaseTest()
-      throws Exception {
+  public void commonCaseTest() throws Exception {
     ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[1024]));
     ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(content);
     assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
@@ -81,8 +80,7 @@ public class ByteBufferReadableStreamChannelTest {
    * @throws Exception
    */
   @Test
-  public void readIntoAWCFailureTest()
-      throws Exception {
+  public void readIntoAWCFailureTest() throws Exception {
     String errMsg = "@@ExpectedExceptionMessage@@";
     byte[] in = fillRandomBytes(new byte[1]);
 
@@ -134,8 +132,7 @@ public class ByteBufferReadableStreamChannelTest {
    * @throws Exception
    */
   @Test
-  public void readAndWriteCornerCasesTest()
-      throws Exception {
+  public void readAndWriteCornerCasesTest() throws Exception {
     // 0 sized blob.
     ByteBufferReadableStreamChannel readableStreamChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
     assertTrue("ByteBufferReadableStreamChannel is not open", readableStreamChannel.isOpen());
@@ -164,8 +161,7 @@ public class ByteBufferReadableStreamChannelTest {
    * @throws IOException
    */
   @Test
-  public void idempotentOperationsTest()
-      throws IOException {
+  public void idempotentOperationsTest() throws IOException {
     byte[] in = fillRandomBytes(new byte[1]);
     ByteBufferReadableStreamChannel byteBufferReadableStreamChannel =
         new ByteBufferReadableStreamChannel(ByteBuffer.wrap(in));
@@ -216,8 +212,7 @@ class ReadIntoCallback implements Callback<Long> {
    * @throws InterruptedException
    * @throws TimeoutException
    */
-  void awaitCallback()
-      throws InterruptedException, TimeoutException {
+  void awaitCallback() throws InterruptedException, TimeoutException {
     if (!latch.await(1, TimeUnit.SECONDS)) {
       throw new TimeoutException("Waiting too long for callback to arrive");
     }
@@ -255,8 +250,7 @@ class BadAsyncWritableChannel implements AsyncWritableChannel {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     isOpen.set(false);
   }
 

@@ -56,8 +56,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object obj)
-      throws Exception {
+  public void channelRead(ChannelHandlerContext ctx, Object obj) throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     boolean forwardObj = false;
     if (obj instanceof HttpRequest) {
@@ -110,8 +109,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-      throws Exception {
+  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
     if (!restServerState.isServiceUp()) {
       if (msg instanceof LastHttpContent) {
         // Start closing client channels after we've completed writing to them (even if they are keep-alive)

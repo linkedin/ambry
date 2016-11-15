@@ -43,8 +43,7 @@ public class FutureResult<T> implements Future<T> {
   /**
    * Await the completion of this request
    */
-  public void await()
-      throws InterruptedException {
+  public void await() throws InterruptedException {
     latch.await();
   }
 
@@ -54,8 +53,7 @@ public class FutureResult<T> implements Future<T> {
    * @param unit The unit for the max time
    * @return true if the request completed, false if we timed out
    */
-  public boolean await(long timeout, TimeUnit unit)
-      throws InterruptedException {
+  public boolean await(long timeout, TimeUnit unit) throws InterruptedException {
     return latch.await(timeout, unit);
   }
 
@@ -96,15 +94,13 @@ public class FutureResult<T> implements Future<T> {
   }
 
   @Override
-  public T get()
-      throws InterruptedException, ExecutionException {
+  public T get() throws InterruptedException, ExecutionException {
     this.await();
     return resultOrThrow();
   }
 
   @Override
-  public T get(long timeout, TimeUnit unit)
-      throws InterruptedException, ExecutionException, TimeoutException {
+  public T get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
     boolean occurred = this.await(timeout, unit);
     if (!occurred) {
       throw new TimeoutException("Timeout after waiting for " + TimeUnit.MILLISECONDS.convert(timeout, unit) + " ms.");
@@ -112,8 +108,7 @@ public class FutureResult<T> implements Future<T> {
     return resultOrThrow();
   }
 
-  private T resultOrThrow()
-      throws ExecutionException {
+  private T resultOrThrow() throws ExecutionException {
     if (this.error() != null) {
       throw new ExecutionException(this.error());
     } else {

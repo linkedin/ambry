@@ -65,8 +65,7 @@ public class PutRequest extends RequestOrResponse {
     this.blob = materializedBlob;
   }
 
-  public static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map)
-      throws IOException {
+  public static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     short versionId = stream.readShort();
     switch (versionId) {
       case Put_Request_Version_V2:
@@ -83,13 +82,12 @@ public class PutRequest extends RequestOrResponse {
 
   protected int sizeExcludingBlobSize() {
     // size of (header + blobId + blob properties + metadata size + metadata + blob size + blob type)
-    return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSize(properties) +
-        UserMetadata_Size_InBytes + usermetadata.capacity() + Blob_Size_InBytes + BlobType_Size_InBytes;
+    return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSize(properties)
+        + UserMetadata_Size_InBytes + usermetadata.capacity() + Blob_Size_InBytes + BlobType_Size_InBytes;
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0;
     if (sentBytes < sizeInBytes()) {
       if (bufferToSend == null) {
@@ -151,8 +149,7 @@ public class PutRequest extends RequestOrResponse {
 
   // Class to read protocol version 2 Put Request from the stream.
   private static class PutRequest_V2 {
-    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map)
-        throws IOException {
+    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
       BlobId id = new BlobId(stream, map);
