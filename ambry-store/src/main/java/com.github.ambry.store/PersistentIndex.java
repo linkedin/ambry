@@ -1301,21 +1301,21 @@ class StoreFindToken implements FindToken {
       return false;
     }
 
-    StoreFindToken token = (StoreFindToken) o;
+    StoreFindToken that = (StoreFindToken) o;
 
-    if (type != token.type) {
+    if (type != that.type) {
       return false;
     }
-    if (!offset.equals(token.offset)) {
+    if (offset != null ? !offset.equals(that.offset) : that.offset != null) {
       return false;
     }
-    return !(storeKey != null ? !storeKey.equals(token.storeKey) : token.storeKey != null);
+    return storeKey != null ? storeKey.equals(that.storeKey) : that.storeKey == null;
   }
 
   @Override
   public int hashCode() {
     int result = type.hashCode();
-    result = 31 * result + offset.hashCode();
+    result = 31 * result + (offset != null ? offset.hashCode() : 0);
     result = 31 * result + (storeKey != null ? storeKey.hashCode() : 0);
     return result;
   }

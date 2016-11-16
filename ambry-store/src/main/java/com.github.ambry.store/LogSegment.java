@@ -333,6 +333,7 @@ class LogSegment implements Read, Write {
    */
   void close() throws IOException {
     if (open.compareAndSet(true, false)) {
+      flush();
       fileChannel.close();
     }
   }
