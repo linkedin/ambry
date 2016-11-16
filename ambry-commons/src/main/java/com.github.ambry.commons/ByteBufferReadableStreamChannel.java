@@ -36,10 +36,8 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private final AtomicBoolean channelEmptied = new AtomicBoolean(false);
-  private final ReentrantLock contentLock = new ReentrantLock();
   private final List<ByteBuffer> buffers;
-
-  private int size;
+  private final int size;
 
   /**
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code buffer}.
@@ -50,19 +48,14 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   }
 
   /**
-   * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code bufferList}
-   * and null {@link ByteBuffer} at the end of buffers signifies end of content.
-   * @param bufferList the {@link ByteBuffer} that is used to retrieve data from on invocation of read operations.
+   * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code bufferList}.
+   * @param bufferList list of {@link ByteBuffer} that is used to retrieve data from on invocation of read operations.
    */
-
   public ByteBufferReadableStreamChannel(List<ByteBuffer> bufferList) {
-    if (bufferList != null) {
-      buffers = bufferList;
-    } else {
-      buffers = new ArrayList<>();
+    if (bufferList == null || bufferList.isEmpty()) {
+      throw new IllegalArgumentException("Input List of ByteBuffer cannot be null/empty for ByteBufferReadableStreamChannel");
     }
-    // null to signify end of the list
-    buffers.add(null);
+    buffers = bufferList;
     size = computeSize(bufferList);
   }
 
@@ -74,21 +67,17 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   @Override
   public Future<Long> readInto(AsyncWritableChannel asyncWritableChannel, Callback<Long> callback) {
     ReadIntoCallbackWrapper callbackWrapper = new ReadIntoCallbackWrapper(callback);
-    contentLock.lock();
-    try {
-      if (!channelOpen.get()) {
-        callbackWrapper.invokeCallback(new ClosedChannelException());
-      } else if (!channelEmptied.compareAndSet(false, true)) {
-        throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
-      }
-      Iterator<ByteBuffer> bufferIterator = buffers.iterator();
-      while (bufferIterator.hasNext()) {
-        ByteBuffer buffer = bufferIterator.next();
-        writeContent(asyncWritableChannel, callbackWrapper, buffer);
-        bufferIterator.remove();
-      }
-    } finally {
-      contentLock.unlock();
+    if (!channelOpen.get()) {
+      callbackWrapper.invokeCallback(new ClosedChannelException());
+    } else if (!channelEmptied.compareAndSet(false, true)) {
+      throw new IllegalStateException("ReadableStreamChannel cannot be read more than once");
+    }
+    Iterator<ByteBuffer> bufferIterator = buffers.iterator();
+    while (bufferIterator.hasNext()) {
+      ByteBuffer buffer = bufferIterator.next();
+      boolean isLast = buffers.size() == 1;
+      writeContent(asyncWritableChannel, callbackWrapper, buffer, isLast);
+      bufferIterator.remove();
     }
     return callbackWrapper.futureResult;
   }
@@ -98,16 +87,11 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
    * @param writeChannel the {@link AsyncWritableChannel} to write the {@code content} to.
    * @param callbackWrapper the {@link ReadIntoCallbackWrapper} for the read operation.
    * @param content the piece of {@link ByteBuffer} that needs to be written to the {@code writeChannel}.
+   * @param isLast if this the last piece of content in {@code buffers}.
    */
   private void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
-                            ByteBuffer content) {
-    ContentWriteCallback writeCallback;
-    if (content == null) {
-      writeCallback = new ContentWriteCallback(true, callbackWrapper);
-      content = ByteBuffer.allocate(0);
-    } else {
-      writeCallback = new ContentWriteCallback(false, callbackWrapper);
-    }
+                            ByteBuffer content, boolean isLast) {
+    ContentWriteCallback writeCallback = new ContentWriteCallback(isLast, callbackWrapper);
     writeChannel.write(content, writeCallback);
   }
 
@@ -121,14 +105,16 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     channelOpen.set(false);
   }
 
+  /**
+   * Computes the total size of the given {@code bufferList}
+   * @param bufferList list of {@link ByteBuffer} that is used to retrieve data from on invocation of read operations.
+   */
   private int computeSize(List<ByteBuffer> bufferList) {
-    int size = 0;
+    int totalSize = 0;
     for (ByteBuffer buffer : bufferList) {
-      if (buffer != null ) {
-        size += buffer.array().length;
-      }
+      totalSize += buffer.remaining();
     }
-    return size;
+    return totalSize;
   }
 
   /**
