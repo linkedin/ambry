@@ -1252,9 +1252,10 @@ class StoreFindToken implements FindToken {
     // add version
     bufWrap.putShort(version);
     // add sessionId
-    bufWrap.putInt(sessionId == null ? 0 : sessionId.toString().length());
-    if (sessionId != null) {
-      bufWrap.put(sessionId.toString().getBytes());
+    byte[] sessionIdBytes = sessionId == null ? null : sessionId.toString().getBytes();
+    bufWrap.putInt(sessionIdBytes == null ? 0 : sessionIdBytes.length);
+    if (sessionIdBytes != null) {
+      bufWrap.put(sessionIdBytes);
     }
     long logOffset = Uninitialized_Offset;
     long indexStartOffset = Uninitialized_Offset;
