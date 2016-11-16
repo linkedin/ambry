@@ -34,6 +34,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
 import java.io.File;
@@ -336,7 +337,7 @@ public class ServerTool {
 
       OptionSet options = parser.parse(args);
 
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
+      ArrayList<OptionSpec> listOpt = new ArrayList<>();
       listOpt.add(rootDirectoryOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
@@ -344,16 +345,10 @@ public class ServerTool {
       listOpt.add(datacenterOpt);
       listOpt.add(outFileOpt);
 
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt)) {
-          System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
+      ToolUtils.ensureOrExit(listOpt, options, parser);
 
       System.out.println("Starting to parse arguments");
-      boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
+      boolean enableVerboseLogging = options.has(verboseLoggingOpt);
       if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
       }

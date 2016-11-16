@@ -21,6 +21,7 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
@@ -113,23 +114,17 @@ public class IndexReadPerformance {
 
       OptionSet options = parser.parse(args);
 
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
+      ArrayList<OptionSpec> listOpt = new ArrayList<>();
       listOpt.add(logToReadOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
 
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt)) {
-          System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
+      ToolUtils.ensureOrExit(listOpt, options, parser);
 
       String logToRead = options.valueOf(logToReadOpt);
       int numberOfReaders = options.valueOf(numberOfReadersOpt);
       int readsPerSecond = options.valueOf(readsPerSecondOpt);
-      boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
+      boolean enableVerboseLogging = options.has(verboseLoggingOpt);
       if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
       }

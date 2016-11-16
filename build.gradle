@@ -97,6 +97,7 @@ project(':ambry-clustermap') {
     dependencies {
         compile project(':ambry-api'),
                 project(':ambry-utils')
+        compile "org.apache.helix:helix-core:$helixVersion"
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
     }
@@ -186,6 +187,7 @@ project(':ambry-tools') {
                 project(':ambry-admin'),
                 project(':ambry-frontend')
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
+        testCompile project(':ambry-clustermap').sourceSets.test.output
     }
 }
 
@@ -269,6 +271,7 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
         attributes 'Implementation-Title': 'Ambry',
                    'Main-Class': 'com.github.ambry.server.AmbryMain'
     }
+    zip64 true
     destinationDir = file('target')
     baseName = 'ambry'
     subprojects.each { subproject ->

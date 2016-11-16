@@ -19,9 +19,11 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -269,32 +271,52 @@ public class TestUtils {
   }
 
   public static JSONArray getJsonPartitions(long partitionCount, PartitionState partitionState,
-      long replicaCapacityInBytes, int replicaCount, TestHardwareLayout testHardwareLayout) throws JSONException {
+      long replicaCapacityInBytes, int replicaCountPerDc, TestHardwareLayout testHardwareLayout) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < partitionCount; i++) {
-      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCount));
+      JSONArray jsonReplicas =
+          TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCountPerDc));
       jsonArray.put(getJsonPartition(i, partitionState, replicaCapacityInBytes, jsonReplicas));
     }
     return jsonArray;
   }
 
+  static JSONArray getUpdatedJsonPartitions(JSONArray jsonArray, long partitionCount,
+      PartitionState partitionState, long replicaCapacityInBytes, int replicaCountPerDc,
+      TestHardwareLayout testHardwareLayout) throws JSONException {
+    Set<Long> currentPartitions = new HashSet<>();
+    for (int i = 0; i < jsonArray.length(); i++) {
+      JSONObject jsonObject = jsonArray.getJSONObject(i);
+      currentPartitions.add((long) jsonObject.get("id"));
+    }
+    for (long i = 0; i < partitionCount; i++) {
+      if (!currentPartitions.contains(i)) {
+        JSONArray jsonReplicas =
+            TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCountPerDc));
+        jsonArray.put(getJsonPartition(i, partitionState, replicaCapacityInBytes, jsonReplicas));
+      }
+    }
+    return jsonArray;
+  }
+
   public static JSONArray getJsonDuplicatePartitions(long partitionCount, PartitionState partitionState,
-      long replicaCapacityInBytes, int replicaCount, TestHardwareLayout testHardwareLayout) throws JSONException {
+      long replicaCapacityInBytes, int replicaCountPerDc, TestHardwareLayout testHardwareLayout) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < partitionCount; i++) {
-      JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCount));
+      JSONArray jsonReplicas =
+          TestUtils.getJsonArrayReplicas(testHardwareLayout.getIndependentDisks(replicaCountPerDc));
       jsonArray.put(getJsonPartition(0, partitionState, replicaCapacityInBytes, jsonReplicas));
     }
     return jsonArray;
   }
 
   public static JSONArray getJsonDuplicateReplicas(long partitionCount, PartitionState partitionState,
-      long replicaCapacityInBytes, int replicaCount, TestHardwareLayout testHardwareLayout) throws JSONException {
+      long replicaCapacityInBytes, int replicaCountPerDc, TestHardwareLayout testHardwareLayout) throws JSONException {
     JSONArray jsonArray = new JSONArray();
     for (int i = 0; i < partitionCount; i++) {
-      ArrayList<Disk> disks = new ArrayList<Disk>(replicaCount);
+      ArrayList<Disk> disks = new ArrayList<Disk>(replicaCountPerDc);
       Disk randomDisk = testHardwareLayout.getRandomDisk();
-      for (int j = 0; j < replicaCount; j++) {
+      for (int j = 0; j < replicaCountPerDc; j++) {
         disks.add(randomDisk);
       }
       JSONArray jsonReplicas = TestUtils.getJsonArrayReplicas(disks);
@@ -339,6 +361,7 @@ public class TestUtils {
     private int basePort;
     private int numRacks;
     private boolean rackAware;
+    private String clusterName;
 
     private HardwareLayout hardwareLayout;
 
@@ -359,11 +382,12 @@ public class TestUtils {
       List<JSONArray> dataNodes = new ArrayList<JSONArray>(datacenterCount);
 
       int curBasePort = basePort;
-      int sslPort = curBasePort + 1000;
+      int sslPort = basePort + 10000;
       for (int i = 0; i < datacenterCount; i++) {
         names.add(i, "DC" + i);
         dataNodes.add(i, getDataNodes(curBasePort, sslPort, getDisks()));
-        curBasePort += dataNodeCount;
+        curBasePort += 5000;
+        sslPort += 5000;
       }
 
       return TestUtils.getJsonArrayDatacenters(names, dataNodes);
@@ -378,7 +402,14 @@ public class TestUtils {
       this.basePort = basePort;
       this.numRacks = numRacks;
       this.rackAware = rackAware;
+      this.clusterName = clusterName;
 
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters()),
+          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    }
+
+    void addNewDataNodes(int i) throws JSONException {
+      this.dataNodeCount += i;
       this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters()),
           new ClusterMapConfig(new VerifiableProperties(new Properties())));
     }
@@ -443,6 +474,25 @@ public class TestUtils {
       return datacenter.getDataNodes().get(new Random().nextInt(datacenter.getDataNodes().size()));
     }
 
+    /**
+     * Get given number of datanodes from each datacenter.
+     * @param dataNodeCountPerDc number of datanodes to get from each datacenter.
+     * @return a list of datanodes.
+     */
+    public List<DataNode> getIndependentDataNodes(int dataNodeCountPerDc) {
+      List<DataNode> dataNodesToReturn = new ArrayList<DataNode>();
+      for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
+        List<DataNode> dataNodesInThisDc = new ArrayList<>();
+        dataNodesInThisDc.addAll(datacenter.getDataNodes());
+        if (dataNodesInThisDc.size() < dataNodeCountPerDc || dataNodeCountPerDc < 0) {
+          throw new IndexOutOfBoundsException("dataNodeCount out of bounds:" + dataNodeCountPerDc);
+        }
+        Collections.shuffle(dataNodesInThisDc);
+        dataNodesToReturn.addAll(dataNodesInThisDc.subList(0, dataNodeCountPerDc));
+      }
+      return dataNodesToReturn;
+    }
+
     public List<DataNode> getRandomDataNodes(int dataNodeCount) {
       List<DataNode> dataNodes = new ArrayList<DataNode>();
       for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
@@ -465,7 +515,7 @@ public class TestUtils {
 
     // Finds diskCount disks, each on distinct random datanodes.
     public List<Disk> getIndependentDisks(int diskCount) {
-      List<DataNode> dataNodes = getRandomDataNodes(diskCount);
+      List<DataNode> dataNodes = getIndependentDataNodes(diskCount);
       List<Disk> disks = new ArrayList<Disk>(diskCount);
       for (DataNode dataNode : dataNodes) {
         disks.add(dataNode.getDisks().get(new Random().nextInt(dataNode.getDisks().size())));
@@ -509,37 +559,55 @@ public class TestUtils {
     protected static final int defaultPartitionCount = 10;
     protected static final PartitionState defaultPartitionState = PartitionState.READ_WRITE;
     protected static final long defaultReplicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
-    protected static final int defaultReplicaCount = 6; // Per Partition
+    protected static final int defaultReplicaCount = 3; // Per Partition
 
     protected int partitionCount;
     protected PartitionState partitionState;
     protected long replicaCapacityInBytes;
-    protected int replicaCount;
+    protected int replicaCountPerDc;
+    protected long dcCount;
 
     protected TestHardwareLayout testHardwareLayout;
     protected PartitionLayout partitionLayout;
+    private JSONArray jsonPartitions;
+    private long version;
 
     protected JSONObject makeJsonPartitionLayout() throws JSONException {
-      JSONArray jsonPartitions =
-          getJsonPartitions(partitionCount, partitionState, replicaCapacityInBytes, replicaCount, testHardwareLayout);
-      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), defaultVersion,
-          partitionCount, jsonPartitions);
+      version = defaultVersion;
+      jsonPartitions = getJsonPartitions(partitionCount, partitionState, replicaCapacityInBytes, replicaCountPerDc,
+          testHardwareLayout);
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
+          jsonPartitions);
+    }
+
+    JSONObject updateJsonPartitionLayout() throws JSONException {
+      version += 1;
+      jsonPartitions = getUpdatedJsonPartitions(jsonPartitions, partitionCount, partitionState, replicaCapacityInBytes,
+          replicaCountPerDc, testHardwareLayout);
+      return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
+          jsonPartitions);
     }
 
     public TestPartitionLayout(TestHardwareLayout testHardwareLayout, int partitionCount, PartitionState partitionState,
-        long replicaCapacityInBytes, int replicaCount) throws JSONException {
+        long replicaCapacityInBytes, int replicaCountPerDc) throws JSONException {
       this.partitionCount = partitionCount;
       this.partitionState = partitionState;
       this.replicaCapacityInBytes = replicaCapacityInBytes;
-      this.replicaCount = replicaCount;
+      this.replicaCountPerDc = replicaCountPerDc;
 
       this.testHardwareLayout = testHardwareLayout;
       this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), makeJsonPartitionLayout());
+      this.dcCount = testHardwareLayout.getHardwareLayout().getDatacenterCount();
     }
 
     public TestPartitionLayout(TestHardwareLayout testHardwareLayout) throws JSONException {
       this(testHardwareLayout, defaultPartitionCount, defaultPartitionState, defaultReplicaCapacityInBytes,
           defaultReplicaCount);
+    }
+
+    void addNewPartitions(int i) throws JSONException {
+      this.partitionCount += i;
+      this.partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout(), updateJsonPartitionLayout());
     }
 
     public PartitionLayout getPartitionLayout() {
@@ -550,12 +618,16 @@ public class TestUtils {
       return partitionCount;
     }
 
-    public int getReplicaCount() {
-      return replicaCount;
+    public int getTotalReplicaCount() {
+      return replicaCountPerDc * (int) dcCount;
+    }
+
+    public int getReplicaCountPerDc() {
+      return replicaCountPerDc;
     }
 
     public long getAllocatedRawCapacityInBytes() {
-      return partitionCount * replicaCount * replicaCapacityInBytes;
+      return partitionCount * replicaCountPerDc * dcCount * replicaCapacityInBytes;
     }
 
     public long getAllocatedUsableCapacityInBytes() {
@@ -574,7 +646,7 @@ public class TestUtils {
     @Override
     protected JSONObject makeJsonPartitionLayout() throws JSONException {
       JSONArray jsonPartitions =
-          getJsonDuplicatePartitions(partitionCount, partitionState, replicaCapacityInBytes, replicaCount,
+          getJsonDuplicatePartitions(partitionCount, partitionState, replicaCapacityInBytes, replicaCountPerDc,
               testHardwareLayout);
       return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), defaultVersion,
           partitionCount, jsonPartitions);
@@ -589,7 +661,7 @@ public class TestUtils {
     @Override
     protected JSONObject makeJsonPartitionLayout() throws JSONException {
       JSONArray jsonPartitions =
-          getJsonDuplicateReplicas(partitionCount, partitionState, replicaCapacityInBytes, replicaCount,
+          getJsonDuplicateReplicas(partitionCount, partitionState, replicaCapacityInBytes, replicaCountPerDc,
               testHardwareLayout);
       return getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), defaultVersion,
           partitionCount, jsonPartitions);
