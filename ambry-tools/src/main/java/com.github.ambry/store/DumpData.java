@@ -654,28 +654,27 @@ public class DumpData {
                   coveredRanges);
           if (!success) {
             logger.error("Failed for Index Entry " + msg);
+            continue;
           }
           if (isDeleted) {
             long originalOffset = blobValue.getOriginalMessageOffset();
             deleteMsgsOriginalOffsets.add(originalOffset);
-            if (originalOffset != -1 && !coveredRanges.containsKey(originalOffset) &&
-                originalOffset >= startOffset) {
-              randomAccessFile.seek(originalOffset);
-              DumpDataHelper.BlobRecordInfo blobRecordInfo =
-                  dumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset);
-              coveredRanges.put(originalOffset, originalOffset + blobRecordInfo.totalRecordSize);
-              logger.trace(
-                  "PUT Record {} added with orig offset {} and end offset {} for a delete msg " + "{} at offset {} ",
-                  blobRecordInfo.blobId, originalOffset, (originalOffset + blobRecordInfo.totalRecordSize), key.getID(),
-                  blobValue.getOffset());
-              if (!blobRecordInfo.blobId.getID().equals(key.getID())) {
-                logger.error("BlobId value mismatch between delete record " + key.getID() + " and put record "
-                    + blobRecordInfo.blobId.getID());
-              }
-            } else {
-              if (!coveredRanges.containsKey(originalOffset) && startOffset > originalOffset) {
-                logger.trace("Put Record ignored at {} with delete msg's offset {} prior to startOffset {} ",
+            if (originalOffset != -1 && !coveredRanges.containsKey(originalOffset)) {
+              if (startOffset > originalOffset) {
+                logger.trace("Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
                     originalOffset, blobValue.getOffset(), startOffset);
+              } else {
+                randomAccessFile.seek(originalOffset);
+                LogBlobRecordInfo logBlobRecordInfo =
+                    dumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset);
+                coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
+                logger.trace("PUT Record {} with start offset {} and end offset {} for a delete msg {} at offset {} ",
+                    logBlobRecordInfo.blobId, originalOffset, (originalOffset + logBlobRecordInfo.totalRecordSize),
+                    key.getID(), blobValue.getOffset());
+                if (!logBlobRecordInfo.blobId.getID().equals(key.getID())) {
+                  logger.error("BlobId value mismatch between delete record " + key.getID() + " and put record "
+                      + logBlobRecordInfo.blobId.getID());
+                }
               }
             }
           }
@@ -702,8 +701,7 @@ public class DumpData {
    * @throws Exception
    */
   public void compareLogEntriestoIndex(String logFile, ArrayList<String> blobList, String replicaRootDirectory,
-      boolean filter, boolean generateBlobStatusReport, long startOffset, long endOffset)
-      throws Exception {
+      boolean filter, boolean generateBlobStatusReport, long startOffset, long endOffset) throws Exception {
     if (logFile == null || replicaRootDirectory == null) {
       logger.error("logFile and replicaRootDirectory needs to be set for compareLogToIndex");
       System.exit(0);
