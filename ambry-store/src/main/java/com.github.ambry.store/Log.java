@@ -382,4 +382,28 @@ class Log implements Write {
     LogSegment newSegment = new LogSegment(newSegmentName, newSegmentFile, segmentCapacity, metrics, true);
     segmentsByName.put(newSegmentName, newSegment);
   }
+
+  /**
+   * Gets the {@link FileSpan} for a message that is written starting at {@code endOffsetOfPrevMessage} and is of size
+   * {@code size}.
+   * @param endOffsetOfPrevMessage the end offset of the message that is before this one.
+   * @param size the size of the write.
+   * @return the {@link FileSpan} for a message that is written starting at {@code endOffsetOfPrevMessage} and is of
+   * size {@code size}.
+   */
+  FileSpan getFileSpanForMessage(Offset endOffsetOfPrevMessage, long size) {
+    LogSegment segment = segmentsByName.get(endOffsetOfPrevMessage.getName());
+    long startOffset = endOffsetOfPrevMessage.getOffset();
+    if (startOffset > segment.getEndOffset()) {
+      throw new IllegalArgumentException("Start offset provided is greater than segment end offset");
+    } else if (startOffset == segment.getEndOffset()) {
+      // current segment has ended. Since a blob will be wholly contained within one segment, this blob is in the
+      // next segment
+      segment = getNextSegment(segment);
+      startOffset = segment.getStartOffset();
+    } else if (startOffset + size > segment.getEndOffset()) {
+      throw new IllegalStateException("Args indicate that blob is not wholly contained within a single segment");
+    }
+    return new FileSpan(new Offset(segment.getName(), startOffset), new Offset(segment.getName(), startOffset + size));
+  }
 }

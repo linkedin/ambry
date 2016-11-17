@@ -175,20 +175,20 @@ class BlobStore implements Store {
             }
           }
         }
-        Offset currentLogEndOffset = log.getEndOffset();
+        Offset endOffsetOfLastMessage = log.getEndOffset();
         messageSetToWrite.writeTo(log);
         logger.trace("Store : {} message set written to log", dataDir);
         List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
         ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
         for (MessageInfo info : messageInfo) {
-          FileSpan fileSpan = getFileSpanForMessage(currentLogEndOffset, info.getSize());
+          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           IndexValue value =
-              new IndexValue(info.getSize(), currentLogEndOffset, (byte) 0, info.getExpirationTimeInMs());
+              new IndexValue(info.getSize(), fileSpan.getStartOffset(), (byte) 0, info.getExpirationTimeInMs());
           IndexEntry entry = new IndexEntry(info.getStoreKey(), value);
           indexEntries.add(entry);
-          currentLogEndOffset = fileSpan.getEndOffset();
+          endOffsetOfLastMessage = fileSpan.getEndOffset();
         }
-        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), currentLogEndOffset);
+        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
         index.addToIndex(indexEntries, fileSpan);
         logger.trace("Store : {} message set written to index ", dataDir);
       }
@@ -235,13 +235,13 @@ class BlobStore implements Store {
             }
           }
         }
-        Offset currentLogEndOffset = log.getEndOffset();
+        Offset endOffsetOfLastMessage = log.getEndOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
         for (MessageInfo info : infoList) {
-          FileSpan fileSpan = getFileSpanForMessage(currentLogEndOffset, info.getSize());
+          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          currentLogEndOffset = fileSpan.getEndOffset();
+          endOffsetOfLastMessage = fileSpan.getEndOffset();
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
@@ -333,27 +333,5 @@ class BlobStore implements Store {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
     }
-  }
-
-  /**
-   * Gets the {@link FileSpan} for a message that is written starting at {@code writeStartOffset} and is of size
-   * {@code size}.
-   * @param writeStartOffset the start offset of the write.
-   * @param size the size of the write.
-   * @return the {@link FileSpan} for a message that is written starting at {@code writeStartOffset} and is of size
-   * {@code size}.
-   */
-  private FileSpan getFileSpanForMessage(Offset writeStartOffset, long size) {
-    LogSegment segment = log.getSegment(writeStartOffset.getName());
-    long startOffset = writeStartOffset.getOffset();
-    if (startOffset == segment.getEndOffset()) {
-      // current segment has ended. Since a blob will be wholly contained within one segment, this blob is in the
-      // next segment
-      segment = log.getNextSegment(segment);
-      startOffset = segment.getStartOffset();
-    } else if (startOffset + size > segment.getEndOffset()) {
-      throw new IllegalStateException("Blob is not wholly contained within a single segment");
-    }
-    return new FileSpan(new Offset(segment.getName(), startOffset), new Offset(segment.getName(), startOffset + size));
   }
 }

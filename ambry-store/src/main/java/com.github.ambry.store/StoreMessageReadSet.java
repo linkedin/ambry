@@ -115,7 +115,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     switch (version) {
       case 0:
         // backwards compatibility
-        Offset offset = new Offset(log.getStartOffset().getName(), stream.readLong());
+        Offset offset = new Offset(log.getFirstSegment().getName(), stream.readLong());
         long size = stream.readLong();
         long ttl = stream.readLong();
         StoreKey key = factory.getStoreKey(stream);

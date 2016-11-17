@@ -303,10 +303,10 @@ class PersistentIndex {
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
           IndexValue.Index_Value_Size_In_Bytes, config, metrics);
-      info.addEntry(entry, fileSpan.getEndOffset().getOffset());
+      info.addEntry(entry, fileSpan.getEndOffset());
       indexes.put(info.getStartOffset(), info);
     } else {
-      indexes.lastEntry().getValue().addEntry(entry, fileSpan.getEndOffset().getOffset());
+      indexes.lastEntry().getValue().addEntry(entry, fileSpan.getEndOffset());
     }
     journal.addEntry(entry.getValue().getOffset(), entry.getKey());
   }

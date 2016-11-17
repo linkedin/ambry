@@ -100,23 +100,23 @@ public class PersistentIndexTest {
       IndexSegment info = new IndexSegment(tempDirStr, toOffset(0), factory, blobId1.sizeInBytes(),
           IndexValue.Index_Value_Size_In_Bytes, config, new StoreMetrics(tempDirStr, new MetricRegistry()));
       IndexValue value = new IndexValue(1000, toOffset(0), (byte) 0);
-      info.addEntry(new IndexEntry(blobId1, value), 1000);
+      info.addEntry(new IndexEntry(blobId1, value), toOffset(1000));
       value = new IndexValue(1000, toOffset(1000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId2, value), 2000);
+      info.addEntry(new IndexEntry(blobId2, value), toOffset(2000));
       value = new IndexValue(1000, toOffset(2000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId3, value), 3000);
+      info.addEntry(new IndexEntry(blobId3, value), toOffset(3000));
       value = new IndexValue(1000, toOffset(3000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId4, value), 4000);
+      info.addEntry(new IndexEntry(blobId4, value), toOffset(4000));
       value = new IndexValue(1000, toOffset(4000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId5, value), 5000);
+      info.addEntry(new IndexEntry(blobId5, value), toOffset(5000));
       value = new IndexValue(1000, toOffset(5000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId6, value), 6000);
+      info.addEntry(new IndexEntry(blobId6, value), toOffset(6000));
       value = new IndexValue(1000, toOffset(6000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId7, value), 7000);
+      info.addEntry(new IndexEntry(blobId7, value), toOffset(7000));
       value = new IndexValue(1000, toOffset(7000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId8, value), 8000);
+      info.addEntry(new IndexEntry(blobId8, value), toOffset(8000));
       value = new IndexValue(1000, toOffset(8000), (byte) 0);
-      info.addEntry(new IndexEntry(blobId9, value), 9000);
+      info.addEntry(new IndexEntry(blobId9, value), toOffset(9000));
 
       Assert.assertEquals(info.find(blobId1).getSize(), 1000);
       Assert.assertEquals(info.find(blobId1).getOffset(), toOffset(0));
