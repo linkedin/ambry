@@ -245,7 +245,7 @@ public class DumpData {
           break;
       }
     } catch (Exception e) {
-      logger.error("Closed with exception " + e.getStackTrace());
+      logger.error("Closed with exception ", e);
     }
   }
 
