@@ -33,6 +33,7 @@ public class ServerMetrics {
   public final Histogram putBlobResponseQueueTimeInMs;
   public final Histogram putBlobSendTimeInMs;
   public final Histogram putBlobTotalTimeInMs;
+  public final Histogram putBlobTotalTimePer100kbInMs;
 
   public final Histogram putSmallBlobProcessingTimeInMs;
   public final Histogram putSmallBlobSendTimeInMs;
@@ -51,6 +52,7 @@ public class ServerMetrics {
   public final Histogram getBlobResponseQueueTimeInMs;
   public final Histogram getBlobSendTimeInMs;
   public final Histogram getBlobTotalTimeInMs;
+  public final Histogram getBlobTotalTimePer100kbInMs;
 
   public final Histogram getSmallBlobProcessingTimeInMs;
   public final Histogram getSmallBlobSendTimeInMs;
@@ -155,6 +157,8 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobResponseQueueTime"));
     putBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobSendTime"));
     putBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobTotalTime"));
+    putBlobTotalTimePer100kbInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "putBlobTotalTimePer100kb"));
 
     putSmallBlobProcessingTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobProcessingTime"));
@@ -178,6 +182,8 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobResponseQueueTime"));
     getBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobSendTime"));
     getBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetBlobTotalTime"));
+    getBlobTotalTimePer100kbInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "getBlobTotalTimePer100kb"));
 
     getSmallBlobProcessingTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobProcessingTime"));
