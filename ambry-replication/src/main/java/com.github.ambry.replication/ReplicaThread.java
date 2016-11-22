@@ -693,7 +693,7 @@ class ReplicaThread implements Runnable {
               }
               totalBlobsFixed += messageInfoList.size();
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-              remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.lagFromRemoteInBytes);
+              remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
             } catch (StoreException e) {
@@ -711,7 +711,7 @@ class ReplicaThread implements Runnable {
         } else {
           // There are no missing keys. We just advance the token
           remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-          remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.lagFromRemoteInBytes);
+          remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
         }
@@ -725,20 +725,20 @@ class ReplicaThread implements Runnable {
   static class ExchangeMetadataResponse {
     final Set<StoreKey> missingStoreKeys;
     final FindToken remoteToken;
-    final long lagFromRemoteInBytes;
+    final long localLagFromRemoteInBytes;
     final ServerErrorCode serverErrorCode;
 
-    ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken, long lagFromRemoteInBytes) {
+    ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken, long localLagFromRemoteInBytes) {
       this.missingStoreKeys = missingStoreKeys;
       this.remoteToken = remoteToken;
-      this.lagFromRemoteInBytes = lagFromRemoteInBytes;
+      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
       this.serverErrorCode = ServerErrorCode.No_Error;
     }
 
     ExchangeMetadataResponse(ServerErrorCode errorCode) {
       missingStoreKeys = null;
       remoteToken = null;
-      lagFromRemoteInBytes = -1;
+      localLagFromRemoteInBytes = -1;
       this.serverErrorCode = errorCode;
     }
   }
