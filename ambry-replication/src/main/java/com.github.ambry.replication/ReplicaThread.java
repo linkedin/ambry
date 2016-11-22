@@ -722,7 +722,7 @@ class ReplicaThread implements Runnable {
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
   }
 
-  class ExchangeMetadataResponse {
+  static class ExchangeMetadataResponse {
     final Set<StoreKey> missingStoreKeys;
     final FindToken remoteToken;
     final long lagFromRemoteInBytes;

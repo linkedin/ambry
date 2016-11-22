@@ -398,7 +398,7 @@ public final class ReplicationManager {
    * @param replicaPath The path of the remote replica on the host
    * @return The lag in bytes that the remote replica is behind the local store
    */
-  public long getRemoteReplicaLagInBytes(PartitionId partitionId, String hostName, String replicaPath) {
+  public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
     if (remoteReplicaInfo != null) {
       return remoteReplicaInfo.getRemoteLagFromLocalInBytes();
