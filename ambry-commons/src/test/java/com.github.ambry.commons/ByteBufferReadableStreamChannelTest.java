@@ -20,6 +20,9 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -173,8 +176,73 @@ public class ByteBufferReadableStreamChannelTest {
     assertFalse("ByteBufferReadableStreamChannel is not closed", byteBufferReadableStreamChannel.isOpen());
   }
 
+  /**
+   * Tests construction of {@link ByteBufferReadableStreamChannel} on some corner cases.
+   * <p/>
+   * Corner case list:
+   * 1. Create with a null {@link ByteBuffer}.
+   * 2. Create with a null list of {@link ByteBuffer}.
+   * 3. Create with an empty {@link ByteBuffer} list.
+   * 4. Create with a list of {@link ByteBuffer} containing a null {@link ByteBuffer}.
+   */
+  @Test
+  public void cornerCasesTest() {
+    // null byteBuffer
+    ByteBufferReadableStreamChannel readableStreamChannel;
+    try {
+      ByteBuffer content = null;
+      readableStreamChannel = new ByteBufferReadableStreamChannel(content);
+    } catch (RuntimeException e) {
+      Exception exception = (Exception) Utils.getRootCause(e);
+      assertTrue("Exception is not NullPointerException", exception instanceof NullPointerException);
+    }
+
+    // null bufferList
+    List<ByteBuffer> bufferList;
+    try {
+      bufferList = null;
+      readableStreamChannel = new ByteBufferReadableStreamChannel(bufferList);
+    } catch (RuntimeException e) {
+      Exception exception = (Exception) Utils.getRootCause(e);
+      assertTrue("Exception is not IllegalArgumentException", exception instanceof IllegalArgumentException);
+    }
+
+    // empty bufferList
+    try {
+      bufferList = Collections.EMPTY_LIST;
+      readableStreamChannel = new ByteBufferReadableStreamChannel(bufferList);
+    } catch (RuntimeException e) {
+      Exception exception = (Exception) Utils.getRootCause(e);
+      assertTrue("Exception is not IllegalArgumentException", exception instanceof IllegalArgumentException);
+    }
+
+    // bufferList containing a null byteBuffer
+    try {
+      ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[32]));
+      bufferList = fillBufferList(content, null);
+      Collections.shuffle(bufferList);
+      readableStreamChannel = new ByteBufferReadableStreamChannel(bufferList);
+    } catch (RuntimeException e) {
+      Exception exception = (Exception) Utils.getRootCause(e);
+      assertTrue("Exception is not NullPointerException", exception instanceof NullPointerException);
+    }
+  }
+
   // helpers
   // general
+
+  /**
+   * Create a list of {@code ByteBuffer} from given varargs.
+   * @param contents the variable {@code ByteBuffer} argument.
+   * @return list of {@code ByteBuffer}.
+   */
+  private List<ByteBuffer> fillBufferList(Object... contents) {
+    List<ByteBuffer> buffers = new ArrayList<>();
+    for (Object content : contents) {
+      buffers.add((ByteBuffer) content);
+    }
+    return buffers;
+  }
 
   /**
    * Fills random bytes into {@code in}.

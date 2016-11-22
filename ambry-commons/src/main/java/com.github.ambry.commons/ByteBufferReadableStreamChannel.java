@@ -55,7 +55,7 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
     if (bufferList == null || bufferList.isEmpty()) {
       throw new IllegalArgumentException("Input List of ByteBuffer cannot be null/empty for ByteBufferReadableStreamChannel");
     }
-    buffers = bufferList;
+    buffers = new ArrayList<>(bufferList);
     size = computeSize(bufferList);
   }
 
