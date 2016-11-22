@@ -43,9 +43,7 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code buffer}.
    * @param buffer the {@link ByteBuffer} that is used to retrieve data from on invocation of read operations.
    */
-  public ByteBufferReadableStreamChannel(ByteBuffer buffer) {
-    this(new ArrayList<>(Arrays.asList(buffer)));
-  }
+  public ByteBufferReadableStreamChannel(ByteBuffer buffer) { this(Arrays.asList(buffer)); }
 
   /**
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code bufferList}.
