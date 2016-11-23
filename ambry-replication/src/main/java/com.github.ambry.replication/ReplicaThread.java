@@ -90,7 +90,7 @@ class ReplicaThread implements Runnable {
   private final boolean replicatingOverSsl;
   private final String datacenterName;
 
-  public ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
+  ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
@@ -117,7 +117,7 @@ class ReplicaThread implements Runnable {
     this.datacenterName = datacenterName;
   }
 
-  public String getName() {
+  String getName() {
     return threadName;
   }
 
@@ -264,7 +264,7 @@ class ReplicaThread implements Runnable {
    * @throws ReplicationException
    * @throws InterruptedException
    */
-  protected List<ExchangeMetadataResponse> exchangeMetadata(ConnectedChannel connectedChannel,
+  List<ExchangeMetadataResponse> exchangeMetadata(ConnectedChannel connectedChannel,
       List<RemoteReplicaInfo> replicasToReplicatePerNode)
       throws IOException, ReplicationException, InterruptedException {
 
@@ -295,7 +295,8 @@ class ReplicaThread implements Runnable {
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
                   remoteNode);
               ExchangeMetadataResponse exchangeMetadataResponse =
-                  new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken());
+                  new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
+                      replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
               exchangeMetadataResponseList.add(exchangeMetadataResponse);
             } catch (Exception e) {
               replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
@@ -339,8 +340,8 @@ class ReplicaThread implements Runnable {
    * @throws MessageFormatException
    * @throws ReplicationException
    */
-  protected void fixMissingStoreKeys(ConnectedChannel connectedChannel,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, List<ExchangeMetadataResponse> exchangeMetadataResponseList)
+  void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
+      List<ExchangeMetadataResponse> exchangeMetadataResponseList)
       throws IOException, StoreException, MessageFormatException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = SystemTime.getInstance().milliseconds();
     try {
@@ -692,6 +693,7 @@ class ReplicaThread implements Runnable {
               }
               totalBlobsFixed += messageInfoList.size();
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
+              remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
             } catch (StoreException e) {
@@ -709,6 +711,7 @@ class ReplicaThread implements Runnable {
         } else {
           // There are no missing keys. We just advance the token
           remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
+          remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
         }
@@ -719,29 +722,32 @@ class ReplicaThread implements Runnable {
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
   }
 
-  class ExchangeMetadataResponse {
-    public final Set<StoreKey> missingStoreKeys;
-    public final FindToken remoteToken;
-    public final ServerErrorCode serverErrorCode;
+  static class ExchangeMetadataResponse {
+    final Set<StoreKey> missingStoreKeys;
+    final FindToken remoteToken;
+    final long localLagFromRemoteInBytes;
+    final ServerErrorCode serverErrorCode;
 
-    public ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken) {
+    ExchangeMetadataResponse(Set<StoreKey> missingStoreKeys, FindToken remoteToken, long localLagFromRemoteInBytes) {
       this.missingStoreKeys = missingStoreKeys;
       this.remoteToken = remoteToken;
+      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
       this.serverErrorCode = ServerErrorCode.No_Error;
     }
 
-    public ExchangeMetadataResponse(ServerErrorCode errorCode) {
+    ExchangeMetadataResponse(ServerErrorCode errorCode) {
       missingStoreKeys = null;
       remoteToken = null;
+      localLagFromRemoteInBytes = -1;
       this.serverErrorCode = errorCode;
     }
   }
 
-  public boolean isThreadUp() {
+  boolean isThreadUp() {
     return running;
   }
 
-  public void shutdown() throws InterruptedException {
+  void shutdown() throws InterruptedException {
     running = false;
     shutdownLatch.await();
   }

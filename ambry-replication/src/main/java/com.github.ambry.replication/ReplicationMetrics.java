@@ -354,7 +354,7 @@ public class ReplicationMetrics {
     Gauge<Long> replicaLag = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return remoteReplicaInfo.getReplicaLagInBytes();
+        return remoteReplicaInfo.getRemoteLagFromLocalInBytes();
       }
     };
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);

@@ -450,7 +450,7 @@ public class AmbryRequests implements RequestAPI {
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             long remoteReplicaLagInBytes =
-                replicationManager.getRemoteReplicaLagInBytes(partitionId, hostName, replicaPath);
+                replicationManager.getRemoteReplicaLagFromLocalInBytes(partitionId, hostName, replicaPath);
             logger.trace("{} Time used to get remote replica lag in bytes: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 

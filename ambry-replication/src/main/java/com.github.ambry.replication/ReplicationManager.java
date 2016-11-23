@@ -59,10 +59,13 @@ final class RemoteReplicaInfo {
   private final ReplicaId replicaId;
   private final ReplicaId localReplicaId;
   private final Object lock = new Object();
-
+  private final Store localStore;
+  private final Port port;
+  private final Time time;
   // tracks the point up to which a node is in sync with a remote replica
   private final long tokenPersistIntervalInMs;
-  // The latest know token
+
+  // The latest known token
   private FindToken currentToken = null;
   // The token that will be safe to persist eventually
   private FindToken candidateTokenToPersist = null;
@@ -70,12 +73,10 @@ final class RemoteReplicaInfo {
   private long timeCandidateSetInMs;
   // The token that is known to be safe to persist.
   private FindToken tokenSafeToPersist = null;
-  private final Store localStore;
   private long totalBytesReadFromLocalStore;
-  private Time time;
-  private final Port port;
+  private long localLagFromRemoteStore = -1;
 
-  public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
+  RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
@@ -87,23 +88,23 @@ final class RemoteReplicaInfo {
     initializeTokens(token);
   }
 
-  public ReplicaId getReplicaId() {
+  ReplicaId getReplicaId() {
     return replicaId;
   }
 
-  public ReplicaId getLocalReplicaId() {
+  ReplicaId getLocalReplicaId() {
     return localReplicaId;
   }
 
-  public Store getLocalStore() {
+  Store getLocalStore() {
     return localStore;
   }
 
-  public Port getPort() {
+  Port getPort() {
     return this.port;
   }
 
-  public long getReplicaLagInBytes() {
+  long getRemoteLagFromLocalInBytes() {
     if (localStore != null) {
       return this.localStore.getSizeInBytes() - this.totalBytesReadFromLocalStore;
     } else {
@@ -111,21 +112,29 @@ final class RemoteReplicaInfo {
     }
   }
 
-  public FindToken getToken() {
+  long getLocalLagFromRemoteInBytes() {
+    return localLagFromRemoteStore;
+  }
+
+  FindToken getToken() {
     synchronized (lock) {
       return currentToken;
     }
   }
 
-  public void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
+  void setTotalBytesReadFromLocalStore(long totalBytesReadFromLocalStore) {
     this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
   }
 
-  public long getTotalBytesReadFromLocalStore() {
+  void setLocalLagFromRemoteInBytes(long localLagFromRemoteStore) {
+    this.localLagFromRemoteStore = localLagFromRemoteStore;
+  }
+
+  long getTotalBytesReadFromLocalStore() {
     return this.totalBytesReadFromLocalStore;
   }
 
-  public void setToken(FindToken token) {
+  void setToken(FindToken token) {
     // reference assignment is atomic in java but we want to be completely safe. performance is
     // not important here
     synchronized (lock) {
@@ -142,7 +151,7 @@ final class RemoteReplicaInfo {
     }
   }
 
-  /**
+  /*
    * The token persist logic ensures that a token corresponding to an entry in the store is never persisted in the
    * replicaTokens file before the entry itself is persisted in the store. This is done as follows. Objects of this
    * class maintain 3 tokens: tokenSafeToPersist, candidateTokenToPersist and currentToken:
@@ -166,7 +175,7 @@ final class RemoteReplicaInfo {
    * get the token to persist. Returns either the candidate token if enough time has passed since it was
    * set, or the last token again.
    */
-  public FindToken getTokenToPersist() {
+  FindToken getTokenToPersist() {
     synchronized (lock) {
       if (time.milliseconds() - timeCandidateSetInMs > tokenPersistIntervalInMs) {
         // candidateTokenToPersist is now safe to be persisted.
@@ -176,7 +185,7 @@ final class RemoteReplicaInfo {
     }
   }
 
-  public void onTokenPersisted() {
+  void onTokenPersisted() {
     synchronized (lock) {
       /* Only update the candidate token if it qualified as the token safe to be persisted in the previous get call.
        * If not, keep it as it is.
@@ -389,10 +398,10 @@ public final class ReplicationManager {
    * @param replicaPath The path of the remote replica on the host
    * @return The lag in bytes that the remote replica is behind the local store
    */
-  public long getRemoteReplicaLagInBytes(PartitionId partitionId, String hostName, String replicaPath) {
+  public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
     if (remoteReplicaInfo != null) {
-      return remoteReplicaInfo.getReplicaLagInBytes();
+      return remoteReplicaInfo.getRemoteLagFromLocalInBytes();
     }
     return 0;
   }
