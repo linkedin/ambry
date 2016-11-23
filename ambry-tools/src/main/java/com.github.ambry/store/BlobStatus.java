@@ -14,18 +14,20 @@
 package com.github.ambry.store;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 
-public class BlobStatus {
-  ArrayList<String> available;
-  ArrayList<String> deletedOrExpired;
-  ArrayList<String> unavailable;
-  boolean isDeletedOrExpired;
+class BlobStatus {
+  private final Set<String> available;
+  private final Set<String> deletedOrExpired;
+  private final Set<String> unavailable;
+  private boolean isDeletedOrExpired;
 
-  public BlobStatus(String replica, boolean isDeletedOrExpired, ArrayList<String> replicaList) {
-    available = new ArrayList<String>();
-    deletedOrExpired = new ArrayList<String>();
-    unavailable = new ArrayList<String>();
+  BlobStatus(String replica, boolean isDeletedOrExpired, ArrayList<String> replicaList) {
+    available = new HashSet<>();
+    deletedOrExpired = new HashSet<>();
+    unavailable = new HashSet<>();
     this.isDeletedOrExpired = isDeletedOrExpired;
     if (!isDeletedOrExpired) {
       available.add(replica);
@@ -38,7 +40,7 @@ public class BlobStatus {
     }
   }
 
-  ArrayList<String> getAvailable() {
+  Set<String> getAvailable() {
     return available;
   }
 
@@ -47,11 +49,11 @@ public class BlobStatus {
     this.unavailable.remove(replica);
   }
 
-  ArrayList<String> getDeletedOrExpired() {
+  Set<String> getDeletedOrExpired() {
     return deletedOrExpired;
   }
 
-  ArrayList<String> getUnavailableList() {
+  Set<String> getUnavailableList() {
     return unavailable;
   }
 
