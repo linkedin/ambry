@@ -45,12 +45,12 @@ import org.slf4j.LoggerFactory;
 /**
  * Helper class to assist in dumping data from index or log files
  */
-public class DumpDataHelper {
+class DumpDataHelper {
 
   private final ClusterMap _clusterMap;
   private static final Logger logger = LoggerFactory.getLogger(DumpDataHelper.class);
 
-  public DumpDataHelper(ClusterMap clusterMap) {
+  DumpDataHelper(ClusterMap clusterMap) {
     this._clusterMap = clusterMap;
   }
 
@@ -330,6 +330,7 @@ public class DumpDataHelper {
    * @param blobId the blobId which that is expected to be matched for the record present at
    *               <code>offset</code>
    * @param indexValue the {@link IndexValue} that needs to be compared against
+   * @param coveredRanges a {@link Map} of startOffset to endOffset of ranges covered by records in the log
    * @throws IOException
    */
   public boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, long offset, String blobId,

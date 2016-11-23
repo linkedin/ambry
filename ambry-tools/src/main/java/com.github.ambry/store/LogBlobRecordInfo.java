@@ -15,23 +15,25 @@ package com.github.ambry.store;
 
 import com.github.ambry.commons.BlobId;
 
+
 /**
  * Holds information about a blob record in the log
  */
-public class LogBlobRecordInfo {
-  String messageHeader = null;
-  BlobId blobId = null;
-  String blobProperty = null;
-  String userMetadata = null;
-  String blobDataOutput = null;
-  String deleteMsg = null;
-  boolean isDeleted;
-  boolean isExpired;
-  long timeToLiveInSeconds;
-  int totalRecordSize;
+class LogBlobRecordInfo {
+  final String messageHeader;
+  final BlobId blobId;
+  final String blobProperty;
+  final String userMetadata;
+  final String blobDataOutput;
+  final String deleteMsg;
+  final boolean isDeleted;
+  final boolean isExpired;
+  final long timeToLiveInSeconds;
+  final int totalRecordSize;
 
-  LogBlobRecordInfo(String messageHeader, BlobId blobId, String blobProperty, String userMetadata, String blobDataOutput,
-      String deleteMsg, boolean isDeleted, boolean isExpired, long timeToLiveInSeconds, int totalRecordSize) {
+  LogBlobRecordInfo(String messageHeader, BlobId blobId, String blobProperty, String userMetadata,
+      String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long timeToLiveInSeconds,
+      int totalRecordSize) {
     this.messageHeader = messageHeader;
     this.blobId = blobId;
     this.blobProperty = blobProperty;

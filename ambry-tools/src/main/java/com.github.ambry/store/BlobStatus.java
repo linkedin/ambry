@@ -18,13 +18,13 @@ import java.util.HashSet;
 import java.util.Set;
 
 
-public class BlobStatus {
-  Set<String> available;
-  Set<String> deletedOrExpired;
-  Set<String> unavailable;
-  boolean isDeletedOrExpired;
+class BlobStatus {
+  private final Set<String> available;
+  private final Set<String> deletedOrExpired;
+  private final Set<String> unavailable;
+  private boolean isDeletedOrExpired;
 
-  public BlobStatus(String replica, boolean isDeletedOrExpired, ArrayList<String> replicaList) {
+  BlobStatus(String replica, boolean isDeletedOrExpired, ArrayList<String> replicaList) {
     available = new HashSet<>();
     deletedOrExpired = new HashSet<>();
     unavailable = new HashSet<>();

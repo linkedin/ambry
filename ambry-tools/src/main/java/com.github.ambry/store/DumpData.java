@@ -355,7 +355,7 @@ public class DumpData {
       if (logBlobStats) {
         logger.info(key + " : " + blobStatus.toString());
       }
-      if (!blobStatus.isDeletedOrExpired) {
+      if (!blobStatus.getIsDeletedOrExpired()) {
         totalActiveRecords++;
       }
     }
@@ -562,7 +562,7 @@ public class DumpData {
 
   /**
    * Log ranges not covered by the index in the log
-   * @param coveredRanges {@link Map} of covered ranges in the log
+   * @param coveredRanges {@link Map} of startOffsets to endOffsets of ranges covered by records in the log
    * @param indexEndOffset the end offset in the log that this index segment covers
    */
   private void logRangesNotCovered(Map<Long, Long> coveredRanges, long indexEndOffset) {
@@ -717,7 +717,7 @@ public class DumpData {
       DumpDataHelper.LogBlobRecord logBlobRecord = blobIdToLogRecordStats.get(blobId);
       if (indexBlobStatusMap.containsKey(blobId)) {
         BlobStatus blobStatus = indexBlobStatusMap.get(blobId);
-        if ((logBlobRecord.isDeleted || logBlobRecord.isExpired) && !blobStatus.isDeletedOrExpired) {
+        if ((logBlobRecord.isDeleted || logBlobRecord.isExpired) && !blobStatus.getIsDeletedOrExpired()) {
           logger.error("Blob " + blobId + " is deleted/expired in log while alive in index. LogRecord " + logBlobRecord
               + ", Index Blob status " + blobStatus);
           totalInconsistentBlobs++;
