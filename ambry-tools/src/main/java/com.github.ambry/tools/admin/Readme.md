@@ -39,39 +39,39 @@ This tool exposes some admin APIs to get more information for debugging purposes
 ### Dumping Index
 
 #### Dump Index
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile]
  --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile]
 ```
 
 #### Dump index filtering for a list of blobs
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
 [PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile] --listOfBlobs [blobid1,blobid2,blobid3]
 ```
 
 #### Dump all indexes in a replica
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
 [PartitionLayoutFile] --typeOfOperation DumpIndexesForReplica --replicaRootDirectory [replicaRootDirecotry]
 --avoidTraceLogging true
 ```
 
 #### Dump Active blobs in an index
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
 [PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile] --activeBlobsOnly true
 ```
 
 #### Dump all active blobs in a replica
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
 [PartitionLayoutFile] --typeOfOperation DumpIndexesForReplica --replicaRootDirectory [replicaRootDirecotry]
 --activeBlobsOnly true --avoidTraceLogging true
 ```
 
 #### Dump N Random active blobs for a given replica
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
 [PartitionLayoutFile] --typeOfOperation DumpNRandomActiveBlobsForReplica --replicaRootDirectory [replicaRootDirecotry]
 --activeBlobsCount 10000 --avoidTraceLogging true
@@ -80,20 +80,20 @@ java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLay
 ### Dumping Log
 
 #### Dump log file
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog --fileToRead [logFile]
 ```
 
 #### Dump log starting at offset x and ending at offset y
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog
 --fileToRead [logFile] --startOffset x --endOffset y
 ```
 
 #### Dump log filtering with a set of blobs
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog
 --fileToRead [logFile] --listOfBlobs [blobid1,blobid2,blobid3]
@@ -101,21 +101,21 @@ java -cp ambry.jar com.github.ambry.store.DumpData
 
 ### Comparing index entries to log entries(or in other words, trying to read a log record based on index info for
 ### every entry in the index)
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation CompareIndexToLog
 --fileToRead [indexFile] --logFileToDump [logFile]
 ```
 
 ### Comparing all index entries for a replica to log entries
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation
 CompareReplicaIndexesToLog --replicaRootDirectory [replicaRootDirectory] --logFileToDump [logFile]
 ```
 
 ### Compare Log Entries to Indexes
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.DumpData
 --hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation
 CompareLogToIndex --replicaRootDirectory [replicaRootDirectory] --logFileToDump [logFile]
@@ -124,20 +124,20 @@ CompareLogToIndex --replicaRootDirectory [replicaRootDirectory] --logFileToDump 
 ### BlobValidator
 
 #### Get blob from all replicas
-```java
+```bash
 java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --ambryBlobId [blobid]
 ```
 
 #### Get blob from all replicas from a datacenter
-```java
+```bash
 java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_DATACENTER --fabric [fabric]
 --ambryBlobId [blobid]
 ```
 
 #### Get blob from a replica
-```java
+```bash
 java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_REPLICA --ambryBlobId [blobid]
 --replicaHost [replicaHost] --replicaPort [replicaPort]
@@ -146,7 +146,7 @@ java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [
 ### AdminTool
 
 #### List Replicas
-```java
+```bash
 java -cp ambry.jar com.github.ambry.tools.admin.AdminTool --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS --ambryBlobId [blobid]
 ```
@@ -154,14 +154,14 @@ java -cp ambry.jar com.github.ambry.tools.admin.AdminTool --hardwareLayout [Hard
 ### ConsistencyCheckerTool
 
 #### Check for consistency among replicas for a partition
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.ConsistencyCheckerTool --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --rootDirectoryForPartition [rootDirectory which contains replicas which in
 turn contains all index files] --outFile [outFile]
 ```
 
 #### Check for consistency of index file boundaries on all replicas of a partition
-```java
+```bash
 java -cp ambry.jar com.github.ambry.store.ConsistencyCheckerTool --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --rootDirectoryForPartition [rootDirectory which contains replicas which in
 turn contains all index files] --subject index --outFile [outFile]
@@ -194,10 +194,10 @@ rootDir
 
 Ensure that ambry server is running at the given hostName and port
 
-```java
+```bash
 java -cp ambry.jar com.github.ambry.tools.admin.ConcurrencyTestTool --hardwareLayout [HardwareLayoutFile]
  --partitionLayout [PartitionLayoutFile] --putGetHelperFactory com.github.ambry.tools.admin.RouterPutGetHelperFactory
  --maxParallelPutCount 2 --parallelGetCount 4 --burstCountForGet 4 --maxGetCountPerBlob 10
  --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --routerPropsFilePath [Path to router props
- file] --deleteOnExit true
+ file] --deleteAndValidate true
 ```
