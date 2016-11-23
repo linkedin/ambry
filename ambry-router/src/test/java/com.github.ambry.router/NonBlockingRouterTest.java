@@ -161,9 +161,9 @@ public class NonBlockingRouterTest {
     verifiableProperties = new VerifiableProperties((props));
     router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
         new LoggingNotificationSystem()).getRouter();
-    assertExpectedThreadCounts(1);
+    assertExpectedThreadCounts(2, 1);
     router.close();
-    assertExpectedThreadCounts(0);
+    assertExpectedThreadCounts(0, 0);
   }
 
   /**
@@ -172,7 +172,7 @@ public class NonBlockingRouterTest {
   @Test
   public void testRouterBasic() throws Exception {
     setRouter();
-    assertExpectedThreadCounts(1);
+    assertExpectedThreadCounts(2, 1);
     setOperationParams();
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
@@ -182,7 +182,7 @@ public class NonBlockingRouterTest {
     router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null)).get();
     router.deleteBlob(blobId).get();
     router.close();
-    assertExpectedThreadCounts(0);
+    assertExpectedThreadCounts(0, 0);
 
     //submission after closing should return a future that is already done.
     assertClosed();
@@ -195,7 +195,7 @@ public class NonBlockingRouterTest {
   @Test
   public void testNullArguments() throws Exception {
     setRouter();
-    assertExpectedThreadCounts(1);
+    assertExpectedThreadCounts(2, 1);
     setOperationParams();
 
     try {
@@ -227,7 +227,7 @@ public class NonBlockingRouterTest {
     router.putBlob(putBlobProperties, null, putChannel).get();
 
     router.close();
-    assertExpectedThreadCounts(0);
+    assertExpectedThreadCounts(0, 0);
     //submission after closing should return a future that is already done.
     assertClosed();
   }
@@ -249,7 +249,7 @@ public class NonBlockingRouterTest {
           r.getErrorCode());
     }
     router.close();
-    assertExpectedThreadCounts(0);
+    assertExpectedThreadCounts(0, 0);
     assertClosed();
   }
 
@@ -272,7 +272,7 @@ public class NonBlockingRouterTest {
       Assert.assertEquals(RouterErrorCode.UnexpectedInternalError, r.getErrorCode());
     }
     router.close();
-    assertExpectedThreadCounts(0);
+    assertExpectedThreadCounts(0, 0);
     assertClosed();
   }
 
@@ -291,7 +291,7 @@ public class NonBlockingRouterTest {
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
         mockClusterMap, mockTime);
 
-    assertExpectedThreadCounts(1);
+    assertExpectedThreadCounts(2, 1);
 
     setOperationParams();
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnAllPoll);
@@ -395,6 +395,50 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test that if a composite blob is deleted, the data chunks are eventually deleted.
+   */
+  @Test
+  public void testCompositeBlobDataChunksDelete() throws Exception {
+    // Ensure there are 4 chunks.
+    maxPutChunkSize = PUT_CONTENT_SIZE / 4;
+    Properties props = getNonBlockingRouterProperties("DC1");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    MockTime mockTime = new MockTime();
+    MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+    // metadata blob + data chunks.
+    final CountDownLatch deletesDoneLatch = new CountDownLatch(5);
+    LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobDeleted(String blobId) {
+        deletesDoneLatch.countDown();
+      }
+    };
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+        new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap,
+        mockTime);
+
+    setOperationParams();
+
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    router.deleteBlob(blobId, null).get();
+
+    long waitStart = SystemTime.getInstance().milliseconds();
+    while (router.getBackgroundOperationsCount() != 0
+        && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
+      Thread.sleep(1000);
+    }
+
+    Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
+        deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+
+    router.close();
+    assertClosed();
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  /**
    * Test that multiple scaling units can be instantiated, exercised and closed.
    */
   @Test
@@ -403,7 +447,7 @@ public class NonBlockingRouterTest {
     Properties props = getNonBlockingRouterProperties("DC1");
     props.setProperty("router.scaling.unit.count", Integer.toString(SCALING_UNITS));
     setRouter(props, new MockServerLayout(mockClusterMap));
-    assertExpectedThreadCounts(SCALING_UNITS);
+    assertExpectedThreadCounts(SCALING_UNITS + 1, SCALING_UNITS);
 
     // Submit a few jobs so that all the scaling units get exercised.
     for (int i = 0; i < SCALING_UNITS * 10; i++) {
@@ -411,7 +455,7 @@ public class NonBlockingRouterTest {
       router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     }
     router.close();
-    assertExpectedThreadCounts(0);
+    assertExpectedThreadCounts(0, 0);
 
     //submission after closing should return a future that is already done.
     setOperationParams();
@@ -464,7 +508,7 @@ public class NonBlockingRouterTest {
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new OperationCompleteCallback(new AtomicInteger(0)), new ReadyForPollCallback(networkClient),
-        new ArrayList<String>(), 0, mockTime);
+        new ArrayList<String>(), "0", mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -656,14 +700,15 @@ public class NonBlockingRouterTest {
 
   /**
    * Assert that the number of ChunkFiller and RequestResponseHandler threads running are as expected.
-   * @param expectedCount the expected number of ChunkFiller and RequestResponseHandler threads.
+   * @param expectedRequestResponseHandlerCount the expected number of ChunkFiller and RequestResponseHandler threads.
+   * @param expectedChunkFillerCount the expected number of ChunkFiller threads.
    */
-  private void assertExpectedThreadCounts(int expectedCount) {
-    Assert.assertEquals("Number of RequestResponseHandler threads running should be as expected", expectedCount,
-        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("Number of chunkFiller threads running should be as expected", expectedCount,
+  private void assertExpectedThreadCounts(int expectedRequestResponseHandlerCount, int expectedChunkFillerCount) {
+    Assert.assertEquals("Number of RequestResponseHandler threads running should be as expected",
+        expectedRequestResponseHandlerCount, TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
+    Assert.assertEquals("Number of chunkFiller threads running should be as expected", expectedChunkFillerCount,
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    if (expectedCount == 0) {
+    if (expectedRequestResponseHandlerCount == 0) {
       Assert.assertFalse("Router should be closed if there are no worker threads running", router.isOpen());
       Assert.assertEquals("All operations should have completed if the router is closed", 0,
           router.getOperationsCount());
@@ -730,7 +775,8 @@ public class NonBlockingRouterTest {
         case GET:
           futureResult = new FutureResult<BlobInfo>();
           getManager.submitGetBlobOperation(blobId,
-              new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null), futureResult, null);
+              new ExtendedGetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null, false),
+              futureResult, null);
           break;
         case DELETE:
           futureResult = new FutureResult<BlobInfo>();

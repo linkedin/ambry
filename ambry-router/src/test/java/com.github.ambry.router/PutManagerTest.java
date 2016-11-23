@@ -767,7 +767,7 @@ public class PutManagerTest {
   private void assertCloseCleanup() {
     Assert.assertEquals("Exactly one chunkFiller thread should be running before the router is closed", 1,
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    Assert.assertEquals("Exactly one RequestResponseHandler thread should be running before the router is closed", 1,
+    Assert.assertEquals("Exactly two RequestResponseHandler thread should be running before the router is closed", 2,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     router.close();
     Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,

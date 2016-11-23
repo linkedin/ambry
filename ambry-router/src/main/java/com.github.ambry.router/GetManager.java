@@ -22,9 +22,11 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
@@ -105,11 +107,11 @@ class GetManager {
   /**
    * Submit an operation to get a blob asynchronously.
    * @param blobId The blobId for which the BlobInfo is being requested, in string form.
-   * @param options The {@link GetBlobOptions} associated witht the operation.
+   * @param options The {@link ExtendedGetBlobOptions} associated witht the operation.
    * @param futureResult The {@link FutureResult} that contains the pending result of the operation.
    * @param callback The {@link Callback} object to be called on completion of the operation.
    */
-  void submitGetBlobOperation(String blobId, GetBlobOptions options, FutureResult<GetBlobResult> futureResult,
+  void submitGetBlobOperation(String blobId, ExtendedGetBlobOptions options, FutureResult<GetBlobResult> futureResult,
       Callback<GetBlobResult> callback) {
     try {
       GetOperation getOperation;
@@ -122,6 +124,28 @@ class GetManager {
             futureResult, callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       }
       getOperations.add(getOperation);
+    } catch (RouterException e) {
+      routerMetrics.onGetBlobError(e, options);
+      routerMetrics.operationDequeuingRate.mark();
+      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
+    }
+  }
+
+  /**
+   * Submit an operation to get the chunk ids associated with this blob (if it is a composite blob), asynchronously.
+   * @param blobId The blobId for which the chunk ids are being requested.
+   * @param futureResult The {@link FutureResult} that contains the pending result of the operation.
+   * @param callback The {@link Callback} object to be called on completion of the operation.
+   */
+  void submitGetChunkIdsOperation(String blobId, FutureResult<List<StoreKey>> futureResult,
+      Callback<List<StoreKey>> callback) {
+    ExtendedGetBlobOptions options =
+        new ExtendedGetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.Include_All, null, true);
+    try {
+      GetBlobOperation getChunkIdsOperation =
+          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, futureResult,
+              callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+      getOperations.add(getChunkIdsOperation);
     } catch (RouterException e) {
       routerMetrics.onGetBlobError(e, options);
       routerMetrics.operationDequeuingRate.mark();
@@ -249,6 +273,35 @@ class GetManager {
       routerMetrics.operationAbortCount.inc();
       routerMetrics.onGetBlobError(abortCause, op.getOptions());
     }
+  }
+}
+
+/**
+ * Extension to {@link GetBlobOptions} containing additional parameters to the GetBlob operation that is internal to the
+ * router.
+ */
+class ExtendedGetBlobOptions extends GetBlobOptions {
+  final boolean getChunkIdsOnly;
+
+  /**
+   * Construct an ExtendedGetBlobOptions instance.
+   * @param operationType The {@link OperationType} associated with this operation.
+   * @param getOption The {@link GetOption} associated with this operation.
+   * @param range The {@link ByteRange} if this is a range request. This can be null.
+   * @param getChunkIdsOnly {@code true} if this operation is to fetch just the chunk ids of a composite blob.
+   */
+  ExtendedGetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean getChunkIdsOnly) {
+    super(operationType, getOption, range);
+    this.getChunkIdsOnly = getChunkIdsOnly;
+  }
+
+  /**
+   * Construct an ExtendedGetBlobOptions instance
+   * @param options
+   */
+  ExtendedGetBlobOptions(GetBlobOptions options) {
+    super(options.getOperationType(), options.getGetOption(), options.getRange());
+    this.getChunkIdsOnly = false;
   }
 }
 

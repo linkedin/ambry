@@ -25,6 +25,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -46,6 +47,8 @@ import org.slf4j.LoggerFactory;
 class NonBlockingRouter implements Router {
   private final NetworkClientFactory networkClientFactory;
   private final ArrayList<OperationController> ocList;
+  private final BackgroundDeleter backgroundDeleter;
+  private final int ocCount;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
   // Shared with the operation managers.
   private final RouterConfig routerConfig;
@@ -57,6 +60,7 @@ class NonBlockingRouter implements Router {
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
   private final AtomicInteger currentOperationsCount = new AtomicInteger(0);
+  private final AtomicInteger currentBackgroundOperationsCount = new AtomicInteger(0);
   private final OperationCompleteCallback operationCompleteCallback =
       new OperationCompleteCallback(currentOperationsCount);
 
@@ -85,10 +89,13 @@ class NonBlockingRouter implements Router {
     this.clusterMap = clusterMap;
     responseHandler = new ResponseHandler(clusterMap);
     this.time = time;
-    ocList = new ArrayList<OperationController>(routerConfig.routerScalingUnitCount);
-    for (int i = 0; i < routerConfig.routerScalingUnitCount; i++) {
-      ocList.add(new OperationController(i));
+    ocCount = routerConfig.routerScalingUnitCount;
+    ocList = new ArrayList<>();
+    for (int i = 0; i < ocCount; i++) {
+      ocList.add(new OperationController(Integer.toString(i)));
     }
+    backgroundDeleter = new BackgroundDeleter();
+    ocList.add(backgroundDeleter);
     routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount);
   }
 
@@ -97,7 +104,7 @@ class NonBlockingRouter implements Router {
    * @return a randomly picked {@link OperationController} from the list of OperationControllers.
    */
   private OperationController getOperationController() {
-    return ocList.get(ThreadLocalRandom.current().nextInt(ocList.size()));
+    return ocList.get(ThreadLocalRandom.current().nextInt(ocCount));
   }
 
   /**
@@ -294,6 +301,15 @@ class NonBlockingRouter implements Router {
   }
 
   /**
+   * Return an approximate count of the number of background operations submitted to the router that are not yet
+   * completed.
+   * @return (approximate) number of background operations being handled at the time of this call.
+   */
+  int getBackgroundOperationsCount() {
+    return currentBackgroundOperationsCount.get();
+  }
+
+  /**
    * OperationController is the scaling unit for the NonBlockingRouter. The NonBlockingRouter can have multiple
    * OperationControllers. Any operation submitted to the NonBlockingRouter will be submitted to one of the
    * OperationControllers. A worker thread (the RequestResponseHandler thread) will poll The OperationController for
@@ -303,8 +319,8 @@ class NonBlockingRouter implements Router {
    */
   private class OperationController implements Runnable {
     private final PutManager putManager;
-    private final GetManager getManager;
-    private final DeleteManager deleteManager;
+    protected final GetManager getManager;
+    protected final DeleteManager deleteManager;
     private final NetworkClient networkClient;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
@@ -313,19 +329,19 @@ class NonBlockingRouter implements Router {
 
     /**
      * Constructs an OperationController
-     * @param index the index of this OperationController in the NonBlockingRouter's list.
+     * @param suffix the suffix to associate with the thread names of this OperationController
      * @throws IOException if the network components could not be created.
      */
-    OperationController(int index) throws IOException {
+    OperationController(String suffix) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       readyForPollCallback = new ReadyForPollCallback(networkClient);
       putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCompleteCallback, readyForPollCallback, idsToDeleteList, index, time);
+          operationCompleteCallback, readyForPollCallback, idsToDeleteList, suffix, time);
       getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCompleteCallback,
           readyForPollCallback, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
           operationCompleteCallback, time);
-      requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + index, this, true);
+      requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);
       requestResponseHandlerThread.start();
       routerMetrics.initializeOperationControllerMetrics(requestResponseHandlerThread);
     }
@@ -341,7 +357,8 @@ class NonBlockingRouter implements Router {
      */
     private void getBlob(String blobId, GetBlobOptions options, FutureResult<GetBlobResult> futureResult,
         Callback<GetBlobResult> callback) {
-      getManager.submitGetBlobOperation(blobId, options, futureResult, callback);
+      ExtendedGetBlobOptions extendedOptions = new ExtendedGetBlobOptions(options);
+      getManager.submitGetBlobOperation(blobId, extendedOptions, futureResult, callback);
       readyForPollCallback.onPollReady();
     }
 
@@ -353,7 +370,7 @@ class NonBlockingRouter implements Router {
      * @param futureResult A future that would contain the BlobId eventually.
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
      */
-    private void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+    protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
       if (!putManager.isOpen()) {
         RouterException routerException =
@@ -376,8 +393,16 @@ class NonBlockingRouter implements Router {
      *                     eventually.
      * @param callback The {@link Callback} which will be invoked on the completion of a request.
      */
-    private void deleteBlob(String blobId, FutureResult<Void> futureResult, Callback<Void> callback) {
-      deleteManager.submitDeleteBlobOperation(blobId, futureResult, callback);
+    private void deleteBlob(final String blobId, FutureResult<Void> futureResult, final Callback<Void> callback) {
+      deleteManager.submitDeleteBlobOperation(blobId, futureResult, new Callback<Void>() {
+        @Override
+        public void onCompletion(Void result, Exception exception) {
+          if (exception == null) {
+            backgroundDeleter.initiateChunkDeletesIfAny(blobId);
+          }
+          callback.onCompletion(result, exception);
+        }
+      });
       readyForPollCallback.onPollReady();
     }
 
@@ -403,7 +428,7 @@ class NonBlockingRouter implements Router {
      * This method is used by the RequestResponseHandler thread to poll for requests to be sent
      * @return a list of {@link RequestInfo} that contains the requests to be sent out.
      */
-    private List<RequestInfo> pollForRequests() {
+    protected List<RequestInfo> pollForRequests() {
       List<RequestInfo> requests = new ArrayList<>();
       try {
         putManager.poll(requests);
@@ -429,7 +454,7 @@ class NonBlockingRouter implements Router {
      * Handle the response from polling the {@link NetworkClient}.
      * @param responseInfoList the list of {@link ResponseInfo} containing the responses.
      */
-    private void onResponse(List<ResponseInfo> responseInfoList) {
+    protected void onResponse(List<ResponseInfo> responseInfoList) {
       for (ResponseInfo responseInfo : responseInfoList) {
         try {
           RouterRequestInfo routerRequestInfo = (RouterRequestInfo) responseInfo.getRequestInfo();
@@ -480,6 +505,100 @@ class NonBlockingRouter implements Router {
         // Close the router.
         shutDownOperationControllers();
       }
+    }
+  }
+
+  /**
+   * A special {@link OperationController} that is responsible for handling background operations for this router.
+   *
+   * Background operations will be a scaling unit of its own (using its own {@link NetworkClient}), so that these
+   * operations do not interfere or contend with resources used for regular operations.
+   *
+   * Background operations include:
+   * 1. Deleting chunks of a composite blob that is deleted. When a composite blob is deleted, only the
+   * associated metadata blob is deleted before notifying the caller. This keeps the latency low. In the background,
+   * the associated metadata blob will be fetched, the chunk ids will be extracted and deleted.
+   *
+   * 2. (TBD) Deleting successfully put chunks of a failed composite blob put operation. Today, this is done by the
+   * same {@link OperationController} doing the put.
+   */
+  private class BackgroundDeleter extends OperationController {
+    private final Logger logger = LoggerFactory.getLogger(getClass());
+
+    /**
+     * Instantiate the BackgroundDeleter
+     * @throws IOException if the associated {@link OperationController} throws one.
+     */
+    BackgroundDeleter() throws IOException {
+      super("backgroundDeleter");
+      super.putManager.close();
+    }
+
+    /**
+     * Put operations are disallowed in the BackgroundDeleter.
+     */
+    @Override
+    protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
+        FutureResult<String> futureResult, Callback<String> callback) {
+      RouterException routerException =
+          new RouterException("Illegal attempt to put blob through backgroundDeleteOperationController",
+              RouterErrorCode.UnexpectedInternalError);
+      routerMetrics.operationDequeuingRate.mark();
+      routerMetrics.onPutBlobError(routerException);
+      operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
+    }
+
+    /**
+     * Initiate the deletes of the data chunks associated with this blobId, if this blob turns out to be a composite
+     * blob.
+     * @param blobId the blobId string associated with the possibly composite blob.
+     */
+    void initiateChunkDeletesIfAny(String blobId) {
+      FutureResult<List<StoreKey>> futureResult = new FutureResult<>();
+      Callback<List<StoreKey>> callback = new Callback<List<StoreKey>>() {
+        @Override
+        public void onCompletion(List<StoreKey> result, Exception exception) {
+          if (exception != null) {
+            logger.error("Encountered exception when attempting to get chunks of a possibly composite deleted blob",
+                exception);
+          } else if (result != null) {
+            // result can be null if the blob is not a composite blob.
+            for (StoreKey key : result) {
+              currentOperationsCount.incrementAndGet(); // @todo
+              currentBackgroundOperationsCount.incrementAndGet();
+              deleteManager.submitDeleteBlobOperation(key.getID(), new FutureResult<Void>(), new Callback<Void>() {
+                @Override
+                public void onCompletion(Void result, Exception exception) {
+                  if (exception != null) {
+                    logger.info("Background delete operation failed with exception", exception);
+                  }
+                  currentBackgroundOperationsCount.decrementAndGet();
+                }
+              });
+            }
+          }
+          currentBackgroundOperationsCount.decrementAndGet();
+        }
+      };
+      currentOperationsCount.incrementAndGet();
+      currentBackgroundOperationsCount.incrementAndGet();
+      getManager.submitGetChunkIdsOperation(blobId, futureResult, callback);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    protected List<RequestInfo> pollForRequests() {
+      List<RequestInfo> requests = new ArrayList<>();
+      try {
+        getManager.poll(requests);
+        deleteManager.poll(requests);
+      } catch (Exception e) {
+        logger.error("Background Deleter Operation Manager poll received an unexpected error: ", e);
+        routerMetrics.operationManagerPollErrorCount.inc();
+      }
+      return requests;
     }
   }
 }

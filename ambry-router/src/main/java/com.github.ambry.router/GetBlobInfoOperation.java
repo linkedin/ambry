@@ -57,6 +57,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blob id associated with the operation in string form.
+   * @param options the {@link ExtendedGetBlobOptions} containing the options associated with this operation.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param operationCompleteCallback the {@link OperationCompleteCallback} to use to complete operations.
@@ -64,7 +65,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
+      ResponseHandler responseHandler, String blobIdStr, ExtendedGetBlobOptions options,
       FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
       OperationCompleteCallback operationCompleteCallback, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
