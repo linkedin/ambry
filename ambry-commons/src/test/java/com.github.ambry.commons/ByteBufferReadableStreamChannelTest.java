@@ -20,7 +20,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -177,7 +177,7 @@ public class ByteBufferReadableStreamChannelTest {
   }
 
   /**
-   * Tests construction of {@link ByteBufferReadableStreamChannel} on some corner cases.
+   * Tests that the right exceptions are thrown when construction of {@link ByteBufferReadableStreamChannel} fails
    * <p/>
    * Corner case list:
    * 1. Create with a null {@link ByteBuffer}.
@@ -186,62 +186,42 @@ public class ByteBufferReadableStreamChannelTest {
    * 4. Create with a list of {@link ByteBuffer} containing a null {@link ByteBuffer}.
    */
   @Test
-  public void cornerCasesTest() {
+  public void constructionErrorCasesTest() {
     // null byteBuffer
-    ByteBufferReadableStreamChannel readableStreamChannel;
     try {
-      ByteBuffer content = null;
-      readableStreamChannel = new ByteBufferReadableStreamChannel(content);
+      new ByteBufferReadableStreamChannel((ByteBuffer) null);
+      fail("Construction of ByteBufferReadableStreamChannel should have failed");
     } catch (RuntimeException e) {
-      Exception exception = (Exception) Utils.getRootCause(e);
-      assertTrue("Exception is not NullPointerException", exception instanceof NullPointerException);
+      assertEquals("Unexpected RuntimeException", NullPointerException.class, e.getClass());
     }
 
     // null bufferList
-    List<ByteBuffer> bufferList;
-    try {
-      bufferList = null;
-      readableStreamChannel = new ByteBufferReadableStreamChannel(bufferList);
-    } catch (RuntimeException e) {
-      Exception exception = (Exception) Utils.getRootCause(e);
-      assertTrue("Exception is not IllegalArgumentException", exception instanceof IllegalArgumentException);
-    }
+    constructionFailureTest(null, IllegalArgumentException.class);
 
     // empty bufferList
-    try {
-      bufferList = Collections.EMPTY_LIST;
-      readableStreamChannel = new ByteBufferReadableStreamChannel(bufferList);
-    } catch (RuntimeException e) {
-      Exception exception = (Exception) Utils.getRootCause(e);
-      assertTrue("Exception is not IllegalArgumentException", exception instanceof IllegalArgumentException);
-    }
+    constructionFailureTest(Collections.EMPTY_LIST, IllegalArgumentException.class);
 
     // bufferList containing a null byteBuffer
-    try {
-      ByteBuffer content = ByteBuffer.wrap(fillRandomBytes(new byte[32]));
-      bufferList = fillBufferList(content, null);
-      Collections.shuffle(bufferList);
-      readableStreamChannel = new ByteBufferReadableStreamChannel(bufferList);
-    } catch (RuntimeException e) {
-      Exception exception = (Exception) Utils.getRootCause(e);
-      assertTrue("Exception is not NullPointerException", exception instanceof NullPointerException);
-    }
+    List<ByteBuffer> bufferList = Arrays.asList(ByteBuffer.wrap(fillRandomBytes(new byte[32])), null);
+    Collections.shuffle(bufferList);
+    constructionFailureTest(bufferList, NullPointerException.class);
   }
 
   // helpers
   // general
 
   /**
-   * Create a list of {@code ByteBuffer} from given varargs.
-   * @param contents the variable {@code ByteBuffer} argument.
-   * @return list of {@code ByteBuffer}.
+   * Calls the {@link ByteBufferReadableStreamChannel} constructor with the given {@code bufferList}
+   * @param bufferList the list of {@link ByteBuffer} passed to the constructor
+   * @param expectedExceptionType type of the thrown exception.
    */
-  private List<ByteBuffer> fillBufferList(Object... contents) {
-    List<ByteBuffer> buffers = new ArrayList<>();
-    for (Object content : contents) {
-      buffers.add((ByteBuffer) content);
+  private void constructionFailureTest(List<ByteBuffer> bufferList, Class expectedExceptionType) {
+    try {
+      new ByteBufferReadableStreamChannel(bufferList);
+      fail("Construction of ByteBufferReadableStreamChannel should have failed");
+    } catch (RuntimeException e) {
+      assertEquals("Unexpected RuntimeException", expectedExceptionType, e.getClass());
     }
-    return buffers;
   }
 
   /**
