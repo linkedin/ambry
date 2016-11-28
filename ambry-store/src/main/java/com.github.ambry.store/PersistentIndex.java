@@ -56,11 +56,11 @@ class PersistentIndex {
     PUT, DELETE,
   }
 
-  static final short version = 0;
-  static final String Index_File_Name_Suffix = "index";
-  static final String Bloom_File_Name_Suffix = "bloom";
+  static final short VERSION = 0;
+  static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
+  static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
 
-  private static final String Clean_Shutdown_Filename = "cleanshutdown";
+  private static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
   private static final Comparator<File> INDEX_FILE_COMPARATOR = new Comparator<File>() {
     @Override
     public int compare(File o1, File o2) {
@@ -74,7 +74,7 @@ class PersistentIndex {
   private static final FilenameFilter INDEX_FILE_FILTER = new FilenameFilter() {
     @Override
     public boolean accept(File dir, String name) {
-      return name.endsWith(Index_File_Name_Suffix);
+      return name.endsWith(INDEX_SEGMENT_FILE_NAME_SUFFIX);
     }
   };
 
@@ -178,7 +178,7 @@ class PersistentIndex {
       }
       logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getEndOffset());
       // delete the shutdown file
-      File cleanShutdownFile = new File(datadir, Clean_Shutdown_Filename);
+      File cleanShutdownFile = new File(datadir, CLEAN_SHUTDOWN_FILENAME);
       cleanShutdown = cleanShutdownFile.exists();
       if (cleanShutdown) {
         cleanShutdownFile.delete();
@@ -246,15 +246,13 @@ class PersistentIndex {
             info.getSize());
         Offset infoEndOffset = new Offset(runningOffset.getName(), runningOffset.getOffset() + info.getSize());
         IndexValue value = findKey(info.getStoreKey());
-        if (value != null) {
-          logger.info("Index : {} msg already exists with key {}", dataDir, info.getStoreKey());
-          // if the key already exists in the index, update it if it is deleted
-          if (!info.isDeleted()) {
-            throw new StoreException("Illegal message state during recovery. ", StoreErrorCodes.Initialization_Error);
-          }
+        if (info.isDeleted()) {
           markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset));
           logger.info("Index : {} updated message with key {} size {} ttl {} deleted {}", dataDir, info.getStoreKey(),
               value.getSize(), value.getExpiresAtMs(), info.isDeleted());
+        } else if (value != null) {
+          throw new StoreException("Illegal message state during recovery. Duplicate PUT record",
+              StoreErrorCodes.Initialization_Error);
         } else {
           // create a new entry in the index
           IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
@@ -302,7 +300,7 @@ class PersistentIndex {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
-          IndexValue.Index_Value_Size_In_Bytes, config, metrics);
+          entry.getValue().getBytes().capacity(), config, metrics);
       info.addEntry(entry, fileSpan.getEndOffset());
       indexes.put(info.getStartOffset(), info);
     } else {
@@ -353,10 +351,9 @@ class PersistentIndex {
           lastSegment.getKeySize(), entry.getKey().sizeInBytes());
       return true;
     }
-    if (lastSegment.getValueSize() != IndexValue.Index_Value_Size_In_Bytes) {
-      logger.info(
-          "Index: {} Rolling over because the segment value size: {} != IndexValue.Index_Value_Size_In_Bytes: {}",
-          dataDir, IndexValue.Index_Value_Size_In_Bytes);
+    if (lastSegment.getValueSize() != entry.getValue().getBytes().capacity()) {
+      logger.info("Index: {} Rolling over because the segment value size: {} != current entry value size: {}", dataDir,
+          lastSegment.getValueSize(), entry.getValue().getBytes().capacity());
       return true;
     }
     return !entry.getValue().getOffset().getName().equals(lastSegment.getLogSegmentName());
@@ -614,14 +611,11 @@ class PersistentIndex {
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (!storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
         startTimeInMs = time.milliseconds();
-        boolean inclusive = false;
+        boolean inclusive = tokenWasReset;
         Offset offsetToStart = storeToken.getOffset();
         if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
           offsetToStart = log.getStartOffset();
           inclusive = true;
-        } else if (tokenWasReset) {
-          offsetToStart = logEndOffsetOnStartup;
-          inclusive = true; //the key, if any, at logEndOffsetOnStartup is new.
         }
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
         // check journal
@@ -918,7 +912,7 @@ class PersistentIndex {
     } catch (Exception e) {
       logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
     }
-    File cleanShutdownFile = new File(dataDir, Clean_Shutdown_Filename);
+    File cleanShutdownFile = new File(dataDir, CLEAN_SHUTDOWN_FILENAME);
     try {
       cleanShutdownFile.createNewFile();
     } catch (IOException e) {
@@ -1072,12 +1066,12 @@ class PersistentIndex {
               throw new StoreException(message, StoreErrorCodes.IOError);
             }
             logger.trace("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
-            prevInfo.writeIndexToFile(prevInfo.getEndOffset());
+            prevInfo.writeIndexSegmentToFile(prevInfo.getEndOffset());
             prevInfo.map(true);
             Map.Entry<Offset, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
-          currentInfo.writeIndexToFile(currentIndexEndOffsetBeforeFlush);
+          currentInfo.writeIndexSegmentToFile(currentIndexEndOffsetBeforeFlush);
         }
       } catch (IOException e) {
         throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);

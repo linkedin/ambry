@@ -66,7 +66,7 @@ class IndexSegment {
       Version_Field_Length + Key_Size_Field_Length + Value_Size_Field_Length + Log_End_Offset_Field_Length
           + Crc_Field_Length;
 
-  private final String indexBloomFilenamePrefix;
+  private final String indexSegmentFilenamePrefix;
   private final Offset startOffset;
   private final AtomicReference<Offset> endOffset;
   private final File indexFile;
@@ -85,7 +85,7 @@ class IndexSegment {
   private IFilter bloomFilter;
   private int keySize;
   private int valueSize;
-  private Offset prevSegmentEndOffset = null;
+  private Offset prevSafeEndPoint = null;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
 
   /**
@@ -113,28 +113,28 @@ class IndexSegment {
     numberOfItems = new AtomicInteger(0);
     this.metrics = metrics;
     this.lastModifiedTimeSec = new AtomicLong(0);
-    indexBloomFilenamePrefix = generateIndexBloomFilenamePrefix();
-    indexFile = new File(dataDir, indexBloomFilenamePrefix + PersistentIndex.Index_File_Name_Suffix);
-    bloomFile = new File(dataDir, indexBloomFilenamePrefix + PersistentIndex.Bloom_File_Name_Suffix);
+    indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix();
+    indexFile = new File(dataDir, indexSegmentFilenamePrefix + PersistentIndex.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+    bloomFile = new File(dataDir, indexSegmentFilenamePrefix + PersistentIndex.BLOOM_FILE_NAME_SUFFIX);
   }
 
   /**
    * Initializes an existing segment. Memory maps the segment or reads the segment into memory. Also reads the
    * persisted bloom filter from disk.
    * @param indexFile The index file that the segment needs to be initialized from
-   * @param isMapped Indicates if the segment needs to be memory mapped
+   * @param shouldMap Indicates if the segment needs to be memory mapped
    * @param factory The store key factory used to create new store keys
    * @param config The store config used to initialize the index segment
    * @param metrics The store metrics used to track metrics
    * @param journal The journal to use
    * @throws StoreException
    */
-  IndexSegment(File indexFile, boolean isMapped, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
+  IndexSegment(File indexFile, boolean shouldMap, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
       Journal journal) throws StoreException {
     try {
       startOffset = getIndexSegmentStartOffset(indexFile.getName());
       endOffset = new AtomicReference<>(startOffset);
-      indexBloomFilenamePrefix = generateIndexBloomFilenamePrefix();
+      indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix();
       this.indexFile = indexFile;
       this.lastModifiedTimeSec = new AtomicLong(indexFile.lastModified() / 1000);
       this.rwLock = new ReentrantReadWriteLock();
@@ -142,11 +142,12 @@ class IndexSegment {
       sizeWritten = new AtomicLong(0);
       numberOfItems = new AtomicInteger(0);
       mapped = new AtomicBoolean(false);
-      if (isMapped) {
+      if (shouldMap) {
         map(false);
         // Load the bloom filter for this index
         // We need to load the bloom filter only for mapped indexes
-        bloomFile = new File(indexFile.getParent(), indexBloomFilenamePrefix + PersistentIndex.Bloom_File_Name_Suffix);
+        bloomFile =
+            new File(indexFile.getParent(), indexSegmentFilenamePrefix + PersistentIndex.BLOOM_FILE_NAME_SUFFIX);
         CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
         DataInputStream stream = new DataInputStream(crcBloom);
         bloomFilter = FilterFactory.deserialize(stream);
@@ -164,7 +165,8 @@ class IndexSegment {
         index = new ConcurrentSkipListMap<StoreKey, IndexValue>();
         bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
             config.storeIndexBloomMaxFalsePositiveProbability);
-        bloomFile = new File(indexFile.getParent(), indexBloomFilenamePrefix + PersistentIndex.Bloom_File_Name_Suffix);
+        bloomFile =
+            new File(indexFile.getParent(), indexSegmentFilenamePrefix + PersistentIndex.BLOOM_FILE_NAME_SUFFIX);
         try {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {
@@ -420,15 +422,15 @@ class IndexSegment {
    *  key n / value n - the key and value entries contained in this index segment
    *  crc             - the crc of the index segment content
    *
-   * @param safeEndPoint the end point until which it is safe to flush
+   * @param safeEndPoint the end point (that is relevant to this segment) until which the log has been flushed.
    * @throws IOException
    * @throws StoreException
    */
-  void writeIndexToFile(Offset safeEndPoint) throws IOException, StoreException {
+  void writeIndexSegmentToFile(Offset safeEndPoint) throws IOException, StoreException {
     if (safeEndPoint.compareTo(startOffset) < 0) {
       return;
     }
-    if (!safeEndPoint.equals(prevSegmentEndOffset)) {
+    if (!safeEndPoint.equals(prevSafeEndPoint)) {
       if (safeEndPoint.compareTo(getEndOffset()) > 0) {
         throw new StoreException(
             "SafeEndOffSet " + safeEndPoint + " is greater than current end offset for current " + "index segment "
@@ -442,7 +444,7 @@ class IndexSegment {
         rwLock.readLock().lock();
 
         // write the current version
-        writer.writeShort(PersistentIndex.version);
+        writer.writeShort(PersistentIndex.VERSION);
         // write key, value size and file end pointer for this index
         writer.writeInt(this.keySize);
         writer.writeInt(this.valueSize);
@@ -458,7 +460,7 @@ class IndexSegment {
                 safeEndPoint);
           }
         }
-        prevSegmentEndOffset = safeEndPoint;
+        prevSafeEndPoint = safeEndPoint;
         long crcValue = crc.getValue();
         writer.writeLong(crcValue);
 
@@ -554,7 +556,7 @@ class IndexSegment {
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
               // add to the journal
-              if (offsetInLogSegment != blobValue.getOriginalMessageOffset()
+              if (offsetInLogSegment != -1 && offsetInLogSegment != blobValue.getOriginalMessageOffset()
                   && blobValue.getOriginalMessageOffset() >= startOffset.getOffset()) {
                 // we add an entry for the original message offset if it is within the same index segment
                 journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
@@ -567,8 +569,8 @@ class IndexSegment {
               }
             } else {
               logger.info(
-                  "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset {} "
-                      + "key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getAbsolutePath(),
+                  "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset "
+                      + "{} key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getAbsolutePath(),
                   logEndOffset, key, blobValue.getOffset(), blobValue.getSize(),
                   blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
             }
@@ -666,9 +668,9 @@ class IndexSegment {
   }
 
   /**
-   * @return the prefix for the index and bloom file names.
+   * @return the prefix for the index segment file name (also used for bloom filter file name).
    */
-  private String generateIndexBloomFilenamePrefix() {
+  private String generateIndexSegmentFilenamePrefix() {
     String logSegmentName = startOffset.getName();
     StringBuilder filenamePrefix = new StringBuilder(logSegmentName);
     if (!logSegmentName.isEmpty()) {
@@ -683,8 +685,8 @@ class IndexSegment {
    * @return the start {@link Offset} in the {@link Log} that the index with file name {@code filename} represents.
    */
   static Offset getIndexSegmentStartOffset(String filename) {
-    // file name pattern for index is logSegmentName_offset_index.
-    // If the logSegment name is empty, then the file name pattern is offset_index.
+    // file name pattern for index is {logSegmentName}_{offset}_index.
+    // If the logSegment name is empty, then the file name pattern is {offset}_index.
     String logSegmentName;
     String startOffsetValue;
     int firstSepIdx = filename.indexOf(BlobStore.SEPARATOR);

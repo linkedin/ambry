@@ -97,9 +97,10 @@ public class PersistentIndexTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      IndexSegment info = new IndexSegment(tempDirStr, toOffset(0), factory, blobId1.sizeInBytes(),
-          IndexValue.Index_Value_Size_In_Bytes, config, new StoreMetrics(tempDirStr, new MetricRegistry()));
       IndexValue value = new IndexValue(1000, toOffset(0), (byte) 0);
+      IndexSegment info =
+          new IndexSegment(tempDirStr, toOffset(0), factory, blobId1.sizeInBytes(), value.getBytes().capacity(), config,
+              new StoreMetrics(tempDirStr, new MetricRegistry()));
       info.addEntry(new IndexEntry(blobId1, value), toOffset(1000));
       value = new IndexValue(1000, toOffset(1000), (byte) 0);
       info.addEntry(new IndexEntry(blobId2, value), toOffset(2000));
@@ -150,7 +151,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(entries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(entries.get(4).getStoreKey(), blobId5);
 
-      info.writeIndexToFile(toOffset(9000));
+      info.writeIndexSegmentToFile(toOffset(9000));
       StoreMetrics metrics = new StoreMetrics(info.getFile().getAbsolutePath(), new MetricRegistry());
       Journal journal = new Journal("test", 5, 5);
       IndexSegment infonew = new IndexSegment(info.getFile(), false, factory, config, metrics, journal);
@@ -434,6 +435,7 @@ public class PersistentIndexTest {
         public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
             throws IOException {
           List<MessageInfo> infos = new ArrayList<>();
+          infos.add(new MessageInfo(blobId4, 100));
           infos.add(new MessageInfo(blobId4, 100, true));
           infos.add(new MessageInfo(blobId5, 100, Utils.Infinite_Time));
           return infos;
@@ -443,9 +445,9 @@ public class PersistentIndexTest {
       value4 = indexNew.getValue(blobId4);
       value5 = indexNew.getValue(blobId5);
       Assert.assertEquals(value4.getSize(), 100);
-      Assert.assertEquals(value4.getOffset(), toOffset(0));
+      Assert.assertEquals(value4.getOffset(), toOffset(100));
       Assert.assertEquals(value5.getSize(), 100);
-      Assert.assertEquals(value5.getOffset(), toOffset(100));
+      Assert.assertEquals(value5.getOffset(), toOffset(200));
 
       log.close();
       scheduler.shutdown();

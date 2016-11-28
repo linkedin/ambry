@@ -659,7 +659,7 @@ public class DumpData {
             long originalOffset = blobValue.getOriginalMessageOffset();
             deleteMsgsOriginalOffsets.add(originalOffset);
             if (originalOffset != -1 && !coveredRanges.containsKey(originalOffset)) {
-              if (startOffset > originalOffset) {
+              if (startOffset.getOffset() > originalOffset) {
                 logger.trace("Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
                     originalOffset, blobValue.getOffset(), startOffset);
               } else {
