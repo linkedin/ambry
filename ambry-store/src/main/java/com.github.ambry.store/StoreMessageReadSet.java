@@ -41,11 +41,11 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  private static final short version = 0;
-  private static final short Version_Length = 2;
-  private static final short Offset_Length = 8;
-  private static final short Size_Length = 8;
-  private static final short TTL_Length = 8;
+  private static final short VERSION = 0;
+  private static final short VERSION_LENGTH = 2;
+  private static final short OFFSET_LENGTH = 8;
+  private static final short SIZE_LENGTH = 8;
+  private static final short EXPIRES_AT_MS_LENGTH = 8;
 
   BlobReadOptions(Log log, Offset offset, long size, long expiresAtMs, StoreKey storeKey) {
     segment = log.getSegment(offset.getName());
@@ -100,9 +100,9 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   byte[] toBytes() {
-    byte[] buf = new byte[Version_Length + Offset_Length + Size_Length + TTL_Length + storeKey.sizeInBytes()];
+    byte[] buf = new byte[VERSION_LENGTH + OFFSET_LENGTH + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + storeKey.sizeInBytes()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-    bufWrap.putShort(version);
+    bufWrap.putShort(VERSION);
     bufWrap.putLong(offset.getOffset());
     bufWrap.putLong(size);
     bufWrap.putLong(expiresAtMs);
@@ -117,15 +117,15 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
         // backwards compatibility
         Offset offset = new Offset(log.getFirstSegment().getName(), stream.readLong());
         long size = stream.readLong();
-        long ttl = stream.readLong();
+        long expiresAtMs = stream.readLong();
         StoreKey key = factory.getStoreKey(stream);
-        return new BlobReadOptions(log, offset, size, ttl, key);
+        return new BlobReadOptions(log, offset, size, expiresAtMs, key);
       case 1:
         offset = Offset.fromBytes(stream);
         size = stream.readLong();
-        ttl = stream.readLong();
+        expiresAtMs = stream.readLong();
         key = factory.getStoreKey(stream);
-        return new BlobReadOptions(log, offset, size, ttl, key);
+        return new BlobReadOptions(log, offset, size, expiresAtMs, key);
       default:
         throw new IOException("Unknown version encountered for BlobReadOptions");
     }

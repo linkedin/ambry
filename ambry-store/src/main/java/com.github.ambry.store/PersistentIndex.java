@@ -53,14 +53,14 @@ class PersistentIndex {
    * Represents the different types of index entries.
    */
   private enum IndexEntryType {
-    PUT, DELETE,
+    ANY, PUT, DELETE,
   }
 
   static final short VERSION = 0;
   static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
   static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
+  static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
-  private static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
   private static final Comparator<File> INDEX_FILE_COMPARATOR = new Comparator<File>() {
     @Override
     public int compare(File o1, File o2) {
@@ -379,18 +379,15 @@ class PersistentIndex {
    * @throws StoreException
    */
   IndexValue findKey(StoreKey key, FileSpan fileSpan) throws StoreException {
-    return findKey(key, fileSpan, null);
+    return findKey(key, fileSpan, IndexEntryType.ANY);
   }
 
   /**
    * Finds the {@link IndexValue} of type {@code type} associated with the {@code key} if it is present in the index
    * within the given {@code fileSpan}.
-   * <p/>
-   * If {@code type} is {@code null}, it is assumed that the most recent {@link IndexValue} (regardless of type) is to
-   * be returned.
    * @param key the {@link StoreKey} whose {@link IndexValue} is required.
    * @param fileSpan {@link FileSpan} which specifies the range within which search should be made
-   * @param type the {@link IndexEntryType} desired. Can be {@code null}.
+   * @param type the {@link IndexEntryType} desired.
    * @return The associated {@link IndexValue} of the type {@code type} if it exists within the {@code fileSpan},
    * {@code null} otherwise.
    * @throws StoreException
@@ -418,7 +415,7 @@ class PersistentIndex {
         if (value != null) {
           logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
               value.getExpiresAtMs());
-          if (type == null) {
+          if (type.equals(IndexEntryType.ANY)) {
             retValue = value;
             break;
           } else if (type.equals(IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
@@ -501,7 +498,7 @@ class PersistentIndex {
       IndexValue putValue =
           findKey(key, new FileSpan(indexes.firstEntry().getValue().getStartOffset(), value.getOffset()),
               IndexEntryType.PUT);
-      if (value.getOriginalMessageOffset() >= 0) {
+      if (value.getOriginalMessageOffset() != -1) {
         // PUT record in the same log segment.
         String logSegmentName = value.getOffset().getName();
         // The delete entry in the index might not contain the information about the size of the original blob. So we
@@ -827,7 +824,6 @@ class PersistentIndex {
         segmentToProcess = indexes.get(segmentStartOffset);
       }
     }
-
     if (newTokenOffsetInJournal != null) {
       return new StoreFindToken(newTokenOffsetInJournal, sessionId);
     } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
@@ -987,6 +983,7 @@ class PersistentIndex {
         if (entries != null) {
           // Case 2: offset based, and offset still in journal
           IndexSegment currentSegment = indexes.floorEntry(offsetToStart).getValue();
+          long currentTotalSizeOfEntries = 0;
           for (JournalEntry entry : entries) {
             if (entry.getOffset().compareTo(currentSegment.getEndOffset()) > 0) {
               Offset nextSegmentStartOffset = indexes.higherKey(currentSegment.getStartOffset());
@@ -1001,6 +998,10 @@ class PersistentIndex {
               messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true, value.getExpiresAtMs()));
             }
             offsetEnd = entry.getOffset();
+            currentTotalSizeOfEntries += value.getSize();
+            if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
+              break;
+            }
           }
           newToken = new StoreFindToken(offsetEnd, sessionId);
         } else {
@@ -1043,11 +1044,11 @@ class PersistentIndex {
           // before iterating the map, get the current file end pointer
           Map.Entry<Offset, IndexSegment> lastEntry = indexes.lastEntry();
           IndexSegment currentInfo = lastEntry.getValue();
-          Offset currentIndexEndOffsetBeforeFlush = currentInfo.getEndOffset();
+          Offset indexEndOffsetBeforeFlush = currentInfo.getEndOffset();
           Offset logEndOffsetBeforeFlush = log.getEndOffset();
-          if (logEndOffsetBeforeFlush.compareTo(currentIndexEndOffsetBeforeFlush) < 0) {
+          if (logEndOffsetBeforeFlush.compareTo(indexEndOffsetBeforeFlush) < 0) {
             throw new StoreException("LogEndOffset " + logEndOffsetBeforeFlush + " before flush cannot be less than "
-                + "currentEndOffSet of index " + currentIndexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
+                + "currentEndOffSet of index " + indexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
           }
 
           hardDeleter.preLogFlush();
@@ -1071,7 +1072,7 @@ class PersistentIndex {
             Map.Entry<Offset, IndexSegment> infoEntry = indexes.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
           }
-          currentInfo.writeIndexSegmentToFile(currentIndexEndOffsetBeforeFlush);
+          currentInfo.writeIndexSegmentToFile(indexEndOffsetBeforeFlush);
         }
       } catch (IOException e) {
         throw new StoreException("IO error while writing index to file", e, StoreErrorCodes.IOError);
@@ -1273,6 +1274,7 @@ class StoreFindToken implements FindToken {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("version: ").append(version);
+    sb.append("type: ").append(type);
     if (!type.equals(Type.Uninitialized)) {
       if (sessionId != null) {
         sb.append(" sessionId ").append(sessionId);
