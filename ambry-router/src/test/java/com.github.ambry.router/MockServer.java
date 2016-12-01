@@ -24,6 +24,7 @@ import com.github.ambry.network.ByteBufferSend;
 import com.github.ambry.network.Send;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
@@ -37,6 +38,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -167,7 +169,9 @@ class MockServer {
       int byteBufferSize;
       ByteBuffer byteBuffer;
       StoreKey key = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0);
-      if (blobs.containsKey(key.getID())) {
+      StoredBlob blob = blobs.get(key.getID());
+      ServerErrorCode processedError = errorForGet(blob, getRequest);
+      if (processedError == ServerErrorCode.No_Error) {
         ByteBuffer buf = blobs.get(key.getID()).serializedSentPutRequest.duplicate();
         // read off the size
         buf.getLong();
@@ -266,6 +270,18 @@ class MockServer {
           default:
             throw new IOException("GetRequest flag is not supported: " + getRequest.getMessageFormatFlag());
         }
+      } else if (processedError == ServerErrorCode.Blob_Deleted) {
+        if (partitionError == ServerErrorCode.No_Error) {
+          partitionError = ServerErrorCode.Blob_Deleted;
+        }
+        byteBuffer = ByteBuffer.allocate(0);
+        byteBufferSize = 0;
+      } else if (processedError == ServerErrorCode.Blob_Expired) {
+        if (partitionError == ServerErrorCode.No_Error) {
+          partitionError = ServerErrorCode.Blob_Expired;
+        }
+        byteBuffer = ByteBuffer.allocate(0);
+        byteBufferSize = 0;
       } else {
         if (partitionError == ServerErrorCode.No_Error) {
           partitionError = ServerErrorCode.Blob_Not_Found;
@@ -293,6 +309,20 @@ class MockServer {
     return getResponse;
   }
 
+  ServerErrorCode errorForGet(StoredBlob blob, GetRequest getRequest) {
+    ServerErrorCode retCode = ServerErrorCode.No_Error;
+    if (blob == null) {
+      retCode = ServerErrorCode.Blob_Not_Found;
+    } else if (blob.isDeleted() && !getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest
+        .getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
+      retCode = ServerErrorCode.Blob_Deleted;
+    } else if (blob.hasExpired() && !getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest
+        .getGetOption().equals(GetOption.Include_Expired_Blobs)) {
+      retCode = ServerErrorCode.Blob_Expired;
+    }
+    return retCode;
+  }
+
   /**
    *
    * Make a {@link DeleteResponse} for the given {@link DeleteRequest} for which the given {@link ServerErrorCode} was
@@ -303,6 +333,9 @@ class MockServer {
    * @throws IOException if there was an error constructing the response.
    */
   DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) throws IOException {
+    if (deleteError == ServerErrorCode.No_Error) {
+      updateBlobMap(deleteRequest);
+    }
     return new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), deleteError);
   }
 
@@ -314,6 +347,13 @@ class MockServer {
   private void updateBlobMap(PutRequest putRequest) throws IOException {
     StoredBlob blob = new StoredBlob(putRequest, clusterMap);
     blobs.put(blob.id, blob);
+  }
+
+  private void updateBlobMap(DeleteRequest deleteRequest) throws IOException {
+    StoredBlob blob = blobs.get(deleteRequest.getBlobId().getID());
+    if (blob != null) {
+      blob.markAsDeleted();
+    }
   }
 
   /**
@@ -397,6 +437,8 @@ class StoredBlob {
   final ByteBuffer userMetadata;
   final ByteBuffer serializedSentPutRequest;
   final PutRequest.ReceivedPutRequest receivedPutRequest;
+  private final long expiresAt;
+  private boolean deleted = false;
 
   StoredBlob(PutRequest putRequest, ClusterMap clusterMap) throws IOException {
     serializedSentPutRequest = ByteBuffer.allocate((int) putRequest.sizeInBytes());
@@ -414,5 +456,19 @@ class StoredBlob {
     type = receivedPutRequest.getBlobType();
     properties = receivedPutRequest.getBlobProperties();
     userMetadata = receivedPutRequest.getUsermetadata();
+    expiresAt = properties.getTimeToLiveInSeconds() == Utils.Infinite_Time ? Utils.Infinite_Time
+        : SystemTime.getInstance().milliseconds() + properties.getTimeToLiveInSeconds();
+  }
+
+  boolean isDeleted() {
+    return deleted;
+  }
+
+  boolean hasExpired() {
+    return expiresAt != Utils.Infinite_Time && expiresAt <= SystemTime.getInstance().milliseconds();
+  }
+
+  void markAsDeleted() {
+    deleted = true;
   }
 }

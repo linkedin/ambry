@@ -36,9 +36,11 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -407,32 +409,97 @@ public class NonBlockingRouterTest {
     MockTime mockTime = new MockTime();
     MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
     // metadata blob + data chunks.
-    final CountDownLatch deletesDoneLatch = new CountDownLatch(5);
+    final AtomicReference<CountDownLatch> deletesDoneLatch = new AtomicReference<>();
+    final Set<String> blobsThatAreDeleted = new HashSet<>();
     LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
       @Override
       public void onBlobDeleted(String blobId) {
-        deletesDoneLatch.countDown();
+        blobsThatAreDeleted.add(blobId);
+        deletesDoneLatch.get().countDown();
       }
     };
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap,
         mockTime);
-
     setOperationParams();
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    Set<String> blobsToBeDeleted = getBlobsInServers(mockServerLayout);
+    // The second iteration is to test the case where the blob was already deleted.
+    // The third iteration is to test the case where the blob has expired.
+    for (int i=0; i<3; i++) {
+      if (i == 2) {
+        // Create a clean cluster and put another blob that immediate expires.
+        setOperationParams();
+        putBlobProperties =
+            new BlobProperties(PUT_CONTENT_SIZE, "serviceId", "memberId", "contentType", false, 0);
+        blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+        Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
+        allBlobsInServer.removeAll(blobsToBeDeleted);
+        blobsToBeDeleted = allBlobsInServer;
+      }
+      blobsThatAreDeleted.clear();
+      deletesDoneLatch.set(new CountDownLatch(5));
+      router.deleteBlob(blobId, null).get();
+      Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
+          deletesDoneLatch.get().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      Assert.assertTrue("All blobs in server are deleted", blobsThatAreDeleted.containsAll(blobsToBeDeleted));
+      Assert.assertTrue("Only blobs in server are deleted", blobsToBeDeleted.containsAll(blobsThatAreDeleted));
+    }
 
+    deletesDoneLatch.set(new CountDownLatch(5));
+    router.deleteBlob(blobId, null).get();
+    Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
+        deletesDoneLatch.get().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+
+    router.close();
+    assertClosed();
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  private Set<String> getBlobsInServers(MockServerLayout mockServerLayout) {
+    Set<String> blobsInServers = new HashSet<>();
+    for (MockServer mockServer : mockServerLayout.getMockServers()) {
+      blobsInServers.addAll(mockServer.getBlobs().keySet());
+    }
+    return blobsInServers;
+  }
+
+  /**
+   * Test to ensure that for simple blob deletions, no additional background delete operations
+   * are initiated.
+   */
+  @Test
+  public void testSimpleBlobDelete() throws Exception {
+    // Ensure there are 4 chunks.
+    maxPutChunkSize = PUT_CONTENT_SIZE;
+    Properties props = getNonBlockingRouterProperties("DC1");
+    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+    MockClusterMap mockClusterMap = new MockClusterMap();
+    MockTime mockTime = new MockTime();
+    MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+    // metadata blob + data chunks.
+    final AtomicInteger deletesInitiated = new AtomicInteger();
+    LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobDeleted(String blobId) {
+        deletesInitiated.incrementAndGet();
+      }
+    };
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+        new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap,
+        mockTime);
+    setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.deleteBlob(blobId, null).get();
-
     long waitStart = SystemTime.getInstance().milliseconds();
     while (router.getBackgroundOperationsCount() != 0
         && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
       Thread.sleep(1000);
     }
-
-    Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
-        deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-
+    Assert.assertEquals("All background operations should be complete ", 0, router.getBackgroundOperationsCount());
+    Assert.assertEquals("Only the original blob deletion should have been initiated", 1, deletesInitiated.get());
     router.close();
     assertClosed();
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
@@ -773,13 +840,19 @@ public class NonBlockingRouterTest {
           putManager.submitPutBlobOperation(putBlobProperties, putUserMetadata, putChannel, futureResult, null);
           break;
         case GET:
-          futureResult = new FutureResult<BlobInfo>();
-          getManager.submitGetBlobOperation(blobId,
-              new ExtendedGetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null, false),
-              futureResult, null);
+          final FutureResult getFutureResult = new FutureResult<GetBlobResultInternal>();
+          getManager.submitGetBlobOperation(blobId, new GetBlobOptionsInternal(
+                  new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null), false),
+              new Callback<GetBlobResultInternal>() {
+                @Override
+                public void onCompletion(GetBlobResultInternal result, Exception exception) {
+                  getFutureResult.done(result, exception);
+                }
+              });
+          futureResult = getFutureResult;
           break;
         case DELETE:
-          futureResult = new FutureResult<BlobInfo>();
+          futureResult = new FutureResult<Void>();
           deleteManager.submitDeleteBlobOperation(blobId, futureResult, null);
           break;
       }

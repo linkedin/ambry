@@ -19,6 +19,7 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
@@ -107,49 +108,26 @@ class GetManager {
   /**
    * Submit an operation to get a blob asynchronously.
    * @param blobId The blobId for which the BlobInfo is being requested, in string form.
-   * @param options The {@link ExtendedGetBlobOptions} associated witht the operation.
-   * @param futureResult The {@link FutureResult} that contains the pending result of the operation.
+   * @param options The {@link GetBlobOptionsInternal} associated with the operation.
    * @param callback The {@link Callback} object to be called on completion of the operation.
    */
-  void submitGetBlobOperation(String blobId, ExtendedGetBlobOptions options, FutureResult<GetBlobResult> futureResult,
-      Callback<GetBlobResult> callback) {
+  void submitGetBlobOperation(String blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback) {
     try {
       GetOperation getOperation;
-      if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation =
             new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                futureResult, callback, operationCompleteCallback, time);
+                callback, operationCompleteCallback, time);
       } else {
-        getOperation = new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-            futureResult, callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+        getOperation =
+            new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+                operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       }
       getOperations.add(getOperation);
     } catch (RouterException e) {
       routerMetrics.onGetBlobError(e, options);
       routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
-    }
-  }
-
-  /**
-   * Submit an operation to get the chunk ids associated with this blob (if it is a composite blob), asynchronously.
-   * @param blobId The blobId for which the chunk ids are being requested.
-   * @param futureResult The {@link FutureResult} that contains the pending result of the operation.
-   * @param callback The {@link Callback} object to be called on completion of the operation.
-   */
-  void submitGetChunkIdsOperation(String blobId, FutureResult<List<StoreKey>> futureResult,
-      Callback<List<StoreKey>> callback) {
-    ExtendedGetBlobOptions options =
-        new ExtendedGetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.Include_All, null, true);
-    try {
-      GetBlobOperation getChunkIdsOperation =
-          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, futureResult,
-              callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
-      getOperations.add(getChunkIdsOperation);
-    } catch (RouterException e) {
-      routerMetrics.onGetBlobError(e, options);
-      routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
+      operationCompleteCallback.completeOperation(null, callback, null, e);
     }
   }
 
@@ -277,31 +255,34 @@ class GetManager {
 }
 
 /**
- * Extension to {@link GetBlobOptions} containing additional parameters to the GetBlob operation that is internal to the
- * router.
+ * An internal options class containing parameters to the GetBlob operation.
  */
-class ExtendedGetBlobOptions extends GetBlobOptions {
+class GetBlobOptionsInternal {
+  final GetBlobOptions getBlobOptions;
   final boolean getChunkIdsOnly;
 
   /**
-   * Construct an ExtendedGetBlobOptions instance.
-   * @param operationType The {@link OperationType} associated with this operation.
-   * @param getOption The {@link GetOption} associated with this operation.
-   * @param range The {@link ByteRange} if this is a range request. This can be null.
+   * Construct an GetBlobOptionsInternal instance
+   * @param getBlobOptions the {@link GetBlobOptions} associated with this instance.
    * @param getChunkIdsOnly {@code true} if this operation is to fetch just the chunk ids of a composite blob.
    */
-  ExtendedGetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean getChunkIdsOnly) {
-    super(operationType, getOption, range);
+  GetBlobOptionsInternal(GetBlobOptions getBlobOptions, boolean getChunkIdsOnly) {
+    this.getBlobOptions = getBlobOptions;
     this.getChunkIdsOnly = getChunkIdsOnly;
-  }
-
-  /**
-   * Construct an ExtendedGetBlobOptions instance
-   * @param options
-   */
-  ExtendedGetBlobOptions(GetBlobOptions options) {
-    super(options.getOperationType(), options.getGetOption(), options.getRange());
-    this.getChunkIdsOnly = false;
   }
 }
 
+class GetBlobResultInternal {
+  GetBlobResult getBlobResult;
+  List<StoreKey> storeKeys;
+
+  /**
+   * Construct a GetBlobResultInternal instance.
+   * @param getBlobResult The {@link GetBlobResult} associated with this instance, if there is one..
+   * @param storeKeys The store keys associated with this instance, if there are any.
+   */
+  public GetBlobResultInternal(GetBlobResult getBlobResult, List<StoreKey> storeKeys) {
+    this.getBlobResult = getBlobResult;
+    this.storeKeys = storeKeys;
+  }
+}

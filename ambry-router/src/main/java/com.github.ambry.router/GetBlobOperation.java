@@ -115,8 +115,7 @@ class GetBlobOperation extends GetOperation {
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blob id associated with the operation in string form.
-   * @param options the {@link ExtendedGetBlobOptions} associated with the operation.
-   * @param futureResult the future that will contain the result of the operation.
+   * @param options the {@link GetBlobOptionsInternal} associated with the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param operationCompleteCallback the {@link OperationCompleteCallback} to use to complete operations.
    * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
@@ -126,10 +125,10 @@ class GetBlobOperation extends GetOperation {
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, ExtendedGetBlobOptions options, FutureResult futureResult,
-      Callback callback, OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
-      BlobIdFactory blobIdFactory, Time time) throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
+      ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
+      Callback<GetBlobResultInternal> callback, OperationCompleteCallback operationCompleteCallback,
+      ReadyForPollCallback readyForPollCallback, BlobIdFactory blobIdFactory, Time time) throws RouterException {
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     this.readyForPollCallback = readyForPollCallback;
     this.blobIdFactory = blobIdFactory;
@@ -146,7 +145,7 @@ class GetBlobOperation extends GetOperation {
   @Override
   void abort(Exception abortCause) {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
-      operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
+      operationCompleteCallback.completeOperation(null, operationCallback, null, abortCause);
     } else {
       setOperationException(abortCause);
       if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
@@ -175,8 +174,8 @@ class GetBlobOperation extends GetOperation {
           // result callback and no more chunks will be fetched, so mark the operation as complete to let the
           // GetManager remove this operation.
           operationCompleted = true;
-          List<StoreKey> result = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
-          operationCompleteCallback.completeOperation(operationFuture, operationCallback, result, e);
+          List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
+          operationResult = new GetBlobResultInternal(null, chunkIds);
         } else {
           // Complete the operation from the caller's perspective, so that the caller can start reading from the
           // channel if there is no exception. The operation will not be marked as complete internally as subsequent
@@ -187,14 +186,14 @@ class GetBlobOperation extends GetOperation {
           routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
           if (e == null) {
             blobDataChannel = new BlobDataReadableStreamChannel();
-            operationResult = new GetBlobResult(blobInfo, blobDataChannel);
+            operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
           } else {
             blobDataChannel = null;
             operationResult = null;
             routerMetrics.onGetBlobError(e, options);
           }
-          operationCompleteCallback.completeOperation(operationFuture, operationCallback, operationResult, e);
         }
+        operationCompleteCallback.completeOperation(null, operationCallback, operationResult, e);
       }
     }
     chunk.postCompletionCleanup();
@@ -408,7 +407,7 @@ class GetBlobOperation extends GetOperation {
     private void updateChunkingAndSizeMetricsOnSuccessfulGet() {
       routerMetrics.getBlobSizeBytes.update(bytesWritten);
       routerMetrics.getBlobChunkCount.update(numChunksTotal);
-      if (options != null && options.getRange() != null) {
+      if (options != null && options.getBlobOptions.getRange() != null) {
         routerMetrics.getBlobWithRangeSizeBytes.update(bytesWritten);
         routerMetrics.getBlobWithRangeTotalBlobSizeBytes.update(totalSize);
       }
@@ -765,7 +764,7 @@ class GetBlobOperation extends GetOperation {
      */
     protected ByteBuffer filterChunkToRange(BlobData blobData) {
       ByteBuffer buf = blobData.getStream().getByteBuffer();
-      if (options == null || options.getRange() == null) {
+      if (options == null || options.getBlobOptions.getRange() == null) {
         return buf;
       }
       if (resolvedByteRange.getRangeSize() == 0) {
@@ -837,7 +836,7 @@ class GetBlobOperation extends GetOperation {
 
     @Override
     GetOption getGetOption() {
-      return options.getGetOption();
+      return options.getBlobOptions.getGetOption();
     }
 
     /**
@@ -847,7 +846,7 @@ class GetBlobOperation extends GetOperation {
      */
     @Override
     MessageFormatFlags getOperationFlag() {
-      return options.getOperationType() == GetBlobOptions.OperationType.Data ? MessageFormatFlags.Blob
+      return options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.Data ? MessageFormatFlags.Blob
           : MessageFormatFlags.All;
     }
 
@@ -925,8 +924,8 @@ class GetBlobOperation extends GetOperation {
       List<StoreKey> keys = compositeBlobInfo.getKeys();
       boolean rangeResolutionFailure = false;
       try {
-        if (options != null && options.getRange() != null) {
-          resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
+        if (options != null && options.getBlobOptions.getRange() != null) {
+          resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
           // Get only the chunks within the range.
           int firstChunkIndexInRange = (int) (resolvedByteRange.getStartOffset() / chunkSize);
           int lastChunkIndexInRange = (int) (resolvedByteRange.getEndOffset() / chunkSize);
@@ -961,8 +960,8 @@ class GetBlobOperation extends GetOperation {
       chunkSize = totalSize;
       boolean rangeResolutionFailure = false;
       try {
-        if (options != null && options.getRange() != null) {
-          resolvedByteRange = options.getRange().toResolvedByteRange(totalSize);
+        if (options != null && options.getBlobOptions.getRange() != null) {
+          resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(totalSize);
         }
       } catch (IllegalArgumentException e) {
         onInvalidRange(e);

@@ -23,6 +23,7 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKey;
@@ -96,7 +97,7 @@ class NonBlockingRouter implements Router {
     }
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
-    routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount);
+    routerMetrics.initializeNumActiveOperationsMetrics(currentOperationsCount, currentBackgroundOperationsCount);
   }
 
   /**
@@ -146,13 +147,14 @@ class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
+    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false);
     if (isOpen.get()) {
-      getOperationController().getBlob(blobId, options, futureResult, callback);
+      getOperationController().getBlob(blobId, internalOptions, futureResult, callback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onGetBlobError(routerException, options);
+      routerMetrics.onGetBlobError(routerException, internalOptions);
       operationCompleteCallback.completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -293,17 +295,17 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Return an approximate count of the number of operations submitted to the router that are not yet completed.
-   * @return (approximate) number of operations being handled at the time of this call.
+   * Return the count of the number of operations submitted to the router that are not yet completed.
+   * @return number of operations being handled at the time of this call.
    */
   int getOperationsCount() {
     return currentOperationsCount.get();
   }
 
   /**
-   * Return an approximate count of the number of background operations submitted to the router that are not yet
+   * Return the count of the number of background operations submitted to the router that are not yet
    * completed.
-   * @return (approximate) number of background operations being handled at the time of this call.
+   * @return number of background operations being handled at the time of this call.
    */
   int getBackgroundOperationsCount() {
     return currentBackgroundOperationsCount.get();
@@ -318,7 +320,7 @@ class NonBlockingRouter implements Router {
    * respectively. A {@link NetworkClient} is used to interact with the network.
    */
   private class OperationController implements Runnable {
-    private final PutManager putManager;
+    protected final PutManager putManager;
     protected final GetManager getManager;
     protected final DeleteManager deleteManager;
     private final NetworkClient networkClient;
@@ -350,15 +352,23 @@ class NonBlockingRouter implements Router {
      * Requests for the blob (info, data, or both) asynchronously and invokes the {@link Callback} when the request
      * completes.
      * @param blobId The ID of the blob for which blob data is requested.
-     * @param options The {@link GetBlobOptions} associated with the request.
+     * @param options The {@link GetBlobOptionsInternal} associated with the request.
      * @param futureResult A future that would eventually contain a {@link GetBlobResult} that can contain either
      *                     the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
      * @param callback The callback which will be invoked on the completion of the request.
      */
-    private void getBlob(String blobId, GetBlobOptions options, FutureResult<GetBlobResult> futureResult,
-        Callback<GetBlobResult> callback) {
-      ExtendedGetBlobOptions extendedOptions = new ExtendedGetBlobOptions(options);
-      getManager.submitGetBlobOperation(blobId, extendedOptions, futureResult, callback);
+    private void getBlob(String blobId, GetBlobOptionsInternal options, final FutureResult<GetBlobResult> futureResult,
+        final Callback<GetBlobResult> callback) {
+      getManager.submitGetBlobOperation(blobId, options, new Callback<GetBlobResultInternal>() {
+        @Override
+        public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
+          GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+          futureResult.done(getBlobResult, exception);
+          if (callback != null) {
+            callback.onCompletion(getBlobResult, exception);
+          }
+        }
+      });
       readyForPollCallback.onPollReady();
     }
 
@@ -400,7 +410,9 @@ class NonBlockingRouter implements Router {
           if (exception == null) {
             backgroundDeleter.initiateChunkDeletesIfAny(blobId);
           }
-          callback.onCompletion(result, exception);
+          if (callback != null) {
+            callback.onCompletion(result, exception);
+          }
         }
       });
       readyForPollCallback.onPollReady();
@@ -531,7 +543,7 @@ class NonBlockingRouter implements Router {
      */
     BackgroundDeleter() throws IOException {
       super("backgroundDeleter");
-      super.putManager.close();
+      putManager.close();
     }
 
     /**
@@ -550,27 +562,29 @@ class NonBlockingRouter implements Router {
 
     /**
      * Initiate the deletes of the data chunks associated with this blobId, if this blob turns out to be a composite
-     * blob.
+     * blob. Note that this causes the rate of gets to increase at the servers.
      * @param blobId the blobId string associated with the possibly composite blob.
      */
-    void initiateChunkDeletesIfAny(String blobId) {
-      FutureResult<List<StoreKey>> futureResult = new FutureResult<>();
-      Callback<List<StoreKey>> callback = new Callback<List<StoreKey>>() {
+    void initiateChunkDeletesIfAny(final String blobId) {
+      Callback<GetBlobResultInternal> callback = new Callback<GetBlobResultInternal>() {
         @Override
-        public void onCompletion(List<StoreKey> result, Exception exception) {
+        public void onCompletion(GetBlobResultInternal result, Exception exception) {
           if (exception != null) {
-            logger.error("Encountered exception when attempting to get chunks of a possibly composite deleted blob",
+            logger.error(
+                "Encountered exception when attempting to get chunks of a possibly composite deleted blob" + blobId,
                 exception);
-          } else if (result != null) {
+          } else if (result.getBlobResult != null) {
+            logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
+          } else if (result.storeKeys != null) {
             // result can be null if the blob is not a composite blob.
-            for (StoreKey key : result) {
-              currentOperationsCount.incrementAndGet(); // @todo
+            for (StoreKey key : result.storeKeys) {
+              currentOperationsCount.incrementAndGet();
               currentBackgroundOperationsCount.incrementAndGet();
               deleteManager.submitDeleteBlobOperation(key.getID(), new FutureResult<Void>(), new Callback<Void>() {
                 @Override
                 public void onCompletion(Void result, Exception exception) {
                   if (exception != null) {
-                    logger.info("Background delete operation failed with exception", exception);
+                    logger.error("Background delete operation failed with exception", exception);
                   }
                   currentBackgroundOperationsCount.decrementAndGet();
                 }
@@ -582,7 +596,10 @@ class NonBlockingRouter implements Router {
       };
       currentOperationsCount.incrementAndGet();
       currentBackgroundOperationsCount.incrementAndGet();
-      getManager.submitGetChunkIdsOperation(blobId, futureResult, callback);
+      GetBlobOptionsInternal options =
+          new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.Include_All, null),
+              true);
+      getManager.submitGetBlobOperation(blobId, options, callback);
     }
 
     /**
@@ -631,7 +648,9 @@ class OperationCompleteCallback {
       Exception exception) {
     operationsCount.decrementAndGet();
     try {
-      futureResult.done(operationResult, exception);
+      if (futureResult != null) {
+        futureResult.done(operationResult, exception);
+      }
       if (callback != null) {
         callback.onCompletion(operationResult, exception);
       }
