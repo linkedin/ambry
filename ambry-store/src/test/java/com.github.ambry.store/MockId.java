@@ -42,7 +42,7 @@ public class MockId extends StoreKey {
 
   @Override
   public String getID() {
-    return toString();
+    return id;
   }
 
   @Override
@@ -90,5 +90,10 @@ public class MockId extends StoreKey {
       return false;
     }
     return true;
+  }
+
+  @Override
+  public String toString() {
+    return getID();
   }
 }
