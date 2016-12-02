@@ -37,9 +37,10 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.HardDeleter;
+import com.github.ambry.store.Offset;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
@@ -104,7 +105,7 @@ public class ServerHardDeleteTest {
       throws Exception {
     final int TIMEOUT = 10000;
     File cleanupTokenFile = new File(path, "cleanuptoken");
-    FindToken endToken;
+    StoreFindToken endToken;
     long parsedTokenValue = -1;
 
     long endTime = SystemTime.getInstance().milliseconds() + TIMEOUT;
@@ -143,13 +144,9 @@ public class ServerHardDeleteTest {
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
           factory.getFindToken(stream);
-          endToken = factory.getFindToken(stream);
-
-          ByteBuffer bytebufferToken = ByteBuffer.wrap(endToken.toBytes());
-          Assert.assertEquals(bytebufferToken.getShort(), 0);
-          int size = bytebufferToken.getInt();
-          bytebufferToken.position(bytebufferToken.position() + size);
-          parsedTokenValue = bytebufferToken.getLong();
+          endToken = (StoreFindToken) factory.getFindToken(stream);
+          Offset endTokenOffset = endToken.getOffset();
+          parsedTokenValue = endTokenOffset == null ? -1 : endTokenOffset.getOffset();
 
           int num = stream.readInt();
           List<StoreKey> storeKeyList = new ArrayList<StoreKey>(num);
@@ -157,10 +154,10 @@ public class ServerHardDeleteTest {
             // Read BlobReadOptions
             short blobReadOptionsVersion = stream.readShort();
             switch (blobReadOptionsVersion) {
-              case 0:
-                long offset = stream.readLong();
-                long sz = stream.readLong();
-                long ttl = stream.readLong();
+              case 1:
+                Offset.fromBytes(stream);
+                stream.readLong();
+                stream.readLong();
                 StoreKey key = storeKeyFactory.getStoreKey(stream);
                 storeKeyList.add(key);
                 break;
