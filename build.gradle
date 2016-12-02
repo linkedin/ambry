@@ -50,6 +50,7 @@ subprojects {
         compile "log4j:log4j:$log4jVersion"
         compile "org.slf4j:slf4j-api:$slf4jVersion"
         compile "org.slf4j:slf4j-log4j12:$slf4jVersion"
+        compile "org.apache.helix:helix-core:$helixVersion"
         testCompile "junit:junit:$junitVersion"
         unitTestCompile sourceSets.main.output
         unitTestCompile sourceSets.test.output
@@ -259,6 +260,14 @@ project(':ambry-frontend') {
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-rest').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+    }
+}
+
+project(':ambry-validation-service') {
+    dependencies {
+        compile project(':ambry-tools')
+        compile project(':ambry-utils')
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
     }
 }
 
