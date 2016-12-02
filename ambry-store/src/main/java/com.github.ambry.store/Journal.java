@@ -24,19 +24,19 @@ import org.slf4j.LoggerFactory;
 
 
 class JournalEntry {
-  private long offset;
-  private StoreKey key;
+  private final Offset offset;
+  private final StoreKey key;
 
-  public JournalEntry(long offset, StoreKey key) {
+  JournalEntry(Offset offset, StoreKey key) {
     this.offset = offset;
     this.key = key;
   }
 
-  public long getOffset() {
+  Offset getOffset() {
     return offset;
   }
 
-  public StoreKey getKey() {
+  StoreKey getKey() {
     return key;
   }
 }
@@ -46,12 +46,12 @@ class JournalEntry {
  */
 class Journal {
 
-  private final ConcurrentSkipListMap<Long, StoreKey> journal;
+  private final ConcurrentSkipListMap<Offset, StoreKey> journal;
   private final int maxEntriesToJournal;
   private final int maxEntriesToReturn;
-  private AtomicInteger currentNumberOfEntries;
-  private String dataDir;
-  private Logger logger = LoggerFactory.getLogger(getClass());
+  private final AtomicInteger currentNumberOfEntries;
+  private final String dataDir;
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * The journal that holds the most recent entries in a store sorted by offset of the blob on disk
@@ -59,8 +59,8 @@ class Journal {
    *                            the journal after the size is reached.
    * @param maxEntriesToReturn The max number of entries to return from the journal when queried for entries.
    */
-  public Journal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
-    journal = new ConcurrentSkipListMap<Long, StoreKey>();
+  Journal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
+    journal = new ConcurrentSkipListMap<>();
     this.maxEntriesToJournal = maxEntriesToJournal;
     this.maxEntriesToReturn = maxEntriesToReturn;
     this.currentNumberOfEntries = new AtomicInteger(0);
@@ -69,15 +69,13 @@ class Journal {
 
   /**
    * The entry that needs to be added to the journal.
-   * @param offset The offset that the key pertains to. The journal verifies that the provided offset is monotonically
-   *               increasing.
+   * @param offset The {@link Offset} that the key pertains to.
    * @param key The key that the entry in the journal refers to.
    */
-  public void addEntry(long offset, StoreKey key) {
-    if (key == null || offset < 0) {
+  void addEntry(Offset offset, StoreKey key) {
+    if (key == null || offset == null) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
     }
-
     if (currentNumberOfEntries.get() == maxEntriesToJournal) {
       journal.remove(journal.firstKey());
       currentNumberOfEntries.decrementAndGet();
@@ -91,31 +89,32 @@ class Journal {
   /**
    * Gets all the entries from the journal starting at the provided offset and till the maxEntriesToReturn or the
    * end of the journal is reached.
-   * @param offset The offset (inclusive) from where the journal needs to return entries.
+   * @param offset The {@link Offset} from where the journal needs to return entries.
+   * @param inclusive if {@code true}, the returned entries (if not {@code null}), contain the entry at {@code offset}.
    * @return The entries in the journal starting from offset. If the offset is outside the range of the journal,
    *         it returns null.
    */
-  public List<JournalEntry> getEntriesSince(long offset, boolean inclusive) {
+  List<JournalEntry> getEntriesSince(Offset offset, boolean inclusive) {
     // To prevent synchronizing the addEntry method, we first get all the entries from the journal that are greater
     // than offset. Once we have all the required entries, we finally check if the offset is actually present
     // in the journal. If the offset is not present we return null, else we return the entries we got in the first step.
     // The offset may not be present in the journal as it could be removed.
 
-    Map.Entry<Long, StoreKey> first = journal.firstEntry();
-    Map.Entry<Long, StoreKey> last = journal.lastEntry();
+    Map.Entry<Offset, StoreKey> first = journal.firstEntry();
+    Map.Entry<Offset, StoreKey> last = journal.lastEntry();
 
     // check if the journal contains the offset.
-    if (first == null || offset < first.getKey() || last == null || offset > last.getKey() || !journal.containsKey(
-        offset)) {
+    if (first == null || offset.compareTo(first.getKey()) < 0 || last == null || offset.compareTo(last.getKey()) > 0
+        || !journal.containsKey(offset)) {
       return null;
     }
 
-    ConcurrentNavigableMap<Long, StoreKey> subsetMap = journal.tailMap(offset, true);
+    ConcurrentNavigableMap<Offset, StoreKey> subsetMap = journal.tailMap(offset, true);
     int entriesToReturn = Math.min(subsetMap.size(), maxEntriesToReturn);
     List<JournalEntry> journalEntries = new ArrayList<JournalEntry>(entriesToReturn);
     int entriesAdded = 0;
-    for (Map.Entry<Long, StoreKey> entry : subsetMap.entrySet()) {
-      if (inclusive || entry.getKey() != offset) {
+    for (Map.Entry<Offset, StoreKey> entry : subsetMap.entrySet()) {
+      if (inclusive || !entry.getKey().equals(offset)) {
         journalEntries.add(new JournalEntry(entry.getKey(), entry.getValue()));
         entriesAdded++;
         if (entriesAdded == entriesToReturn) {
@@ -126,7 +125,7 @@ class Journal {
 
     // Ensure that the offset was not pushed out of the journal.
     first = journal.firstEntry();
-    if (first == null || offset < first.getKey()) {
+    if (first == null || offset.compareTo(first.getKey()) < 0) {
       return null;
     }
 
@@ -135,18 +134,18 @@ class Journal {
   }
 
   /**
-   * @return the first/smallest offset in the journal or -1 if no such entry exists.
+   * @return the first/smallest offset in the journal or {@code null} if no such entry exists.
    */
-  public long getFirstOffset() {
-    Map.Entry<Long, StoreKey> first = journal.firstEntry();
-    return first == null ? -1 : first.getKey();
+  Offset getFirstOffset() {
+    Map.Entry<Offset, StoreKey> first = journal.firstEntry();
+    return first == null ? null : first.getKey();
   }
 
   /**
-   * @return the last/greatest offset in the journal or -1 if no such entry exists.
+   * @return the last/greatest offset in the journal or {@code null} if no such entry exists.
    */
-  public long getLastOffset() {
-    Map.Entry<Long, StoreKey> last = journal.lastEntry();
-    return last == null ? -1 : last.getKey();
+  Offset getLastOffset() {
+    Map.Entry<Offset, StoreKey> last = journal.lastEntry();
+    return last == null ? null : last.getKey();
   }
 }

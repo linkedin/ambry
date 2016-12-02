@@ -13,15 +13,12 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -387,16 +384,26 @@ class Log implements Write {
   }
 
   /**
-   * Gets a {@link StoreMessageReadSet} with the file and file channel of the first segment of the log.
-   * @param readOptions the {@link BlobReadOptions} to include in the {@link StoreMessageReadSet}.
-   * @return a {@link StoreMessageReadSet} with the file and file channel of the first segment and the given {@code }
-   * @deprecated this function is deprecated and is available for use until {@link PersistentIndex} and
-   * {@link HardDeleter} are rewritten to understand segmented logs.
+   * Gets the {@link FileSpan} for a message that is written starting at {@code endOffsetOfPrevMessage} and is of size
+   * {@code size}.
+   * @param endOffsetOfPrevMessage the end offset of the message that is before this one.
+   * @param size the size of the write.
+   * @return the {@link FileSpan} for a message that is written starting at {@code endOffsetOfPrevMessage} and is of
+   * size {@code size}.
    */
-  @Deprecated
-  StoreMessageReadSet getView(List<BlobReadOptions> readOptions) {
-    LogSegment firstLogSegment = segmentsByName.firstEntry().getValue();
-    Pair<File, FileChannel> view = firstLogSegment.getView();
-    return new StoreMessageReadSet(view.getFirst(), view.getSecond(), readOptions, firstLogSegment.getEndOffset());
+  FileSpan getFileSpanForMessage(Offset endOffsetOfPrevMessage, long size) {
+    LogSegment segment = segmentsByName.get(endOffsetOfPrevMessage.getName());
+    long startOffset = endOffsetOfPrevMessage.getOffset();
+    if (startOffset > segment.getEndOffset()) {
+      throw new IllegalArgumentException("Start offset provided is greater than segment end offset");
+    } else if (startOffset == segment.getEndOffset()) {
+      // current segment has ended. Since a blob will be wholly contained within one segment, this blob is in the
+      // next segment
+      segment = getNextSegment(segment);
+      startOffset = segment.getStartOffset();
+    } else if (startOffset + size > segment.getEndOffset()) {
+      throw new IllegalStateException("Args indicate that blob is not wholly contained within a single segment");
+    }
+    return new FileSpan(new Offset(segment.getName(), startOffset), new Offset(segment.getName(), startOffset + size));
   }
 }

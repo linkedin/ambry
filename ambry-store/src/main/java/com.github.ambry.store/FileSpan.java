@@ -14,25 +14,42 @@
 package com.github.ambry.store;
 
 /**
- * Represents a portion of a file. Provides the start and end offset of a file
+ * Represents a portion of a log. Provides the start and end offset of a log
  */
 class FileSpan {
-  private long fileStartOffset;
-  private long fileEndOffset;
+  private Offset startOffset;
+  private Offset endOffset;
 
-  public FileSpan(long fileStartOffset, long fileEndOffset) {
-    if (fileEndOffset < fileStartOffset) {
+  /**
+   * Creates a file span with the given start and end offsets.
+   * @param startOffset the start {@link Offset} of the FileSpan.
+   * @param endOffset the end {@link Offset} of the FileSpan.
+   * @throws IllegalArgumentException if {@code endOffset} < {@code startOffset}
+   */
+  FileSpan(Offset startOffset, Offset endOffset) {
+    if (endOffset.compareTo(startOffset) < 0) {
       throw new IllegalArgumentException("File span needs to be positive");
     }
-    this.fileStartOffset = fileStartOffset;
-    this.fileEndOffset = fileEndOffset;
+    this.startOffset = startOffset;
+    this.endOffset = endOffset;
   }
 
-  public long getStartOffset() {
-    return fileStartOffset;
+  /**
+   * @return the start {@link Offset} represented by this FileSpan. Guaranteed to be <= {@link #getEndOffset()}.
+   */
+  Offset getStartOffset() {
+    return startOffset;
   }
 
-  public long getEndOffset() {
-    return fileEndOffset;
+  /**
+   * @return the end {@link Offset} represented by this FileSpan. Guaranteed to be >= {@link #getStartOffset()}.
+   */
+  Offset getEndOffset() {
+    return endOffset;
+  }
+
+  @Override
+  public String toString() {
+    return "StartOffset=[" + startOffset + "], EndOffset=[" + endOffset + "]";
   }
 }

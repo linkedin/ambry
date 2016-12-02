@@ -17,19 +17,19 @@ package com.github.ambry.store;
  * A key and value that represents an index entry
  */
 class IndexEntry {
-  private StoreKey key;
-  private IndexValue value;
+  private final StoreKey key;
+  private final IndexValue value;
 
-  public IndexEntry(StoreKey key, IndexValue value) {
+  IndexEntry(StoreKey key, IndexValue value) {
     this.key = key;
     this.value = value;
   }
 
-  public StoreKey getKey() {
+  StoreKey getKey() {
     return this.key;
   }
 
-  public IndexValue getValue() {
+  IndexValue getValue() {
     return this.value;
   }
 }

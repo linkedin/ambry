@@ -62,22 +62,25 @@ public class HardDeleterTest {
       private long sizeOfEntry;
       private MockIndex index;
       private Log log;
+      private String logSegmentName;
       HashMap<Long, MessageInfo> offsetMap;
 
       HardDeleteTestHelper(long offset, long size) {
         nextOffset = offset;
         sizeOfEntry = size;
-        offsetMap = new HashMap<Long, MessageInfo>();
+        offsetMap = new HashMap<>();
       }
 
       void setIndex(MockIndex index, Log log) {
         this.index = index;
         this.log = log;
+        logSegmentName = log.getFirstSegment().getName();
       }
 
       void add(MockId id) throws IOException, StoreException {
-        index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, nextOffset, (byte) 0, 12345)),
-            new FileSpan(nextOffset, nextOffset + sizeOfEntry));
+        Offset offset = new Offset(logSegmentName, nextOffset);
+        index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, offset, (byte) 0, 12345)),
+            new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
         ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
         log.appendFrom(byteBuffer);
         offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
@@ -85,7 +88,8 @@ public class HardDeleterTest {
       }
 
       void delete(MockId id) throws IOException, StoreException {
-        index.markAsDeleted(id, new FileSpan(nextOffset, nextOffset + sizeOfEntry));
+        Offset offset = new Offset(logSegmentName, nextOffset);
+        index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
         ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
         log.appendFrom(byteBuffer);
         nextOffset += sizeOfEntry;

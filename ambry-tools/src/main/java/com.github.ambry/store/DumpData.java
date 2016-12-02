@@ -621,11 +621,10 @@ public class DumpData {
     logger.info(
         "Dumping index " + indexFile.getName() + " for " + ((replicaDirectory != null) ? replicaDirectory.getName()
             : null));
+    Offset startOffset = IndexSegment.getIndexSegmentStartOffset(indexFile.getName());
     DataInputStream stream = null;
     TreeMap<Long, Long> coveredRanges = new TreeMap<Long, Long>();
     Set<Long> deleteMsgsOriginalOffsets = new HashSet<Long>();
-    String startOffsetStr = indexFile.getName().substring(0, indexFile.getName().indexOf('_'));
-    long startOffset = Long.valueOf(startOffsetStr);
     try {
       stream = new DataInputStream(new FileInputStream(indexFile));
       short version = stream.readShort();
@@ -644,14 +643,14 @@ public class DumpData {
           StoreKey key = storeKeyFactory.getStoreKey(stream);
           byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
           stream.read(value);
-          IndexValue blobValue = new IndexValue(ByteBuffer.wrap(value));
+          IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value));
           String msg = "key :" + key + ": value - offset " + blobValue.getOffset() + " size " + blobValue.getSize()
               + " Original Message Offset " + blobValue.getOriginalMessageOffset() + " Flag " + blobValue.getFlags()
               + "\n";
           boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           boolean success =
-              dumpDataHelper.readFromLogAndVerify(randomAccessFile, blobValue.getOffset(), key.getID(), blobValue,
-                  coveredRanges);
+              dumpDataHelper.readFromLogAndVerify(randomAccessFile, blobValue.getOffset().getOffset(), key.getID(),
+                  blobValue, coveredRanges);
           if (!success) {
             logger.error("Failed for Index Entry " + msg);
             continue;
@@ -660,7 +659,7 @@ public class DumpData {
             long originalOffset = blobValue.getOriginalMessageOffset();
             deleteMsgsOriginalOffsets.add(originalOffset);
             if (originalOffset != -1 && !coveredRanges.containsKey(originalOffset)) {
-              if (startOffset > originalOffset) {
+              if (startOffset.getOffset() > originalOffset) {
                 logger.trace("Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
                     originalOffset, blobValue.getOffset(), startOffset);
               } else {

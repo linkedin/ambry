@@ -40,6 +40,7 @@ public class StoreMetrics {
   public final Timer indexFlushTime;
   public final Timer cleanupTokenFlushTime;
   public final Timer hardDeleteTime;
+  public final Counter putEntryDeletedInfoMismatchCount;
   public final Counter nonzeroMessageRecovery;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
@@ -73,6 +74,8 @@ public class StoreMetrics {
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));
     cleanupTokenFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "CleanupTokenFlushTime"));
     hardDeleteTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteTime"));
+    putEntryDeletedInfoMismatchCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "PutEntryDeletedInfoMismatchCount"));
     nonzeroMessageRecovery =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "NonZeroMessageRecovery"));
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPositiveCount"));

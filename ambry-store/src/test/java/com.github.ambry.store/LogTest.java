@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -232,27 +231,39 @@ public class LogTest {
       fail("Getting next segment should have failed because provided segment does not exist in the log");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
+    } finally {
+      log.close();
+      cleanDirectory(tempDir);
     }
   }
 
   /**
-   * Tests the deprecated {@link Log#getView(List)} function.
+   * Tests cases where bad arguments are provided to {@link Log#getFileSpanForMessage(Offset, long)}.
    * @throws IOException
    */
   @Test
-  public void getViewTest() throws IOException {
+  public void getFileSpanForMessageBadArgsTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
     try {
-      long writeStartOffset = log.getEndOffset().getOffset();
-      long writeSize = (int) (SEGMENT_CAPACITY - writeStartOffset);
-      byte[] buf = TestUtils.getRandomBytes((int) (writeSize));
-      log.appendFrom(ByteBuffer.wrap(buf));
-      List<BlobReadOptions> list = new ArrayList<>();
-      list.add(new BlobReadOptions(writeStartOffset, writeSize, -1, null));
-      StoreMessageReadSet readSet = log.getView(list);
-      ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(buf.length));
-      readSet.writeTo(0, channel, 0, buf.length);
-      assertArrayEquals("Data read does not match data written", buf, channel.getBuffer().array());
+      LogSegment firstSegment = log.getFirstSegment();
+      log.setActiveSegment(firstSegment.getName());
+      Offset endOffsetOfPrevMessage = new Offset(firstSegment.getName(), firstSegment.getEndOffset() + 1);
+      try {
+        log.getFileSpanForMessage(endOffsetOfPrevMessage, 1);
+        fail("Should have failed because endOffsetOfPrevMessage > endOffset of log segment");
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
+      // write a single byte into the log
+      endOffsetOfPrevMessage = log.getStartOffset();
+      CHANNEL_APPENDER.append(log, ByteBuffer.allocate(1));
+      try {
+        // provide the wrong size
+        log.getFileSpanForMessage(endOffsetOfPrevMessage, 2);
+        fail("Should have failed because endOffsetOfPrevMessage + size > endOffset of log segment");
+      } catch (IllegalStateException e) {
+        // expected. Nothing to do.
+      }
     } finally {
       log.close();
       cleanDirectory(tempDir);
@@ -455,16 +466,17 @@ public class LogTest {
     byte[] buf = TestUtils.getRandomBytes((int) writeSize);
     long expectedUsedCapacity = logCapacity - segmentCapacity * segmentsLeft;
     int nextSegmentIdx = activeSegmentIdx + 1;
-    String expectedNextSegmentName = null;
     LogSegment expectedActiveSegment = log.getSegment(segmentNames.get(activeSegmentIdx));
-    if (segmentNames.size() > nextSegmentIdx) {
-      expectedNextSegmentName = segmentNames.get(nextSegmentIdx);
-    }
+    String activeSegName = expectedActiveSegment.getName();
     // add header space (if any) from the active segment.
     long currentSegmentWriteSize = expectedActiveSegment.getEndOffset();
     expectedUsedCapacity += currentSegmentWriteSize;
     while (expectedUsedCapacity + writeSize <= logCapacity) {
+      Offset endOffsetOfLastMessage = new Offset(activeSegName, currentSegmentWriteSize);
       appender.append(log, ByteBuffer.wrap(buf));
+      FileSpan fileSpanOfMessage = log.getFileSpanForMessage(endOffsetOfLastMessage, writeSize);
+      FileSpan expectedFileSpanForMessage =
+          new FileSpan(endOffsetOfLastMessage, new Offset(activeSegName, currentSegmentWriteSize + writeSize));
       currentSegmentWriteSize += writeSize;
       expectedUsedCapacity += writeSize;
       if (currentSegmentWriteSize > segmentCapacity) {
@@ -475,13 +487,18 @@ public class LogTest {
         expectedUsedCapacity += LogSegment.HEADER_SIZE + segmentCapacity - expectedActiveSegment.getEndOffset();
         expectedActiveSegment = log.getSegment(segmentNames.get(nextSegmentIdx));
         assertNotNull("Next active segment is null", expectedActiveSegment);
-        assertEquals("Next active segment name does not match", expectedNextSegmentName,
-            expectedActiveSegment.getName());
+        activeSegName = expectedActiveSegment.getName();
+        // currentSegmentWriteSize must be equal to LogSegment.HEADER_SIZE + writeSize
+        assertEquals("Unexpected size of new active segment", writeSize + LogSegment.HEADER_SIZE,
+            currentSegmentWriteSize);
+        expectedFileSpanForMessage = new FileSpan(new Offset(activeSegName, expectedActiveSegment.getStartOffset()),
+            new Offset(activeSegName, currentSegmentWriteSize));
         nextSegmentIdx++;
-        if (segmentNames.size() > nextSegmentIdx) {
-          expectedNextSegmentName = segmentNames.get(nextSegmentIdx);
-        }
       }
+      assertEquals("StartOffset of message  not as expected", expectedFileSpanForMessage.getStartOffset(),
+          fileSpanOfMessage.getStartOffset());
+      assertEquals("EndOffset of message  not as expected", expectedFileSpanForMessage.getEndOffset(),
+          fileSpanOfMessage.getEndOffset());
       assertEquals("Active segment end offset not as expected", currentSegmentWriteSize,
           expectedActiveSegment.getEndOffset());
       assertEquals("End offset not as expected", new Offset(expectedActiveSegment.getName(), currentSegmentWriteSize),
