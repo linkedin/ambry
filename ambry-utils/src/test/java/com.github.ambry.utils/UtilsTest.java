@@ -379,8 +379,6 @@ public class UtilsTest {
     String threadName = future.get(10, TimeUnit.SECONDS);
     assertTrue("Unexpected thread name returned: " + threadName, threadName.startsWith("ambry-scheduler-"));
     scheduler.shutdown();
-    assertTrue("All tasks should be finished.", scheduler.isTerminated());
-    assertTrue("Scheduler should be shutdown.", scheduler.isShutdown());
   }
 
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
