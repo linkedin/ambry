@@ -1,10 +1,13 @@
-package com.github.ambry;
+package com.github.ambry.validationservice;
 
 import java.util.ArrayList;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 
+/**
+ * Utils for Validation Service
+ */
 public class ValidationServiceUtils {
 
   /**

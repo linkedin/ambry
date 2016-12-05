@@ -1,4 +1,4 @@
-package com.github.ambry;
+package com.github.ambry.validationservice;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -9,6 +9,9 @@ import org.apache.helix.task.TaskResult;
 import org.apache.helix.task.UserContentStore;
 
 
+/**
+ * Simple HelloWorld Task which sleeps and prints timing of the task start and end
+ */
 public class HelloWorldTask extends UserContentStore implements Task {
 
   public static final String TASK_COMMAND = "helloWorld";
@@ -27,13 +30,14 @@ public class HelloWorldTask extends UserContentStore implements Task {
     if (taskCfg != null) {
       cfg.putAll(taskCfg);
     }
-    sleepTimeInMs = cfg.containsKey(SLEEPTIME_CONFIG) ? Long.parseLong(cfg.get(SLEEPTIME_CONFIG)) : 10000;
+    sleepTimeInMs = cfg.containsKey(SLEEPTIME_CONFIG) ? Long.parseLong(cfg.get(SLEEPTIME_CONFIG)) : 1000;
   }
 
   @Override
   public TaskResult run() {
+    System.out.println("Executing HelloWorld task : " + System.currentTimeMillis());
     sleep(sleepTimeInMs);
-    System.out.println("Done executing the task " + System.currentTimeMillis());
+    System.out.println("Done executing the task : " + System.currentTimeMillis());
     return new TaskResult(TaskResult.Status.COMPLETED, String.valueOf(System.currentTimeMillis()));
   }
 
@@ -42,6 +46,10 @@ public class HelloWorldTask extends UserContentStore implements Task {
     cancelled = true;
   }
 
+  /**
+   * Invoked to sleep for {@code d} millis
+   * @param d the time to sleep in millis
+   */
   private static void sleep(long d) {
     try {
       Thread.sleep(d);

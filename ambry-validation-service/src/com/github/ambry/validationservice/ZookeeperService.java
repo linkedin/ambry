@@ -1,13 +1,11 @@
-package com.github.ambry;
+package com.github.ambry.validationservice;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
 import org.I0Itec.zkclient.IDefaultNameSpace;
 import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.ZkServer;
@@ -15,6 +13,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Class to instantiate a standalone Zookeeper instance
+ */
 public class ZookeeperService {
 
   private final String zkAddress;
@@ -33,26 +34,28 @@ public class ZookeeperService {
     int exitCode = 0;
     try {
       final ZookeeperService.InvocationOptions options = new ZookeeperService.InvocationOptions(args);
-      // final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      logger.info("Bootstrapping ValidationService");
+      logger.info("Bootstrapping ValidationServiceOld");
       zookeeperService = new ZookeeperService(options.zkAddress, options.rootDirPath);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
-          logger.info("Received shutdown signal. Shutting down ValidationService");
+          logger.info("Received shutdown signal. Shutting down ValidationServiceOld");
           zookeeperService.shutdown();
         }
       });
       zookeeperService.startup();
       zookeeperService.awaitShutdown();
     } catch (Exception e) {
-      logger.error("Exception during bootstrap of ValidationService", e);
+      logger.error("Exception during bootstrap of ValidationServiceOld", e);
       exitCode = 1;
     }
-    logger.info("Exiting ValidationServiceMain");
+    logger.info("Exiting ValidationService");
     System.exit(exitCode);
   }
 
+  /**
+   * Starts up a standalone zookeeper instance
+   */
   public void startup() {
     logger.info("STARTING Zookeeper at " + zkAddress);
     IDefaultNameSpace defaultNameSpace = new IDefaultNameSpace() {
@@ -102,18 +105,13 @@ public class ZookeeperService {
               .withRequiredArg()
               .describedAs("rootDirPath")
               .ofType(String.class)
-              .defaultsTo("/tmp/helixTrial");
+              .defaultsTo("/tmp/ambryDevCluster");
 
       OptionSet options = parser.parse(args);
-      if (zkAddressOpt != null && rootDirPathOpt != null) {
-        this.zkAddress = options.valueOf(zkAddressOpt);
-        logger.trace("ZK Address : {}", this.zkAddress);
-        this.rootDirPath = options.valueOf(rootDirPathOpt);
-        logger.trace("Root Directory Parth : {} ", this.rootDirPath);
-      } else {
-        parser.printHelpOn(System.err);
-        throw new InstantiationException("Did not receive all the required params to start Zookeeper service");
-      }
+      this.zkAddress = options.valueOf(zkAddressOpt);
+      logger.trace("ZK Address : {}", this.zkAddress);
+      this.rootDirPath = options.valueOf(rootDirPathOpt);
+      logger.trace("Root Directory Parth : {} ", this.rootDirPath);
     }
   }
 }

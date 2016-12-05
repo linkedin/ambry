@@ -1,4 +1,4 @@
-package com.github.ambry;
+package com.github.ambry.validationservice;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -13,14 +13,9 @@ import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
-import org.apache.helix.controller.HelixControllerMain;
-import org.apache.helix.examples.Quickstart;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
-import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.StateModelDefinition;
-import org.apache.helix.participant.StateMachineEngine;
-import org.apache.helix.participant.statemachine.StateModelFactory;
 import org.apache.helix.task.JobConfig;
 import org.apache.helix.task.JobQueue;
 import org.apache.helix.task.ScheduleConfig;
@@ -32,81 +27,91 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class ValidationController {
+public class ValidationServiceHelper {
 
   private final String zkAddress;
   private final String clusterName;
+  private final String resourceName;
+  private final String instanceGroupTag;
   private final String queueName;
   private final String taskCommand;
   private final String stateModelName;
-  private final String instanceName;
 
   // type of operations supported
   private static final String ADD_CLUSTER = "add_cluster";
-  private static final String START_CONTROLLER = "start_controller";
-  private static final String TRIGGER_TEST = "trigger_test";
+  private static final String TRIGGER_GENERIC_JOB = "trigger_generic_job";
+  private static final String TRIGGER_TARGETED_JOB = "trigger_targeted_job";
+  private static final String TRIGGER_TARGETED_JOB_PARTITION = "trigger_targeted_job_partition";
+
+  private static final int NUM_NODES = 3;
+  private static final int INIT_PORT_NO = 6999;
 
   // states
-  private static final String ONLINE = "ONLINE";
-  private static final String OFFLINE = "OFFLINE";
-  // states
   private static final String SLAVE = "SLAVE";
- // private static final String OFFLINE = "OFFLINE";
+  private static final String OFFLINE = "OFFLINE";
   private static final String MASTER = "MASTER";
   private static final String DROPPED = "DROPPED";
 
-  static TaskDriver taskDriver;
-  private static Logger logger = LoggerFactory.getLogger(ValidationController.class);
+  private static TaskDriver taskDriver;
+  private static Logger logger = LoggerFactory.getLogger(ValidationServiceHelper.class);
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
 
-  public ValidationController(String zkAddress, String clusterName, String queueName, String taskCommand,
-      String stateModelName, String instanceName) {
+  public ValidationServiceHelper(String zkAddress, String clusterName, String resourceName, String instanceGroupTag,
+      String queueName, String taskCommand, String stateModelName) {
     this.zkAddress = zkAddress;
     this.clusterName = clusterName;
+    this.resourceName = resourceName;
+    this.instanceGroupTag = instanceGroupTag;
     this.queueName = queueName;
     this.taskCommand = taskCommand;
     this.stateModelName = stateModelName;
-    this.instanceName = instanceName;
   }
 
   public static void main(String[] args) {
-    final ValidationController validationController;
+    final ValidationServiceHelper validationServiceHelper;
     int exitCode = 0;
     try {
-      final ValidationController.InvocationOptions options = new ValidationController.InvocationOptions(args);
-      // final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      logger.info("Bootstrapping ValidationService");
-      validationController =
-          new ValidationController(options.zkAddress, options.clusterName, options.queueName, options.taskCommand,
-              options.stateModelName, options.instanceName);
+      final ValidationServiceHelper.InvocationOptions options = new ValidationServiceHelper.InvocationOptions(args);
+      logger.info("Bootstrapping ValidationServiceHelper");
+      validationServiceHelper =
+          new ValidationServiceHelper(options.zkAddress, options.clusterName, options.resourceName,
+              options.instanceGroupTag, options.queueName, options.taskCommand, options.stateModelName);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
-          logger.info("Received shutdown signal. Shutting down ValidationService");
-          validationController.shutdown();
+          logger.info("Received shutdown signal. Shutting down ValidationServiceHelper");
+          validationServiceHelper.shutdown();
         }
       });
-      validationController.doOperation(options.typeOfOperation);
-      validationController.awaitShutdown();
+      validationServiceHelper.doOperation(options.typeOfOperation);
+      validationServiceHelper.awaitShutdown();
     } catch (Exception e) {
-      logger.error("Exception during bootstrap of ValidationService", e);
+      logger.error("Exception during bootstrap of ValidationServiceHelper", e);
       e.printStackTrace();
       exitCode = 1;
     }
-    logger.info("Exiting ValidationServiceMain");
+    logger.info("Exiting ValidationServiceHelper");
     System.exit(exitCode);
   }
 
-  public void doOperation(String typeOfOperation) throws InterruptedException {
+  /**
+   * Perform the {@code typeOfOperation}
+   * @param typeOfOperation
+   * @throws Exception
+   */
+  public void doOperation(String typeOfOperation) throws Exception {
     switch (typeOfOperation) {
       case ADD_CLUSTER:
         addCluster();
         break;
-      case START_CONTROLLER:
-        startupController();
+      case TRIGGER_GENERIC_JOB:
+        triggerGenericJob();
         break;
-      case TRIGGER_TEST:
-        triggerJob();
+      case TRIGGER_TARGETED_JOB:
+        triggerInstanceGroupTargetedJob();
+        break;
+      case TRIGGER_TARGETED_JOB_PARTITION:
+        triggerPartitionTargetedJob();
         break;
       default:
         logger.error("Undefined operation type " + typeOfOperation);
@@ -114,6 +119,9 @@ public class ValidationController {
     shutdownLatch.countDown();
   }
 
+  /**
+   * Adds a new cluster via {@link HelixAdmin} with the specified values
+   */
   private void addCluster() {
     HelixAdmin admin = new ZKHelixAdmin(zkAddress);
     // create cluster
@@ -121,16 +129,19 @@ public class ValidationController {
     admin.addCluster(clusterName, true);
 
     // add instances
-    int NUM_NODES = 2;
     List<InstanceConfig> INSTANCE_CONFIG_LIST;
     INSTANCE_CONFIG_LIST = new ArrayList<InstanceConfig>();
     for (int i = 0; i < NUM_NODES; i++) {
-      int port = 6999 + i;
+      int port = INIT_PORT_NO + i;
       InstanceConfig instanceConfig = new InstanceConfig("localhost_" + port);
       instanceConfig.setHostName("localhost");
       instanceConfig.setPort("" + port);
       instanceConfig.setInstanceEnabled(true);
-      instanceConfig.addTag("group1");
+      if (instanceGroupTag == null) {
+        instanceConfig.addTag("localhost:" + port);
+      } else {
+        instanceConfig.addTag(instanceGroupTag);
+      }
       INSTANCE_CONFIG_LIST.add(instanceConfig);
     }
 
@@ -142,26 +153,18 @@ public class ValidationController {
     }
 
     // Add a state model
-   /* HelixManager manager = HelixManagerFactory.getZKHelixManager(clusterName, instanceName,
-        InstanceType.CONTROLLER, zkAddress);
-    StateMachineEngine stateMachine = manager.getStateMachineEngine();
-    StateModelFactory stateModelFactory = new AmbryStateModelFactory();
-    stateMachine.registerStateModelFactory("OnlineOfflineStateModel", stateModelFactory);
-*/
-
-    // Add a state model
-     StateModelDefinition myStateModel = defineStateModel();
-    // echo("Configuring StateModel: " + "MyStateModel  with 1 Master and 1 Slave");
+    StateModelDefinition myStateModel = defineStateModel();
     admin.addStateModelDef(clusterName, stateModelName, myStateModel);
-    admin.addResource(clusterName, "ResourceName1", 1, stateModelName, "AUTO");
-
-    // admin.addStateModelDef();
-
-    logger.info("Configuring StateModel: OnlineOfflineStateModel  with ONLINE, OFFLINE config");
+    // Adding 3 partition with 2 replicas each to the cluster
+    admin.addResource(clusterName, resourceName, 3, stateModelName, "FULL_AUTO");
+    admin.rebalance(clusterName, resourceName, 2);
     admin.close();
   }
 
-
+  /**
+   * Defines a master slave state model for the cluster
+   * @return {@link StateModelDefinition} for the master slave approach
+   */
   private StateModelDefinition defineStateModel() {
     StateModelDefinition.Builder builder = new StateModelDefinition.Builder(stateModelName);
     // Add states and their rank to indicate priority. Lower the rank higher the
@@ -191,39 +194,52 @@ public class ValidationController {
     return statemodelDefinition;
   }
 
-  /*private StateModelDefinition defineStateModel() {
-    StateModelDefinition.Builder builder = new StateModelDefinition.Builder(stateModelName);
-    // Add states and their rank to indicate priority. Lower the rank higher the
-    // priority
-    builder.addState(ONLINE);
-    builder.addState(OFFLINE);
-    // Set the initial state when the node starts
-    builder.initialState(OFFLINE);
+  /**
+   * Instantiates the {@link TaskDriver} for trigger jobs/workflows
+   * @throws Exception
+   */
+  private void instantiateTaskDriver() throws Exception {
+    HelixManager manager =
+        HelixManagerFactory.getZKHelixManager(clusterName, "Admin", InstanceType.ADMINISTRATOR, zkAddress);
+    manager.connect();
+    taskDriver = new TaskDriver(manager);
+  }
 
-    // Add transitions between the states.
-    builder.addTransition(OFFLINE, ONLINE);
-    builder.addTransition(ONLINE, OFFLINE);
-
-    StateModelDefinition statemodelDefinition = builder.build();
-    return statemodelDefinition;
-  }*/
-
-  private void startupController() throws InterruptedException {
-    // start controller
-    logger.info("Starting Helix Controller");
-    HelixControllerMain.startHelixController(zkAddress, clusterName, "localhost_9100",
-        HelixControllerMain.STANDALONE);
+  /**
+   * Triggers a generic type of job
+   * @throws Exception
+   */
+  private void triggerGenericJob() throws Exception {
+    instantiateTaskDriver();
+    testGenericTask();
     shutdownLatch.countDown();
   }
 
-  private void triggerJob() throws InterruptedException {
-    ZkClient zkClient = new ZkClient(zkAddress, 10000);
-    taskDriver = new TaskDriver(zkClient, clusterName);
-    testTask();
+  /**
+   * Triggers a job/worklow targetted against an Instance Group
+   * @throws Exception
+   */
+  private void triggerInstanceGroupTargetedJob() throws Exception {
+    instantiateTaskDriver();
+    testInstanceGroupTargetedTask();
     shutdownLatch.countDown();
   }
 
-  private void testTask() throws InterruptedException {
+  /**
+   * Triggers a job/worklow targetted against an Instance Group
+   * @throws Exception
+   */
+  private void triggerPartitionTargetedJob() throws Exception {
+    instantiateTaskDriver();
+    testPartitionTargetedTask();
+    shutdownLatch.countDown();
+  }
+
+  /**
+   * Triggers a generic type of job
+   * @throws Exception
+   */
+  private void testGenericTask() throws InterruptedException {
     // Create a queue
     logger.info("Starting job-queue: " + queueName);
     JobQueue.Builder queueBuilder = buildJobQueue(queueName, 0, 0);
@@ -232,12 +248,10 @@ public class ValidationController {
     List<String> currentJobNames = new ArrayList<String>();
     for (int i = 0; i < num_jobs; i++) {
       JobConfig.Builder jobConfig = new JobConfig.Builder();
-      jobConfig.setInstanceGroupTag("group1");
-      jobConfig.setTargetResource("ResourceName1");
 
       // create each task configs.
       List<TaskConfig> taskConfigs = new ArrayList<TaskConfig>();
-      int num_tasks = 2;
+      int num_tasks = NUM_NODES;
       for (int j = 0; j < num_tasks; j++) {
         taskConfigs.add(new TaskConfig.Builder().setTaskId("task_" + j).setCommand(taskCommand).build());
       }
@@ -247,11 +261,75 @@ public class ValidationController {
       queueBuilder.enqueueJob(jobName, jobConfig);
       currentJobNames.add(jobName);
     }
-    taskDriver.start(queueBuilder.build());
+    JobQueue jobQueue = queueBuilder.build();
+    taskDriver.start(jobQueue);
     String namedSpaceJob = String.format("%s_%s", queueName, currentJobNames.get(currentJobNames.size() - 1));
-    taskDriver.pollForJobState(queueName, namedSpaceJob, TaskState.COMPLETED);
+    taskDriver.pollForJobState(queueName, namedSpaceJob, 10000, TaskState.COMPLETED);
   }
 
+  /**
+   * Triggers a job/worklow targeted against an Instance Group
+   * @throws Exception
+   */
+  private void testInstanceGroupTargetedTask() throws InterruptedException {
+    // Create a queue
+    logger.info("Starting job-queue: " + queueName);
+    JobQueue.Builder queueBuilder = buildJobQueue(queueName, 0, 0);
+
+    List<String> currentJobNames = new ArrayList<String>();
+    for (int i = 0; i < NUM_NODES; i++) {
+      JobConfig.Builder jobConfig = new JobConfig.Builder();
+      int port = INIT_PORT_NO + i;
+      jobConfig.setInstanceGroupTag("localhost:" + port);
+
+      // create each task configs.
+      List<TaskConfig> taskConfigs = new ArrayList<TaskConfig>();
+      int num_tasks = 1;
+      for (int j = 0; j < num_tasks; j++) {
+        taskConfigs.add(new TaskConfig.Builder().setTaskId("task_" + j).setCommand(taskCommand).build());
+      }
+      jobConfig.addTaskConfigs(taskConfigs);
+
+      String jobName = "job_" + i;
+      queueBuilder.enqueueJob(jobName, jobConfig);
+      currentJobNames.add(jobName);
+    }
+    JobQueue jobQueue = queueBuilder.build();
+    taskDriver.start(jobQueue);
+    String namedSpaceJob = String.format("%s_%s", queueName, currentJobNames.get(currentJobNames.size() - 1));
+    taskDriver.pollForJobState(queueName, namedSpaceJob, 10000, TaskState.COMPLETED);
+  }
+
+  /**
+   * Triggers a job/worklow targeted against a partition for a resource
+   * @throws Exception
+   */
+  private void testPartitionTargetedTask() throws InterruptedException {
+    // Create a queue
+    logger.info("Starting job-queue: " + queueName);
+    JobQueue.Builder queueBuilder = buildJobQueue(queueName, 0, 0);
+    List<String> currentJobNames = new ArrayList<String>();
+    JobConfig.Builder jobConfig = new JobConfig.Builder();
+    List<String> partitions = new ArrayList<>();
+    partitions.add(resourceName + "_1");
+    jobConfig.setTargetPartitions(partitions);
+    jobConfig.setTargetResource(resourceName);
+    jobConfig.setCommand(taskCommand);
+    queueBuilder.enqueueJob("job_0", jobConfig);
+    currentJobNames.add("job_0");
+    JobQueue jobQueue = queueBuilder.build();
+    taskDriver.start(jobQueue);
+    String namedSpaceJob = String.format("%s_%s", queueName, currentJobNames.get(currentJobNames.size() - 1));
+    taskDriver.pollForJobState(queueName, namedSpaceJob, 10000, TaskState.COMPLETED);
+  }
+
+  /**
+   * Builds a {@link JobQueue} with the passed in values
+   * @param jobQueueName the name of the job queue
+   * @param delayStart dealy in seconds after which job will be scheduled
+   * @param failureThreshold threshold for failures
+   * @return the {@link JobQueue.Builder} which assists in building the job queue
+   */
   public static JobQueue.Builder buildJobQueue(String jobQueueName, int delayStart, int failureThreshold) {
     WorkflowConfig.Builder workflowCfgBuilder = new WorkflowConfig.Builder();
     workflowCfgBuilder.setExpiry(120000);
@@ -268,6 +346,9 @@ public class ValidationController {
     return new JobQueue.Builder(jobQueueName).setWorkflowConfig(workflowCfgBuilder.build());
   }
 
+  /**
+   * Invoked to shutdown all resources and connections
+   */
   public void shutdown() {
     try {
     } finally {
@@ -275,6 +356,10 @@ public class ValidationController {
     }
   }
 
+  /**
+   * Awaits until shutdown is complete
+   * @throws InterruptedException
+   */
   public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
@@ -282,10 +367,11 @@ public class ValidationController {
   static class InvocationOptions {
     String zkAddress;
     String clusterName;
+    String resourceName;
+    String instanceGroupTag;
     String queueName;
     String taskCommand;
     String stateModelName;
-    String instanceName;
     String typeOfOperation;
 
     /**
@@ -307,14 +393,27 @@ public class ValidationController {
               .withRequiredArg()
               .describedAs("clusterName")
               .ofType(String.class)
-              .defaultsTo("Trail_Cluster");
+              .defaultsTo("AmbryDev_Cluster");
+
+      ArgumentAcceptingOptionSpec<String> resourceNameOpt =
+          parser.accepts("resourceName", "Resource name of the Ambry's validation service")
+              .withRequiredArg()
+              .describedAs("resourceName")
+              .ofType(String.class)
+              .defaultsTo("AmbryDev_Resource");
+
+      ArgumentAcceptingOptionSpec<String> instanceGroupTagOpt =
+          parser.accepts("instanceGroupTag", "Instance Group Tag for instances of Ambry's validation service")
+              .withRequiredArg()
+              .describedAs("instanceGroupTag")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> queueNameOpt =
           parser.accepts("queueName", "Name of the queue to use for tasks")
               .withRequiredArg()
               .describedAs("queueName")
               .ofType(String.class)
-              .defaultsTo("Trail_Queue1");
+              .defaultsTo("AmbryDev_Queue_0");
 
       ArgumentAcceptingOptionSpec<String> taskCommandOpt = parser.accepts("taskCommand", "Task command name")
           .withRequiredArg()
@@ -331,14 +430,8 @@ public class ValidationController {
           "SateModelName that" + "this node should register itself while adding as participant")
           .withRequiredArg()
           .describedAs("stateModelName")
-          .ofType(String.class).defaultsTo("OnlineOfflineStateModel");
-
-      ArgumentAcceptingOptionSpec<String> instanceNameOpt =
-          parser.accepts("instanceName", "Instance name")
-              .withRequiredArg()
-              .describedAs("instanceName")
-              .ofType(String.class)
-              .defaultsTo("Trail_Instance");
+          .ofType(String.class)
+          .defaultsTo("MasterSlaveStateModel");
 
       ArrayList<OptionSpec<?>> requiredArgs = new ArrayList<>();
       requiredArgs.add(typeOfOperationOpt);
@@ -349,6 +442,10 @@ public class ValidationController {
         logger.trace("ZK Address : {}", this.zkAddress);
         this.clusterName = options.valueOf(clusterNameOpt);
         logger.trace("ClusterName : {} ", this.clusterName);
+        this.resourceName = options.valueOf(resourceNameOpt);
+        logger.trace("ResourceName : {} ", this.resourceName);
+        this.instanceGroupTag = options.valueOf(instanceGroupTagOpt);
+        logger.trace("InstanceGroupTag : {} ", this.instanceGroupTag);
         this.queueName = options.valueOf(queueNameOpt);
         logger.trace("QueueName : {} ", this.queueName);
         this.taskCommand = options.valueOf(taskCommandOpt);
@@ -357,12 +454,10 @@ public class ValidationController {
         logger.trace("Type of Operation : {} ", this.typeOfOperation);
         this.stateModelName = options.valueOf(stateModelNameOpt);
         logger.trace("StateModelName : {}", this.stateModelName);
-        this.instanceName = options.valueOf(instanceNameOpt);
-        logger.trace("InstanceName : {}", this.instanceName);
       } else {
         parser.printHelpOn(System.err);
         throw new InstantiationException(
-            "Did not receive all the required params to perform an operation with the " + "controller");
+            "Did not receive all the required params to perform an operation with the controller");
       }
     }
   }
