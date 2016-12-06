@@ -346,7 +346,7 @@ class PutManager {
           }
           if (chunkFillerThreadMaySleep) {
             synchronized (chunkFillerSynchronizer) {
-              while (chunkFillerThreadMaySleep) {
+              while (chunkFillerThreadMaySleep && isOpen.get()) {
                 isChunkFillerThreadAsleep = true;
                 chunkFillerSynchronizer.wait();
               }

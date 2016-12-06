@@ -201,7 +201,7 @@ public class LogSegmentNameHelperTest {
     assertEquals("Did not get expected name", "", LogSegmentNameHelper.generateFirstSegmentName(1));
     String firstSegmentName = LogSegmentNameHelper.getName(0, 0);
     for (int i = 0; i < 10; i++) {
-      long numSegments = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+      long numSegments = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 2;
       assertEquals("Did not get expected name", firstSegmentName,
           LogSegmentNameHelper.generateFirstSegmentName(numSegments));
     }
