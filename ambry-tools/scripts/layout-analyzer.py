@@ -1,13 +1,12 @@
 #!/usr/bin/python2.7
 
-import json
 import argparse
+import json
 import sys
 from collections import defaultdict
 
 
 class Node(object):
-
     def __init__(self, node, datacenter):
         self.node = node
         self.datacenter = datacenter
@@ -42,7 +41,6 @@ class Node(object):
 
 
 class Partition(object):
-
     def __init__(self, partition):
         self.partition = partition
         self.nodes_by_datacenter = defaultdict(set)
@@ -120,7 +118,7 @@ class Layout(object):
             print("Max partitions sharing a node combo: {} on the following nodes:".format(max_per_combo))
             for node in max_combo:
                 print(node)
-            if (float(max_per_combo)/avg_per_combo) > self.BALANCE_THRESHOLD:
+            if (float(max_per_combo) / avg_per_combo) > self.BALANCE_THRESHOLD:
                 print("The ratio of max to average number of partitions sharing a node combo "
                       + "exceeds the threshold: {} on this datacenter".format(self.BALANCE_THRESHOLD))
 
@@ -154,7 +152,7 @@ class Layout(object):
                     print("Partition {} in datacenter {} uses the following racks: {}".format(
                         cmd[1], cmd[2], self.racks_used(int(cmd[1]), cmd[2])))
                 elif cmd[0] == "shared_partitions":
-                    args = [(cmd[i+1], int(cmd[i+2])) for i in range(0, len(cmd)-1, 2)]
+                    args = [(cmd[i + 1], int(cmd[i + 2])) for i in range(0, len(cmd) - 1, 2)]
                     print("The following nodes:")
                     for hostname, port in args:
                         print("  {}:{}".format(hostname, port))
@@ -182,6 +180,7 @@ def main():
         layout.interactive()
     else:
         layout.print_report()
+
 
 if __name__ == "__main__":
     main()

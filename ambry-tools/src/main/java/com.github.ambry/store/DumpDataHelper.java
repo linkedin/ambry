@@ -13,9 +13,12 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
@@ -36,8 +39,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,54 +66,32 @@ class DumpDataHelper {
    * @param blobIdToMessageMap {@link HashMap} of BlobId to {@link IndexRecord} to hold the information
    *                                          about blobs in the index after parsing
    * @return the total number of keys/records processed
+   * @throws Exception
    */
   long dumpBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList,
-      ConcurrentHashMap<String, IndexRecord> blobIdToMessageMap) {
+      ConcurrentHashMap<String, IndexRecord> blobIdToMessageMap) throws Exception {
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", _clusterMap);
+    StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
+    StoreMetrics metrics = new StoreMetrics(indexFileToDump.getParent(), new MetricRegistry());
+    IndexSegment segment = new IndexSegment(indexFileToDump, false, storeKeyFactory, config, metrics,
+        new Journal(indexFileToDump.getParent(), 0, 0));
+    List<MessageInfo> entries = new ArrayList<>();
+    segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
     long numberOfKeysProcessed = 0;
-    try {
-      Offset startOffset = IndexSegment.getIndexSegmentStartOffset(indexFileToDump.getName());
-      DataInputStream stream = new DataInputStream(new FileInputStream(indexFileToDump));
-      short version = stream.readShort();
-      logger.trace("version {} ", version);
-      if (version == 0) {
-        int keysize = stream.readInt();
-        int valueSize = stream.readInt();
-        long fileEndPointer = stream.readLong();
-        logger.trace("key size {} ", keysize);
-        logger.trace("value size {} ", valueSize);
-        logger.trace("file end pointer {}", fileEndPointer);
-        int Crc_Size = 8;
-        StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", _clusterMap);
-        while (stream.available() > Crc_Size) {
-          StoreKey key = storeKeyFactory.getStoreKey(stream);
-          byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
-          stream.read(value);
-          IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value));
-          String msg =
-              "key " + key + " keySize(in bytes) " + key.sizeInBytes() + " value - offset " + blobValue.getOffset()
-                  + " size " + blobValue.getSize() + " Original Message Offset " + blobValue.getOriginalMessageOffset()
-                  + " Flag " + blobValue.isFlagSet(IndexValue.Flags.Delete_Index) + " LiveUntil "
-                  + blobValue.getExpiresAtMs();
-          boolean isDeleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
-          numberOfKeysProcessed++;
-
-          if (blobList == null || blobList.size() == 0 || blobList.contains(key.toString())) {
-            IndexRecord indexRecord = new IndexRecord(msg, isDeleted, isExpired(blobValue.getExpiresAtMs()));
-            if (blobIdToMessageMap.containsKey(key.getID())) {
-              logger.error(
-                  "Duplicate record found for same blob " + key.getID() + ". Prev record " + blobIdToMessageMap.get(
-                      key.getID()) + ", New record " + indexRecord);
-            }
-            blobIdToMessageMap.put(key.getID(), indexRecord);
-          }
+    for (MessageInfo entry : entries) {
+      StoreKey key = entry.getStoreKey();
+      IndexValue value = segment.find(key);
+      boolean isDeleted = value.isFlagSet(IndexValue.Flags.Delete_Index);
+      numberOfKeysProcessed++;
+      if (blobList == null || blobList.size() == 0 || blobList.contains(key.toString())) {
+        IndexRecord indexRecord = new IndexRecord(value.toString(), isDeleted, isExpired(value.getExpiresAtMs()));
+        if (blobIdToMessageMap.containsKey(key.getID())) {
+          logger.error(
+              "Duplicate record found for same blob " + key.getID() + ". Prev record " + blobIdToMessageMap.get(
+                  key.getID()) + ", New record " + indexRecord);
         }
-        logger.trace("crc {} ", stream.readLong());
-        logger.trace("Total number of keys processed {} ", numberOfKeysProcessed);
+        blobIdToMessageMap.put(key.getID(), indexRecord);
       }
-    } catch (IOException ioException) {
-      logger.error("IOException thrown " + ioException.getStackTrace());
-    } catch (Exception exception) {
-      logger.error("Exception thrown " + exception.getStackTrace());
     }
     return numberOfKeysProcessed;
   }
@@ -125,7 +108,7 @@ class DumpDataHelper {
    * @param logRecord {@code true} if log record has to be logged, {@code false} otherwise
    * @throws IOException
    */
-  public void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter,
+  void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter,
       ConcurrentHashMap<String, LogBlobRecord> blobIdToLogRecord, boolean logRecord) throws IOException {
     logger.info("Dumping log file " + file.getAbsolutePath());
     long currentOffset = 0;
@@ -248,6 +231,7 @@ class DumpDataHelper {
     boolean isExpired = false;
     long timeToLiveInSeconds = -1;
     int totalRecordSize = 0;
+    randomAccessFile.seek(currentOffset);
     short version = randomAccessFile.readShort();
     if (version == 1) {
       ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
@@ -293,7 +277,7 @@ class DumpDataHelper {
    * @param replicaTokenFile the file that needs to be parsed for
    * @throws Exception
    */
-  public void dumpReplicaToken(File replicaTokenFile) throws Exception {
+  void dumpReplicaToken(File replicaTokenFile) throws Exception {
     logger.info("Dumping replica token");
     DataInputStream stream = new DataInputStream(new FileInputStream(replicaTokenFile));
     short version = stream.readShort();
@@ -327,15 +311,15 @@ class DumpDataHelper {
   /**
    * Dumps a single record from the log at a given offset and verifies for corresponding values in index
    * @param randomAccessFile the {@link RandomAccessFile} referring to log file that needs to be parsed
-   * @param offset the offset at which the record needs to be parsed for
    * @param blobId the blobId which that is expected to be matched for the record present at
    *               <code>offset</code>
    * @param indexValue the {@link IndexValue} that needs to be compared against
    * @param coveredRanges a {@link Map} of startOffset to endOffset of ranges covered by records in the log
    * @throws IOException
    */
-  public boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, long offset, String blobId,
-      IndexValue indexValue, Map<Long, Long> coveredRanges) throws Exception {
+  boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, String blobId, IndexValue indexValue,
+      Map<Long, Long> coveredRanges) throws Exception {
+    long offset = indexValue.getOffset().getOffset();
     try {
       randomAccessFile.seek(offset);
       LogBlobRecordInfo logBlobRecordInfo = readSingleRecordFromLog(randomAccessFile, offset);
@@ -393,8 +377,10 @@ class DumpDataHelper {
   }
 
   /**
-   * Updates the {@link ConcurrentHashMap} of blobIds to {@link LogBlobRecord} with the information about the passed in <code>blobId</code>
-   * @param blobIdToLogRecord {@link HashMap} of blobId to {@link LogBlobRecord} that needs to be updated with the information about the blob
+   * Updates the {@link ConcurrentHashMap} of blobIds to {@link LogBlobRecord} with the information about the passed in
+   * <code>blobId</code>
+   * @param blobIdToLogRecord {@link HashMap} of blobId to {@link LogBlobRecord} that needs to be updated with the
+   *                                         information about the blob
    * @param blobId the blobId of the blob that needs to be updated in the {@link ConcurrentHashMap}
    * @param offset the offset at which the blob record was parsed from in the log file
    * @param putRecord {@code true} if the record is a Put record, {@code false} otherwise (incase of a Delete record)

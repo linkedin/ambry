@@ -43,8 +43,7 @@ public class RouterPutGetHelperFactory implements PutGetHelperFactory {
    * @return an instance of {@link ConcurrencyTestTool.RouterPutGetHelper}
    * throws Exception if instantiation of the {@link ConcurrencyTestTool.RouterPutGetHelper} fails
    */
-  public ConcurrencyTestTool.RouterPutGetHelper getPutGetHelper()
-      throws Exception {
+  public ConcurrencyTestTool.RouterPutGetHelper getPutGetHelper() throws Exception {
     return new ConcurrencyTestTool.RouterPutGetHelper(properties, clusterMap, routerFactoryClass, maxBlobSize,
         minBlobSize);
   }

@@ -61,7 +61,7 @@ class PersistentIndex {
   static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
-  private static final Comparator<File> INDEX_FILE_COMPARATOR = new Comparator<File>() {
+  static final Comparator<File> INDEX_FILE_COMPARATOR = new Comparator<File>() {
     @Override
     public int compare(File o1, File o2) {
       if (o1 == null || o2 == null) {
@@ -71,7 +71,7 @@ class PersistentIndex {
       return o1Offset.compareTo(IndexSegment.getIndexSegmentStartOffset(o2.getName()));
     }
   };
-  private static final FilenameFilter INDEX_FILE_FILTER = new FilenameFilter() {
+  static final FilenameFilter INDEX_FILE_FILTER = new FilenameFilter() {
     @Override
     public boolean accept(File dir, String name) {
       return name.endsWith(INDEX_SEGMENT_FILE_NAME_SUFFIX);

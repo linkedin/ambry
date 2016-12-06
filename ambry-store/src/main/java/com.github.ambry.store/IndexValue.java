@@ -113,6 +113,12 @@ class IndexValue {
   ByteBuffer getBytes() {
     return value;
   }
+
+  @Override
+  public String toString() {
+    return "Offset: " + offset + ", Size: " + getSize() + ", Flags: " + getFlags() + ", ExpiresAtMs: "
+        + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset();
+  }
 }
 
 
