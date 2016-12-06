@@ -99,13 +99,13 @@ class PutManager {
    *                             operations.
    * @param idsToDeleteList The list to fill with ids of successfully put data chunks of an unsuccessful
    *                        overall put operation.
-   * @param index the index of the {@link NonBlockingRouter.OperationController} in the {@link NonBlockingRouter}
+   * @param suffix the suffix to associate with the names of the threads created by this PutManager
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
-      List<String> idsToDeleteList, int index, Time time) {
+      List<String> idsToDeleteList, String suffix, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
@@ -130,7 +130,7 @@ class PutManager {
     this.time = time;
     putOperations = Collections.newSetFromMap(new ConcurrentHashMap<PutOperation, Boolean>());
     correlationIdToPutOperation = new HashMap<Integer, PutOperation>();
-    chunkFillerThread = Utils.newThread("ChunkFillerThread-" + index, new ChunkFiller(), true);
+    chunkFillerThread = Utils.newThread("ChunkFillerThread-" + suffix, new ChunkFiller(), true);
     chunkFillerThread.start();
     routerMetrics.initializePutManagerMetrics(chunkFillerThread);
   }

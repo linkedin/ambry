@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -107,7 +108,6 @@ public class NonBlockingRouterMetrics {
   public final Counter crossColoSuccessCount;
   public Gauge<Long> chunkFillerThreadRunning;
   public Gauge<Long> requestResponseHandlerThreadRunning;
-  public Gauge<Integer> activeOperations;
 
   // metrics for tracking blob sizes and chunking.
   public final Histogram putBlobSizeBytes;
@@ -304,14 +304,21 @@ public class NonBlockingRouterMetrics {
    * {@link com.github.ambry.router.NonBlockingRouter.OperationController} of a {@link NonBlockingRouter}.
    * @param currentOperationsCount The counter of {@link com.github.ambry.router.NonBlockingRouter.OperationController}.
    */
-  public void initializeNumActiveOperationsMetrics(final AtomicInteger currentOperationsCount) {
-    activeOperations = new Gauge<Integer>() {
+  public void initializeNumActiveOperationsMetrics(final AtomicInteger currentOperationsCount,
+      final AtomicInteger currentBackgroundOperationsCount) {
+    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"), new Gauge<Integer>() {
       @Override
       public Integer getValue() {
         return currentOperationsCount.get();
       }
-    };
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"), activeOperations);
+    });
+    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
+        new Gauge<Integer>() {
+          @Override
+          public Integer getValue() {
+            return currentBackgroundOperationsCount.get();
+          }
+        });
   }
 
   /**
@@ -388,10 +395,10 @@ public class NonBlockingRouterMetrics {
   /**
    * Update appropriate metrics on a getBlob operation related error.
    * @param e the {@link Exception} associated with the error.
-   * @param options the {@link GetBlobOptions} associated with the request.
+   * @param options the {@link GetBlobOptionsInternal} associated with the request.
    */
-  void onGetBlobError(Exception e, GetBlobOptions options) {
-    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+  void onGetBlobError(Exception e, GetBlobOptionsInternal options) {
+    if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       onGetBlobInfoError(e);
     } else {
       onGetBlobDataError(e, options);
@@ -413,13 +420,13 @@ public class NonBlockingRouterMetrics {
   /**
    * Update appropriate metrics on a getBlob (Data or All) operation related error.
    * @param e the {@link Exception} associated with the error.
-   * @param options the {@link GetBlobOptions} associated with the request.
+   * @param options the {@link GetBlobOptionsInternal} associated with the request.
    */
-  private void onGetBlobDataError(Exception e, GetBlobOptions options) {
+  private void onGetBlobDataError(Exception e, GetBlobOptionsInternal options) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobErrorCount.inc();
-      if (options != null && options.getRange() != null) {
+      if (options != null && options.getBlobOptions.getRange() != null) {
         getBlobWithRangeErrorCount.inc();
       }
       operationErrorRate.mark();

@@ -23,6 +23,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.RouterTestHelpers.*;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ import static org.junit.Assert.*;
  */
 
 public class DeleteManagerTest {
-  private static final int AWAIT_TIMEOUT_SECONDS = 200;
+  private static final int AWAIT_TIMEOUT_SECONDS = 10;
   private Time mockTime;
   private AtomicReference<MockSelectorState> mockSelectorState;
   private MockClusterMap clusterMap;
@@ -147,6 +148,11 @@ public class DeleteManagerTest {
             }
             for (Future future : futures) {
               future.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            }
+            long waitStart = SystemTime.getInstance().milliseconds();
+            while (router.getBackgroundOperationsCount() != 0
+                && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_SECONDS * 1000) {
+              Thread.sleep(1000);
             }
             Assert.assertTrue("Callback not called.", callbackCalled.await(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS));
             Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());

@@ -41,14 +41,13 @@ abstract class GetOperation {
   protected final NonBlockingRouterMetrics routerMetrics;
   protected final ClusterMap clusterMap;
   protected final ResponseHandler responseHandler;
-  protected final FutureResult<GetBlobResult> operationFuture;
-  protected final Callback<GetBlobResult> operationCallback;
+  protected final Callback<GetBlobResultInternal> operationCallback;
   protected final BlobId blobId;
-  protected final GetBlobOptions options;
+  protected final GetBlobOptionsInternal options;
   protected final Time time;
   protected volatile boolean operationCompleted = false;
   protected final AtomicReference<Exception> operationException = new AtomicReference<>();
-  protected GetBlobResult operationResult;
+  protected GetBlobResultInternal operationResult;
   protected final long submissionTimeMs;
 
   private static final Logger logger = LoggerFactory.getLogger(GetOperation.class);
@@ -60,21 +59,19 @@ abstract class GetOperation {
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blobId of the associated blob in string form.
-   * @param futureResult the future that will contain the result of the operation.
+   * @param options the {@link GetBlobOptionsInternal} associated with this operation.
    * @param operationCallback the callback that is to be called when the operation completes.
    * @param time the {@link Time} instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
-      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> operationCallback, Time time)
-      throws RouterException {
+      ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
+      Callback<GetBlobResultInternal> operationCallback, Time time) throws RouterException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.options = options;
-    this.operationFuture = futureResult;
     this.operationCallback = operationCallback;
     this.time = time;
     submissionTimeMs = time.milliseconds();
@@ -82,18 +79,10 @@ abstract class GetOperation {
   }
 
   /**
-   * Return the {@link FutureResult} associated with this operation.
-   * @return the {@link FutureResult} associated with this operation.
-   */
-  FutureResult<GetBlobResult> getFuture() {
-    return operationFuture;
-  }
-
-  /**
    * Return the {@link Callback} associated with this operation.
    * @return the {@link Callback} associated with this operation.
    */
-  Callback<GetBlobResult> getCallback() {
+  Callback<GetBlobResultInternal> getCallback() {
     return operationCallback;
   }
 
@@ -109,7 +98,7 @@ abstract class GetOperation {
    * Return the result of the operation.
    * @return the operation result.
    */
-  GetBlobResult getOperationResult() {
+  GetBlobResultInternal getOperationResult() {
     return operationResult;
   }
 
@@ -124,7 +113,7 @@ abstract class GetOperation {
   /**
    * @return The {@link GetBlobOptions} associated with this operation.
    */
-  GetBlobOptions getOptions() {
+  GetBlobOptionsInternal getOptions() {
     return options;
   }
 

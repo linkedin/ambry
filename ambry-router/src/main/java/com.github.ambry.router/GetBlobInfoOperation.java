@@ -57,17 +57,17 @@ class GetBlobInfoOperation extends GetOperation {
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blob id associated with the operation in string form.
-   * @param futureResult the future that will contain the result of the operation.
+   * @param options the {@link GetBlobOptionsInternal} containing the options associated with this operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param operationCompleteCallback the {@link OperationCompleteCallback} to use to complete operations.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
-      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
+      ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
+      Callback<GetBlobResultInternal> callback,
       OperationCompleteCallback operationCompleteCallback, Time time) throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
         routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
@@ -76,7 +76,7 @@ class GetBlobInfoOperation extends GetOperation {
 
   @Override
   void abort(Exception abortCause) {
-    operationCompleteCallback.completeOperation(operationFuture, operationCallback, null, abortCause);
+    operationCompleteCallback.completeOperation(null, operationCallback, null, abortCause);
     operationCompleted = true;
   }
 
@@ -135,7 +135,7 @@ class GetBlobInfoOperation extends GetOperation {
       ReplicaId replicaId = replicaIterator.next();
       String hostname = replicaId.getDataNodeId().getHostname();
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
-      GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getGetOption());
+      GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
       RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
@@ -274,8 +274,9 @@ class GetBlobInfoOperation extends GetOperation {
    */
   private void handleBody(InputStream payload) throws IOException, MessageFormatException {
     if (operationResult == null) {
-      operationResult = new GetBlobResult(new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
-          MessageFormatRecord.deserializeUserMetadata(payload).array()), null);
+      operationResult = new GetBlobResultInternal(new GetBlobResult(
+          new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
+              MessageFormatRecord.deserializeUserMetadata(payload).array()), null), null);
     } else {
       // If the successTarget is 1, this case will never get executed.
       // If it is more than 1, then, different responses will have to be reconciled in some way. Here is where that
@@ -331,7 +332,7 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.onGetBlobError(e, options);
       }
       routerMetrics.getBlobInfoOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
-      operationCompleteCallback.completeOperation(operationFuture, operationCallback, operationResult, e);
+      operationCompleteCallback.completeOperation(null, operationCallback, operationResult, e);
     }
   }
 }

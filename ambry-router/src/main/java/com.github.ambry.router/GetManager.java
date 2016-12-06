@@ -19,12 +19,15 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
@@ -105,27 +108,26 @@ class GetManager {
   /**
    * Submit an operation to get a blob asynchronously.
    * @param blobId The blobId for which the BlobInfo is being requested, in string form.
-   * @param options The {@link GetBlobOptions} associated witht the operation.
-   * @param futureResult The {@link FutureResult} that contains the pending result of the operation.
+   * @param options The {@link GetBlobOptionsInternal} associated with the operation.
    * @param callback The {@link Callback} object to be called on completion of the operation.
    */
-  void submitGetBlobOperation(String blobId, GetBlobOptions options, FutureResult<GetBlobResult> futureResult,
-      Callback<GetBlobResult> callback) {
+  void submitGetBlobOperation(String blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback) {
     try {
       GetOperation getOperation;
-      if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation =
             new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                futureResult, callback, operationCompleteCallback, time);
+                callback, operationCompleteCallback, time);
       } else {
-        getOperation = new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-            futureResult, callback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+        getOperation =
+            new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+                operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
       }
       getOperations.add(getOperation);
     } catch (RouterException e) {
       routerMetrics.onGetBlobError(e, options);
       routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
+      operationCompleteCallback.completeOperation(null, callback, null, e);
     }
   }
 
@@ -252,3 +254,35 @@ class GetManager {
   }
 }
 
+/**
+ * An internal options class containing parameters to the GetBlob operation.
+ */
+class GetBlobOptionsInternal {
+  final GetBlobOptions getBlobOptions;
+  final boolean getChunkIdsOnly;
+
+  /**
+   * Construct an GetBlobOptionsInternal instance
+   * @param getBlobOptions the {@link GetBlobOptions} associated with this instance.
+   * @param getChunkIdsOnly {@code true} if this operation is to fetch just the chunk ids of a composite blob.
+   */
+  GetBlobOptionsInternal(GetBlobOptions getBlobOptions, boolean getChunkIdsOnly) {
+    this.getBlobOptions = getBlobOptions;
+    this.getChunkIdsOnly = getChunkIdsOnly;
+  }
+}
+
+class GetBlobResultInternal {
+  GetBlobResult getBlobResult;
+  List<StoreKey> storeKeys;
+
+  /**
+   * Construct a GetBlobResultInternal instance.
+   * @param getBlobResult The {@link GetBlobResult} associated with this instance, if there is one..
+   * @param storeKeys The store keys associated with this instance, if there are any.
+   */
+  public GetBlobResultInternal(GetBlobResult getBlobResult, List<StoreKey> storeKeys) {
+    this.getBlobResult = getBlobResult;
+    this.storeKeys = storeKeys;
+  }
+}
