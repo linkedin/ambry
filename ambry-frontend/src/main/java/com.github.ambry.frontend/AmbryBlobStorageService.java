@@ -35,6 +35,7 @@ import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -360,7 +361,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               break;
             case HEAD:
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null),
+              router.getBlob(result,
+                  new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
                   headCallback);
               break;
             case DELETE:

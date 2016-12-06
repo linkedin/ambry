@@ -27,7 +27,6 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -81,9 +80,8 @@ public class GetBlobInfoOperationTest {
   private final byte[] putContent;
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
-  private final GetBlobOptionsInternal options =
-      new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null),
-          false);
+  private final GetBlobOptionsInternal options = new GetBlobOptionsInternal(
+      new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false);
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;

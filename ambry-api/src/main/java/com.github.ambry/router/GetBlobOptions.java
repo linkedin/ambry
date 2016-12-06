@@ -28,20 +28,12 @@ public class GetBlobOptions {
   private final ByteRange range;
 
   /**
-   * Construct a {@link GetBlobOptions} object with the default options: {@link OperationType#All},
-   * {@link GetOption#None} and no {@link ByteRange}.
-   */
-  public GetBlobOptions() {
-    this(OperationType.All, GetOption.None, null);
-  }
-
-  /**
    * Construct a {@link GetBlobOptions} object that represents any options associated with a getBlob request.
    * @param operationType the {@link OperationType} for this request. This must be non-null.
    * @param getOption the {@link GetOption} associated with the request.
    * @param range a {@link ByteRange} for this get request. This can be null, if the entire blob is desired.
    */
-  public GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range) {
+  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }

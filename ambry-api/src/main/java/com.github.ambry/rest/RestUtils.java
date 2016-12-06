@@ -17,6 +17,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -379,9 +380,11 @@ public class RestUtils {
     if (subResource != null && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources.", RestServiceErrorCode.InvalidArgs);
     }
-    return new GetBlobOptions(
-        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo, getOption,
-        rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null);
+    return new GetBlobOptionsBuilder().operationType(
+        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo)
+        .getOption(getOption)
+        .range(rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null)
+        .build();
   }
 
   /**

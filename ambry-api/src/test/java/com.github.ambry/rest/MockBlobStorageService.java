@@ -16,10 +16,10 @@ package com.github.ambry.rest;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -89,7 +89,8 @@ public class MockBlobStorageService implements BlobStorageService {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
       MockGetCallback callback = new MockGetCallback(this, restRequest, restResponseChannel);
-      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null), callback);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
+          callback);
     }
   }
 
@@ -119,7 +120,7 @@ public class MockBlobStorageService implements BlobStorageService {
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null),
+      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
           new MockHeadCallback(this, restRequest, restResponseChannel));
     }
   }

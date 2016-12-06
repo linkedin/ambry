@@ -23,7 +23,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
-import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -430,14 +430,13 @@ public class ConcurrencyTestTool {
             deleteHelper.deleteBlobAndValidate(blobIdStr, deleteHelper.getErrorCodeForNoError(), callback);
           }
         } catch (InterruptedException e) {
-          logger.error(" Interrupted Exception thrown in , exception ",  e);
+          logger.error(" Interrupted Exception thrown in , exception ", e);
         }
       }
       try {
         countDownLatch.await();
       } catch (InterruptedException e) {
-        logger.error(
-            " Interrupted Exception thrown while waiting for deletion to complete , exception ", e);
+        logger.error(" Interrupted Exception thrown while waiting for deletion to complete , exception ", e);
       }
     }
   }
@@ -560,7 +559,7 @@ public class ConcurrencyTestTool {
       final FutureResult futureResult = new FutureResult();
       try {
         final Long startTimeGetBlobNs = SystemTime.getInstance().nanoseconds();
-        router.getBlob(blobIdStr, new GetBlobOptions(), new Callback<GetBlobResult>() {
+        router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), new Callback<GetBlobResult>() {
           @Override
           public void onCompletion(GetBlobResult getBlobResult, Exception exception) {
             long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlobNs;

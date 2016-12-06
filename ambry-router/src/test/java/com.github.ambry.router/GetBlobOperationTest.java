@@ -30,7 +30,6 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.router.RouterTestHelpers.*;
@@ -103,7 +102,7 @@ public class GetBlobOperationTest {
   private byte[] putContent;
 
   // Options which are passed into GetBlobOperations
-  private GetBlobOptionsInternal options = new GetBlobOptionsInternal(new GetBlobOptions(), false);
+  private GetBlobOptionsInternal options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false);
 
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
@@ -212,8 +211,8 @@ public class GetBlobOperationTest {
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-        new GetBlobOptionsInternal(new GetBlobOptions(), false), operationCallback, operationCompleteCallback,
-        readyForPollCallback, blobIdFactory, time);
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), operationCallback,
+        operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
 
     Assert.assertEquals("Callbacks must match", operationCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
@@ -230,14 +229,12 @@ public class GetBlobOperationTest {
       doPut();
       switch (i % 2) {
         case 0:
-          options =
-              new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null),
-                  false);
+          options = new GetBlobOptionsInternal(
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false);
           break;
         case 1:
-          options =
-              new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.None, null),
-                  false);
+          options = new GetBlobOptionsInternal(
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false);
           break;
       }
       getAndAssertSuccess();
@@ -277,14 +274,12 @@ public class GetBlobOperationTest {
       doPut();
       switch (i % 2) {
         case 0:
-          options =
-              new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null),
-                  false);
+          options = new GetBlobOptionsInternal(
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false);
           break;
         case 1:
-          options =
-              new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.None, null),
-                  false);
+          options = new GetBlobOptionsInternal(
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false);
           break;
       }
       getAndAssertSuccess();
@@ -660,8 +655,9 @@ public class GetBlobOperationTest {
   private void testRangeRequestOffsetRange(long startOffset, long endOffset, boolean rangeSatisfiable)
       throws Exception {
     doPut();
-    options = new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None,
-        ByteRange.fromOffsetRange(startOffset, endOffset)), false);
+    options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .range(ByteRange.fromOffsetRange(startOffset, endOffset))
+        .build(), false);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -674,9 +670,9 @@ public class GetBlobOperationTest {
    */
   private void testRangeRequestFromStartOffset(long startOffset, boolean rangeSatisfiable) throws Exception {
     doPut();
-    options = new GetBlobOptionsInternal(
-        new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, ByteRange.fromStartOffset(startOffset)),
-        false);
+    options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .range(ByteRange.fromStartOffset(startOffset))
+        .build(), false);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -689,9 +685,9 @@ public class GetBlobOperationTest {
    */
   private void testRangeRequestLastNBytes(long lastNBytes, boolean rangeSatisfiable) throws Exception {
     doPut();
-    options = new GetBlobOptionsInternal(
-        new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, ByteRange.fromLastNBytes(lastNBytes)),
-        false);
+    options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
+        .range(ByteRange.fromLastNBytes(lastNBytes))
+        .build(), false);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 

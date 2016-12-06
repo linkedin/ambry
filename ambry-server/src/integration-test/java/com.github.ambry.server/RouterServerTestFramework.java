@@ -25,6 +25,7 @@ import com.github.ambry.network.Selector;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -270,9 +271,9 @@ class RouterServerTestFramework {
    */
   private void startGetBlobInfo(GetOption options, final boolean checkDeleted, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
-    Future<GetBlobResult> future =
-        router.getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, options, null),
-            callback);
+    Future<GetBlobResult> future = router.getBlob(opChain.blobId,
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).getOption(options).build(),
+        callback);
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlobInfo", checkDeleted), opChain) {
           @Override
@@ -295,8 +296,9 @@ class RouterServerTestFramework {
    */
   private void startGetBlob(GetOption options, final boolean checkDeleted, final OperationChain opChain) {
     Callback<GetBlobResult> callback = new TestCallback<>(opChain, checkDeleted);
-    Future<GetBlobResult> future =
-        router.getBlob(opChain.blobId, new GetBlobOptions(GetBlobOptions.OperationType.All, options, null), callback);
+    Future<GetBlobResult> future = router.getBlob(opChain.blobId,
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).getOption(options).build(),
+        callback);
     TestFuture<GetBlobResult> testFuture =
         new TestFuture<GetBlobResult>(future, genLabel("getBlob", checkDeleted), opChain) {
           @Override
