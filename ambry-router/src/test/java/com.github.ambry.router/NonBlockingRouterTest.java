@@ -427,12 +427,11 @@ public class NonBlockingRouterTest {
     Set<String> blobsToBeDeleted = getBlobsInServers(mockServerLayout);
     // The second iteration is to test the case where the blob was already deleted.
     // The third iteration is to test the case where the blob has expired.
-    for (int i=0; i<3; i++) {
+    for (int i = 0; i < 3; i++) {
       if (i == 2) {
         // Create a clean cluster and put another blob that immediate expires.
         setOperationParams();
-        putBlobProperties =
-            new BlobProperties(PUT_CONTENT_SIZE, "serviceId", "memberId", "contentType", false, 0);
+        putBlobProperties = new BlobProperties(PUT_CONTENT_SIZE, "serviceId", "memberId", "contentType", false, 0);
         blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
         Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
         allBlobsInServer.removeAll(blobsToBeDeleted);
