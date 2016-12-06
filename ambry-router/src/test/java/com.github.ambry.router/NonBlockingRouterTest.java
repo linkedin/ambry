@@ -457,6 +457,11 @@ public class NonBlockingRouterTest {
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
+  /**
+   * Return the blob ids of all the blobs in the servers in the cluster.
+   * @param mockServerLayout the {@link MockServerLayout} representing the cluster.
+   * @return a Set of blob id strings of the blobs in the servers in the cluster.
+   */
   private Set<String> getBlobsInServers(MockServerLayout mockServerLayout) {
     Set<String> blobsInServers = new HashSet<>();
     for (MockServer mockServer : mockServerLayout.getMockServers()) {
