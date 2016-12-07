@@ -430,13 +430,13 @@ public class ConcurrencyTestTool {
             deleteHelper.deleteBlobAndValidate(blobIdStr, deleteHelper.getErrorCodeForNoError(), callback);
           }
         } catch (InterruptedException e) {
-          logger.error(" Interrupted Exception thrown in , exception ", e);
+          logger.error("Delete operation interrupted", e);
         }
       }
       try {
         countDownLatch.await();
       } catch (InterruptedException e) {
-        logger.error(" Interrupted Exception thrown while waiting for deletion to complete , exception ", e);
+        logger.error("Waiting for delete operations to complete interrupted", e);
       }
     }
   }
