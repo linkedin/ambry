@@ -114,15 +114,15 @@ public class StoreFindTokenTest {
    * @throws IOException
    */
   @Test
-  public void serDeSerTest() throws IOException {
+  public void serDeTest() throws IOException {
     UUID sessionId = new UUID(0, 0);
     String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(UtilsTest.getRandomString(10));
 
-    doSerDeSerTest(new StoreFindToken());
-    doSerDeSerTest(new StoreFindToken(key, offset, sessionId));
-    doSerDeSerTest(new StoreFindToken(offset, sessionId));
+    doSerDeTest(new StoreFindToken());
+    doSerDeTest(new StoreFindToken(key, offset, sessionId));
+    doSerDeTest(new StoreFindToken(offset, sessionId));
   }
 
   /**
@@ -189,7 +189,7 @@ public class StoreFindTokenTest {
     assertEquals("Hash code does not match", reference.hashCode(), toCheck.hashCode());
   }
 
-  // serDeSerTest() helpers
+  // serDeTest() helpers
 
   /**
    * Serializes {@code token} in all formats and ensures that the {@link StoreFindToken} obtained from the
@@ -197,7 +197,7 @@ public class StoreFindTokenTest {
    * @param token the {@link StoreFindToken} that has to be serialized/deserialized.
    * @throws IOException
    */
-  private void doSerDeSerTest(StoreFindToken token) throws IOException {
+  private void doSerDeTest(StoreFindToken token) throws IOException {
     short i = numSegments > 1 ? (short) 1 : (short) 0;
     for (; i <= 1; i++) {
       DataInputStream stream = getSerializedStream(token, i);
