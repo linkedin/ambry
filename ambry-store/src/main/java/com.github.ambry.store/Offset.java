@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * Denotes an offset inside the log.
  */
-class Offset implements Comparable<Offset> {
+public class Offset implements Comparable<Offset> {
   private final String name;
   private final long offset;
 
@@ -53,7 +53,7 @@ class Offset implements Comparable<Offset> {
    * of the record is not recognized.
    * @throws IOException if there are I/O problems reading from the stream.
    */
-  static Offset fromBytes(DataInputStream stream) throws IOException {
+  public static Offset fromBytes(DataInputStream stream) throws IOException {
     String name;
     long offset;
     int version = stream.readShort();
@@ -72,14 +72,14 @@ class Offset implements Comparable<Offset> {
    * @return the name of the log segment for which the offset provided by {@link #getOffset()} is valid. Guaranteed to
    * be non-null and non-empty.
    */
-  String getName() {
+  public String getName() {
     return name;
   }
 
   /**
    * @return the offset in the log segment with name provided by {@link #getName()}. Guaranteed to be >= 0.
    */
-  long getOffset() {
+  public long getOffset() {
     return offset;
   }
 

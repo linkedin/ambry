@@ -41,9 +41,10 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  private static final short VERSION = 0;
+  private static final short VERSION_0 = 0;
+  private static final short VERSION_1 = 1;
+
   private static final short VERSION_LENGTH = 2;
-  private static final short OFFSET_LENGTH = 8;
   private static final short SIZE_LENGTH = 8;
   private static final short EXPIRES_AT_MS_LENGTH = 8;
 
@@ -100,10 +101,12 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   byte[] toBytes() {
-    byte[] buf = new byte[VERSION_LENGTH + OFFSET_LENGTH + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + storeKey.sizeInBytes()];
+    byte[] offsetBytes = offset.toBytes();
+    byte[] buf =
+        new byte[VERSION_LENGTH + offsetBytes.length + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + storeKey.sizeInBytes()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-    bufWrap.putShort(VERSION);
-    bufWrap.putLong(offset.getOffset());
+    bufWrap.putShort(VERSION_1);
+    bufWrap.put(offsetBytes);
     bufWrap.putLong(size);
     bufWrap.putLong(expiresAtMs);
     bufWrap.put(storeKey.toBytes());
@@ -113,14 +116,14 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   static BlobReadOptions fromBytes(DataInputStream stream, StoreKeyFactory factory, Log log) throws IOException {
     short version = stream.readShort();
     switch (version) {
-      case 0:
+      case VERSION_0:
         // backwards compatibility
         Offset offset = new Offset(log.getFirstSegment().getName(), stream.readLong());
         long size = stream.readLong();
         long expiresAtMs = stream.readLong();
         StoreKey key = factory.getStoreKey(stream);
         return new BlobReadOptions(log, offset, size, expiresAtMs, key);
-      case 1:
+      case VERSION_1:
         offset = Offset.fromBytes(stream);
         size = stream.readLong();
         expiresAtMs = stream.readLong();

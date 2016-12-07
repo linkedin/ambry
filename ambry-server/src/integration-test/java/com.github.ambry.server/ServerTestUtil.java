@@ -54,8 +54,9 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.Offset;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
@@ -1184,14 +1185,11 @@ public final class ServerTestUtil {
               // read total bytes read from local store
               dataInputStream.readLong();
               // read replica token
-              FindToken token = factory.getFindToken(dataInputStream);
+              StoreFindToken token = (StoreFindToken) factory.getFindToken(dataInputStream);
               System.out.println(
                   "partitionId " + partitionId + " hostname " + hostname + " port " + port + " token " + token);
-              ByteBuffer bytebufferToken = ByteBuffer.wrap(token.toBytes());
-              assertEquals(0, bytebufferToken.getShort());
-              int size = bytebufferToken.getInt();
-              bytebufferToken.position(bytebufferToken.position() + size);
-              long parsedToken = bytebufferToken.getLong();
+              Offset endTokenOffset = token.getOffset();
+              long parsedToken = endTokenOffset == null ? -1 : endTokenOffset.getOffset();
               System.out.println("The parsed token is " + parsedToken);
               if (partitionId.isEqual(targetPartition)) {
                 Assert.assertFalse("Parsed offset must not be larger than target value: " + targetOffset,
