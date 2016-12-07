@@ -24,15 +24,13 @@ import java.util.UUID;
  * The StoreFindToken is an implementation of FindToken.
  * It is used to provide a token to the client to resume
  * the find from where it was left previously. The StoreFindToken
- * maintains a offset to track entries within the journal. If the
+ * maintains an offset to track entries within the journal. If the
  * offset gets outside the range of the journal, the storekey and
  * indexstartoffset that refers to the segment of the index is used
  * to perform the search. This is possible because the journal is
  * always equal or larger than the writable segment.
  */
 public class StoreFindToken implements FindToken {
-  private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
-
   /**
    * The type of the store token.
    */
@@ -40,18 +38,21 @@ public class StoreFindToken implements FindToken {
     Uninitialized, JournalBased, IndexBased
   }
 
-  private Type type;
-  private Offset offset;
-  private StoreKey storeKey;
-  private UUID sessionId;
-  private long bytesRead;
+  static final short VERSION_0 = 0;
+  static final short VERSION_1 = 1;
 
-  private static final short VERSION = 1;
   private static final int VERSION_SIZE = 2;
   private static final int TYPE_SIZE = 2;
-  private static final int SESSION_ID_SIZE = 4;
+  private static final int SESSION_ID_LENGTH_SIZE = 4;
 
+  private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final int UNINITIALIZED_OFFSET = -1;
+
+  private final Type type;
+  private final Offset offset;
+  private final StoreKey storeKey;
+  private final UUID sessionId;
+  private long bytesRead;
 
   StoreFindToken() {
     this(Type.Uninitialized, null, null, null);
@@ -89,7 +90,7 @@ public class StoreFindToken implements FindToken {
     // read version
     short version = stream.readShort();
     switch (version) {
-      case 0:
+      case VERSION_0:
         // backwards compatibility
         String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(1);
         // read sessionId
@@ -112,7 +113,7 @@ public class StoreFindToken implements FindToken {
           storeFindToken = new StoreFindToken();
         }
         break;
-      case 1:
+      case VERSION_1:
         // read sessionId
         sessionId = Utils.readIntString(stream);
         sessionIdUUID = null;
@@ -172,12 +173,12 @@ public class StoreFindToken implements FindToken {
     byte[] offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
     byte[] sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
     byte[] storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
-    int size =
-        VERSION_SIZE + SESSION_ID_SIZE + sessionIdBytes.length + TYPE_SIZE + offsetBytes.length + storeKeyBytes.length;
+    int size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length + TYPE_SIZE + offsetBytes.length
+        + storeKeyBytes.length;
     byte[] buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
-    bufWrap.putShort(VERSION);
+    bufWrap.putShort(VERSION_1);
     // add sessionId
     bufWrap.putInt(sessionIdBytes.length);
     bufWrap.put(sessionIdBytes);
@@ -193,7 +194,6 @@ public class StoreFindToken implements FindToken {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("version: ").append(VERSION);
     sb.append("type: ").append(type);
     if (!type.equals(Type.Uninitialized)) {
       if (sessionId != null) {
