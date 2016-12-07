@@ -625,9 +625,6 @@ public final class ReplicationManager {
                   logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname,
                       port);
                 }
-              } else {
-                logger.warn("The local store corresponding to partition {} in the replica token file was not started",
-                    partitionId);
               }
             }
             long crc = crcStream.getValue();
