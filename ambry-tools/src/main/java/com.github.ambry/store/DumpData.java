@@ -26,12 +26,12 @@ import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -236,12 +236,12 @@ public class DumpData {
   }
 
   /**
-   * Dumps all records in an index file and updates the {@link ConcurrentHashMap} for the blob status
+   * Dumps all records in an index file and updates the {@link Map} for the blob status
    * @param indexFileToDump the index file that needs to be parsed for
    * @param replica the replica from which the index files are being parsed for
    * @param replicaList total list of all replicas for the partition which this replica is part of
    * @param blobList List of blobIds to be filtered for. Can be {@code null}
-   * @param blobIdToStatusMap {@link ConcurrentHashMap} of BlobId to {@link BlobStatus} that needs to be updated with the
+   * @param blobIdToStatusMap {@link Map} of BlobId to {@link BlobStatus} that needs to be updated with the
    *                                         status of every blob in the index
    * @param indexStats the {@link IndexStats} to be updated with some stats info
    * @param logBlobStats {@code true} if blobs stats needs to be logged, {@code false} otherwise
@@ -249,9 +249,8 @@ public class DumpData {
    * @throws Exception
    */
   long dumpIndex(File indexFileToDump, String replica, ArrayList<String> replicaList, ArrayList<String> blobList,
-      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, IndexStats indexStats, boolean logBlobStats)
-      throws Exception {
-    ConcurrentHashMap<String, DumpDataHelper.IndexRecord> blobIdToMessageMapPerIndexFile = new ConcurrentHashMap<>();
+      Map<String, BlobStatus> blobIdToStatusMap, IndexStats indexStats, boolean logBlobStats) throws Exception {
+    Map<String, DumpDataHelper.IndexRecord> blobIdToMessageMapPerIndexFile = new HashMap<>();
     logger.trace("Dumping index {} for {}", indexFileToDump.getName(), replica);
     long blobsProcessed = dumpDataHelper.dumpBlobsFromIndex(indexFileToDump, blobList, blobIdToMessageMapPerIndexFile);
 
@@ -320,17 +319,17 @@ public class DumpData {
    * @param replicaRootDirectory the root directory for a replica
    * @param blobList list of blobIds to be filtered for. Can be {@code null}
    * @param logBlobStats {@code true} if blobs stats needs to be logged, {@code false} otherwise
-   * @return a {@link ConcurrentHashMap} of BlobId to {@link BlobStatus} containing the information about every blob in
+   * @return a {@link Map} of BlobId to {@link BlobStatus} containing the information about every blob in
    * this replica
    * @throws Exception
    */
-  private ConcurrentHashMap<String, BlobStatus> dumpIndexesForReplica(String replicaRootDirectory,
-      ArrayList<String> blobList, boolean logBlobStats) throws Exception {
+  private Map<String, BlobStatus> dumpIndexesForReplica(String replicaRootDirectory, ArrayList<String> blobList,
+      boolean logBlobStats) throws Exception {
     long totalKeysProcessed = 0;
     File replicaDirectory = new File(replicaRootDirectory);
     logger.info("Root directory for replica : " + replicaRootDirectory);
     IndexStats indexStats = new IndexStats();
-    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<>();
+    Map<String, BlobStatus> blobIdToStatusMap = new HashMap<>();
     File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_FILE_FILTER);
     Arrays.sort(replicas, PersistentIndex.INDEX_FILE_COMPARATOR);
     for (File indexFile : replicas) {
@@ -363,15 +362,15 @@ public class DumpData {
    * Dumps active blobs for a given index file
    * @param indexFileToDump the index file that needs to be parsed for
    * @param blobList List of BlobIds that needs to be filtered for. Can be {@code null}
-   * @param blobIdToBlobMessageMap a {@link ConcurrentHashMap} of BlobId to Message that needs to be updated with the
-   *                               information about the blobs in the index
+   * @param blobIdToBlobMessageMap a {@link Map} of BlobId to Message that needs to be updated with the information
+   *                               about the blobs in the index
    * @param activeBlobStats {@link ActiveBlobStats} to be updated with necessary stats
    * @return the total number of blobs parsed from the given index file
    * @throws Exception
    */
   private long dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList,
-      ConcurrentHashMap<String, String> blobIdToBlobMessageMap, ActiveBlobStats activeBlobStats) throws Exception {
-    ConcurrentHashMap<String, DumpDataHelper.IndexRecord> blobIdToMessageMapPerIndexFile = new ConcurrentHashMap<>();
+      Map<String, String> blobIdToBlobMessageMap, ActiveBlobStats activeBlobStats) throws Exception {
+    Map<String, DumpDataHelper.IndexRecord> blobIdToMessageMapPerIndexFile = new HashMap<>();
 
     long blobsProcessed = dumpDataHelper.dumpBlobsFromIndex(indexFileToDump, blobList, blobIdToMessageMapPerIndexFile);
     for (String key : blobIdToMessageMapPerIndexFile.keySet()) {
@@ -410,7 +409,7 @@ public class DumpData {
    * @throws Exception
    */
   private void dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList) throws Exception {
-    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<>();
+    Map<String, String> blobIdToBlobMessageMap = new HashMap<>();
     logger.trace("Dumping index {} ", indexFileToDump);
     ActiveBlobStats activeBlobStats = new ActiveBlobStats();
     long totalKeysProcessed =
@@ -439,7 +438,7 @@ public class DumpData {
   private void dumpActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList) throws Exception {
     long totalKeysProcessed = 0;
     File replicaDirectory = new File(replicaRootDirectory);
-    ConcurrentHashMap<String, String> blobIdToMessageMap = new ConcurrentHashMap<>();
+    Map<String, String> blobIdToMessageMap = new HashMap<>();
     ActiveBlobStats activeBlobStats = new ActiveBlobStats();
     File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_FILE_FILTER);
     Arrays.sort(replicas, PersistentIndex.INDEX_FILE_COMPARATOR);
@@ -478,7 +477,7 @@ public class DumpData {
       long randomBlobsCount) throws Exception {
     long totalKeysProcessed = 0;
     File replicaDirectory = new File(replicaRootDirectory);
-    ConcurrentHashMap<String, String> blobIdToBlobMessageMap = new ConcurrentHashMap<>();
+    Map<String, String> blobIdToBlobMessageMap = new HashMap<>();
     ActiveBlobStats activeBlobStats = new ActiveBlobStats();
     File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_FILE_FILTER);
     Arrays.sort(replicas, PersistentIndex.INDEX_FILE_COMPARATOR);
@@ -517,7 +516,7 @@ public class DumpData {
   private void dumpLog(File logFile, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter)
       throws IOException {
 
-    ConcurrentHashMap<String, DumpDataHelper.LogBlobRecord> blobIdToLogRecord = new ConcurrentHashMap<>();
+    Map<String, DumpDataHelper.LogBlobRecord> blobIdToLogRecord = new HashMap<>();
     dumpDataHelper.dumpLog(logFile, startOffset, endOffset, blobs, filter, blobIdToLogRecord, true);
 
     long totalInConsistentBlobs = 0;

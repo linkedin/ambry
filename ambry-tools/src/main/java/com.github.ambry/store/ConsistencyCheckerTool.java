@@ -21,9 +21,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -115,11 +115,11 @@ public class ConsistencyCheckerTool {
     logger.info("Root directory for Partition" + rootDir);
     ArrayList<String> replicaList = populateReplicaList(rootDir);
     logger.trace("Replica List " + replicaList);
-    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap = new ConcurrentHashMap<String, BlobStatus>();
+    Map<String, BlobStatus> blobIdToStatusMap = new HashMap<>();
     AtomicLong totalKeysProcessed = new AtomicLong(0);
     int replicaCount = replicaList.size();
 
-    doCheck(rootDir.listFiles(), replicaList, blobIdToStatusMap, totalKeysProcessed);
+    collectData(rootDir.listFiles(), replicaList, blobIdToStatusMap, totalKeysProcessed);
     return populateOutput(totalKeysProcessed, blobIdToStatusMap, replicaCount, includeAcceptableInconsistentBlobs);
   }
 
@@ -132,20 +132,26 @@ public class ConsistencyCheckerTool {
     return replicaList;
   }
 
-  private void doCheck(File[] replicas, ArrayList<String> replicasList,
-      ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed)
-      throws IOException, InterruptedException {
+  private void collectData(File[] replicas, ArrayList<String> replicasList, Map<String, BlobStatus> blobIdToStatusMap,
+      AtomicLong totalKeysProcessed) throws IOException, InterruptedException {
     DumpData dumpData = new DumpData(map);
-    CountDownLatch countDownLatch = new CountDownLatch(replicas.length);
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
-      Thread thread = new Thread(
-          new ReplicaProcessorForBlobs(replica, replicasList, blobIdToStatusMap, totalKeysProcessed, dumpData,
-              countDownLatch, indexStats));
-      thread.start();
-      thread.join();
+      try {
+        File[] indexFiles = replica.listFiles(PersistentIndex.INDEX_FILE_FILTER);
+        long keysProcessedforReplica = 0;
+        Arrays.sort(indexFiles, PersistentIndex.INDEX_FILE_COMPARATOR);
+        for (File indexFile : indexFiles) {
+          keysProcessedforReplica +=
+              dumpData.dumpIndex(indexFile, replica.getName(), replicasList, new ArrayList<String>(), blobIdToStatusMap,
+                  indexStats, true);
+        }
+        logger.info("Total keys processed for " + replica.getName() + " " + keysProcessedforReplica);
+        totalKeysProcessed.addAndGet(keysProcessedforReplica);
+      } catch (Exception e) {
+        logger.error("Could not complete processing for {}", replica, e);
+      }
     }
-    countDownLatch.await();
     logger.info("Total Keys Processed " + totalKeysProcessed.get());
     logger.info("Total Put Records " + indexStats.getTotalPutRecords().get());
     logger.info("Total Delete Records " + indexStats.getTotalDeleteRecords().get());
@@ -155,7 +161,7 @@ public class ConsistencyCheckerTool {
     logger.info("Total Duplicate Delete Records " + indexStats.getTotalDuplicateDeleteRecords().get());
   }
 
-  private boolean populateOutput(AtomicLong totalKeysProcessed, ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap,
+  private boolean populateOutput(AtomicLong totalKeysProcessed, Map<String, BlobStatus> blobIdToStatusMap,
       int replicaCount, boolean includeAcceptableInconsistentBlobs) {
     logger.info("Total keys processed " + totalKeysProcessed.get());
     logger.info("\nTotal Blobs Found " + blobIdToStatusMap.size());
@@ -192,48 +198,6 @@ public class ConsistencyCheckerTool {
     }
     logger.info("Real Inconsistent blobs count :" + realInconsistentBlobs);
     return realInconsistentBlobs == 0;
-  }
-
-  private static class ReplicaProcessorForBlobs implements Runnable {
-
-    File rootDirectory;
-    ArrayList<String> replicaList;
-    ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap;
-    AtomicLong totalKeysProcessed;
-    DumpData dumpData;
-    CountDownLatch countDownLatch;
-    IndexStats indexStats;
-
-    ReplicaProcessorForBlobs(File rootDirectory, ArrayList<String> replicaList,
-        ConcurrentHashMap<String, BlobStatus> blobIdToStatusMap, AtomicLong totalKeysProcessed, DumpData dumpData,
-        CountDownLatch countDownLatch, IndexStats indexStats) {
-      this.rootDirectory = rootDirectory;
-      this.replicaList = replicaList;
-      this.blobIdToStatusMap = blobIdToStatusMap;
-      this.totalKeysProcessed = totalKeysProcessed;
-      this.dumpData = dumpData;
-      this.countDownLatch = countDownLatch;
-      this.indexStats = indexStats;
-    }
-
-    @Override
-    public void run() {
-      try {
-        File[] indexFiles = rootDirectory.listFiles(PersistentIndex.INDEX_FILE_FILTER);
-        long keysProcessedforReplica = 0;
-        Arrays.sort(indexFiles, PersistentIndex.INDEX_FILE_COMPARATOR);
-        for (File indexFile : indexFiles) {
-          keysProcessedforReplica +=
-              dumpData.dumpIndex(indexFile, rootDirectory.getName(), replicaList, new ArrayList<String>(),
-                  blobIdToStatusMap, indexStats, true);
-        }
-        logger.info("Total keys processed for " + rootDirectory.getName() + " " + keysProcessedforReplica);
-        totalKeysProcessed.addAndGet(keysProcessedforReplica);
-        countDownLatch.countDown();
-      } catch (Exception e) {
-        logger.error("Could not complete processing", e);
-      }
-    }
   }
 }
 

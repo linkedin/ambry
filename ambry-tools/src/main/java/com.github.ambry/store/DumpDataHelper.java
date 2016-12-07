@@ -40,7 +40,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -63,13 +62,13 @@ class DumpDataHelper {
    * Dumps all blobs in an index file
    * @param indexFileToDump the index file that needs to be parsed
    * @param blobList List of blobIds to be filtered for
-   * @param blobIdToMessageMap {@link HashMap} of BlobId to {@link IndexRecord} to hold the information
+   * @param blobIdToMessageMap {@link Map} of BlobId to {@link IndexRecord} to hold the information
    *                                          about blobs in the index after parsing
    * @return the total number of keys/records processed
    * @throws Exception
    */
-  long dumpBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList,
-      ConcurrentHashMap<String, IndexRecord> blobIdToMessageMap) throws Exception {
+  long dumpBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList, Map<String, IndexRecord> blobIdToMessageMap)
+      throws Exception {
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", _clusterMap);
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
     StoreMetrics metrics = new StoreMetrics(indexFileToDump.getParent(), new MetricRegistry());
@@ -109,7 +108,7 @@ class DumpDataHelper {
    * @throws IOException
    */
   void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs, boolean filter,
-      ConcurrentHashMap<String, LogBlobRecord> blobIdToLogRecord, boolean logRecord) throws IOException {
+      Map<String, LogBlobRecord> blobIdToLogRecord, boolean logRecord) throws IOException {
     logger.info("Dumping log file " + file.getAbsolutePath());
     long currentOffset = 0;
     RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
@@ -377,17 +376,17 @@ class DumpDataHelper {
   }
 
   /**
-   * Updates the {@link ConcurrentHashMap} of blobIds to {@link LogBlobRecord} with the information about the passed in
+   * Updates the {@link Map} of blobIds to {@link LogBlobRecord} with the information about the passed in
    * <code>blobId</code>
    * @param blobIdToLogRecord {@link HashMap} of blobId to {@link LogBlobRecord} that needs to be updated with the
    *                                         information about the blob
-   * @param blobId the blobId of the blob that needs to be updated in the {@link ConcurrentHashMap}
+   * @param blobId the blobId of the blob that needs to be updated in the {@link Map}
    * @param offset the offset at which the blob record was parsed from in the log file
    * @param putRecord {@code true} if the record is a Put record, {@code false} otherwise (incase of a Delete record)
    * @param isExpired {@code true} if the blob has expired, {@code false} otherwise
    */
-  private void updateBlobIdToLogRecordMap(ConcurrentHashMap<String, LogBlobRecord> blobIdToLogRecord, String blobId,
-      Long offset, boolean putRecord, boolean isExpired) {
+  private void updateBlobIdToLogRecordMap(Map<String, LogBlobRecord> blobIdToLogRecord, String blobId, Long offset,
+      boolean putRecord, boolean isExpired) {
     if (blobIdToLogRecord != null) {
       if (blobIdToLogRecord.containsKey(blobId)) {
         if (putRecord) {
