@@ -49,7 +49,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.CopyingAsyncWritableChannel;
-import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.NonBlockingRouterFactory;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -1220,7 +1220,7 @@ public final class ServerTestUtil {
   }
 
   private static void checkBlobId(Router router, BlobId blobId, byte[] data) throws Exception {
-    GetBlobResult result = router.getBlob(blobId.getID(), new GetBlobOptions()).get(1, TimeUnit.SECONDS);
+    GetBlobResult result = router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build()).get(1, TimeUnit.SECONDS);
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
         result.getBlobInfo().getBlobProperties().getBlobSize());

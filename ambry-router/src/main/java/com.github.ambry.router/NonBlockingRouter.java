@@ -596,9 +596,10 @@ class NonBlockingRouter implements Router {
       };
       currentOperationsCount.incrementAndGet();
       currentBackgroundOperationsCount.incrementAndGet();
-      GetBlobOptionsInternal options =
-          new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.Include_All, null),
-              true);
+      GetBlobOptionsInternal options = new GetBlobOptionsInternal(
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data)
+              .getOption(GetOption.Include_All)
+              .build(), true);
       getManager.submitGetBlobOperation(blobId, options, callback);
     }
 

@@ -22,13 +22,11 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOption;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -180,8 +178,9 @@ public class NonBlockingRouterTest {
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
-    router.getBlob(blobId, new GetBlobOptions()).get();
-    router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null)).get();
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+    router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
+        .get();
     router.deleteBlob(blobId).get();
     router.close();
     assertExpectedThreadCounts(0, 0);
@@ -201,7 +200,7 @@ public class NonBlockingRouterTest {
     setOperationParams();
 
     try {
-      router.getBlob(null, new GetBlobOptions());
+      router.getBlob(null, new GetBlobOptionsBuilder().build());
       Assert.fail("null blobId should have resulted in IllegalArgumentException");
     } catch (IllegalArgumentException expected) {
     }
@@ -846,7 +845,7 @@ public class NonBlockingRouterTest {
         case GET:
           final FutureResult getFutureResult = new FutureResult<GetBlobResultInternal>();
           getManager.submitGetBlobOperation(blobId, new GetBlobOptionsInternal(
-                  new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null), false),
+                  new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false),
               new Callback<GetBlobResultInternal>() {
                 @Override
                 public void onCompletion(GetBlobResultInternal result, Exception exception) {

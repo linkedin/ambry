@@ -35,6 +35,7 @@ import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
@@ -358,7 +359,9 @@ class AdminBlobStorageService implements BlobStorageService {
                 getCallback.markStartTime();
                 GetBlobOptions.OperationType getOperationType =
                     subresource != null ? GetBlobOptions.OperationType.BlobInfo : GetBlobOptions.OperationType.All;
-                router.getBlob(result, new GetBlobOptions(getOperationType, getOption, null), getCallback);
+                router.getBlob(result,
+                    new GetBlobOptionsBuilder().operationType(getOperationType).getOption(getOption).build(),
+                    getCallback);
               } else {
                 switch (subresource) {
                   case Replicas:
@@ -370,8 +373,9 @@ class AdminBlobStorageService implements BlobStorageService {
             case HEAD:
               getOption = RestUtils.getGetOption(restRequest);
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, getOption, null),
-                  headCallback);
+              router.getBlob(result, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
+                  .getOption(getOption)
+                  .build(), headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();
