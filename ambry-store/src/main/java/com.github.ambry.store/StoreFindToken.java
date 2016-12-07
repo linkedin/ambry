@@ -40,10 +40,12 @@ public class StoreFindToken implements FindToken {
 
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
+  static final short VERSION_2 = 2;
 
   private static final int VERSION_SIZE = 2;
   private static final int TYPE_SIZE = 2;
   private static final int SESSION_ID_LENGTH_SIZE = 4;
+  private static final int INCARNATION_ID_SIZE_LENGTH_SIZE = 4;
 
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final int UNINITIALIZED_OFFSET = -1;
@@ -52,23 +54,25 @@ public class StoreFindToken implements FindToken {
   private final Offset offset;
   private final StoreKey storeKey;
   private final UUID sessionId;
+  private final UUID incarnationId;
   private long bytesRead;
 
-  StoreFindToken() {
-    this(Type.Uninitialized, null, null, null);
+  StoreFindToken(UUID incarnationId) {
+    this(Type.Uninitialized, null, null, null, incarnationId);
   }
 
-  StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId) {
-    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId);
+  StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId) {
+    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId);
   }
 
-  StoreFindToken(Offset offset, UUID sessionId) {
-    this(Type.JournalBased, offset, null, sessionId);
+  StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId) {
+    this(Type.JournalBased, offset, null, sessionId, incarnationId);
   }
 
-  private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId) {
+  private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId) {
     if (!type.equals(Type.Uninitialized)) {
       if (offset == null || sessionId == null) {
+        //TODO: check if incarnationId is not null once we start writing incarnationId to the StoreFindToken
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
       } else if (type.equals(Type.IndexBased) && key == null) {
         throw new IllegalArgumentException("StoreKey cannot be null for an index based token");
@@ -78,6 +82,7 @@ public class StoreFindToken implements FindToken {
     this.offset = offset;
     this.storeKey = key;
     this.sessionId = sessionId;
+    this.incarnationId = incarnationId;
     this.bytesRead = -1;
   }
 
@@ -106,11 +111,11 @@ public class StoreFindToken implements FindToken {
         if (indexStartOffset != UNINITIALIZED_OFFSET) {
           // read store key if needed
           storeFindToken = new StoreFindToken(factory.getStoreKey(stream), new Offset(logSegmentName, indexStartOffset),
-              sessionIdUUID);
+              sessionIdUUID, null);
         } else if (offset != UNINITIALIZED_OFFSET) {
-          storeFindToken = new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID);
+          storeFindToken = new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID, null);
         } else {
-          storeFindToken = new StoreFindToken();
+          storeFindToken = new StoreFindToken(null);
         }
         break;
       case VERSION_1:
@@ -124,15 +129,48 @@ public class StoreFindToken implements FindToken {
         Type type = Type.values()[stream.readShort()];
         switch (type) {
           case Uninitialized:
-            storeFindToken = new StoreFindToken();
+            storeFindToken = new StoreFindToken(null);
             break;
           case JournalBased:
             Offset logOffset = Offset.fromBytes(stream);
-            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID);
+            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, null);
             break;
           case IndexBased:
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
-            storeFindToken = new StoreFindToken(factory.getStoreKey(stream), indexSegmentStartOffset, sessionIdUUID);
+            storeFindToken =
+                new StoreFindToken(factory.getStoreKey(stream), indexSegmentStartOffset, sessionIdUUID, null);
+            break;
+          default:
+            throw new IllegalStateException("Unknown store find token type: " + type);
+        }
+        break;
+      case VERSION_2:
+        // read incarnationId
+        String incarnationId = Utils.readIntString(stream);
+        UUID incarnationIdUUID = null;
+        if (!incarnationId.isEmpty()) {
+          incarnationIdUUID = UUID.fromString(incarnationId);
+        }
+        // read sessionId
+        sessionId = Utils.readIntString(stream);
+        sessionIdUUID = null;
+        if (!sessionId.isEmpty()) {
+          sessionIdUUID = UUID.fromString(sessionId);
+        }
+        // read type
+        type = Type.values()[stream.readShort()];
+        switch (type) {
+          case Uninitialized:
+            storeFindToken = new StoreFindToken(incarnationIdUUID);
+            break;
+          case JournalBased:
+            Offset logOffset = Offset.fromBytes(stream);
+            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID);
+            break;
+          case IndexBased:
+            Offset indexSegmentStartOffset = Offset.fromBytes(stream);
+            storeFindToken = new StoreFindToken(factory.getStoreKey(stream), indexSegmentStartOffset, sessionIdUUID,
+                incarnationIdUUID);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -160,6 +198,10 @@ public class StoreFindToken implements FindToken {
     return sessionId;
   }
 
+  public UUID getIncarnationId() {
+    return incarnationId;
+  }
+
   @Override
   public long getBytesRead() {
     if (this.bytesRead == -1) {
@@ -179,6 +221,7 @@ public class StoreFindToken implements FindToken {
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
     bufWrap.putShort(VERSION_1);
+    // TODO: add incarnationId when switching to version 2.
     // add sessionId
     bufWrap.putInt(sessionIdBytes.length);
     bufWrap.put(sessionIdBytes);
@@ -195,6 +238,9 @@ public class StoreFindToken implements FindToken {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("type: ").append(type);
+    if (incarnationId != null) {
+      sb.append(" incarnationId ").append(incarnationId);
+    }
     if (!type.equals(Type.Uninitialized)) {
       if (sessionId != null) {
         sb.append(" sessionId ").append(sessionId);

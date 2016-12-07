@@ -34,6 +34,6 @@ public class StoreFindTokenFactory implements FindTokenFactory {
 
   @Override
   public FindToken getNewFindToken() {
-    return new StoreFindToken();
+    return new StoreFindToken(null);
   }
 }
