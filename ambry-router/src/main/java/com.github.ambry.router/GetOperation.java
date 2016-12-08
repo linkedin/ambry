@@ -41,7 +41,7 @@ abstract class GetOperation {
   protected final NonBlockingRouterMetrics routerMetrics;
   protected final ClusterMap clusterMap;
   protected final ResponseHandler responseHandler;
-  protected final Callback<GetBlobResultInternal> operationCallback;
+  protected final Callback<GetBlobResultInternal> getOperationCallback;
   protected final BlobId blobId;
   protected final GetBlobOptionsInternal options;
   protected final Time time;
@@ -60,19 +60,19 @@ abstract class GetOperation {
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param blobIdStr the blobId of the associated blob in string form.
    * @param options the {@link GetBlobOptionsInternal} associated with this operation.
-   * @param operationCallback the callback that is to be called when the operation completes.
+   * @param getOperationCallback the callback that is to be called when the operation completes.
    * @param time the {@link Time} instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> operationCallback, Time time) throws RouterException {
+      Callback<GetBlobResultInternal> getOperationCallback, Time time) throws RouterException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.options = options;
-    this.operationCallback = operationCallback;
+    this.getOperationCallback = getOperationCallback;
     this.time = time;
     submissionTimeMs = time.milliseconds();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
@@ -83,7 +83,7 @@ abstract class GetOperation {
    * @return the {@link Callback} associated with this operation.
    */
   Callback<GetBlobResultInternal> getCallback() {
-    return operationCallback;
+    return getOperationCallback;
   }
 
   /**

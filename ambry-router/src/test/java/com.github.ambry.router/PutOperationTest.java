@@ -100,7 +100,7 @@ public class PutOperationTest {
     MockNetworkClient mockNetworkClient = new MockNetworkClient();
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobProperties, userMetadata,
-            channel, future, null, new ReadyForPollCallback(mockNetworkClient), null, time);
+            channel, future, null, new OperationCallback(mockNetworkClient, new ArrayList<String>()), null, time);
     op.startReadingFromChannel();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;

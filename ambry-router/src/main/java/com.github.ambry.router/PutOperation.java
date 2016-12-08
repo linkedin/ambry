@@ -78,7 +78,7 @@ class PutOperation {
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
-  private final ReadyForPollCallback readyForPollCallback;
+  private final OperationCallback operationCallback;
   private final Time time;
 
   // Parameters associated with the state.
@@ -141,15 +141,14 @@ class PutOperation {
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
-   * @param readyForPollCallback The callback to be used to notify the router of any state changes within this
-   *                             operation.
+   * @param operationCallback The {@link OperationCallback} to use for callbacks to the router.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
-      ReadyForPollCallback readyForPollCallback,
+      OperationCallback operationCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, Time time)
       throws RouterException {
     submissionTimeMs = time.milliseconds();
@@ -175,7 +174,7 @@ class PutOperation {
     this.channel = channel;
     this.futureResult = futureResult;
     this.callback = callback;
-    this.readyForPollCallback = readyForPollCallback;
+    this.operationCallback = operationCallback;
     this.time = time;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
@@ -331,7 +330,7 @@ class PutOperation {
               maybeStopTrackingWaitForChunkTime();
               bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
               if (chunkToFill.isReady()) {
-                readyForPollCallback.onPollReady();
+                operationCallback.onPollReady();
                 updateChunkFillerWaitTimeMetrics();
               }
               if (!channelReadBuffer.hasRemaining()) {
@@ -354,7 +353,7 @@ class PutOperation {
       }
     } catch (Exception e) {
       routerMetrics.chunkFillerUnexpectedErrorCount.inc();
-      readyForPollCallback.onPollReady();
+      operationCallback.onPollReady();
       setOperationExceptionAndComplete(new RouterException("PutOperation fillChunks encountered unexpected error", e,
           RouterErrorCode.UnexpectedInternalError));
     }
@@ -525,12 +524,10 @@ class PutOperation {
 
   /**
    * if this is a composite object, fill the list with successfully put chunk ids.
-   * @param chunkIdList the list to fill with chunk ids.
+   * @return the list of successfully put chunk ids, if any; else null.
    */
-  void addSuccessfullyPutChunkIds(List<String> chunkIdList) {
-    if (numDataChunks > 1) {
-      metadataPutChunk.addChunkIds(chunkIdList);
-    }
+  List<String> getSuccessfullyPutChunkIds() {
+    return numDataChunks > 1 ? metadataPutChunk.getChunkIds() : null;
   }
 
   /**
@@ -1089,14 +1086,16 @@ class PutOperation {
 
     /**
      * Add all the successfully put chunk ids of the overall blob to the passed in list.
-     * @param chunkIdList list to fill with chunk ids.
+     * @return list of chunk ids associated with this composite blob.
      */
-    void addChunkIds(List<String> chunkIdList) {
+    List<String> getChunkIds() {
+      List<String> chunkIdList = new ArrayList<>();
       for (int i = 0; i <= maxFilledChunkIndex; i++) {
         if (chunkIds[i] != null) {
           chunkIdList.add(chunkIds[i].getID());
         }
       }
+      return chunkIdList;
     }
 
     /**

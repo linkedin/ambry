@@ -70,8 +70,8 @@ import org.slf4j.LoggerFactory;
  */
 class GetBlobOperation extends GetOperation {
   // the callback to use to complete the operation.
-  private final OperationCompleteCallback operationCompleteCallback;
-  // whether the operationCompleteCallback has been called already.
+  private final OperationCallback operationCallback;
+  // whether the operationCallback has been called already.
   private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
   // The first chunk may be a metadata chunk if the blob is composite, or the only data chunk if the blob is simple.
   private final FirstGetChunk firstChunk;
@@ -104,7 +104,6 @@ class GetBlobOperation extends GetOperation {
   private BlobDataReadableStreamChannel blobDataChannel;
   // the CompositeBlobInfo that will be set if (and when) this blob turns out to be a composite blob.
   private CompositeBlobInfo compositeBlobInfo;
-  private final ReadyForPollCallback readyForPollCallback;
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobOperation.class);
 
@@ -117,20 +116,17 @@ class GetBlobOperation extends GetOperation {
    * @param blobIdStr the blob id associated with the operation in string form.
    * @param options the {@link GetBlobOptionsInternal} associated with the operation.
    * @param callback the callback that is to be called when the operation completes.
-   * @param operationCompleteCallback the {@link OperationCompleteCallback} to use to complete operations.
-   * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
-   *                             operations.
+   * @param operationCallback the {@link OperationCallback} to use to complete operations.
    * @param blobIdFactory the factory to use to deserialize keys in a metadata chunk.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback, OperationCompleteCallback operationCompleteCallback,
-      ReadyForPollCallback readyForPollCallback, BlobIdFactory blobIdFactory, Time time) throws RouterException {
+      Callback<GetBlobResultInternal> callback, OperationCallback operationCallback, BlobIdFactory blobIdFactory,
+      Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback, time);
-    this.operationCompleteCallback = operationCompleteCallback;
-    this.readyForPollCallback = readyForPollCallback;
+    this.operationCallback = operationCallback;
     this.blobIdFactory = blobIdFactory;
     firstChunk = new FirstGetChunk();
   }
@@ -145,7 +141,7 @@ class GetBlobOperation extends GetOperation {
   @Override
   void abort(Exception abortCause) {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
-      operationCompleteCallback.completeOperation(null, operationCallback, null, abortCause);
+      OperationCallback.completeOperation(null, getOperationCallback, null, abortCause);
     } else {
       setOperationException(abortCause);
       if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
@@ -193,7 +189,7 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.onGetBlobError(e, options);
           }
         }
-        operationCompleteCallback.completeOperation(null, operationCallback, operationResult, e);
+        OperationCallback.completeOperation(null, getOperationCallback, operationResult, e);
       }
     }
     chunk.postCompletionCleanup();
@@ -300,7 +296,7 @@ class GetBlobOperation extends GetOperation {
           setOperationException(exception);
         }
         numChunksWrittenOut++;
-        readyForPollCallback.onPollReady();
+        operationCallback.onPollReady();
       }
     };
 
@@ -328,7 +324,7 @@ class GetBlobOperation extends GetOperation {
       if (operationException.get() != null) {
         completeRead();
       }
-      readyForPollCallback.onPollReady();
+      operationCallback.onPollReady();
       return readIntoFuture;
     }
 

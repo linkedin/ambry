@@ -89,7 +89,7 @@ public class GetBlobOperationTest {
   private final ResponseHandler responseHandler;
   private final NonBlockingRouter router;
   private final MockNetworkClient mockNetworkClient;
-  private final ReadyForPollCallback readyForPollCallback;
+  private final OperationCallback operationCallback;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -117,9 +117,6 @@ public class GetBlobOperationTest {
     }
   }
 
-  private final AtomicInteger operationsCount = new AtomicInteger(0);
-  private final OperationCompleteCallback operationCompleteCallback = new OperationCompleteCallback(operationsCount);
-
   /**
    * A checker that either asserts that a get operation succeeds or returns the specified error code.
    */
@@ -138,7 +135,7 @@ public class GetBlobOperationTest {
   @After
   public void after() {
     router.close();
-    Assert.assertEquals("All operations should have completed", 0, operationsCount.get());
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**
@@ -165,7 +162,7 @@ public class GetBlobOperationTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
         new LoggingNotificationSystem(), mockClusterMap, time);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
-    readyForPollCallback = new ReadyForPollCallback(mockNetworkClient);
+    operationCallback = new OperationCallback(mockNetworkClient, new ArrayList<String>());
   }
 
   /**
@@ -190,7 +187,7 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testInstantiation() throws Exception {
-    Callback<GetBlobResultInternal> operationCallback = new Callback<GetBlobResultInternal>() {
+    Callback<GetBlobResultInternal> getOperationCallback = new Callback<GetBlobResultInternal>() {
       @Override
       public void onCompletion(GetBlobResultInternal result, Exception exception) {
         // no op.
@@ -200,7 +197,7 @@ public class GetBlobOperationTest {
     // test a bad case
     try {
       new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", null,
-          operationCallback, operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+          getOperationCallback, operationCallback, blobIdFactory, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert.assertEquals("Unexpected exception received on creating GetBlobOperation", RouterErrorCode.InvalidBlobId,
@@ -211,10 +208,10 @@ public class GetBlobOperationTest {
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), operationCallback,
-        operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), getOperationCallback, operationCallback,
+        blobIdFactory, time);
 
-    Assert.assertEquals("Callbacks must match", operationCallback, op.getCallback());
+    Assert.assertEquals("Callbacks must match", getOperationCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
   }
 
@@ -871,10 +868,10 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   private GetBlobOperation createOperation(Callback<GetBlobResultInternal> callback) throws Exception {
-    operationsCount.incrementAndGet();
+    NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, callback,
-            operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+            operationCallback, blobIdFactory, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     return op;
   }

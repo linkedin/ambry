@@ -22,6 +22,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
@@ -111,7 +112,7 @@ public class ChunkFillTest {
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
         putUserMetadata, putChannel, futureResult, null,
-        new ReadyForPollCallback(networkClientFactory.getNetworkClient()), null, new MockTime());
+        new OperationCallback(networkClientFactory.getNetworkClient(), new ArrayList<String>()), null, new MockTime());
     op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     // largeBlobSize is not a multiple of chunkSize
@@ -196,7 +197,7 @@ public class ChunkFillTest {
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
         putUserMetadata, putChannel, futureResult, null,
-        new ReadyForPollCallback(networkClientFactory.getNetworkClient()), null, time);
+        new OperationCallback(networkClientFactory.getNetworkClient(), new ArrayList<String>()), null, time);
     op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     compositeBuffers = new ByteBuffer[numChunks];

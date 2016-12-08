@@ -46,6 +46,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -89,6 +90,12 @@ public class NonBlockingRouterTest {
   public NonBlockingRouterTest() throws Exception {
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap();
+    NonBlockingRouter.currentOperationsCount.set(0);
+  }
+
+  @After
+  public void after() {
+    Assert.assertEquals(0, NonBlockingRouter.currentOperationsCount.get());
   }
 
   /**
@@ -577,8 +584,7 @@ public class NonBlockingRouterTest {
 
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new OperationCompleteCallback(new AtomicInteger(0)), new ReadyForPollCallback(networkClient),
-        new ArrayList<String>(), "0", mockTime);
+        new OperationCallback(networkClient, new ArrayList<String>()), "0", mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -593,8 +599,8 @@ public class NonBlockingRouterTest {
 
     opHelper = new OperationHelper(OperationType.GET);
     getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
-        new NonBlockingRouterMetrics(mockClusterMap), new OperationCompleteCallback(new AtomicInteger(0)),
-        new ReadyForPollCallback(networkClient), mockTime);
+        new NonBlockingRouterMetrics(mockClusterMap), new OperationCallback(networkClient, new ArrayList<String>()),
+        mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
@@ -609,7 +615,7 @@ public class NonBlockingRouterTest {
     opHelper = new OperationHelper(OperationType.DELETE);
     deleteManager = new DeleteManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new OperationCompleteCallback(new AtomicInteger(0)), mockTime);
+        new OperationCallback(null, new ArrayList<String>()), mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
@@ -859,6 +865,7 @@ public class NonBlockingRouterTest {
           deleteManager.submitDeleteBlobOperation(blobId, futureResult, null);
           break;
       }
+      NonBlockingRouter.currentOperationsCount.incrementAndGet();
       return futureResult;
     }
 

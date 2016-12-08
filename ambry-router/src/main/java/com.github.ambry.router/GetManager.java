@@ -62,8 +62,7 @@ class GetManager {
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
-  private final OperationCompleteCallback operationCompleteCallback;
-  private final ReadyForPollCallback readyForPollCallback;
+  private final OperationCallback operationCallback;
 
   private class GetRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;
@@ -86,21 +85,17 @@ class GetManager {
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
-   * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
-   *                             operations.
+   * @param operationCallback The {@link OperationCallback} to use for callbacks to the router.
    * @param time The {@link Time} instance to use.
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
-      NonBlockingRouterMetrics routerMetrics, OperationCompleteCallback operationCompleteCallback,
-      ReadyForPollCallback readyForPollCallback, Time time) {
+      NonBlockingRouterMetrics routerMetrics, OperationCallback operationCallback, Time time) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.operationCompleteCallback = operationCompleteCallback;
-    this.readyForPollCallback = readyForPollCallback;
+    this.operationCallback = operationCallback;
     this.time = time;
     getOperations = Collections.newSetFromMap(new ConcurrentHashMap<GetOperation, Boolean>());
   }
@@ -117,17 +112,17 @@ class GetManager {
       if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation =
             new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                callback, operationCompleteCallback, time);
+                callback, operationCallback, time);
       } else {
         getOperation =
             new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-                operationCompleteCallback, readyForPollCallback, blobIdFactory, time);
+                operationCallback, blobIdFactory, time);
       }
       getOperations.add(getOperation);
     } catch (RouterException e) {
       routerMetrics.onGetBlobError(e, options);
       routerMetrics.operationDequeuingRate.mark();
-      operationCompleteCallback.completeOperation(null, callback, null, e);
+      OperationCallback.completeOperation(null, callback, null, e);
     }
   }
 
