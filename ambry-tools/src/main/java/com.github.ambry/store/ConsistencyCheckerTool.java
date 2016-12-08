@@ -144,21 +144,21 @@ public class ConsistencyCheckerTool {
         for (File indexFile : indexFiles) {
           keysProcessedforReplica +=
               dumpData.dumpIndex(indexFile, replica.getName(), replicasList, new ArrayList<String>(), blobIdToStatusMap,
-                  indexStats, true);
+                  indexStats, false);
         }
-        logger.info("Total keys processed for " + replica.getName() + " " + keysProcessedforReplica);
+        logger.debug("Total keys processed for {} is {}", replica.getName(), keysProcessedforReplica);
         totalKeysProcessed.addAndGet(keysProcessedforReplica);
       } catch (Exception e) {
         logger.error("Could not complete processing for {}", replica, e);
       }
     }
-    logger.info("Total Keys Processed " + totalKeysProcessed.get());
-    logger.info("Total Put Records " + indexStats.getTotalPutRecords().get());
-    logger.info("Total Delete Records " + indexStats.getTotalDeleteRecords().get());
-    logger.info("Total Duplicate Put Records " + indexStats.getTotalDuplicatePutRecords().get());
-    logger.info("Total Delete before Put Records " + indexStats.getTotalDeleteBeforePutRecords().get());
-    logger.info("Total Put after Delete Records " + indexStats.getTotalPutAfterDeleteRecords().get());
-    logger.info("Total Duplicate Delete Records " + indexStats.getTotalDuplicateDeleteRecords().get());
+    logger.debug("Total Keys Processed {}", totalKeysProcessed.get());
+    logger.debug("Total Put Records {}", indexStats.getTotalPutRecords().get());
+    logger.debug("Total Delete Records {}", indexStats.getTotalDeleteRecords().get());
+    logger.debug("Total Duplicate Put Records {}", indexStats.getTotalDuplicatePutRecords().get());
+    logger.debug("Total Delete before Put Records {}", indexStats.getTotalDeleteBeforePutRecords().get());
+    logger.debug("Total Put after Delete Records {}", indexStats.getTotalPutAfterDeleteRecords().get());
+    logger.debug("Total Duplicate Delete Records {}", indexStats.getTotalDuplicateDeleteRecords().get());
   }
 
   private boolean populateOutput(AtomicLong totalKeysProcessed, Map<String, BlobStatus> blobIdToStatusMap,
