@@ -1131,10 +1131,10 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId5);
 
       // find entries with the token referring to a different incarnation Id.
-      info = index.findEntriesSince(new StoreFindToken(UUID.randomUUID()), 500);
-      messageEntries = info.getMessageEntries();
+      FindInfo infoZero = index.findEntriesSince(new StoreFindToken(UUID.randomUUID()), 500);
+      messageEntries = infoZero.getMessageEntries();
       Assert.assertEquals("IncarnationId mismatch ", incarnationId,
-          ((StoreFindToken) (info.getFindToken())).getIncarnationId());
+          ((StoreFindToken) (infoZero.getFindToken())).getIncarnationId());
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(0).getSize(), 100);
       Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
@@ -1149,7 +1149,16 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId7);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId8);
       Assert.assertEquals("IncarnationId mismatch ", incarnationId,
-          ((StoreFindToken) (infoempty.getFindToken())).getIncarnationId());
+          ((StoreFindToken) (info1.getFindToken())).getIncarnationId());
+
+      FindInfo infoOne = index.findEntriesSince(infoZero.getFindToken(), 300);
+      messageEntries = infoOne.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId6);
+      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId7);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId8);
+      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
+          ((StoreFindToken) (infoOne.getFindToken())).getIncarnationId());
 
       index.close();
       props = new Properties();
@@ -1166,11 +1175,11 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
 
-      // token with old incarnationId
-      info2 = index.findEntriesSince(info.getFindToken(), 300);
-      messageEntries = info2.getMessageEntries();
+      // token with old incarnationId referring to offset 500
+      FindInfo infoTwo = index.findEntriesSince(infoZero.getFindToken(), 300);
+      messageEntries = infoTwo.getMessageEntries();
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
-          ((StoreFindToken) (info2.getFindToken())).getIncarnationId());
+          ((StoreFindToken) (infoTwo.getFindToken())).getIncarnationId());
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
@@ -1184,12 +1193,12 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId6);
 
-      // token with old incarnationId. Info1 referring to offset 300. Should have been reset and entries should be
+      // token with old incarnationId. InfoOne referring to offset 300. Should have been reset and entries should be
       // returned starting from beginning
-      FindInfo info2_OldToken = index.findEntriesSince(info1.getFindToken(), 300);
+      infoTwo = index.findEntriesSince(infoOne.getFindToken(), 300);
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
-          ((StoreFindToken) (info2_OldToken.getFindToken())).getIncarnationId());
-      messageEntries = info2_OldToken.getMessageEntries();
+          ((StoreFindToken) (infoTwo.getFindToken())).getIncarnationId());
+      messageEntries = infoTwo.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
@@ -1200,19 +1209,20 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId1);
+
       info2 = index.findEntriesSince(info2.getFindToken(), 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 0);
 
-      // info2_OldToken pointing to offset 300. Should continue as usual as the returned token should have matching
+      // infoTwo pointing to offset 300. Should continue as usual as the returned token should have matching
       // incarnationId
-      info2 = index.findEntriesSince(info2_OldToken.getFindToken(), 600);
-      messageEntries = info2.getMessageEntries();
+      infoTwo = index.findEntriesSince(infoTwo.getFindToken(), 600);
+      messageEntries = infoTwo.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 6);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
       Assert.assertEquals(messageEntries.get(5).getStoreKey(), blobId1);
-      info2 = index.findEntriesSince(info2.getFindToken(), 300);
-      messageEntries = info2.getMessageEntries();
+      infoTwo = index.findEntriesSince(infoTwo.getFindToken(), 300);
+      messageEntries = infoTwo.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 0);
 
       scheduler.shutdown();
