@@ -116,15 +116,12 @@ class DumpDataHelper {
     boolean lastBlobFailed = false;
     if (startOffset != -1) {
       currentOffset = startOffset;
-      randomAccessFile.seek(currentOffset);
     }
     if (endOffset == -1) {
       endOffset = fileSize;
     }
     logger.info("Starting dumping from offset " + currentOffset);
     while (currentOffset < endOffset) {
-      long tempCurrentOffset = currentOffset;
-
       try {
         LogBlobRecordInfo logBlobRecordInfo = readSingleRecordFromLog(randomAccessFile, currentOffset);
         if (lastBlobFailed) {
@@ -175,19 +172,16 @@ class DumpDataHelper {
       } catch (IllegalArgumentException e) {
         if (!lastBlobFailed) {
           logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
-              + "while reading blob starting at offset " + tempCurrentOffset + "with exception: " + e.getStackTrace());
+              + "while reading blob starting at offset " + currentOffset + "with exception: " + e.getStackTrace());
         }
-        randomAccessFile.seek(++tempCurrentOffset);
-        currentOffset = tempCurrentOffset;
+        currentOffset++;
         lastBlobFailed = true;
       } catch (MessageFormatException e) {
         if (!lastBlobFailed) {
           logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
-              + " while reading blob starting at offset " + tempCurrentOffset + " with exception: "
-              + e.getStackTrace());
+              + " while reading blob starting at offset " + currentOffset + " with exception: " + e.getStackTrace());
         }
-        randomAccessFile.seek(++tempCurrentOffset);
-        currentOffset = tempCurrentOffset;
+        currentOffset++;
         lastBlobFailed = true;
       } catch (EOFException e) {
         e.printStackTrace();
@@ -200,10 +194,9 @@ class DumpDataHelper {
           logger.error(
               "Unknown exception thrown with Cause " + e.getCause() + ", Msg :" + e.getMessage() + ", stacktrace "
                   + e.getStackTrace());
-          logger.error("Trying out next offset " + (tempCurrentOffset + 1));
+          logger.info("Trying out next offset " + (currentOffset + 1));
         }
-        randomAccessFile.seek(++tempCurrentOffset);
-        currentOffset = tempCurrentOffset;
+        currentOffset++;
         lastBlobFailed = true;
       }
     }
@@ -320,7 +313,6 @@ class DumpDataHelper {
       Map<Long, Long> coveredRanges) throws Exception {
     long offset = indexValue.getOffset().getOffset();
     try {
-      randomAccessFile.seek(offset);
       LogBlobRecordInfo logBlobRecordInfo = readSingleRecordFromLog(randomAccessFile, offset);
       if (coveredRanges != null) {
         coveredRanges.put(offset, offset + logBlobRecordInfo.totalRecordSize);

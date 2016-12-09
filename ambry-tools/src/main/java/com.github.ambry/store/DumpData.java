@@ -618,7 +618,6 @@ public class DumpData {
                 logger.trace("Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
                     originalOffset, value.getOffset(), startOffset);
               } else {
-                randomAccessFile.seek(originalOffset);
                 LogBlobRecordInfo logBlobRecordInfo =
                     dumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset);
                 coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
