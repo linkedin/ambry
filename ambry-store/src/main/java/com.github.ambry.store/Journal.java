@@ -76,14 +76,16 @@ class Journal {
     if (key == null || offset == null) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
     }
-    if (currentNumberOfEntries.get() == maxEntriesToJournal) {
-      journal.remove(journal.firstKey());
-      currentNumberOfEntries.decrementAndGet();
+    if (maxEntriesToJournal > 0) {
+      if (currentNumberOfEntries.get() == maxEntriesToJournal) {
+        journal.remove(journal.firstKey());
+        currentNumberOfEntries.decrementAndGet();
+      }
+      journal.put(offset, key);
+      logger.trace("Journal : " + dataDir + " offset " + offset + " key " + key);
+      currentNumberOfEntries.incrementAndGet();
+      logger.trace("Journal : " + dataDir + " number of entries " + currentNumberOfEntries.get());
     }
-    journal.put(offset, key);
-    logger.trace("Journal : " + dataDir + " offset " + offset + " key " + key);
-    currentNumberOfEntries.incrementAndGet();
-    logger.trace("Journal : " + dataDir + " number of entries " + currentNumberOfEntries.get());
   }
 
   /**

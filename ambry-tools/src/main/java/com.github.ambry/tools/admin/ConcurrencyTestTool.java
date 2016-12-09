@@ -85,13 +85,6 @@ import org.slf4j.LoggerFactory;
  *  --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --routerPropsFilePath [Path to router props
  *  file] --deleteAndValidate true
  *
- * Server
- *  java -cp ambry.jar com.github.ambry.tools.admin.ConcurrencyTestTool --hardwareLayout [HardwareLayoutFile]
- *  --partitionLayout [PartitionLayoutFile] --putGetHelperFactory com.github.ambry.tools.admin.RouterPutGetHelperFactory
- *  --maxParallelPutCount 2 --parallelGetCount 4 --burstCountForGet 4 --maxGetCountPerBlob 10
- *  --totalPutBlobCount 1000 --maxBlobSizeInBytes 1000 --minBlobSizeInBytes 100 --hostName [HostName] --port [PortNo]
- *  --deleteAndValidate true
- *
  *  Few other options that might be useful:
  * --sleepTimeBetweenBatchGetsInMs long : Time to sleep in ms between batch Gets
  * --sleepTimeBetweenBatchPutsInMs long : Time to sleep in ms between batch Puts

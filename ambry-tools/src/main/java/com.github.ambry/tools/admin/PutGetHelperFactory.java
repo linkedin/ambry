@@ -23,6 +23,5 @@ interface PutGetHelperFactory {
    * @returns a new instance of {@link ConcurrencyTestTool.PutGetHelper}
    * @throws Exception
    */
-  ConcurrencyTestTool.PutGetHelper getPutGetHelper()
-      throws Exception;
+  ConcurrencyTestTool.PutGetHelper getPutGetHelper() throws Exception;
 }

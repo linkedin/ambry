@@ -113,6 +113,10 @@ class IndexValue {
   ByteBuffer getBytes() {
     return value;
   }
+
+  @Override
+  public String toString() {
+    return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
+        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset();
+  }
 }
-
-
