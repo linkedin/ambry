@@ -587,14 +587,14 @@ class PersistentIndex {
       if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) &&
           remoteIncarnationId != null && incarnationId != null && remoteIncarnationId.compareTo(incarnationId) != 0) {
         // incarnationId mismatch, hence resetting the token to beginning
-        logger.info("Index : " + dataDir + " resetting offset after incarnation, new incarnation Id {}, "
-            + "incarnationId from store token {}", incarnationId, remoteIncarnationId);
+        logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
+            + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
         storeToken = new StoreFindToken(incarnationId);
         tokenWasReset = true;
       }
       // if incarnationId is null, for backwards compatability purposes, will consider the token as good
       // validate token
-      if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
+      else if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
         // the session has changed. check if we had an unclean shutdown on startup
         if (!cleanShutdown) {
           // if we had an unclean shutdown and the token offset is larger than the logEndOffsetOnStartup

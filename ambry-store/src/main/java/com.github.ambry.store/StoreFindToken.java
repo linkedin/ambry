@@ -45,7 +45,7 @@ public class StoreFindToken implements FindToken {
   private static final int VERSION_SIZE = 2;
   private static final int TYPE_SIZE = 2;
   private static final int SESSION_ID_LENGTH_SIZE = 4;
-  private static final int INCARNATION_ID_SIZE_LENGTH_SIZE = 4;
+  private static final int INCARNATION_ID_LENGTH_SIZE = 4;
 
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final int UNINITIALIZED_OFFSET = -1;

@@ -15,6 +15,10 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -23,19 +27,57 @@ import java.util.UUID;
 /**
  * Refers to the Store descriptor of a {@link BlobStore} having some metadata information about each store.
  * As of now, store descriptor has storeId and incarnation Id. IncarnationId is a unique identifier for every new
- * incarnation of the store. The contents of store descriptor is expected to evolve.
+ * incarnation of the store.
  */
 class StoreDescriptor {
-  String storeId;
-  UUID incarnationId;
-  public static final int VERSION = 0;
+  private final String storeId;
+  private final UUID incarnationId;
+  public static final short VERSION_0 = 0;
   public static final int VERSION_SIZE = 2;
-  public static final int STORE_ID_SIZE = 4;
-  public static final int INCARNATION_ID_SIZE = 4;
+  public static final int STORE_ID_LENGTH_SIZE = 4;
+  public static final int INCARNATION_ID_LENGTH_SIZE = 4;
+  public static final String STORE_DESCRIPTOR = "StoreDescriptor";
+  private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
 
-  StoreDescriptor(String storeId, UUID incarnationId) {
+  /**
+   * Instantiates the {@link StoreDescriptor} for the store. If the respective file is present, reads the bytes
+   * to understand the storeId and the incarnationId. If not, creates a new one with a random Unique identifier.
+   * @param dataDir the directory path to locate the Store Descriptor file
+   * @param storeId the StoreId of the store for which the StoreDescriptor has to be instantiated
+   * @throws IOException
+   */
+  public StoreDescriptor(String dataDir, String storeId) throws IOException {
+    this.storeId = storeId;
+    File storeDescriptorFile = new File(dataDir, StoreDescriptor.STORE_DESCRIPTOR);
+    if (storeDescriptorFile.exists()) {
+      DataInputStream dataInputStream = new DataInputStream(new FileInputStream(storeDescriptorFile));
+      StoreDescriptor storeDescriptor = StoreDescriptor.fromBytes(dataInputStream);
+      this.incarnationId = storeDescriptor.incarnationId;
+    } else {
+      this.incarnationId = UUID.randomUUID();
+      storeDescriptorFile.createNewFile();
+      DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
+      dataOutputStream.write(toBytes());
+      dataOutputStream.close();
+    }
+  }
+
+  /**
+   * Instantiates the StoreDescriptor with the incarnationId for the given store
+   * @param storeId
+   * @param incarnationId
+   */
+  private StoreDescriptor(String storeId, UUID incarnationId) {
     this.storeId = storeId;
     this.incarnationId = incarnationId;
+  }
+
+  public String getStoreId() {
+    return storeId;
+  }
+
+  public UUID getIncarnationId() {
+    return incarnationId;
   }
 
   /**
@@ -45,10 +87,10 @@ class StoreDescriptor {
    * @throws IOException
    */
   static StoreDescriptor fromBytes(DataInputStream stream) throws IOException {
-    StoreDescriptor storeDescriptor = null;
+    StoreDescriptor storeDescriptor;
     short version = stream.readShort();
     switch (version) {
-      case 0:
+      case VERSION_0:
         String storeId = Utils.readIntString(stream);
         UUID incarnationIdUUID = null;
         // read incarnationId
@@ -68,21 +110,20 @@ class StoreDescriptor {
    * Returns the serialized form of this {@link StoreDescriptor}
    * @return the serialized form of this {@link StoreDescriptor}
    */
-  byte[] toBytes() {
-    int size = VERSION_SIZE + STORE_ID_SIZE + storeId.length() + INCARNATION_ID_SIZE +
-        ((incarnationId == null) ? 0 : incarnationId.toString().getBytes().length);
+  private byte[] toBytes() {
+    byte[] storeIdBytes = storeId.toString().getBytes();
+    byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+    int size = VERSION_SIZE + STORE_ID_LENGTH_SIZE + storeIdBytes.length + INCARNATION_ID_LENGTH_SIZE +
+        incarnationIdBytes.length;
     byte[] buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
-    bufWrap.putShort((short) VERSION);
-    bufWrap.putInt(storeId.length());
-    bufWrap.put(storeId.getBytes());
+    bufWrap.putShort(VERSION_0);
+    bufWrap.putInt(storeIdBytes.length);
+    bufWrap.put(storeIdBytes);
     // add incarnationId
-    byte[] incarnationIdInBytes = incarnationId == null ? null : incarnationId.toString().getBytes();
-    bufWrap.putInt(incarnationIdInBytes == null ? 0 : incarnationIdInBytes.length);
-    if (incarnationIdInBytes != null) {
-      bufWrap.put(incarnationIdInBytes);
-    }
+    bufWrap.putInt(incarnationIdBytes.length);
+    bufWrap.put(incarnationIdBytes);
     return buf;
   }
 }

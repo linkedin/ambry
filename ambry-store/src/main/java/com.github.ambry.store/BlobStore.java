@@ -17,9 +17,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
-import java.io.DataInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -27,7 +25,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +56,6 @@ class BlobStore implements Store {
   private PersistentIndex index;
   private boolean started;
   private FileLock fileLock;
-  static final String STORE_DESCRIPTOR = "StoreDescriptor";
 
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
@@ -107,18 +103,11 @@ class BlobStore implements Store {
               "Failed to acquire lock on file " + dataDir + ". Another process or thread is using this directory.",
               StoreErrorCodes.Initialization_Error);
         }
-        File storeDescriptorFile = new File(dataDir, STORE_DESCRIPTOR);
-        StoreDescriptor storeDescriptor = null;
-        if (storeDescriptorFile.exists()) {
-          DataInputStream dataInputStream = new DataInputStream(new FileInputStream(storeDescriptorFile));
-          storeDescriptor = StoreDescriptor.fromBytes(dataInputStream);
-        } else {
-          storeDescriptor = new StoreDescriptor(storeId, UUID.randomUUID());
-          // TODO create and persist the file
-        }
+
+        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, storeId);
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
-            storeDescriptor.incarnationId);
+            storeDescriptor.getIncarnationId());
         metrics.initializeLogGauges(log, capacityInBytes);
         started = true;
       } catch (Exception e) {
