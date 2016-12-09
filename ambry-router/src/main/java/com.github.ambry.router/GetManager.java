@@ -122,7 +122,7 @@ class GetManager {
     } catch (RouterException e) {
       routerMetrics.onGetBlobError(e, options);
       routerMetrics.operationDequeuingRate.mark();
-      OperationCallback.completeOperation(null, callback, null, e);
+      NonBlockingRouter.completeOperation(null, callback, null, e);
     }
   }
 

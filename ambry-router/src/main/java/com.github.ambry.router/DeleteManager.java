@@ -110,7 +110,7 @@ class DeleteManager {
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onDeleteBlobError(e);
-      OperationCallback.completeOperation(futureResult, callback, null, e);
+      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
     }
   }
 
@@ -213,7 +213,7 @@ class DeleteManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    OperationCallback.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
+    NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
         op.getOperationException());
   }
 
@@ -231,7 +231,7 @@ class DeleteManager {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
         routerMetrics.onDeleteBlobError(e);
-        OperationCallback.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
+        NonBlockingRouter.completeOperation(op.getFutureResult(), op.getCallback(), null, e);
       }
     }
   }

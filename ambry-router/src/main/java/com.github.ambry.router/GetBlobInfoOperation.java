@@ -75,7 +75,7 @@ class GetBlobInfoOperation extends GetOperation {
 
   @Override
   void abort(Exception abortCause) {
-    OperationCallback.completeOperation(null, getOperationCallback, null, abortCause);
+    NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
     operationCompleted = true;
   }
 
@@ -331,7 +331,7 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.onGetBlobError(e, options);
       }
       routerMetrics.getBlobInfoOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
-      OperationCallback.completeOperation(null, getOperationCallback, operationResult, e);
+      NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
   }
 }

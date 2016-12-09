@@ -145,7 +145,7 @@ class PutManager {
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(e);
-      OperationCallback.completeOperation(futureResult, callback, null, e);
+      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
     }
   }
 
@@ -252,7 +252,7 @@ class PutManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    OperationCallback.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
+    NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
   /**
@@ -314,7 +314,7 @@ class PutManager {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
         routerMetrics.onPutBlobError(e);
-        OperationCallback.completeOperation(op.getFuture(), op.getCallback(), null, e);
+        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null, e);
       }
     }
   }

@@ -141,7 +141,7 @@ class GetBlobOperation extends GetOperation {
   @Override
   void abort(Exception abortCause) {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
-      OperationCallback.completeOperation(null, getOperationCallback, null, abortCause);
+      NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
     } else {
       setOperationException(abortCause);
       if (blobDataChannel != null && blobDataChannel.isReadCalled()) {
@@ -189,7 +189,7 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.onGetBlobError(e, options);
           }
         }
-        OperationCallback.completeOperation(null, getOperationCallback, operationResult, e);
+        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
       }
     }
     chunk.postCompletionCleanup();
