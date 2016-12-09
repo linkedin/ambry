@@ -60,7 +60,7 @@ class NonBlockingRouter implements Router {
   private final Time time;
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
-  protected static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
+  static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
   private final AtomicInteger currentBackgroundOperationsCount = new AtomicInteger(0);
   static final int MAX_IN_MEM_CHUNKS = 4;
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
@@ -254,11 +254,11 @@ class NonBlockingRouter implements Router {
    * Initiated deletes of the blobIds in the given list of ids via the {@link BackgroundDeleter}
    * @param idsToDelete the list of blobId strings to delete.
    */
-  private void initiateBackgroundDeletes(List<String> idsToDelete) {
-    for (String id : idsToDelete) {
+  private void initiateBackgroundDeletes(List<StoreKey> idsToDelete) {
+    for (StoreKey key : idsToDelete) {
       currentOperationsCount.incrementAndGet();
       currentBackgroundOperationsCount.incrementAndGet();
-      backgroundDeleter.deleteBlob(id, new FutureResult<Void>(), new Callback<Void>() {
+      backgroundDeleter.deleteBlob(key.getID(), new FutureResult<Void>(), new Callback<Void>() {
         @Override
         public void onCompletion(Void result, Exception exception) {
           if (exception != null) {
@@ -286,12 +286,7 @@ class NonBlockingRouter implements Router {
         } else if (result.getBlobResult != null) {
           logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
         } else if (result.storeKeys != null) {
-          // storeKeys can be null if the blob is not a composite blob.
-          List<String> idsToDelete = new ArrayList<>();
-          for (StoreKey key : result.storeKeys) {
-            idsToDelete.add(key.getID());
-          }
-          initiateBackgroundDeletes(idsToDelete);
+          initiateBackgroundDeletes(result.storeKeys);
         }
         currentBackgroundOperationsCount.decrementAndGet();
       }
@@ -411,7 +406,7 @@ class NonBlockingRouter implements Router {
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
     protected final OperationCallback operationCallback;
-    private final List<String> idsToDeleteList = new ArrayList<>();
+    private final List<StoreKey> idsToDeleteList = new ArrayList<>();
 
     /**
      * Constructs an OperationController

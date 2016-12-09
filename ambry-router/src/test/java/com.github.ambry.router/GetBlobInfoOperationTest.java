@@ -29,6 +29,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
@@ -93,7 +94,7 @@ public class GetBlobInfoOperationTest {
     }
   }
 
-  private final OperationCallback operationCallback = new OperationCallback(null, new ArrayList<String>());
+  private final OperationCallback operationCallback = new OperationCallback(null, new ArrayList<StoreKey>());
 
   public GetBlobInfoOperationTest() throws Exception {
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());

@@ -14,6 +14,8 @@
 package com.github.ambry.router;
 
 import com.github.ambry.network.NetworkClient;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKey;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,13 +27,13 @@ import org.slf4j.LoggerFactory;
  */
 class OperationCallback {
   private final NetworkClient networkClient;
-  private final List<String> idsToDelete;
+  private final List<StoreKey> idsToDelete;
 
   /**
    * Construct an OperationCompleteCallback object
    * @param networkClient the {@link NetworkClient} associated with this callback.
    */
-  OperationCallback(NetworkClient networkClient, List<String> idsToDelete) {
+  OperationCallback(NetworkClient networkClient, List<StoreKey> idsToDelete) {
     this.networkClient = networkClient;
     this.idsToDelete = idsToDelete;
   }
@@ -55,7 +57,7 @@ class OperationCallback {
    * Schedule the deletes of ids in the given list.
    * @param idsToDelete the list of ids that need to be deleted.
    */
-  void scheduleDeletes(List<String> idsToDelete) {
+  void scheduleDeletes(List<StoreKey> idsToDelete) {
     if (idsToDelete != null) {
       this.idsToDelete.addAll(idsToDelete);
     }

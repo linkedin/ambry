@@ -526,7 +526,7 @@ class PutOperation {
    * if this is a composite object, fill the list with successfully put chunk ids.
    * @return the list of successfully put chunk ids, if any; else null.
    */
-  List<String> getSuccessfullyPutChunkIds() {
+  List<StoreKey> getSuccessfullyPutChunkIds() {
     return numDataChunks > 1 ? metadataPutChunk.getChunkIds() : null;
   }
 
@@ -1088,11 +1088,11 @@ class PutOperation {
      * Add all the successfully put chunk ids of the overall blob to the passed in list.
      * @return list of chunk ids associated with this composite blob.
      */
-    List<String> getChunkIds() {
-      List<String> chunkIdList = new ArrayList<>();
+    List<StoreKey> getChunkIds() {
+      List<StoreKey> chunkIdList = new ArrayList<>();
       for (int i = 0; i <= maxFilledChunkIndex; i++) {
         if (chunkIds[i] != null) {
-          chunkIdList.add(chunkIds[i].getID());
+          chunkIdList.add(chunkIds[i]);
         }
       }
       return chunkIdList;
