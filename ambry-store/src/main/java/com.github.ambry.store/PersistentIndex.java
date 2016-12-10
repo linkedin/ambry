@@ -585,7 +585,7 @@ class PersistentIndex {
       StoreFindToken storeToken = (StoreFindToken) token;
       UUID remoteIncarnationId = storeToken.getIncarnationId();
       if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) &&
-          remoteIncarnationId != null && incarnationId != null && remoteIncarnationId.compareTo(incarnationId) != 0) {
+          remoteIncarnationId != null && remoteIncarnationId.compareTo(incarnationId) != 0) {
         // incarnationId mismatch, hence resetting the token to beginning
         logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
             + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);

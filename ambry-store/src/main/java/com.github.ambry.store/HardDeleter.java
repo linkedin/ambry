@@ -341,8 +341,8 @@ public class HardDeleter implements Runnable {
    */
   private void readCleanupTokenAndPopulateRecoveryRange() throws IOException, StoreException {
     File cleanupTokenFile = new File(dataDir, Cleanup_Token_Filename);
-    StoreFindToken recoveryStartToken = recoveryEndToken = new StoreFindToken(null);
-    startToken = startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = new StoreFindToken(null);
+    StoreFindToken recoveryStartToken = recoveryEndToken = new StoreFindToken();
+    startToken = startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = new StoreFindToken();
     if (cleanupTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(cleanupTokenFile));
       DataInputStream stream = new DataInputStream(crcStream);

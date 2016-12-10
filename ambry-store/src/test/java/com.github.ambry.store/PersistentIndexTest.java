@@ -899,10 +899,10 @@ public class PersistentIndexTest {
   @Test
   public void testFindEntries() throws Exception {
     // provide empty token and ensure we get everything till max
-    StoreFindToken tokenWithNullIncarnationId = new StoreFindToken(null);
+    StoreFindToken unInitializedToken = new StoreFindToken();
     StoreFindToken tokenWithIncarnationId = new StoreFindToken(UUID.randomUUID());
     List<StoreFindToken> tokensToTest = new ArrayList<>();
-    tokensToTest.add(tokenWithNullIncarnationId);
+    tokensToTest.add(unInitializedToken);
     tokensToTest.add(tokenWithIncarnationId);
     MockClusterMap map = null;
     for (StoreFindToken tokenToTest : tokensToTest) {
@@ -1166,7 +1166,7 @@ public class PersistentIndexTest {
       // re-incarnation
       index = new MockIndex(tempDirStr, scheduler, log, newIncarnationId, config, factory);
 
-      StoreFindToken token2 = new StoreFindToken(null);
+      StoreFindToken token2 = new StoreFindToken();
       FindInfo info2 = index.findEntriesSince(token2, 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
@@ -1175,7 +1175,8 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
 
-      // token with old incarnationId referring to offset 500
+      // token with old incarnationId referring to offset 500. Should have been reset and entries should
+      // be returned from start
       FindInfo infoTwo = index.findEntriesSince(infoZero.getFindToken(), 300);
       messageEntries = infoTwo.getMessageEntries();
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
@@ -1243,7 +1244,7 @@ public class PersistentIndexTest {
   public void testFindEntriesAdditional() throws Exception {
     // provide token referencing an offset from before
     MockClusterMap map = null;
-    StoreFindToken tokenWithNullIncarnationId = new StoreFindToken(null);
+    StoreFindToken tokenWithNullIncarnationId = new StoreFindToken();
     StoreFindToken tokenWithIncarnationId = new StoreFindToken(UUID.randomUUID());
     List<StoreFindToken> tokensToTest = new ArrayList<>();
     tokensToTest.add(tokenWithNullIncarnationId);
@@ -1721,7 +1722,7 @@ public class PersistentIndexTest {
   @Test
   public void testFindDeletedEntries() throws Exception {
     // provide empty token and ensure we get everything till max
-    StoreFindToken token = new StoreFindToken(null);
+    StoreFindToken token = new StoreFindToken();
     MockClusterMap map = null;
     try {
       for (File c : tempDir.listFiles()) {
@@ -1942,7 +1943,7 @@ public class PersistentIndexTest {
       //Segment 3: [6d 10d 11 12 13]
       //Segment 4: [4d 7d 12d 14 15d] // lastmodified time < beforeSegment5LastModification
       //segment 5: [5d 16d 17d 18 19d] //lastmodified time > beforeSegment5LastModification
-      info = index.findDeletedEntriesSince(new StoreFindToken(null), 4000, beforeSegment5LastModification.get());
+      info = index.findDeletedEntriesSince(new StoreFindToken(), 4000, beforeSegment5LastModification.get());
       messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 8);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId2);

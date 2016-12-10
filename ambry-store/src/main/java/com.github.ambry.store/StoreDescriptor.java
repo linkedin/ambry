@@ -37,7 +37,6 @@ class StoreDescriptor {
   public static final int STORE_ID_LENGTH_SIZE = 4;
   public static final int INCARNATION_ID_LENGTH_SIZE = 4;
   public static final String STORE_DESCRIPTOR = "StoreDescriptor";
-  private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
 
   /**
    * Instantiates the {@link StoreDescriptor} for the store. If the respective file is present, reads the bytes
@@ -92,12 +91,9 @@ class StoreDescriptor {
     switch (version) {
       case VERSION_0:
         String storeId = Utils.readIntString(stream);
-        UUID incarnationIdUUID = null;
         // read incarnationId
         String incarnationId = Utils.readIntString(stream);
-        if (!incarnationId.isEmpty()) {
-          incarnationIdUUID = UUID.fromString(incarnationId);
-        }
+        UUID incarnationIdUUID = UUID.fromString(incarnationId);
         storeDescriptor = new StoreDescriptor(storeId, incarnationIdUUID);
         break;
       default:
@@ -112,7 +108,7 @@ class StoreDescriptor {
    */
   private byte[] toBytes() {
     byte[] storeIdBytes = storeId.toString().getBytes();
-    byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+    byte[] incarnationIdBytes = incarnationId.toString().getBytes();
     int size = VERSION_SIZE + STORE_ID_LENGTH_SIZE + storeIdBytes.length + INCARNATION_ID_LENGTH_SIZE +
         incarnationIdBytes.length;
     byte[] buf = new byte[size];

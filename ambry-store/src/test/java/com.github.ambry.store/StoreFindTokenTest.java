@@ -73,8 +73,8 @@ public class StoreFindTokenTest {
     MockId key = new MockId(UtilsTest.getRandomString(10));
     MockId otherKey = new MockId(UtilsTest.getRandomString(10));
 
-    StoreFindToken initToken = new StoreFindToken(null);
-    StoreFindToken otherInitToken = new StoreFindToken(null);
+    StoreFindToken initToken = new StoreFindToken();
+    StoreFindToken otherInitToken = new StoreFindToken();
     StoreFindToken indexToken = new StoreFindToken(key, offset, sessionId, null);
     StoreFindToken otherIndexToken = new StoreFindToken(key, offset, sessionId, null);
     StoreFindToken journalToken = new StoreFindToken(offset, sessionId, null);
@@ -124,7 +124,7 @@ public class StoreFindTokenTest {
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(UtilsTest.getRandomString(10));
 
-    doSerDeTest(new StoreFindToken(null));
+    doSerDeTest(new StoreFindToken());
     doSerDeTest(new StoreFindToken(key, offset, sessionId, null));
     doSerDeTest(new StoreFindToken(offset, sessionId, null));
   }

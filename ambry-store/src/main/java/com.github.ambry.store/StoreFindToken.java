@@ -57,6 +57,10 @@ public class StoreFindToken implements FindToken {
   private final UUID incarnationId;
   private long bytesRead;
 
+  StoreFindToken() {
+    this(Type.Uninitialized, null, null, null, null);
+  }
+
   StoreFindToken(UUID incarnationId) {
     this(Type.Uninitialized, null, null, null, incarnationId);
   }
@@ -115,7 +119,7 @@ public class StoreFindToken implements FindToken {
         } else if (offset != UNINITIALIZED_OFFSET) {
           storeFindToken = new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID, null);
         } else {
-          storeFindToken = new StoreFindToken(null);
+          storeFindToken = new StoreFindToken();
         }
         break;
       case VERSION_1:
@@ -129,7 +133,7 @@ public class StoreFindToken implements FindToken {
         Type type = Type.values()[stream.readShort()];
         switch (type) {
           case Uninitialized:
-            storeFindToken = new StoreFindToken(null);
+            storeFindToken = new StoreFindToken();
             break;
           case JournalBased:
             Offset logOffset = Offset.fromBytes(stream);
