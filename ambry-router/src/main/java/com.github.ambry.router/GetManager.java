@@ -19,11 +19,9 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -62,7 +60,7 @@ class GetManager {
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
-  private final OperationCallback operationCallback;
+  private final RouterCallback routerCallback;
 
   private class GetRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;
@@ -85,17 +83,17 @@ class GetManager {
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param operationCallback The {@link OperationCallback} to use for callbacks to the router.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time The {@link Time} instance to use.
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
-      NonBlockingRouterMetrics routerMetrics, OperationCallback operationCallback, Time time) {
+      NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, Time time) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.operationCallback = operationCallback;
+    this.routerCallback = routerCallback;
     this.time = time;
     getOperations = Collections.newSetFromMap(new ConcurrentHashMap<GetOperation, Boolean>());
   }
@@ -112,11 +110,11 @@ class GetManager {
       if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation =
             new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                callback, operationCallback, time);
+                callback, time);
       } else {
         getOperation =
             new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-                operationCallback, blobIdFactory, time);
+                routerCallback, blobIdFactory, time);
       }
       getOperations.add(getOperation);
     } catch (RouterException e) {

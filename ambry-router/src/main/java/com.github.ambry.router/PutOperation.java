@@ -78,7 +78,7 @@ class PutOperation {
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
-  private final OperationCallback operationCallback;
+  private final RouterCallback routerCallback;
   private final Time time;
 
   // Parameters associated with the state.
@@ -141,16 +141,15 @@ class PutOperation {
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
-   * @param operationCallback The {@link OperationCallback} to use for callbacks to the router.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
-      OperationCallback operationCallback,
-      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, Time time)
-      throws RouterException {
+      RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
+      Time time) throws RouterException {
     submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
     if (channel.getSize() != blobSize) {
@@ -174,7 +173,7 @@ class PutOperation {
     this.channel = channel;
     this.futureResult = futureResult;
     this.callback = callback;
-    this.operationCallback = operationCallback;
+    this.routerCallback = routerCallback;
     this.time = time;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
@@ -330,7 +329,7 @@ class PutOperation {
               maybeStopTrackingWaitForChunkTime();
               bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
               if (chunkToFill.isReady()) {
-                operationCallback.onPollReady();
+                routerCallback.onPollReady();
                 updateChunkFillerWaitTimeMetrics();
               }
               if (!channelReadBuffer.hasRemaining()) {
@@ -353,7 +352,7 @@ class PutOperation {
       }
     } catch (Exception e) {
       routerMetrics.chunkFillerUnexpectedErrorCount.inc();
-      operationCallback.onPollReady();
+      routerCallback.onPollReady();
       setOperationExceptionAndComplete(new RouterException("PutOperation fillChunks encountered unexpected error", e,
           RouterErrorCode.UnexpectedInternalError));
     }

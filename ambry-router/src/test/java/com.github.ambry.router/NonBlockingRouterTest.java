@@ -585,7 +585,7 @@ public class NonBlockingRouterTest {
 
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new OperationCallback(networkClient, new ArrayList<StoreKey>()), "0", mockTime);
+        new RouterCallback(networkClient, new ArrayList<StoreKey>()), "0", mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -600,7 +600,7 @@ public class NonBlockingRouterTest {
 
     opHelper = new OperationHelper(OperationType.GET);
     getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
-        new NonBlockingRouterMetrics(mockClusterMap), new OperationCallback(networkClient, new ArrayList<StoreKey>()),
+        new NonBlockingRouterMetrics(mockClusterMap), new RouterCallback(networkClient, new ArrayList<StoreKey>()),
         mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
@@ -616,7 +616,7 @@ public class NonBlockingRouterTest {
     opHelper = new OperationHelper(OperationType.DELETE);
     deleteManager = new DeleteManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new OperationCallback(null, new ArrayList<StoreKey>()), mockTime);
+        new RouterCallback(null, new ArrayList<StoreKey>()), mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.

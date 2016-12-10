@@ -113,8 +113,7 @@ public class ChunkFillTest {
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
         putUserMetadata, putChannel, futureResult, null,
-        new OperationCallback(networkClientFactory.getNetworkClient(), new ArrayList<StoreKey>()), null,
-        new MockTime());
+        new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<StoreKey>()), null, new MockTime());
     op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     // largeBlobSize is not a multiple of chunkSize
@@ -199,7 +198,7 @@ public class ChunkFillTest {
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
         putUserMetadata, putChannel, futureResult, null,
-        new OperationCallback(networkClientFactory.getNetworkClient(), new ArrayList<StoreKey>()), null, time);
+        new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<StoreKey>()), null, time);
     op.startReadingFromChannel();
     numChunks = op.getNumDataChunks();
     compositeBuffers = new ByteBuffer[numChunks];

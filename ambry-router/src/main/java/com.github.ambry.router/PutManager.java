@@ -61,7 +61,7 @@ class PutManager {
   // get cleaned up periodically.
   private final Map<Integer, PutOperation> correlationIdToPutOperation;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
-  private final OperationCallback operationCallback;
+  private final RouterCallback routerCallback;
   private final ByteBufferAsyncWritableChannel.ChannelEventListener chunkArrivalListener;
 
   // shared by all PutOperations
@@ -92,19 +92,19 @@ class PutManager {
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob creations.
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param operationCallback The {@link OperationCallback} to use for callbacks to the router.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param suffix the suffix to associate with the names of the threads created by this PutManager
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, OperationCallback operationCallback,
-      String suffix, Time time) {
+      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, String suffix,
+      Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.operationCallback = operationCallback;
+    this.routerCallback = routerCallback;
     this.chunkArrivalListener = new ByteBufferAsyncWritableChannel.ChannelEventListener() {
       @Override
       public void onEvent(ByteBufferAsyncWritableChannel.EventType e) {
@@ -139,7 +139,7 @@ class PutManager {
     try {
       PutOperation putOperation =
           new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
-              channel, futureResult, callback, operationCallback, chunkArrivalListener, time);
+              channel, futureResult, callback, routerCallback, chunkArrivalListener, time);
       putOperations.add(putOperation);
       putOperation.startReadingFromChannel();
     } catch (RouterException e) {
@@ -245,7 +245,7 @@ class PutManager {
     if (e != null) {
       blobId = null;
       routerMetrics.onPutBlobError(e);
-      operationCallback.scheduleDeletes(op.getSuccessfullyPutChunkIds());
+      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIds());
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);

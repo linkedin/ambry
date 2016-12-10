@@ -43,7 +43,6 @@ import org.slf4j.LoggerFactory;
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
 class GetBlobInfoOperation extends GetOperation {
-  private final OperationCallback operationCallback;
   private final SimpleOperationTracker operationTracker;
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
@@ -59,15 +58,13 @@ class GetBlobInfoOperation extends GetOperation {
    * @param blobIdStr the blob id associated with the operation in string form.
    * @param options the {@link GetBlobOptionsInternal} containing the options associated with this operation.
    * @param callback the callback that is to be called when the operation completes.
-   * @param operationCallback the {@link OperationCallback} to use to complete operations.
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback, OperationCallback operationCallback, Time time) throws RouterException {
+      Callback<GetBlobResultInternal> callback, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback, time);
-    this.operationCallback = operationCallback;
     operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
         routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
         routerConfig.routerGetRequestParallelism);

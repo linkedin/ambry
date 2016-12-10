@@ -14,26 +14,23 @@
 package com.github.ambry.router;
 
 import com.github.ambry.network.NetworkClient;
-import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
- * An object of this class is passed by the router to the operation managers for the latter to use to notify about
- * events.
+ * An object of this class is passed by the router to the operation managers for the latter to use to notify the
+ * router about events and state changes that need attention.
  */
-class OperationCallback {
+class RouterCallback {
   private final NetworkClient networkClient;
   private final List<StoreKey> idsToDelete;
 
   /**
-   * Construct an OperationCompleteCallback object
+   * Construct a RouterCallback object
    * @param networkClient the {@link NetworkClient} associated with this callback.
    */
-  OperationCallback(NetworkClient networkClient, List<StoreKey> idsToDelete) {
+  RouterCallback(NetworkClient networkClient, List<StoreKey> idsToDelete) {
     this.networkClient = networkClient;
     this.idsToDelete = idsToDelete;
   }

@@ -405,7 +405,7 @@ class NonBlockingRouter implements Router {
     private final NetworkClient networkClient;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
-    protected final OperationCallback operationCallback;
+    protected final RouterCallback routerCallback;
     private final List<StoreKey> idsToDeleteList = new ArrayList<>();
 
     /**
@@ -415,12 +415,13 @@ class NonBlockingRouter implements Router {
      */
     OperationController(String suffix) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
-      operationCallback = new OperationCallback(networkClient, idsToDeleteList);
-      putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCallback, suffix, time);
-      getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, operationCallback, time);
+      routerCallback = new RouterCallback(networkClient, idsToDeleteList);
+      putManager =
+          new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
+              suffix, time);
+      getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
-          operationCallback, time);
+          routerCallback, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);
       requestResponseHandlerThread.start();
       routerMetrics.initializeOperationControllerMetrics(requestResponseHandlerThread);
@@ -436,7 +437,7 @@ class NonBlockingRouter implements Router {
     protected void getBlob(String blobId, GetBlobOptionsInternal options,
         final Callback<GetBlobResultInternal> callback) {
       getManager.submitGetBlobOperation(blobId, options, callback);
-      operationCallback.onPollReady();
+      routerCallback.onPollReady();
     }
 
     /**
@@ -459,7 +460,7 @@ class NonBlockingRouter implements Router {
         close();
       } else {
         putManager.submitPutBlobOperation(blobProperties, userMetadata, channel, futureResult, callback);
-        operationCallback.onPollReady();
+        routerCallback.onPollReady();
       }
     }
 
@@ -482,7 +483,7 @@ class NonBlockingRouter implements Router {
           }
         }
       });
-      operationCallback.onPollReady();
+      routerCallback.onPollReady();
     }
 
     /**

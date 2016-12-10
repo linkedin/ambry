@@ -91,7 +91,7 @@ public class GetBlobOperationTest {
   private final ResponseHandler responseHandler;
   private final NonBlockingRouter router;
   private final MockNetworkClient mockNetworkClient;
-  private final OperationCallback operationCallback;
+  private final RouterCallback routerCallback;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -164,7 +164,7 @@ public class GetBlobOperationTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
         new LoggingNotificationSystem(), mockClusterMap, time);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
-    operationCallback = new OperationCallback(mockNetworkClient, new ArrayList<StoreKey>());
+    routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<StoreKey>());
   }
 
   /**
@@ -189,7 +189,7 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testInstantiation() throws Exception {
-    Callback<GetBlobResultInternal> getOperationCallback = new Callback<GetBlobResultInternal>() {
+    Callback<GetBlobResultInternal> getRouterCallback = new Callback<GetBlobResultInternal>() {
       @Override
       public void onCompletion(GetBlobResultInternal result, Exception exception) {
         // no op.
@@ -199,7 +199,7 @@ public class GetBlobOperationTest {
     // test a bad case
     try {
       new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", null,
-          getOperationCallback, operationCallback, blobIdFactory, time);
+          getRouterCallback, routerCallback, blobIdFactory, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert.assertEquals("Unexpected exception received on creating GetBlobOperation", RouterErrorCode.InvalidBlobId,
@@ -210,10 +210,10 @@ public class GetBlobOperationTest {
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), getOperationCallback, operationCallback,
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), getRouterCallback, routerCallback,
         blobIdFactory, time);
 
-    Assert.assertEquals("Callbacks must match", getOperationCallback, op.getCallback());
+    Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
   }
 
@@ -873,7 +873,7 @@ public class GetBlobOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, callback,
-            operationCallback, blobIdFactory, time);
+            routerCallback, blobIdFactory, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     return op;
   }
