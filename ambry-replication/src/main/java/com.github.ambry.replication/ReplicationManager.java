@@ -572,7 +572,7 @@ public final class ReplicationManager {
     logger.info("Reading replica tokens for mount path {}", mountPath);
     long readStartTimeMs = SystemTime.getInstance().milliseconds();
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
-    boolean shouldPersist = false;
+    boolean tokenWasReset = false;
     if (replicaTokenFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(replicaTokenFile));
       DataInputStream stream = new DataInputStream(crcStream);
@@ -595,7 +595,6 @@ public final class ReplicationManager {
               FindToken token = factory.getFindToken(stream);
               // update token
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
-              boolean tokenWasReset = false;
               if (partitionInfo != null) {
                 boolean updatedToken = false;
                 for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
@@ -614,6 +613,7 @@ public final class ReplicationManager {
                       // local replica should also be set to 0. During initialization these values are already set to 0,
                       // so we let them be.
                       tokenWasReset = true;
+                      logTokenReset(partitionId, hostname, port, token);
                     }
                     updatedToken = true;
                     break;
@@ -628,12 +628,7 @@ public final class ReplicationManager {
                 // to this partition could not be started. In such a case, the tokens for its remote replicas should be
                 // reset.
                 tokenWasReset = true;
-              }
-              if (tokenWasReset) {
-                shouldPersist = true;
-                replicationMetrics.replicationTokenResetCount.inc();
-                logger.info("Resetting token for partition {} remote host {} port {}, persisted token {}",
-                    partitionId, hostname, port, token);
+                logTokenReset(partitionId, hostname, port, token);
               }
             }
             long crc = crcStream.getValue();
@@ -654,12 +649,25 @@ public final class ReplicationManager {
       }
     }
 
-    if (shouldPersist) {
+    if (tokenWasReset) {
       // We must ensure that the the token file is persisted if any of the tokens in the file got reset. We need to do
       // this before an associated store takes any writes, to avoid the case where a store takes writes and persists it,
       // before the replica token file is persisted after the reset.
       persistor.write(mountPath, false);
     }
+  }
+
+  /**
+   * Update metrics and print a log message when a replica token is reset.
+   * @param partitionId The replica's partition.
+   * @param hostname The replica's hostname.
+   * @param port The replica's port.
+   * @param token The {@link FindToken} for the replica.
+   */
+  private void logTokenReset(PartitionId partitionId, String hostname, int port, FindToken token) {
+    replicationMetrics.replicationTokenResetCount.inc();
+    logger.info("Resetting token for partition {} remote host {} port {}, persisted token {}", partitionId, hostname,
+        port, token);
   }
 
   class ReplicaTokenPersistor implements Runnable {
