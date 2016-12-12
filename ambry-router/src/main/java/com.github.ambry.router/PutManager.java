@@ -61,9 +61,7 @@ class PutManager {
   // get cleaned up periodically.
   private final Map<Integer, PutOperation> correlationIdToPutOperation;
   private final AtomicBoolean isOpen = new AtomicBoolean(true);
-  private final OperationCompleteCallback operationCompleteCallback;
-  private final ReadyForPollCallback readyForPollCallback;
-  private final List<String> idsToDeleteList;
+  private final RouterCallback routerCallback;
   private final ByteBufferAsyncWritableChannel.ChannelEventListener chunkArrivalListener;
 
   // shared by all PutOperations
@@ -94,26 +92,19 @@ class PutManager {
    * @param notificationSystem The {@link NotificationSystem} used for notifying blob creations.
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
-   * @param operationCompleteCallback The {@link OperationCompleteCallback} to use to complete operations.
-   * @param readyForPollCallback The callback to be used to notify the router of any state changes within the
-   *                             operations.
-   * @param idsToDeleteList The list to fill with ids of successfully put data chunks of an unsuccessful
-   *                        overall put operation.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param suffix the suffix to associate with the names of the threads created by this PutManager
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
-      List<String> idsToDeleteList, String suffix, Time time) {
+      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, String suffix,
+      Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
-    this.operationCompleteCallback = operationCompleteCallback;
-    this.readyForPollCallback = readyForPollCallback;
-    this.idsToDeleteList = idsToDeleteList;
+    this.routerCallback = routerCallback;
     this.chunkArrivalListener = new ByteBufferAsyncWritableChannel.ChannelEventListener() {
       @Override
       public void onEvent(ByteBufferAsyncWritableChannel.EventType e) {
@@ -148,13 +139,13 @@ class PutManager {
     try {
       PutOperation putOperation =
           new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
-              channel, futureResult, callback, readyForPollCallback, chunkArrivalListener, time);
+              channel, futureResult, callback, routerCallback, chunkArrivalListener, time);
       putOperations.add(putOperation);
       putOperation.startReadingFromChannel();
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(e);
-      operationCompleteCallback.completeOperation(futureResult, callback, null, e);
+      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
     }
   }
 
@@ -254,14 +245,14 @@ class PutManager {
     if (e != null) {
       blobId = null;
       routerMetrics.onPutBlobError(e);
-      op.addSuccessfullyPutChunkIds(idsToDeleteList);
+      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIds());
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
+    NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
   /**
@@ -323,7 +314,7 @@ class PutManager {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
         routerMetrics.onPutBlobError(e);
-        operationCompleteCallback.completeOperation(op.getFuture(), op.getCallback(), null, e);
+        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null, e);
       }
     }
   }
