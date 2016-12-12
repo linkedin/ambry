@@ -1,0 +1,138 @@
+{
+    "clusterName": "LocalSetUp_MultiPartition_MultiNode",
+    "version": 1,
+    "partitions": [
+        {
+            "id": 0,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 10737418240,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-a/1",
+                    "port": 6670
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-b/1",
+                    "port": 6671
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-c/1",
+                    "port": 6672
+                }
+            ]
+        },
+        {
+            "id": 1,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 10737418240,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-a/1",
+                    "port": 6670
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-b/1",
+                    "port": 6671
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-c/1",
+                    "port": 6672
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 10737418240,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-a/2",
+                    "port": 6670
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-b/2",
+                    "port": 6671
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-c/2",
+                    "port": 6672
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 10737418240,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-a/2",
+                    "port": 6670
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-b/2",
+                    "port": 6671
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-c/2",
+                    "port": 6672
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 10737418240,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-a/3",
+                    "port": 6670
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-b/3",
+                    "port": 6671
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-c/3",
+                    "port": 6672
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 10737418240,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-a/3",
+                    "port": 6670
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-b/3",
+                    "port": 6671
+                },
+                {
+                    "hostname": "localhost",
+                    "mountPath": "/tmp/node-c/3",
+                    "port": 6672
+                }
+            ]
+        }
+    ]
+}

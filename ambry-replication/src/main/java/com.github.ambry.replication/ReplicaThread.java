@@ -178,16 +178,16 @@ class ReplicaThread implements Runnable {
           if (activeReplicasPerNode.size() > 0) {
             try {
               connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(),
-                  replicasToReplicatePerNode.get(0).getPort(),
+                  activeReplicasPerNode.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
               checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
               startTimeInMs = SystemTime.getInstance().milliseconds();
               List<ExchangeMetadataResponse> exchangeMetadataResponseList =
-                  exchangeMetadata(connectedChannel, replicasToReplicatePerNode);
+                  exchangeMetadata(connectedChannel, activeReplicasPerNode);
               exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
 
               startTimeInMs = SystemTime.getInstance().milliseconds();
-              fixMissingStoreKeys(connectedChannel, replicasToReplicatePerNode, exchangeMetadataResponseList);
+              fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, exchangeMetadataResponseList);
               fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
             } catch (Exception e) {
               if (checkoutConnectionTimeInMs == -1) {

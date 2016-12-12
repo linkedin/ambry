@@ -595,33 +595,40 @@ public final class ReplicationManager {
               FindToken token = factory.getFindToken(stream);
               // update token
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
-              boolean updatedToken = false;
-              for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
-                if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
-                    && remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port
-                    && remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
-                  logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname,
-                      port, token);
-                  if (partitionInfo.getStore().getSizeInBytes() > 0) {
-                    remoteReplicaInfo.initializeTokens(token);
-                    remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
-                  } else {
-                    // if the local replica is empty, it could have been newly created. In this case, the offset in
-                    // every peer replica which the local replica lags from should be set to 0, so that the local
-                    // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
-                    // local replica should also be set to 0. During initialization these values are already set to 0,
-                    // so we let them be.
-                    tokenWasReset = true;
-                    replicationMetrics.replicationTokenResetCount.inc();
-                    logger.info("Resetting token for partition {} remote host {} port {}, persisted token {}",
-                        partitionId, hostname, port, token);
+              if (partitionInfo != null) {
+                boolean updatedToken = false;
+                for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
+                  if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
+                      && remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port
+                      && remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
+                    logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname,
+                        port, token);
+                    if (partitionInfo.getStore().getSizeInBytes() > 0) {
+                      remoteReplicaInfo.initializeTokens(token);
+                      remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
+                    } else {
+                      // if the local replica is empty, it could have been newly created. In this case, the offset in
+                      // every peer replica which the local replica lags from should be set to 0, so that the local
+                      // replica starts fetching from the beginning of the peer. The totalBytes the peer read from the
+                      // local replica should also be set to 0. During initialization these values are already set to 0,
+                      // so we let them be.
+                      tokenWasReset = true;
+                      logTokenReset(partitionId, hostname, port, token);
+                    }
+                    updatedToken = true;
+                    break;
                   }
-                  updatedToken = true;
-                  break;
                 }
-              }
-              if (!updatedToken) {
-                logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname, port);
+                if (!updatedToken) {
+                  logger.warn("Persisted remote replica host {} and port {} not present in new cluster ", hostname,
+                      port);
+                }
+              } else {
+                // If this partition was not found in partitionsToReplicate, it means that the local store corresponding
+                // to this partition could not be started. In such a case, the tokens for its remote replicas should be
+                // reset.
+                tokenWasReset = true;
+                logTokenReset(partitionId, hostname, port, token);
               }
             }
             long crc = crcStream.getValue();
@@ -648,6 +655,19 @@ public final class ReplicationManager {
       // before the replica token file is persisted after the reset.
       persistor.write(mountPath, false);
     }
+  }
+
+  /**
+   * Update metrics and print a log message when a replica token is reset.
+   * @param partitionId The replica's partition.
+   * @param hostname The replica's hostname.
+   * @param port The replica's port.
+   * @param token The {@link FindToken} for the replica.
+   */
+  private void logTokenReset(PartitionId partitionId, String hostname, int port, FindToken token) {
+    replicationMetrics.replicationTokenResetCount.inc();
+    logger.info("Resetting token for partition {} remote host {} port {}, persisted token {}", partitionId, hostname,
+        port, token);
   }
 
   class ReplicaTokenPersistor implements Runnable {
