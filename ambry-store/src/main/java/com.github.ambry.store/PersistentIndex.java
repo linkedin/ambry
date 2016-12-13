@@ -36,6 +36,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -580,41 +581,11 @@ class PersistentIndex {
   FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     long startTimeInMs = time.milliseconds();
     try {
-      boolean tokenWasReset = false;
+      boolean tokenWasReset;
       Offset logEndOffsetBeforeFind = log.getEndOffset();
-      StoreFindToken storeToken = (StoreFindToken) token;
-      UUID remoteIncarnationId = storeToken.getIncarnationId();
-      if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) &&
-          remoteIncarnationId != null && remoteIncarnationId.compareTo(incarnationId) != 0) {
-        // incarnationId mismatch, hence resetting the token to beginning
-        logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
-            + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
-        storeToken = new StoreFindToken(incarnationId);
-        tokenWasReset = true;
-      }
-      // if incarnationId is null, for backwards compatability purposes, will consider the token as good
-      // validate token
-      else if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
-        // the session has changed. check if we had an unclean shutdown on startup
-        if (!cleanShutdown) {
-          // if we had an unclean shutdown and the token offset is larger than the logEndOffsetOnStartup
-          // we reset the token to logEndOffsetOnStartup
-          if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized)
-              && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
-            logger.info("Index : " + dataDir + " resetting offset after not clean shutdown " + logEndOffsetOnStartup
-                + " before offset " + storeToken.getOffset());
-            storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId);
-            tokenWasReset = true;
-          }
-        } else if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized)
-            && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
-          logger.error(
-              "Index : " + dataDir + " invalid token. Provided offset is outside the log range after clean shutdown");
-          // if the shutdown was clean, the offset should always be lesser or equal to the logEndOffsetOnStartup
-          throw new IllegalArgumentException(
-              "Invalid token. Provided offset is outside the log range after clean shutdown");
-        }
-      }
+      AtomicReference<StoreFindToken> storeFindTokenAtomicReference = new AtomicReference<>((StoreFindToken) token);
+      tokenWasReset = resetTokenIfRequired(storeFindTokenAtomicReference);
+      StoreFindToken storeToken = storeFindTokenAtomicReference.get();
       logger.trace("Time used to validate token: {}", (time.milliseconds() - startTimeInMs));
 
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
@@ -720,6 +691,49 @@ class PersistentIndex {
       throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
     }
+  }
+
+  /**
+   * Validate the {@link StoreFindToken} and reset if need be.
+   * @param storeFindTokenAtomicReference the atomic reference to the {@link StoreFindToken}
+   * @return
+   */
+  private boolean resetTokenIfRequired(AtomicReference<StoreFindToken> storeFindTokenAtomicReference) {
+    boolean tokenReset = false;
+    StoreFindToken storeToken = storeFindTokenAtomicReference.get();
+    UUID remoteIncarnationId = storeToken.getIncarnationId();
+    if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) &&
+        remoteIncarnationId != null && !remoteIncarnationId.equals(incarnationId)) {
+      // incarnationId mismatch, hence resetting the token to beginning
+      logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
+          + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
+      storeFindTokenAtomicReference.set(new StoreFindToken(incarnationId));
+      tokenReset = true;
+    }
+    // if incarnationId is null, for backwards compatability purposes, will consider the token as good
+    // validate token
+    else if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
+      // the session has changed. check if we had an unclean shutdown on startup
+      if (!cleanShutdown) {
+        // if we had an unclean shutdown and the token offset is larger than the logEndOffsetOnStartup
+        // we reset the token to logEndOffsetOnStartup
+        if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized)
+            && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
+          logger.info("Index : " + dataDir + " resetting offset after not clean shutdown " + logEndOffsetOnStartup
+              + " before offset " + storeToken.getOffset());
+          storeFindTokenAtomicReference.set(new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId));
+          tokenReset = true;
+        }
+      } else if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized)
+          && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
+        logger.error(
+            "Index : " + dataDir + " invalid token. Provided offset is outside the log range after clean shutdown");
+        // if the shutdown was clean, the offset should always be lesser or equal to the logEndOffsetOnStartup
+        throw new IllegalArgumentException(
+            "Invalid token. Provided offset is outside the log range after clean shutdown");
+      }
+    }
+    return tokenReset;
   }
 
   private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,

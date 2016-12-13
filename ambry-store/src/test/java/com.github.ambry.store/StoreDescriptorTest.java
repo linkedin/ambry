@@ -13,10 +13,9 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.utils.ByteBufferInputStream;
-import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -36,54 +35,66 @@ public class StoreDescriptorTest {
   @Test
   public void testStoreDescriptor() throws IOException {
     String tempDirPath = "/tmp/";
-    String storeId = "demoStoreId";
-    StoreDescriptor storeDescriptor = new StoreDescriptor(tempDirPath, storeId);
+    File storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR);
+    storeDescriptorFile.delete();
+
+    StoreDescriptor storeDescriptor = new StoreDescriptor(tempDirPath);
     // store descriptor file should have been created.
-    StoreDescriptor newStoreDescriptor = new StoreDescriptor(tempDirPath, storeId);
-    Assert.assertEquals("StoreId mismatch ", storeDescriptor.getStoreId(), newStoreDescriptor.getStoreId());
+    StoreDescriptor newStoreDescriptor = new StoreDescriptor(tempDirPath);
     Assert.assertEquals("IncarnationId mismatch ", storeDescriptor.getIncarnationId(),
         newStoreDescriptor.getIncarnationId());
 
-    // read the file to fetch storeId and incarnationId
-    newStoreDescriptor = StoreDescriptor.fromBytes(
-        new DataInputStream(new FileInputStream(new File(tempDirPath, StoreDescriptor.STORE_DESCRIPTOR))));
-    Assert.assertEquals("StoreId mismatch ", storeDescriptor.getStoreId(), newStoreDescriptor.getStoreId());
-    Assert.assertEquals("IncarnationId mismatch ", storeDescriptor.getIncarnationId(),
-        newStoreDescriptor.getIncarnationId());
+   /* // read the file to fetch storeId and incarnationId
+    DataInputStream stream = new DataInputStream(new FileInputStream(new File(tempDirPath, StoreDescriptor.STORE_DESCRIPTOR)));
+    short version = stream.readShort();
+    Assert.assertEquals("Version mismatch ", StoreDescriptor.VERSION_0, version);
+    // read incarnationId
+    String incarnationId = Utils.readIntString(stream);
+    UUID incarnationIdUUID = UUID.fromString(incarnationId);
+    Assert.assertEquals("IncarnationId mismatch", newStoreDescriptor.getIncarnationId(), incarnationIdUUID);
+*/
 
-    // Create StoreDescriptor file with explicit store Id and incarnationId
-    storeId = "demoStoreId2";
-    UUID incarnationId = UUID.randomUUID();
-    int size =
-        StoreDescriptor.VERSION_SIZE + StoreDescriptor.STORE_ID_LENGTH_SIZE + storeId.toString().getBytes().length +
-            StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationId.toString().getBytes().length;
+    // Create StoreDescriptor file with new incarnationId
+    UUID incarnationIdUUID = UUID.randomUUID();
+    int size = StoreDescriptor.VERSION_SIZE +
+        StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
     byte[] toBytes = new byte[size];
     ByteBuffer byteBuffer = ByteBuffer.wrap(toBytes);
     byteBuffer.putShort(StoreDescriptor.VERSION_0);
-    byteBuffer.putInt(storeId.toString().getBytes().length);
-    byteBuffer.put(storeId.toString().getBytes());
-    byteBuffer.putInt(incarnationId.toString().getBytes().length);
-    byteBuffer.put(incarnationId.toString().getBytes());
+    byteBuffer.putInt(incarnationIdUUID.toString().getBytes().length);
+    byteBuffer.put(incarnationIdUUID.toString().getBytes());
     byteBuffer.flip();
-    storeDescriptor = StoreDescriptor.fromBytes(new DataInputStream(new ByteBufferInputStream(byteBuffer)));
-    Assert.assertEquals("StoreId mismatch ", storeId, storeDescriptor.getStoreId());
-    Assert.assertEquals("IncarnationId mismatch ", incarnationId, storeDescriptor.getIncarnationId());
 
-    // version mismatch
-    size = StoreDescriptor.VERSION_SIZE + StoreDescriptor.STORE_ID_LENGTH_SIZE + storeId.toString().getBytes().length +
-        StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationId.toString().getBytes().length;
+    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR);
+    storeDescriptorFile.createNewFile();
+    DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
+    dataOutputStream.write(toBytes);
+    dataOutputStream.close();
+
+    storeDescriptor = new StoreDescriptor(tempDirPath);
+    Assert.assertEquals("IncarnationId mismatch ", incarnationIdUUID, storeDescriptor.getIncarnationId());
+
+    // wrong version
+    size = StoreDescriptor.VERSION_SIZE +
+        StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
     toBytes = new byte[size];
     byteBuffer = ByteBuffer.wrap(toBytes);
-    byteBuffer.putShort((short) 2);
-    byteBuffer.putInt(storeId.toString().getBytes().length);
-    byteBuffer.put(storeId.toString().getBytes());
-    byteBuffer.putInt(incarnationId.toString().getBytes().length);
-    byteBuffer.put(incarnationId.toString().getBytes());
+    byteBuffer.putShort((short) 1);
+    byteBuffer.putInt(incarnationIdUUID.toString().getBytes().length);
+    byteBuffer.put(incarnationIdUUID.toString().getBytes());
     byteBuffer.flip();
 
+    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR);
+    storeDescriptorFile.createNewFile();
+    dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
+    dataOutputStream.write(toBytes);
+    dataOutputStream.close();
+
     try {
-      StoreDescriptor.fromBytes(new DataInputStream(new ByteBufferInputStream(byteBuffer)));
+      storeDescriptor = new StoreDescriptor(tempDirPath);
+      Assert.fail("Wrong version should have thrown exception ");
     } catch (IllegalArgumentException e) {
+
     }
   }
 }

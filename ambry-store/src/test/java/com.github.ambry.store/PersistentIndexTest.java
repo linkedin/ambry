@@ -896,6 +896,14 @@ public class PersistentIndexTest {
     }
   }
 
+  /**
+   * Tests {@link PersistentIndex#findEntriesSince(FindToken, long)} for good scenarios.
+   * FindEntries should return entries upto a max of maxTotalSizeofEntries if index contains more entries
+   * starting from the storeFindToken passed in. Also the returned token is expected to point to the starting offset
+   * of the last returned entry. If index doesn't contain so many entries, it should return only until the last
+   * entry in the index. If there are no entries in the index, shouldn't return anything for findEntriessince()
+   * @throws Exception
+   */
   @Test
   public void testFindEntries() throws Exception {
     // provide empty token and ensure we get everything till max
@@ -1009,12 +1017,6 @@ public class PersistentIndexTest {
         Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
         Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
 
-        info2 = index.findEntriesSince(token2, 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 3);
-        Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
-        Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
-
         info2 = index.findEntriesSince(info2.getFindToken(), 300);
         messageEntries = info2.getMessageEntries();
         Assert.assertEquals(messageEntries.size(), 3);
@@ -1055,8 +1057,14 @@ public class PersistentIndexTest {
     }
   }
 
+  /**
+   * Tests cases involving incarnationId and Index based offsets. If incarnationId mismatches, token should be reset
+   * and entries should be returned from the beginning. If incarnationId matches, should return entries as usual.
+   * Also the returned token should contain the current incarnationId of the store.
+   * @throws Exception
+   */
   @Test
-  public void testFindEntriesIncarnationId() throws Exception {
+  public void testFindEntriesWithIncarnationId() throws Exception {
     // provide empty token and ensure we get everything till max
     UUID incarnationId = UUID.randomUUID();
     StoreFindToken token = new StoreFindToken(incarnationId);
@@ -1609,6 +1617,13 @@ public class PersistentIndexTest {
     }
   }
 
+  /**
+   * Tests that during mismatch of incarnationId, token is reset and entries are returned from beginning
+   * (when the token was as journal based token). Also, ensures that the returned token contain the new incarnationId and
+   * the follow up calls to findEntriesSince() do proceed as usual as the returned token contains the matching
+   * incarnationId
+   * @throws Exception
+   */
   @Test
   public void testIncarnationIdWithJournal() throws Exception {
     MockClusterMap map = null;

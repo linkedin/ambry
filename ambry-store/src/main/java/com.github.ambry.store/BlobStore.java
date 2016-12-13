@@ -104,7 +104,7 @@ class BlobStore implements Store {
               StoreErrorCodes.Initialization_Error);
         }
 
-        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir, storeId);
+        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
             storeDescriptor.getIncarnationId());
