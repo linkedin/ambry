@@ -44,16 +44,6 @@ public class StoreDescriptorTest {
     Assert.assertEquals("IncarnationId mismatch ", storeDescriptor.getIncarnationId(),
         newStoreDescriptor.getIncarnationId());
 
-   /* // read the file to fetch storeId and incarnationId
-    DataInputStream stream = new DataInputStream(new FileInputStream(new File(tempDirPath, StoreDescriptor.STORE_DESCRIPTOR)));
-    short version = stream.readShort();
-    Assert.assertEquals("Version mismatch ", StoreDescriptor.VERSION_0, version);
-    // read incarnationId
-    String incarnationId = Utils.readIntString(stream);
-    UUID incarnationIdUUID = UUID.fromString(incarnationId);
-    Assert.assertEquals("IncarnationId mismatch", newStoreDescriptor.getIncarnationId(), incarnationIdUUID);
-*/
-
     // Create StoreDescriptor file with new incarnationId
     UUID incarnationIdUUID = UUID.randomUUID();
     int size = StoreDescriptor.VERSION_SIZE +
