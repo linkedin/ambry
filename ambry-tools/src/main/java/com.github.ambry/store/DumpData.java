@@ -19,6 +19,8 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -62,8 +64,8 @@ public class DumpData {
   private DumpDataHelper dumpDataHelper;
   private static final Logger logger = LoggerFactory.getLogger(DumpData.class);
 
-  public DumpData(ClusterMap map) {
-    dumpDataHelper = new DumpDataHelper(map);
+  public DumpData(ClusterMap map, int bytesPerSec) {
+    dumpDataHelper = new DumpDataHelper(map, bytesPerSec);
   }
 
   public static void main(String args[]) {
@@ -138,6 +140,13 @@ public class DumpData {
               .defaultsTo("false")
               .ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<Integer> bytesPerSecOpt =
+          parser.accepts("bytesPerSec", "Allowed bytes per sec")
+              .withRequiredArg()
+              .describedAs("bytesPerSec")
+              .ofType(Integer.class)
+              .defaultsTo(-1);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<>();
@@ -167,7 +176,8 @@ public class DumpData {
       String replicaRootDirectory = options.valueOf(replicaRootDirectoryOpt);
       boolean activeBlobsOnly = Boolean.parseBoolean(options.valueOf(activeBlobsOnlyOpt));
       boolean logBlobStats = Boolean.parseBoolean(options.valueOf(logBlobStatsOpt));
-      DumpData dumpData = new DumpData(map);
+      int bytesPerSec = options.valueOf(bytesPerSecOpt);
+      DumpData dumpData = new DumpData(map, bytesPerSec);
       long startOffset = -1;
       long endOffset = -1;
       if (startOffsetStr != null) {

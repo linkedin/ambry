@@ -36,6 +36,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -49,6 +50,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -117,7 +119,7 @@ public class ConcurrencyTestTool {
     concurrencyTestTool.startTest(putGetHelper, options.maxParallelPutCount, options.parallelGetCount,
         options.totalPutBlobCount, options.maxGetCountPerBlob, options.burstCountForGet,
         options.maxFailuresPerPutBatchToStopPuts, options.maxFailuresPerGetBatchToStopGets, options.deleteAndValidate,
-        options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs);
+        options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs, options.measurementIntervalNs);
   }
 
   /**
@@ -134,12 +136,13 @@ public class ConcurrencyTestTool {
    * @param deleteAndValidate Deletes the blobs once GETs have reached a threshold on every blob
    * @param sleepTimeBetweenBatchPutsInMs Time to sleep in ms between batch Puts per Producer thread
    * @param sleepTimeBetweenBatchGetsInMs Time to sleep in ms between batch Gets per Consumer thread
+   * @param measurementIntervalMs The interval in milliseconds to report performance result
    * @throws InterruptedException
    */
   public void startTest(PutGetHelper putGetHelper, int maxParallelPutCount, int parallelGetCount, int totalPutCount,
       int maxGetCountPerBlob, int burstCountGet, int maxFailuresPerPutBatchToStopPuts,
       int maxFailuresPerGetBatchToStopGets, boolean deleteAndValidate, long sleepTimeBetweenBatchPutsInMs,
-      long sleepTimeBetweenBatchGetsInMs) throws InterruptedException {
+      long sleepTimeBetweenBatchGetsInMs, long measurementIntervalMs) throws InterruptedException {
     AtomicInteger currentPutCount = new AtomicInteger(0);
     AtomicInteger getCompletedCount = new AtomicInteger(0);
     // Creating shared queue for put Thread and get Thread
@@ -150,18 +153,19 @@ public class ConcurrencyTestTool {
     // Creating PutThread
     Thread putThread = new Thread(
         new PutThread(putGetHelper, generatedBlobAccessInfos, totalPutCount, currentPutCount, maxParallelPutCount,
-            maxFailuresPerPutBatchToStopPuts, sleepTimeBetweenBatchPutsInMs, threadLocalRandom));
+            maxFailuresPerPutBatchToStopPuts, sleepTimeBetweenBatchPutsInMs, threadLocalRandom, measurementIntervalMs));
 
     // Creating Get thread
     Thread getThread = new Thread(
         new GetThread(putGetHelper, generatedBlobAccessInfos, maxGetCountPerBlob, currentPutCount, getCompletedCount,
             burstCountGet, parallelGetCount, maxFailuresPerGetBatchToStopGets, sleepTimeBetweenBatchGetsInMs,
-            deleteAndValidate, threadLocalRandom, deletedBlobIds));
+            deleteAndValidate, threadLocalRandom, deletedBlobIds, measurementIntervalMs));
 
     Thread deleteThread = null;
     if (deleteAndValidate) {
       logger.trace("Initiating Delete thread ");
-      DeleteThread deleteBlobThread = new DeleteThread(putGetHelper, totalPutCount, deletedBlobIds);
+      DeleteThread deleteBlobThread =
+          new DeleteThread(putGetHelper, totalPutCount, deletedBlobIds, measurementIntervalMs);
       deleteThread = new Thread(deleteBlobThread);
       deleteThread.start();
     }
@@ -198,10 +202,12 @@ public class ConcurrencyTestTool {
     private final int maxFailuresPerPutBatchToStopPuts;
     private final long sleepTimeBetweenBatchPutsInMs;
     private final ThreadLocalRandom threadLocalRandom;
+    private MetricsCollector metricsCollector;
 
     public PutThread(PutGetHelper putHelper, CopyOnWriteArrayList<BlobAccessInfo> generatedBlobAccessInfos,
         final int totalPutCount, AtomicInteger currentPutCount, int maxParallelRequest,
-        int maxFailuresPerPutBatchToStopPuts, long sleepTimeBetweenBatchPutsInMs, ThreadLocalRandom threadLocalRandom) {
+        int maxFailuresPerPutBatchToStopPuts, long sleepTimeBetweenBatchPutsInMs, ThreadLocalRandom threadLocalRandom,
+        long measurementIntervalMs) {
       this.putHelper = putHelper;
       this.generatedBlobAccessInfos = generatedBlobAccessInfos;
       this.totalPutCount = totalPutCount;
@@ -210,20 +216,25 @@ public class ConcurrencyTestTool {
       this.maxFailuresPerPutBatchToStopPuts = maxFailuresPerPutBatchToStopPuts;
       this.sleepTimeBetweenBatchPutsInMs = sleepTimeBetweenBatchPutsInMs;
       this.threadLocalRandom = threadLocalRandom;
+      this.metricsCollector = new MetricsCollector(measurementIntervalMs, "PUTs");
     }
 
     @Override
     public void run() {
       try {
         while (currentPutCount.get() < totalPutCount) {
+          long startTimeInNs = SystemTime.getInstance().nanoseconds();
           int burstCount = threadLocalRandom.nextInt(maxParallelRequest) + 1;
           logger.info("PutThread producing " + burstCount + " times ");
           final CountDownLatch countDownLatch = new CountDownLatch(burstCount);
           final AtomicInteger failureCount = new AtomicInteger(0);
           for (int j = 0; j < burstCount; j++) {
             Callback<Pair<String, byte[]>> callback = new Callback<Pair<String, byte[]>>() {
+              long callBakStartTimeInNs = SystemTime.getInstance().nanoseconds();
               @Override
               public void onCompletion(Pair<String, byte[]> result, Exception exception) {
+                long callBackendTimeInNs = SystemTime.getInstance().nanoseconds();
+                metricsCollector.updateLatency(callBackendTimeInNs - callBakStartTimeInNs);
                 if (exception == null) {
                   if (currentPutCount.get() < totalPutCount) {
                     generatedBlobAccessInfos.add(new BlobAccessInfo(result.getFirst(), result.getSecond()));
@@ -239,6 +250,7 @@ public class ConcurrencyTestTool {
             putHelper.putBlob(callback);
           }
           countDownLatch.await(5, TimeUnit.MINUTES);
+          metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().nanoseconds() - startTimeInNs);
           if (failureCount.get() > maxFailuresPerPutBatchToStopPuts) {
             logger.error(failureCount.get() + "  failures during this batch, hence exiting the Put Thread");
             break;
@@ -249,6 +261,7 @@ public class ConcurrencyTestTool {
         logger.error("InterruptedException in putThread ", ex);
       } finally {
         putComplete.set(true);
+        metricsCollector.reportMetrics();
       }
       logger.info(
           "Exiting Producer. Current Put Count " + currentPutCount.get() + ", total Put Count " + totalPutCount);
@@ -297,11 +310,13 @@ public class ConcurrencyTestTool {
     private final long sleepTimeBetweenBatchGetsInMs;
     private final ThreadLocalRandom threadLocalRandom;
     private final BlockingQueue<String> deleteBlobIds;
+    private MetricsCollector metricsCollector;
 
     public GetThread(PutGetHelper getHelper, CopyOnWriteArrayList<BlobAccessInfo> generatedBlobAccessInfos,
         int maxGetCountPerBlob, final AtomicInteger totalPutCount, AtomicInteger getCompletedCount,
         int maxBurstCountPerBlob, int parallelGetCount, int maxFailuresPerGetBatch, long sleepTimeBetweenBatchGetsInMs,
-        boolean deleteOnExit, ThreadLocalRandom threadLocalRandom, BlockingQueue<String> deleteBlobIds) {
+        boolean deleteOnExit, ThreadLocalRandom threadLocalRandom, BlockingQueue<String> deleteBlobIds,
+        long measurementIntervalMs) {
       this.getHelper = getHelper;
       this.generatedBlobAccessInfos = generatedBlobAccessInfos;
       this.maxGetCountPerBlob = maxGetCountPerBlob;
@@ -314,6 +329,7 @@ public class ConcurrencyTestTool {
       this.sleepTimeBetweenBatchGetsInMs = sleepTimeBetweenBatchGetsInMs;
       this.threadLocalRandom = threadLocalRandom;
       this.deleteBlobIds = deleteBlobIds;
+      this.metricsCollector = new MetricsCollector(measurementIntervalMs, "GETs");
     }
 
     @Override
@@ -322,6 +338,7 @@ public class ConcurrencyTestTool {
         try {
           int size = generatedBlobAccessInfos.size();
           if (size > 0) {
+            long startTimeInNs = SystemTime.getInstance().nanoseconds();
             List<Pair<BlobAccessInfo, Integer>> blobInfoBurstCountPairList = new ArrayList<>();
             List<String> toBeDeletedBlobsPerBatch = new ArrayList<>();
             int blobCountPerBatch = Math.min(size, parallelGetCount);
@@ -350,8 +367,11 @@ public class ConcurrencyTestTool {
               final CountDownLatch countDownLatch = new CountDownLatch(burstCount);
               for (int j = 0; j < burstCount; j++) {
                 Callback<Void> callback = new Callback<Void>() {
+                  long callBackStartTimeInNs = SystemTime.getInstance().nanoseconds();
                   @Override
                   public void onCompletion(Void result, Exception exception) {
+                    long callBackEndTimeInNs = SystemTime.getInstance().nanoseconds();
+                    metricsCollector.updateLatency(callBackEndTimeInNs - callBackStartTimeInNs);
                     countDownLatch.countDown();
                     blobAccessInfo.burstGetReferenceCount.decrementAndGet();
                     if (countDownLatch.getCount() == 0) {
@@ -369,6 +389,7 @@ public class ConcurrencyTestTool {
               }
             }
             countDownLatchForBatch.await(5, TimeUnit.MINUTES);
+            metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().nanoseconds() - startTimeInNs);
             if (deleteOnExit) {
               deleteBlobIds.addAll(toBeDeletedBlobsPerBatch);
             }
@@ -382,6 +403,7 @@ public class ConcurrencyTestTool {
           logger.error("InterruptedException in GetThread ", ex);
         }
       }
+      metricsCollector.reportMetrics();
       logger.info("Exiting GetThread ");
     }
   }
@@ -395,12 +417,15 @@ public class ConcurrencyTestTool {
     private AtomicInteger deletedCount = new AtomicInteger(0);
     private BlockingQueue<String> deleteBlobIds;
     private CountDownLatch countDownLatch;
+    private MetricsCollector metricsCollector;
 
-    public DeleteThread(PutGetHelper deleteHelper, int putCount, BlockingQueue<String> deleteBlobIds) {
+    public DeleteThread(PutGetHelper deleteHelper, int putCount, BlockingQueue<String> deleteBlobIds,
+        long measurementIntervalMs) {
       this.putCount = putCount;
       this.deleteHelper = deleteHelper;
       this.deleteBlobIds = deleteBlobIds;
       this.countDownLatch = new CountDownLatch(putCount);
+      this.metricsCollector = new MetricsCollector(measurementIntervalMs, "DELETEs");
     }
 
     public void run() {
@@ -408,11 +433,17 @@ public class ConcurrencyTestTool {
         try {
           final String blobIdStr = deleteBlobIds.poll(50, TimeUnit.MILLISECONDS);
           if (blobIdStr != null) {
+            long startTimeInNs = SystemTime.getInstance().nanoseconds();
             deletedCount.incrementAndGet();
             logger.trace("Deleting blob " + blobIdStr);
             Callback<Void> callback = new Callback<Void>() {
+              long callBackStartTimeNs = SystemTime.getInstance().nanoseconds();
+
               @Override
               public void onCompletion(Void result, Exception exception) {
+                long callBackEndTimeNs = SystemTime.getInstance().nanoseconds();
+                metricsCollector.updateLatency(callBackEndTimeNs - callBackStartTimeNs);
+                metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().nanoseconds() - startTimeInNs);
                 logger.trace("Deletion completed for " + blobIdStr);
                 countDownLatch.countDown();
                 if (exception != null) {
@@ -428,6 +459,7 @@ public class ConcurrencyTestTool {
       }
       try {
         countDownLatch.await();
+        metricsCollector.reportMetrics();
       } catch (InterruptedException e) {
         logger.error("Waiting for delete operations to complete interrupted", e);
       }
@@ -471,6 +503,73 @@ public class ConcurrencyTestTool {
     T getErrorCodeForNoError();
 
     void shutdown() throws InterruptedException;
+  }
+
+  /**
+   * Class to assist in collecting and reporting metrics
+   */
+  class MetricsCollector {
+    String operation;
+    final long measurementIntervalNs;
+    ArrayList<Long> latenciesForBlobs;
+    AtomicLong timePassedInNanoSeconds = new AtomicLong(0);
+    AtomicLong numberOfOperations = new AtomicLong(0);
+    AtomicLong maxLatencyInNanoSeconds = new AtomicLong(0);
+    AtomicLong minLatencyInNanoSeconds = new AtomicLong(Long.MAX_VALUE);
+    AtomicLong totalLatencyInNanoSeconds = new AtomicLong(0);
+
+    MetricsCollector(long measurementIntervalNs, String operation) {
+      this.measurementIntervalNs = measurementIntervalNs;
+      latenciesForBlobs = new ArrayList<Long>();
+      this.operation = operation;
+    }
+
+    /**
+     * Updates the wall clock time spent so far
+     * @param timePassedInNs the spent so far in Nanoseconds
+     */
+    void updateTimePassedSoFar(long timePassedInNs) {
+      timePassedInNanoSeconds.addAndGet(timePassedInNs);
+      if (timePassedInNanoSeconds.get() >= measurementIntervalNs) {
+        reportMetrics();
+        numberOfOperations.set(0);
+        timePassedInNanoSeconds.set(0);
+        latenciesForBlobs.clear();
+        maxLatencyInNanoSeconds.set(0);
+        minLatencyInNanoSeconds.set(Long.MAX_VALUE);
+        totalLatencyInNanoSeconds.set(0);
+      }
+    }
+
+    /**
+     * Reports the metric values like avg, min and max
+     */
+    void reportMetrics() {
+      Collections.sort(latenciesForBlobs);
+      int index99 = (int) (latenciesForBlobs.size() * 0.99) - 1;
+      int index95 = (int) (latenciesForBlobs.size() * 0.95) - 1;
+      String message =
+          operation + " " + numberOfOperations + "," + (double) latenciesForBlobs.get(index99) / SystemTime.NsPerSec
+              + "," + (double) latenciesForBlobs.get(index95) / SystemTime.NsPerSec + "," + (
+              ((double) totalLatencyInNanoSeconds.get()) / SystemTime.NsPerSec / numberOfOperations.get());
+      logger.info(message);
+    }
+
+    /**
+     * Updates the latency for the request
+     * @param latencyPerBlob latency taken by the request
+     */
+    void updateLatency(long latencyPerBlob) {
+      numberOfOperations.incrementAndGet();
+      latenciesForBlobs.add(latencyPerBlob);
+      if (maxLatencyInNanoSeconds.get() < latencyPerBlob) {
+        maxLatencyInNanoSeconds.set(latencyPerBlob);
+      }
+      if (minLatencyInNanoSeconds.get() > latencyPerBlob) {
+        minLatencyInNanoSeconds.set(latencyPerBlob);
+      }
+      totalLatencyInNanoSeconds.addAndGet(latencyPerBlob);
+    }
   }
 
   /**
@@ -779,6 +878,7 @@ public class ConcurrencyTestTool {
     public final int port;
     public final String putGetHelperFactoryStr;
     public final boolean deleteAndValidate;
+    public final long measurementIntervalNs;
     public final boolean enabledVerboseLogging;
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -895,6 +995,12 @@ public class ConcurrencyTestTool {
               .describedAs("deleteAndValidate")
               .ofType(Boolean.class)
               .defaultsTo(true);
+      ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
+          parser.accepts("measurementIntervalInNs", "The interval in second to report performance result")
+              .withOptionalArg()
+              .describedAs("The CPU time spent for putting/getting/deleting blobs, not wall time")
+              .ofType(Long.class)
+              .defaultsTo(300L);
       ArgumentAcceptingOptionSpec<Boolean> enableVerboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging if set to true")
               .withOptionalArg()
@@ -932,6 +1038,7 @@ public class ConcurrencyTestTool {
       this.port = options.valueOf(portNumberOpt);
       this.putGetHelperFactoryStr = options.valueOf(putGetHelperFactoryOpt);
       this.deleteAndValidate = options.valueOf(deleteAndValidateOpt);
+      this.measurementIntervalNs = options.valueOf(measurementIntervalOpt);
       this.enabledVerboseLogging = options.valueOf(enableVerboseLoggingOpt);
     }
 
