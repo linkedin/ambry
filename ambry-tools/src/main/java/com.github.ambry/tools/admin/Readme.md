@@ -126,20 +126,28 @@ CompareLogToIndex --replicaRootDirectory [replicaRootDirectory] --logFileToDump 
 #### Get blob from all replicas
 ```bash
 java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --ambryBlobId [blobid]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --blobIds [comma separate list
+of blobIds]
+```
+
+#### Get blob from all replicas using a file for list of blobIds
+```bash
+java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --blobIdsFilePath [Path to a
+file containing blobIds(one per line)]
 ```
 
 #### Get blob from all replicas from a datacenter
 ```bash
 java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
 --partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_DATACENTER --fabric [fabric]
---ambryBlobId [blobid]
+--blobIds [comma separate list of blobIds]
 ```
 
 #### Get blob from a replica
 ```bash
 java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_REPLICA --ambryBlobId [blobid]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_REPLICA --blobIds [comma separate list of blobIds]
 --replicaHost [replicaHost] --replicaPort [replicaPort]
 ```
 
