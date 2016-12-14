@@ -34,7 +34,7 @@ class StoreDescriptor {
   public static final short VERSION_0 = 0;
   public static final int VERSION_SIZE = 2;
   public static final int INCARNATION_ID_LENGTH_SIZE = 4;
-  public static final String STORE_DESCRIPTOR = "StoreDescriptor";
+  public static final String STORE_DESCRIPTOR_FILENAME = "StoreDescriptor";
 
   /**
    * Instantiates the {@link StoreDescriptor} for the store. If the respective file is present, reads the bytes
@@ -43,7 +43,7 @@ class StoreDescriptor {
    * @throws IOException
    */
   public StoreDescriptor(String dataDir) throws IOException {
-    File storeDescriptorFile = new File(dataDir, StoreDescriptor.STORE_DESCRIPTOR);
+    File storeDescriptorFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME);
     if (storeDescriptorFile.exists()) {
       DataInputStream dataInputStream = new DataInputStream(new FileInputStream(storeDescriptorFile));
       short version = dataInputStream.readShort();
@@ -58,13 +58,20 @@ class StoreDescriptor {
       }
     } else {
       this.incarnationId = UUID.randomUUID();
-      storeDescriptorFile.createNewFile();
-      DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
-      dataOutputStream.write(toBytes());
-      dataOutputStream.close();
+      if (storeDescriptorFile.createNewFile()) {
+        DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
+        dataOutputStream.write(toBytes());
+        dataOutputStream.close();
+      } else {
+        throw new IllegalStateException(
+            "StoreDescriptor file " + storeDescriptorFile.getAbsolutePath() + " cannot be created ");
+      }
     }
   }
 
+  /**
+   * Returns the incarnationId pertaining to the store
+   */
   public UUID getIncarnationId() {
     return incarnationId;
   }

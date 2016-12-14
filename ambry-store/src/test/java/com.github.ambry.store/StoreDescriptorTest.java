@@ -35,7 +35,7 @@ public class StoreDescriptorTest {
   @Test
   public void testStoreDescriptor() throws IOException {
     String tempDirPath = "/tmp/";
-    File storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR);
+    File storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     storeDescriptorFile.delete();
 
     StoreDescriptor storeDescriptor = new StoreDescriptor(tempDirPath);
@@ -55,7 +55,7 @@ public class StoreDescriptorTest {
     byteBuffer.put(incarnationIdUUID.toString().getBytes());
     byteBuffer.flip();
 
-    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR);
+    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     storeDescriptorFile.createNewFile();
     DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
     dataOutputStream.write(toBytes);
@@ -74,7 +74,7 @@ public class StoreDescriptorTest {
     byteBuffer.put(incarnationIdUUID.toString().getBytes());
     byteBuffer.flip();
 
-    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR);
+    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     storeDescriptorFile.createNewFile();
     dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
     dataOutputStream.write(toBytes);

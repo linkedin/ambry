@@ -37,7 +37,6 @@ class BlobStore implements Store {
   static final String SEPARATOR = "_";
   private final static String LockFile = ".lock";
 
-  private final String storeId;
   private final String dataDir;
   private final ScheduledExecutorService taskScheduler;
   private final DiskIOScheduler diskIOScheduler;
@@ -61,7 +60,6 @@ class BlobStore implements Store {
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
-    this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
     this.diskIOScheduler = diskIOScheduler;

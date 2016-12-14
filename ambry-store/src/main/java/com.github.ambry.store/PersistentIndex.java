@@ -694,23 +694,24 @@ class PersistentIndex {
   }
 
   /**
-   * Validate the {@link StoreFindToken} and reset if need be.
+   * Validate the {@link StoreFindToken} and reset if required
    * @param storeFindTokenAtomicReference the atomic reference to the {@link StoreFindToken}
-   * @return
+   * @return {@code true} is {@link StoreFindToken} was reset, {@code false} otherwise
    */
   private boolean resetTokenIfRequired(AtomicReference<StoreFindToken> storeFindTokenAtomicReference) {
     boolean tokenReset = false;
     StoreFindToken storeToken = storeFindTokenAtomicReference.get();
     UUID remoteIncarnationId = storeToken.getIncarnationId();
+    // if incarnationId is null, for backwards compatability purposes, the token is considered as good.
+    /// if not null, we check for a match
     if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) &&
         remoteIncarnationId != null && !remoteIncarnationId.equals(incarnationId)) {
       // incarnationId mismatch, hence resetting the token to beginning
       logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
           + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
-      storeFindTokenAtomicReference.set(new StoreFindToken(incarnationId));
+      storeFindTokenAtomicReference.set(new StoreFindToken());
       tokenReset = true;
     }
-    // if incarnationId is null, for backwards compatability purposes, will consider the token as good
     // validate token
     else if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
       // the session has changed. check if we had an unclean shutdown on startup
@@ -861,7 +862,7 @@ class PersistentIndex {
     } else {
       // if newTokenSegmentStartOffset is set, then we did fetch entries from that segment, otherwise return an
       // uninitialized token
-      return newTokenSegmentStartOffset == null ? new StoreFindToken(incarnationId)
+      return newTokenSegmentStartOffset == null ? new StoreFindToken()
           : new StoreFindToken(messageEntries.get(messageEntries.size() - 1).getStoreKey(), newTokenSegmentStartOffset,
               sessionId, incarnationId);
     }
@@ -1117,3 +1118,4 @@ class PersistentIndex {
     }
   }
 }
+

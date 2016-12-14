@@ -907,152 +907,146 @@ public class PersistentIndexTest {
   @Test
   public void testFindEntries() throws Exception {
     // provide empty token and ensure we get everything till max
-    StoreFindToken unInitializedToken = new StoreFindToken();
-    StoreFindToken tokenWithIncarnationId = new StoreFindToken(UUID.randomUUID());
-    List<StoreFindToken> tokensToTest = new ArrayList<>();
-    tokensToTest.add(unInitializedToken);
-    tokensToTest.add(tokenWithIncarnationId);
+    StoreFindToken tokenToTest = new StoreFindToken();
     MockClusterMap map = null;
-    for (StoreFindToken tokenToTest : tokensToTest) {
-      try {
-        for (File c : tempDir.listFiles()) {
-          c.delete();
-        }
-        ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-        StoreMetrics metrics = new StoreMetrics(tempDirStr, new MetricRegistry());
-        Log log = new Log(tempDirStr, 10000, 10000, metrics);
-        log.appendFrom(ByteBuffer.allocate(1600));
-        Properties props = new Properties();
-        props.put("store.index.max.number.of.inmem.elements", "5");
-        props.put("store.max.number.of.entries.to.return.for.find", "12");
-        StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-        map = new MockClusterMap();
-        StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-        MockIndex index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
-        FindInfo infoempty = index.findEntriesSince(tokenToTest, 1000);
-        Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
-        MockId blobId1 = new MockId("id1");
-        MockId blobId2 = new MockId("id2");
-        MockId blobId3 = new MockId("id3");
-        MockId blobId4 = new MockId("id4");
-        MockId blobId5 = new MockId("id5");
-        MockId blobId6 = new MockId("id6");
-        MockId blobId7 = new MockId("id7");
-        MockId blobId8 = new MockId("id8");
-        MockId blobId9 = new MockId("id9");
-        MockId blobId10 = new MockId("id10");
-        MockId blobId11 = new MockId("id11");
-        MockId blobId12 = new MockId("id12");
-        MockId blobId13 = new MockId("id13");
-        MockId blobId14 = new MockId("id14");
-        MockId blobId15 = new MockId("id15");
+    try {
+      for (File c : tempDir.listFiles()) {
+        c.delete();
+      }
+      ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+      StoreMetrics metrics = new StoreMetrics(tempDirStr, new MetricRegistry());
+      Log log = new Log(tempDirStr, 10000, 10000, metrics);
+      log.appendFrom(ByteBuffer.allocate(1600));
+      Properties props = new Properties();
+      props.put("store.index.max.number.of.inmem.elements", "5");
+      props.put("store.max.number.of.entries.to.return.for.find", "12");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
+      FindInfo infoempty = index.findEntriesSince(tokenToTest, 1000);
+      Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
+      MockId blobId4 = new MockId("id4");
+      MockId blobId5 = new MockId("id5");
+      MockId blobId6 = new MockId("id6");
+      MockId blobId7 = new MockId("id7");
+      MockId blobId8 = new MockId("id8");
+      MockId blobId9 = new MockId("id9");
+      MockId blobId10 = new MockId("id10");
+      MockId blobId11 = new MockId("id11");
+      MockId blobId12 = new MockId("id12");
+      MockId blobId13 = new MockId("id13");
+      MockId blobId14 = new MockId("id14");
+      MockId blobId15 = new MockId("id15");
 
-        byte flags = 0;
-        IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, toOffset(0), flags, 12345));
-        IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, toOffset(100), flags, 12567));
-        IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, toOffset(200), flags, 12567));
-        IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, toOffset(300), flags, 12567));
-        IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, toOffset(400), flags, 12567));
-        IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, toOffset(500), flags, 12567));
-        IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, toOffset(600), flags, 12567));
-        IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, toOffset(700), flags, 12567));
-        IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(100, toOffset(800), flags, 12567));
-        IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, toOffset(900), flags, 12567));
-        IndexEntry entry11 = new IndexEntry(blobId11, new IndexValue(100, toOffset(1000), flags, 12567));
-        IndexEntry entry12 = new IndexEntry(blobId12, new IndexValue(100, toOffset(1100), flags, 12567));
-        IndexEntry entry13 = new IndexEntry(blobId13, new IndexValue(100, toOffset(1200), flags, 12567));
-        IndexEntry entry14 = new IndexEntry(blobId14, new IndexValue(100, toOffset(1300), flags, 12567));
-        IndexEntry entry15 = new IndexEntry(blobId15, new IndexValue(100, toOffset(1400), flags, 12567));
+      byte flags = 0;
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, toOffset(0), flags, 12345));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, toOffset(100), flags, 12567));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, toOffset(200), flags, 12567));
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, toOffset(300), flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, toOffset(400), flags, 12567));
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, toOffset(500), flags, 12567));
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, toOffset(600), flags, 12567));
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, toOffset(700), flags, 12567));
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(100, toOffset(800), flags, 12567));
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, toOffset(900), flags, 12567));
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValue(100, toOffset(1000), flags, 12567));
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValue(100, toOffset(1100), flags, 12567));
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValue(100, toOffset(1200), flags, 12567));
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValue(100, toOffset(1300), flags, 12567));
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValue(100, toOffset(1400), flags, 12567));
 
-        index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
-        index.addToIndex(entry2, new FileSpan(toOffset(100), toOffset(200)));
-        index.addToIndex(entry3, new FileSpan(toOffset(200), toOffset(300)));
-        index.addToIndex(entry4, new FileSpan(toOffset(300), toOffset(400)));
-        index.addToIndex(entry5, new FileSpan(toOffset(400), toOffset(500)));
-        index.addToIndex(entry6, new FileSpan(toOffset(500), toOffset(600)));
-        index.addToIndex(entry7, new FileSpan(toOffset(600), toOffset(700)));
-        index.addToIndex(entry8, new FileSpan(toOffset(700), toOffset(800)));
-        index.addToIndex(entry9, new FileSpan(toOffset(800), toOffset(900)));
-        index.addToIndex(entry10, new FileSpan(toOffset(900), toOffset(1000)));
-        index.addToIndex(entry11, new FileSpan(toOffset(1000), toOffset(1100)));
-        index.addToIndex(entry12, new FileSpan(toOffset(1100), toOffset(1200)));
-        index.addToIndex(entry13, new FileSpan(toOffset(1200), toOffset(1300)));
-        index.addToIndex(entry14, new FileSpan(toOffset(1300), toOffset(1400)));
-        index.addToIndex(entry15, new FileSpan(toOffset(1400), toOffset(1500)));
-        IndexValue value1 = index.getValue(blobId1);
-        IndexValue value2 = index.getValue(blobId2);
-        IndexValue value3 = index.getValue(blobId3);
-        Assert.assertEquals(value1.getOffset(), toOffset(0));
-        Assert.assertEquals(value2.getOffset(), toOffset(100));
-        Assert.assertEquals(value3.getOffset(), toOffset(200));
+      index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
+      index.addToIndex(entry2, new FileSpan(toOffset(100), toOffset(200)));
+      index.addToIndex(entry3, new FileSpan(toOffset(200), toOffset(300)));
+      index.addToIndex(entry4, new FileSpan(toOffset(300), toOffset(400)));
+      index.addToIndex(entry5, new FileSpan(toOffset(400), toOffset(500)));
+      index.addToIndex(entry6, new FileSpan(toOffset(500), toOffset(600)));
+      index.addToIndex(entry7, new FileSpan(toOffset(600), toOffset(700)));
+      index.addToIndex(entry8, new FileSpan(toOffset(700), toOffset(800)));
+      index.addToIndex(entry9, new FileSpan(toOffset(800), toOffset(900)));
+      index.addToIndex(entry10, new FileSpan(toOffset(900), toOffset(1000)));
+      index.addToIndex(entry11, new FileSpan(toOffset(1000), toOffset(1100)));
+      index.addToIndex(entry12, new FileSpan(toOffset(1100), toOffset(1200)));
+      index.addToIndex(entry13, new FileSpan(toOffset(1200), toOffset(1300)));
+      index.addToIndex(entry14, new FileSpan(toOffset(1300), toOffset(1400)));
+      index.addToIndex(entry15, new FileSpan(toOffset(1400), toOffset(1500)));
+      IndexValue value1 = index.getValue(blobId1);
+      IndexValue value2 = index.getValue(blobId2);
+      IndexValue value3 = index.getValue(blobId3);
+      Assert.assertEquals(value1.getOffset(), toOffset(0));
+      Assert.assertEquals(value2.getOffset(), toOffset(100));
+      Assert.assertEquals(value3.getOffset(), toOffset(200));
 
-        index.markAsDeleted(blobId1, new FileSpan(toOffset(1500), toOffset(1600)));
-        index.close();
-        index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
-        FindInfo info = index.findEntriesSince(tokenToTest, 1200);
-        List<MessageInfo> messageEntries = info.getMessageEntries();
-        Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
-        Assert.assertEquals(messageEntries.get(0).getSize(), 100);
-        Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
-        Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
-        Assert.assertEquals(messageEntries.size(), 12);
-        Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId12);
+      index.markAsDeleted(blobId1, new FileSpan(toOffset(1500), toOffset(1600)));
+      index.close();
+      index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
+      FindInfo info = index.findEntriesSince(tokenToTest, 1200);
+      List<MessageInfo> messageEntries = info.getMessageEntries();
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(messageEntries.get(0).getSize(), 100);
+      Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
+      Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
+      Assert.assertEquals(messageEntries.size(), 12);
+      Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId12);
 
-        FindInfo info1 = index.findEntriesSince(info.getFindToken(), 400);
-        messageEntries = info1.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 4);
-        Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId13);
-        Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId15);
-        Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId1);
+      FindInfo info1 = index.findEntriesSince(info.getFindToken(), 400);
+      messageEntries = info1.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 4);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId13);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId15);
+      Assert.assertEquals(messageEntries.get(3).getStoreKey(), blobId1);
 
-        index.close();
-        props = new Properties();
-        config = new StoreConfig(new VerifiableProperties(props));
-        index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      index.close();
+      props = new Properties();
+      config = new StoreConfig(new VerifiableProperties(props));
+      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
 
-        StoreFindToken token2 = new StoreFindToken(tokenToTest.getIncarnationId());
-        FindInfo info2 = index.findEntriesSince(token2, 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 3);
-        Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
-        Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
+      StoreFindToken token2 = new StoreFindToken();
+      FindInfo info2 = index.findEntriesSince(token2, 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
 
-        info2 = index.findEntriesSince(info2.getFindToken(), 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 3);
-        Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
-        Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId6);
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId6);
 
-        info2 = index.findEntriesSince(info2.getFindToken(), 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 3);
-        Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId7);
-        Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId9);
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId7);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId9);
 
-        info2 = index.findEntriesSince(info2.getFindToken(), 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 3);
-        Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId10);
-        Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId12);
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId10);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId12);
 
-        info2 = index.findEntriesSince(info2.getFindToken(), 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 3);
-        Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId14);
-        Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId15);
-        info2 = index.findEntriesSince(info2.getFindToken(), 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 1);
-        info2 = index.findEntriesSince(info2.getFindToken(), 300);
-        messageEntries = info2.getMessageEntries();
-        Assert.assertEquals(messageEntries.size(), 0);
-        scheduler.shutdown();
-        scheduler.awaitTermination(2, TimeUnit.MINUTES);
-        log.close();
-      } finally {
-        if (map != null) {
-          map.cleanup();
-        }
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId14);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId15);
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 1);
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 0);
+      scheduler.shutdown();
+      scheduler.awaitTermination(2, TimeUnit.MINUTES);
+      log.close();
+    } finally {
+      if (map != null) {
+        map.cleanup();
       }
     }
   }
@@ -1067,7 +1061,7 @@ public class PersistentIndexTest {
   public void testFindEntriesWithIncarnationId() throws Exception {
     // provide empty token and ensure we get everything till max
     UUID incarnationId = UUID.randomUUID();
-    StoreFindToken token = new StoreFindToken(incarnationId);
+    StoreFindToken token = new StoreFindToken();
     UUID newIncarnationId = UUID.randomUUID();
     MockClusterMap map = null;
     try {
@@ -1087,7 +1081,8 @@ public class PersistentIndexTest {
       MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       FindInfo infoempty = index.findEntriesSince(token, 1000);
       Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
-      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
+      // when token is reset, no incarnationId will be set
+      Assert.assertEquals("IncarnationId mismatch ", null,
           ((StoreFindToken) (infoempty.getFindToken())).getIncarnationId());
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -1138,18 +1133,6 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.size(), 5);
       Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId5);
 
-      // find entries with the token referring to a different incarnation Id.
-      FindInfo infoZero = index.findEntriesSince(new StoreFindToken(UUID.randomUUID()), 500);
-      messageEntries = infoZero.getMessageEntries();
-      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
-          ((StoreFindToken) (infoZero.getFindToken())).getIncarnationId());
-      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
-      Assert.assertEquals(messageEntries.get(0).getSize(), 100);
-      Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
-      Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
-      Assert.assertEquals(messageEntries.size(), 5);
-      Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId5);
-
       FindInfo info1 = index.findEntriesSince(info.getFindToken(), 300);
       messageEntries = info1.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 3);
@@ -1158,15 +1141,6 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId8);
       Assert.assertEquals("IncarnationId mismatch ", incarnationId,
           ((StoreFindToken) (info1.getFindToken())).getIncarnationId());
-
-      FindInfo infoOne = index.findEntriesSince(infoZero.getFindToken(), 300);
-      messageEntries = infoOne.getMessageEntries();
-      Assert.assertEquals(messageEntries.size(), 3);
-      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId6);
-      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId7);
-      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId8);
-      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
-          ((StoreFindToken) (infoOne.getFindToken())).getIncarnationId());
 
       index.close();
       props = new Properties();
@@ -1185,7 +1159,7 @@ public class PersistentIndexTest {
 
       // token with old incarnationId referring to offset 500. Should have been reset and entries should
       // be returned from start
-      FindInfo infoTwo = index.findEntriesSince(infoZero.getFindToken(), 300);
+      FindInfo infoTwo = index.findEntriesSince(info.getFindToken(), 300);
       messageEntries = infoTwo.getMessageEntries();
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
           ((StoreFindToken) (infoTwo.getFindToken())).getIncarnationId());
@@ -1202,9 +1176,9 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId6);
 
-      // token with old incarnationId. InfoOne referring to offset 300. Should have been reset and entries should be
+      // token with old incarnationId. Info1 referring to offset 300. Should have been reset and entries should be
       // returned starting from beginning
-      infoTwo = index.findEntriesSince(infoOne.getFindToken(), 300);
+      infoTwo = index.findEntriesSince(info1.getFindToken(), 300);
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
           ((StoreFindToken) (infoTwo.getFindToken())).getIncarnationId());
       messageEntries = infoTwo.getMessageEntries();
@@ -1252,367 +1226,361 @@ public class PersistentIndexTest {
   public void testFindEntriesAdditional() throws Exception {
     // provide token referencing an offset from before
     MockClusterMap map = null;
-    StoreFindToken tokenWithNullIncarnationId = new StoreFindToken();
-    StoreFindToken tokenWithIncarnationId = new StoreFindToken(UUID.randomUUID());
-    List<StoreFindToken> tokensToTest = new ArrayList<>();
-    tokensToTest.add(tokenWithNullIncarnationId);
-    tokensToTest.add(tokenWithIncarnationId);
-    for (StoreFindToken tokenToTest : tokensToTest) {
-      try {
-        for (File c : tempDir.listFiles()) {
-          c.delete();
-        }
-        ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-        StoreMetrics metrics = new StoreMetrics(tempDirStr, new MetricRegistry());
-        Log log = new Log(tempDirStr, 10000, 10000, metrics);
-        Properties props = new Properties();
-        props.put("store.index.max.number.of.inmem.elements", "5");
-        props.put("store.max.number.of.entries.to.return.for.find", "12");
-        StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-        map = new MockClusterMap();
-        StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-        MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory,
-            new MockJournal(tempDirStr, 2 * config.storeIndexMaxNumberOfInmemElements,
-                config.storeMaxNumberOfEntriesToReturnFromJournal), tokenToTest.getIncarnationId());
-        MockJournal journal = (MockJournal) index.getJournal();
+    StoreFindToken tokenToTest = new StoreFindToken();
+    try {
+      for (File c : tempDir.listFiles()) {
+        c.delete();
+      }
+      ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+      StoreMetrics metrics = new StoreMetrics(tempDirStr, new MetricRegistry());
+      Log log = new Log(tempDirStr, 10000, 10000, metrics);
+      Properties props = new Properties();
+      props.put("store.index.max.number.of.inmem.elements", "5");
+      props.put("store.max.number.of.entries.to.return.for.find", "12");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory,
+          new MockJournal(tempDirStr, 2 * config.storeIndexMaxNumberOfInmemElements,
+              config.storeMaxNumberOfEntriesToReturnFromJournal), tokenToTest.getIncarnationId());
+      MockJournal journal = (MockJournal) index.getJournal();
 
-        MockId blobId1 = new MockId("id01");
-        MockId blobId2 = new MockId("id02");
-        MockId blobId3 = new MockId("id03");
-        MockId blobId4 = new MockId("id04");
-        MockId blobId5 = new MockId("id05");
-        MockId blobId6 = new MockId("id06");
-        MockId blobId7 = new MockId("id07");
-        MockId blobId8 = new MockId("id08");
-        MockId blobId9 = new MockId("id09");
-        MockId blobId10 = new MockId("id10");
-        MockId blobId11 = new MockId("id11");
-        MockId blobId12 = new MockId("id12");
-        MockId blobId13 = new MockId("id13");
-        MockId blobId14 = new MockId("id14");
-        MockId blobId15 = new MockId("id15");
-        MockId blobId16 = new MockId("id16");
-        MockId blobId17 = new MockId("id17");
-        MockId blobId18 = new MockId("id18");
-        MockId blobId19 = new MockId("id19");
-        MockId blobId20 = new MockId("id20");
-        MockId blobId21 = new MockId("id21");
-        MockId blobId22 = new MockId("id22");
-        MockId blobId23 = new MockId("id23");
-        MockId blobId24 = new MockId("id24");
-        MockId blobId25 = new MockId("id25");
+      MockId blobId1 = new MockId("id01");
+      MockId blobId2 = new MockId("id02");
+      MockId blobId3 = new MockId("id03");
+      MockId blobId4 = new MockId("id04");
+      MockId blobId5 = new MockId("id05");
+      MockId blobId6 = new MockId("id06");
+      MockId blobId7 = new MockId("id07");
+      MockId blobId8 = new MockId("id08");
+      MockId blobId9 = new MockId("id09");
+      MockId blobId10 = new MockId("id10");
+      MockId blobId11 = new MockId("id11");
+      MockId blobId12 = new MockId("id12");
+      MockId blobId13 = new MockId("id13");
+      MockId blobId14 = new MockId("id14");
+      MockId blobId15 = new MockId("id15");
+      MockId blobId16 = new MockId("id16");
+      MockId blobId17 = new MockId("id17");
+      MockId blobId18 = new MockId("id18");
+      MockId blobId19 = new MockId("id19");
+      MockId blobId20 = new MockId("id20");
+      MockId blobId21 = new MockId("id21");
+      MockId blobId22 = new MockId("id22");
+      MockId blobId23 = new MockId("id23");
+      MockId blobId24 = new MockId("id24");
+      MockId blobId25 = new MockId("id25");
 
-        byte flags = 0;
-        IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, toOffset(0), flags, 12345));
-        IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, toOffset(100), flags, 12567));
-        IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, toOffset(200), flags, 12567));
-        IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, toOffset(300), flags, 12567));
-        IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, toOffset(400), flags, 12567));
-        IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, toOffset(500), flags, 12567));
-        IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, toOffset(600), flags, 12567));
-        IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(100, toOffset(700), flags, 12567));
-        IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, toOffset(800), flags, 12567));
-        IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, toOffset(900), flags, 12567));
-        IndexEntry entry12 = new IndexEntry(blobId12, new IndexValue(100, toOffset(1000), flags, 12567));
-        IndexEntry entry11 = new IndexEntry(blobId11, new IndexValue(100, toOffset(1100), flags, 12567));
-        IndexEntry entry14 = new IndexEntry(blobId14, new IndexValue(100, toOffset(1200), flags, 12567));
-        IndexEntry entry13 = new IndexEntry(blobId13, new IndexValue(100, toOffset(1300), flags, 12567));
-        IndexEntry entry15 = new IndexEntry(blobId15, new IndexValue(100, toOffset(1400), flags, 12567));
-        IndexEntry entry16 = new IndexEntry(blobId16, new IndexValue(100, toOffset(1500), flags, 12567));
-        IndexEntry entry18 = new IndexEntry(blobId18, new IndexValue(100, toOffset(1600), flags, 12567));
-        IndexEntry entry17 = new IndexEntry(blobId17, new IndexValue(100, toOffset(1700), flags, 12567));
-        IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, toOffset(1800), flags, 12567));
-        IndexEntry entry20 = new IndexEntry(blobId20, new IndexValue(100, toOffset(1900), flags, 12567));
-        IndexEntry entry21 = new IndexEntry(blobId21, new IndexValue(100, toOffset(2000), flags, 12567));
-        IndexEntry entry22 = new IndexEntry(blobId22, new IndexValue(100, toOffset(2100), flags, 12567));
-        IndexEntry entry24 = new IndexEntry(blobId24, new IndexValue(100, toOffset(2200), flags, 12567));
-        IndexEntry entry23 = new IndexEntry(blobId23, new IndexValue(100, toOffset(2300), flags, 12567));
+      byte flags = 0;
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, toOffset(0), flags, 12345));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, toOffset(100), flags, 12567));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, toOffset(200), flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, toOffset(300), flags, 12567));
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, toOffset(400), flags, 12567));
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, toOffset(500), flags, 12567));
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, toOffset(600), flags, 12567));
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValue(100, toOffset(700), flags, 12567));
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, toOffset(800), flags, 12567));
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValue(100, toOffset(900), flags, 12567));
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValue(100, toOffset(1000), flags, 12567));
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValue(100, toOffset(1100), flags, 12567));
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValue(100, toOffset(1200), flags, 12567));
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValue(100, toOffset(1300), flags, 12567));
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValue(100, toOffset(1400), flags, 12567));
+      IndexEntry entry16 = new IndexEntry(blobId16, new IndexValue(100, toOffset(1500), flags, 12567));
+      IndexEntry entry18 = new IndexEntry(blobId18, new IndexValue(100, toOffset(1600), flags, 12567));
+      IndexEntry entry17 = new IndexEntry(blobId17, new IndexValue(100, toOffset(1700), flags, 12567));
+      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValue(100, toOffset(1800), flags, 12567));
+      IndexEntry entry20 = new IndexEntry(blobId20, new IndexValue(100, toOffset(1900), flags, 12567));
+      IndexEntry entry21 = new IndexEntry(blobId21, new IndexValue(100, toOffset(2000), flags, 12567));
+      IndexEntry entry22 = new IndexEntry(blobId22, new IndexValue(100, toOffset(2100), flags, 12567));
+      IndexEntry entry24 = new IndexEntry(blobId24, new IndexValue(100, toOffset(2200), flags, 12567));
+      IndexEntry entry23 = new IndexEntry(blobId23, new IndexValue(100, toOffset(2300), flags, 12567));
 
-        // Add some delete entries
-        flags = 1;
-        IndexEntry entry21d = new IndexEntry(blobId21, new IndexValue(100, toOffset(2400), flags, 12567));
-        IndexEntry entry22d = new IndexEntry(blobId22, new IndexValue(100, toOffset(2500), flags, 12567));
-        IndexEntry entry24d = new IndexEntry(blobId24, new IndexValue(100, toOffset(2600), flags, 12567));
-        IndexEntry entry23d = new IndexEntry(blobId23, new IndexValue(100, toOffset(2700), flags, 12567));
+      // Add some delete entries
+      flags = 1;
+      IndexEntry entry21d = new IndexEntry(blobId21, new IndexValue(100, toOffset(2400), flags, 12567));
+      IndexEntry entry22d = new IndexEntry(blobId22, new IndexValue(100, toOffset(2500), flags, 12567));
+      IndexEntry entry24d = new IndexEntry(blobId24, new IndexValue(100, toOffset(2600), flags, 12567));
+      IndexEntry entry23d = new IndexEntry(blobId23, new IndexValue(100, toOffset(2700), flags, 12567));
 
-        flags = 0;
-        IndexEntry entry25 = new IndexEntry(blobId25, new IndexValue(100, toOffset(2800), flags, 12567));
+      flags = 0;
+      IndexEntry entry25 = new IndexEntry(blobId25, new IndexValue(100, toOffset(2800), flags, 12567));
 
-        long entrySize = entry1.getValue().getSize();
+      long entrySize = entry1.getValue().getSize();
 
       /* Ensure older tokens are reset, and no entries are returned when the store just started.
        * (when the index is created for the first time, it is similar to an unclean shutdown, so
        * this tests token getting reset in the wake of an unclean shutdown case) */
-        StoreFindToken token =
-            new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
-        FindInfo info = index.findEntriesSince(token, 500);
-        List<MessageInfo> mEntries = info.getMessageEntries();
-        Assert.assertEquals(mEntries.size(), 0);
+      StoreFindToken token =
+          new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
+      FindInfo info = index.findEntriesSince(token, 500);
+      List<MessageInfo> mEntries = info.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 0);
 
       /* Test the case where an entry is added to the index, but not yet to the journal.
       There can only be at most one such entry. The index ensures an entry is added to
       the journal before the next entry is added to a segment. */
 
-        journal.pause();
-        log.appendFrom(ByteBuffer.allocate(100));
-        index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
+      journal.pause();
+      log.appendFrom(ByteBuffer.allocate(100));
+      index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
 
-        // Index_0:      [1]         // sorted on keys
-        // Journal:      [ ]         // sorted on offsets
-        // token before: j           // j means offset (journal) based token
-        // token after : j           // i means index based offset
-        token = new StoreFindToken(tokenToTest.getIncarnationId());
-        info = index.findEntriesSince(token, 100 * entrySize);
-        mEntries = info.getMessageEntries();
-        Assert.assertEquals(mEntries.size(), 0);
+      // Index_0:      [1]         // sorted on keys
+      // Journal:      [ ]         // sorted on offsets
+      // token before: j           // j means offset (journal) based token
+      // token after : j           // i means index based offset
+      token = new StoreFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 0);
 
       /* Ensure we get the entry after it gets into the journal */
-        journal.resume();
-        token = new StoreFindToken(tokenToTest.getIncarnationId());
-        info = index.findEntriesSince(token, 100 * entrySize);
-        mEntries = info.getMessageEntries();
-        Assert.assertEquals(mEntries.size(), 1);
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+      journal.resume();
+      token = new StoreFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 1);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
 
-        log.appendFrom(ByteBuffer.allocate(400));
-        index.addToIndex(entry3, new FileSpan(toOffset(100), toOffset(200)));
-        index.addToIndex(entry2, new FileSpan(toOffset(200), toOffset(300)));
-        index.addToIndex(entry5, new FileSpan(toOffset(300), toOffset(400)));
-        index.addToIndex(entry4, new FileSpan(toOffset(400), toOffset(500)));
+      log.appendFrom(ByteBuffer.allocate(400));
+      index.addToIndex(entry3, new FileSpan(toOffset(100), toOffset(200)));
+      index.addToIndex(entry2, new FileSpan(toOffset(200), toOffset(300)));
+      index.addToIndex(entry5, new FileSpan(toOffset(300), toOffset(400)));
+      index.addToIndex(entry4, new FileSpan(toOffset(400), toOffset(500)));
 
       /* Ensure that a token from a previous session with a key that is beyond the logEndOffsetOnStartup gets reset
          correctly - meaning findEntriesSince gets keys starting and *including* the key at logEndOffsetOnStartup. */
 
-        // Index_0:      [1 2 3 4 5]           // sorted on keys
-        // Journal:      [1 3 2 5 4]           // sorted on offsets
-        // token before:                    i  // i means index based token
-        // token after :          j            // j means offset (journal) based token
+      // Index_0:      [1 2 3 4 5]           // sorted on keys
+      // Journal:      [1 3 2 5 4]           // sorted on offsets
+      // token before:                    i  // i means index based token
+      // token after :          j            // j means offset (journal) based token
 
-        token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
-        info = index.findEntriesSince(token, 5 * entrySize);
-        mEntries = info.getMessageEntries();
-        // Ensure that we got all the keys from the beginning and ordered by offset
-        Assert.assertEquals(mEntries.size(), 5);
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId4);
+      token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
+      // Ensure that we got all the keys from the beginning and ordered by offset
+      Assert.assertEquals(mEntries.size(), 5);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId4);
 
-        // Add more entries to the index to create two new segments and push out the first 5 from the journal.
-        log.appendFrom(ByteBuffer.allocate(1000));
-        index.addToIndex(entry6, new FileSpan(toOffset(500), toOffset(600)));
-        index.addToIndex(entry8, new FileSpan(toOffset(600), toOffset(700)));
-        index.addToIndex(entry9, new FileSpan(toOffset(700), toOffset(800)));
-        index.addToIndex(entry7, new FileSpan(toOffset(800), toOffset(900)));
-        index.addToIndex(entry10, new FileSpan(toOffset(900), toOffset(1000)));
-        index.addToIndex(entry12, new FileSpan(toOffset(1000), toOffset(1100)));
-        index.addToIndex(entry11, new FileSpan(toOffset(1100), toOffset(1200)));
-        index.addToIndex(entry14, new FileSpan(toOffset(1200), toOffset(1300)));
-        index.addToIndex(entry13, new FileSpan(toOffset(1300), toOffset(1400)));
-        index.addToIndex(entry15, new FileSpan(toOffset(1400), toOffset(1500)));
+      // Add more entries to the index to create two new segments and push out the first 5 from the journal.
+      log.appendFrom(ByteBuffer.allocate(1000));
+      index.addToIndex(entry6, new FileSpan(toOffset(500), toOffset(600)));
+      index.addToIndex(entry8, new FileSpan(toOffset(600), toOffset(700)));
+      index.addToIndex(entry9, new FileSpan(toOffset(700), toOffset(800)));
+      index.addToIndex(entry7, new FileSpan(toOffset(800), toOffset(900)));
+      index.addToIndex(entry10, new FileSpan(toOffset(900), toOffset(1000)));
+      index.addToIndex(entry12, new FileSpan(toOffset(1000), toOffset(1100)));
+      index.addToIndex(entry11, new FileSpan(toOffset(1100), toOffset(1200)));
+      index.addToIndex(entry14, new FileSpan(toOffset(1200), toOffset(1300)));
+      index.addToIndex(entry13, new FileSpan(toOffset(1300), toOffset(1400)));
+      index.addToIndex(entry15, new FileSpan(toOffset(1400), toOffset(1500)));
 
-        // Get the next 5 entries. Tests the case where the token has a journal offset which is now no longer
-        // present in the journal. The entries will be read from the corresponding index segment.
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
-        // journal:                  [6 8 9 7 10   12 11 14 13 15]
-        // token before:          j
-        // token after:           i
-        token = (StoreFindToken) info.getFindToken();
-        info = index.findEntriesSince(token, 5 * entrySize);
-        mEntries = info.getMessageEntries();
-        Assert.assertEquals(mEntries.size(), 5);
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId2);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId3);
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId4);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId5);
+      // Get the next 5 entries. Tests the case where the token has a journal offset which is now no longer
+      // present in the journal. The entries will be read from the corresponding index segment.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
+      // journal:                  [6 8 9 7 10   12 11 14 13 15]
+      // token before:          j
+      // token after:           i
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 5);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId2);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId3);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId4);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId5);
 
-        // Get the next 5 entries. Tests the case where the token is index based and has the last key of the last but one
-        // segment. The entries will be read from the journal.
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
-        // journal:                  [6 8 9 7 10   12 11 14 13 15]
-        // token before:          i
-        // token after:                        j
-        token = (StoreFindToken) info.getFindToken();
-        info = index.findEntriesSince(token, 5 * entrySize);
-        mEntries = info.getMessageEntries();
-        Assert.assertEquals(5, mEntries.size());
-        // Ensure that they came from the journal (by verifying they are ordered by offsets)
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId6);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId8);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId9);
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId7);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
+      // Get the next 5 entries. Tests the case where the token is index based and has the last key of the last but one
+      // segment. The entries will be read from the journal.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
+      // journal:                  [6 8 9 7 10   12 11 14 13 15]
+      // token before:          i
+      // token after:                        j
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(5, mEntries.size());
+      // Ensure that they came from the journal (by verifying they are ordered by offsets)
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId6);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId8);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId9);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId7);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
 
-        // Create a token positioned at the last key in the last but one segment.
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
-        // journal:                  [6 8 9 7 10   12 11 14 13 15]
-        // token before:  j
-        // token after:           i
-        token = new StoreFindToken(tokenToTest.getIncarnationId());
-        info = index.findEntriesSince(token, 5 * entrySize);
+      // Create a token positioned at the last key in the last but one segment.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15]
+      // journal:                  [6 8 9 7 10   12 11 14 13 15]
+      // token before:  j
+      // token after:           i
+      token = new StoreFindToken();
+      info = index.findEntriesSince(token, 5 * entrySize);
 
-        // Add more entries to the index to create 4 segments.
-        log.appendFrom(ByteBuffer.allocate(200));
-        index.addToIndex(entry16, new FileSpan(toOffset(1500), toOffset(1600)));
-        index.addToIndex(entry18, new FileSpan(toOffset(1600), toOffset(1700)));
+      // Add more entries to the index to create 4 segments.
+      log.appendFrom(ByteBuffer.allocate(200));
+      index.addToIndex(entry16, new FileSpan(toOffset(1500), toOffset(1600)));
+      index.addToIndex(entry18, new FileSpan(toOffset(1600), toOffset(1700)));
 
-        // Get the next 7 entries. Tests the case where keys are read from a segment and then from the journal.
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 18]
-        // journal:                      [9 7 10   12 11 14 13 15   16 18]
-        // token before:          i
-        // token after:                                j
-        token = (StoreFindToken) info.getFindToken();
-        info = index.findEntriesSince(token, 7 * entrySize);
-        mEntries = info.getMessageEntries();
-        Assert.assertEquals(7, mEntries.size());
+      // Get the next 7 entries. Tests the case where keys are read from a segment and then from the journal.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 18]
+      // journal:                      [9 7 10   12 11 14 13 15   16 18]
+      // token before:          i
+      // token after:                                j
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 7 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(7, mEntries.size());
 
-        // Ensure the first 5 are ordered by keys
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId6);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId7);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId8);
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId9);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
-        // Ensure the last 2 are ordered by offset
-        Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId12);
-        Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId11);
+      // Ensure the first 5 are ordered by keys
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId6);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId7);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId8);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId9);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId10);
+      // Ensure the last 2 are ordered by offset
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId12);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId11);
 
-        long newLogEndOffset = entry24.getValue().getOffset().getOffset() + entry24.getValue().getSize();
-        log.appendFrom(ByteBuffer.allocate((int) (newLogEndOffset - entry17.getValue().getOffset().getOffset())));
-        ArrayList<IndexEntry> indexEntries = new ArrayList<>();
-        indexEntries.add(entry17);
-        indexEntries.add(entry19);
-        indexEntries.add(entry20);
-        indexEntries.add(entry21);
-        indexEntries.add(entry22);
-        indexEntries.add(entry24);
-        index.addToIndex(indexEntries, new FileSpan(entry17.getValue().getOffset(), toOffset(newLogEndOffset)));
+      long newLogEndOffset = entry24.getValue().getOffset().getOffset() + entry24.getValue().getSize();
+      log.appendFrom(ByteBuffer.allocate((int) (newLogEndOffset - entry17.getValue().getOffset().getOffset())));
+      ArrayList<IndexEntry> indexEntries = new ArrayList<>();
+      indexEntries.add(entry17);
+      indexEntries.add(entry19);
+      indexEntries.add(entry20);
+      indexEntries.add(entry21);
+      indexEntries.add(entry22);
+      indexEntries.add(entry24);
+      index.addToIndex(indexEntries, new FileSpan(entry17.getValue().getOffset(), toOffset(newLogEndOffset)));
 
       /* Test batched add, and that keys are read from the segment and then from the journal for the latest ones. */
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 24]
-        // journal:                                        [13 15   16 18 17 19 20   21 22 24]
-        // token before:                               j
-        // token after:                                                    j
-        token = (StoreFindToken) info.getFindToken();
-        info = index.findEntriesSince(token, 100 * entrySize);
-        mEntries = info.getMessageEntries();
-        // This should get us all entries from the segment not completely in journal, ([11 - 15]) +
-        // rest of the entries from the journal
-        Assert.assertEquals(13, mEntries.size());
-        // First 5 from the index
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId11);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId12);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId13);
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId14);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId15);
-        // Last 3 from the journal
-        Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId16);
-        Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId18);
-        Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId17);
-        Assert.assertEquals(mEntries.get(8).getStoreKey(), blobId19);
-        Assert.assertEquals(mEntries.get(9).getStoreKey(), blobId20);
-        Assert.assertEquals(mEntries.get(10).getStoreKey(), blobId21);
-        Assert.assertEquals(mEntries.get(11).getStoreKey(), blobId22);
-        Assert.assertEquals(mEntries.get(12).getStoreKey(), blobId24);
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 24]
+      // journal:                                        [13 15   16 18 17 19 20   21 22 24]
+      // token before:                               j
+      // token after:                                                    j
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
+      // This should get us all entries from the segment not completely in journal, ([11 - 15]) +
+      // rest of the entries from the journal
+      Assert.assertEquals(13, mEntries.size());
+      // First 5 from the index
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId11);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId12);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId13);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId14);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId15);
+      // Last 3 from the journal
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId16);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId18);
+      Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId17);
+      Assert.assertEquals(mEntries.get(8).getStoreKey(), blobId19);
+      Assert.assertEquals(mEntries.get(9).getStoreKey(), blobId20);
+      Assert.assertEquals(mEntries.get(10).getStoreKey(), blobId21);
+      Assert.assertEquals(mEntries.get(11).getStoreKey(), blobId22);
+      Assert.assertEquals(mEntries.get(12).getStoreKey(), blobId24);
 
       /* Position the index at the middle of some segment. Ensure keys are read from multiple segments up to what is
          asked.*/
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 24]
-        // journal:                                        [13 15   16 18 17 19 20   21 22 24]
-        // token before:                i
-        // token after:                                i
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 24]
+      // journal:                                        [13 15   16 18 17 19 20   21 22 24]
+      // token before:                i
+      // token after:                                i
 
-        token = new StoreFindToken(tokenToTest.getIncarnationId());
-        info = index.findEntriesSince(token, 7 * entrySize);
-        token = (StoreFindToken) info.getFindToken();
-        info = index.findEntriesSince(token, 5 * entrySize);
-        mEntries = info.getMessageEntries();
-        Assert.assertEquals(5, mEntries.size());
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId8);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId9);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId10);
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId11);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId12);
+      token = new StoreFindToken();
+      info = index.findEntriesSince(token, 7 * entrySize);
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 5 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(5, mEntries.size());
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId8);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId9);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId10);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId11);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId12);
 
-        // Get the next entries. Ensure that the journal marks the end of the entries even if it is not up-to-date.
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 23 24]
-        // journal:                                        [13 15   16 18 17 19 20   21 22 24]
-        // token before:                               i
-        // token after:                                                                     j
+      // Get the next entries. Ensure that the journal marks the end of the entries even if it is not up-to-date.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21 22 23 24]
+      // journal:                                        [13 15   16 18 17 19 20   21 22 24]
+      // token before:                               i
+      // token after:                                                                     j
 
-        journal.pause();
-        newLogEndOffset = entry23.getValue().getOffset().getOffset() + entry23.getValue().getSize();
-        log.appendFrom(ByteBuffer.allocate((int) (entry23.getValue().getSize())));
-        index.addToIndex(entry23, new FileSpan(entry23.getValue().getOffset(), toOffset(newLogEndOffset)));
-        token = (StoreFindToken) info.getFindToken();
-        info = index.findEntriesSince(token, 100 * entrySize);
-        mEntries = info.getMessageEntries();
-        journal.resume();
+      journal.pause();
+      newLogEndOffset = entry23.getValue().getOffset().getOffset() + entry23.getValue().getSize();
+      log.appendFrom(ByteBuffer.allocate((int) (entry23.getValue().getSize())));
+      index.addToIndex(entry23, new FileSpan(entry23.getValue().getOffset(), toOffset(newLogEndOffset)));
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
+      journal.resume();
 
-        // This should get us entries from the last segment not in journal ([13 - 15]) +
-        // rest of the entries from the journal
-        Assert.assertEquals(11, mEntries.size());
-        // First 3 from the index
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId13);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId14);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId15);
-        // Last 3 from the journal
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId16);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId18);
-        Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId17);
-        Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId19);
-        Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId20);
-        Assert.assertEquals(mEntries.get(8).getStoreKey(), blobId21);
-        Assert.assertEquals(mEntries.get(9).getStoreKey(), blobId22);
-        Assert.assertEquals(mEntries.get(10).getStoreKey(), blobId24);
+      // This should get us entries from the last segment not in journal ([13 - 15]) +
+      // rest of the entries from the journal
+      Assert.assertEquals(11, mEntries.size());
+      // First 3 from the index
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId13);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId14);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId15);
+      // Last 3 from the journal
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId16);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId18);
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId17);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId19);
+      Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId20);
+      Assert.assertEquals(mEntries.get(8).getStoreKey(), blobId21);
+      Assert.assertEquals(mEntries.get(9).getStoreKey(), blobId22);
+      Assert.assertEquals(mEntries.get(10).getStoreKey(), blobId24);
 
-        // Add more entries to test the case where deletes happen to keys in the latest segment.
-        // The journal keeps both entries, but the segment keeps only the delete entry.
-        newLogEndOffset = entry25.getValue().getOffset().getOffset() + entry25.getValue().getSize();
-        log.appendFrom(ByteBuffer.allocate((int) (newLogEndOffset - entry21d.getValue().getOffset().getOffset())));
-        indexEntries.clear();
-        indexEntries.add(entry21d);
-        indexEntries.add(entry22d);
-        indexEntries.add(entry24d);
-        indexEntries.add(entry23d);
-        indexEntries.add(entry25);
-        index.addToIndex(indexEntries, new FileSpan(entry21d.getValue().getOffset(), toOffset(newLogEndOffset)));
+      // Add more entries to test the case where deletes happen to keys in the latest segment.
+      // The journal keeps both entries, but the segment keeps only the delete entry.
+      newLogEndOffset = entry25.getValue().getOffset().getOffset() + entry25.getValue().getSize();
+      log.appendFrom(ByteBuffer.allocate((int) (newLogEndOffset - entry21d.getValue().getOffset().getOffset())));
+      indexEntries.clear();
+      indexEntries.add(entry21d);
+      indexEntries.add(entry22d);
+      indexEntries.add(entry24d);
+      indexEntries.add(entry23d);
+      indexEntries.add(entry25);
+      index.addToIndex(indexEntries, new FileSpan(entry21d.getValue().getOffset(), toOffset(newLogEndOffset)));
 
-        // Ensure that the journal still contains the latest segment's start offset.
-        Assert.assertTrue(journal.getFirstOffset().compareTo(index.getLastSegment().getStartOffset()) <= 0);
+      // Ensure that the journal still contains the latest segment's start offset.
+      Assert.assertTrue(journal.getFirstOffset().compareTo(index.getLastSegment().getStartOffset()) <= 0);
 
-        // Get the next entries. Ensure that entries for the last segment are obtained from the journal.
-        // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21d 22d 23d 24d 25]
-        // journal:                                                                 [21 22 24 23 21d 22d 24d 23d 25]
-        // token before:                                                i
-        // token after:                                                                                           j
+      // Get the next entries. Ensure that entries for the last segment are obtained from the journal.
+      // Index:        [1 2 3 4 5] [6 7 8 9 10] [11 12 13 14 15] [16 17 18 19 20] [21d 22d 23d 24d 25]
+      // journal:                                                                 [21 22 24 23 21d 22d 24d 23d 25]
+      // token before:                                                i
+      // token after:                                                                                           j
 
-        token = new StoreFindToken(tokenToTest.getIncarnationId());
-        info = index.findEntriesSince(token, 17 * entrySize); // position in the middle of the last but one segment.
-        token = (StoreFindToken) info.getFindToken();
-        info = index.findEntriesSince(token, 100 * entrySize);
-        mEntries = info.getMessageEntries();
-        Assert.assertEquals(8, mEntries.size()); // All keys are deleted so shouldn't be returned.
+      token = new StoreFindToken();
+      info = index.findEntriesSince(token, 17 * entrySize); // position in the middle of the last but one segment.
+      token = (StoreFindToken) info.getFindToken();
+      info = index.findEntriesSince(token, 100 * entrySize);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals(8, mEntries.size()); // All keys are deleted so shouldn't be returned.
 
-        // from the index
-        Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId18);
-        Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId19);
-        Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId20);
-        // from the journal
-        Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId21);
-        Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId22);
-        Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId24);
-        Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId23);
-        Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId25);
+      // from the index
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId18);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId19);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId20);
+      // from the journal
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId21);
+      Assert.assertEquals(mEntries.get(4).getStoreKey(), blobId22);
+      Assert.assertEquals(mEntries.get(5).getStoreKey(), blobId24);
+      Assert.assertEquals(mEntries.get(6).getStoreKey(), blobId23);
+      Assert.assertEquals(mEntries.get(7).getStoreKey(), blobId25);
 
-        scheduler.shutdown();
-        scheduler.awaitTermination(2, TimeUnit.MINUTES);
-        log.close();
-      } finally {
-        if (map != null) {
-          map.cleanup();
-        }
+      scheduler.shutdown();
+      scheduler.awaitTermination(2, TimeUnit.MINUTES);
+      log.close();
+    } finally {
+      if (map != null) {
+        map.cleanup();
       }
     }
   }
@@ -1666,7 +1634,7 @@ public class PersistentIndexTest {
       index.addToIndex(entry5, new FileSpan(toOffset(300), toOffset(400)));
       index.addToIndex(entry4, new FileSpan(toOffset(400), toOffset(500)));
 
-      StoreFindToken token = new StoreFindToken(incarnationId);
+      StoreFindToken token = new StoreFindToken();
       FindInfo info = index.findEntriesSince(token, 400);
       Assert.assertEquals("IncarnationId mismatch ", incarnationId,
           ((StoreFindToken) (info.getFindToken())).getIncarnationId());
@@ -1676,18 +1644,6 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
       Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
       Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
-
-      StoreFindToken tokenWithDiffIncarnationId = new StoreFindToken(newIncarnationId);
-      FindInfo infowithDiffIncarnationId = index.findEntriesSince(tokenWithDiffIncarnationId, 400);
-      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
-          ((StoreFindToken) (info.getFindToken())).getIncarnationId());
-      mEntries = infowithDiffIncarnationId.getMessageEntries();
-      Assert.assertEquals(mEntries.size(), 4);
-      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
-      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
-      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
-      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
-
       index.close();
 
       // instantiating index with new incarnationId
@@ -1705,8 +1661,8 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId4);
 
       // with old incarnation Id
-      tokenWithDiffIncarnationId = new StoreFindToken(toOffset(300), new UUID(0, 0), incarnationId);
-      infowithDiffIncarnationId = index.findEntriesSince(tokenWithDiffIncarnationId, 300);
+      StoreFindToken tokenWithDiffIncarnationId = new StoreFindToken(toOffset(300), new UUID(0, 0), incarnationId);
+      FindInfo infowithDiffIncarnationId = index.findEntriesSince(tokenWithDiffIncarnationId, 300);
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
           ((StoreFindToken) (info.getFindToken())).getIncarnationId());
       mEntries = infowithDiffIncarnationId.getMessageEntries();
