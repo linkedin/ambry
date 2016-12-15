@@ -73,8 +73,6 @@ import org.slf4j.LoggerFactory;
  * - Parallel Puts and Gets
  * - Concurrent GETs for the same blobs
  *
- * TODO: Metrics
- *
  * Future work:
  * - Adding delay between concurrent GETs for same blobs
  * - Adding delay for GETs to start so that the file cache will only have recently uploaded blobs(and not all)
@@ -119,7 +117,8 @@ public class ConcurrencyTestTool {
     concurrencyTestTool.startTest(putGetHelper, options.maxParallelPutCount, options.parallelGetCount,
         options.totalPutBlobCount, options.maxGetCountPerBlob, options.burstCountForGet,
         options.maxFailuresPerPutBatchToStopPuts, options.maxFailuresPerGetBatchToStopGets, options.deleteAndValidate,
-        options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs, options.measurementIntervalNs);
+        options.sleepTimeBetweenBatchPutsInMs, options.sleepTimeBetweenBatchGetsInMs,
+        options.measurementIntervalInSecs);
   }
 
   /**
@@ -136,13 +135,13 @@ public class ConcurrencyTestTool {
    * @param deleteAndValidate Deletes the blobs once GETs have reached a threshold on every blob
    * @param sleepTimeBetweenBatchPutsInMs Time to sleep in ms between batch Puts per Producer thread
    * @param sleepTimeBetweenBatchGetsInMs Time to sleep in ms between batch Gets per Consumer thread
-   * @param measurementIntervalMs The interval in milliseconds to report performance result
+   * @param measurementIntervalInSecs The interval in seconds to report performance result
    * @throws InterruptedException
    */
   public void startTest(PutGetHelper putGetHelper, int maxParallelPutCount, int parallelGetCount, int totalPutCount,
       int maxGetCountPerBlob, int burstCountGet, int maxFailuresPerPutBatchToStopPuts,
       int maxFailuresPerGetBatchToStopGets, boolean deleteAndValidate, long sleepTimeBetweenBatchPutsInMs,
-      long sleepTimeBetweenBatchGetsInMs, long measurementIntervalMs) throws InterruptedException {
+      long sleepTimeBetweenBatchGetsInMs, long measurementIntervalInSecs) throws InterruptedException {
     AtomicInteger currentPutCount = new AtomicInteger(0);
     AtomicInteger getCompletedCount = new AtomicInteger(0);
     // Creating shared queue for put Thread and get Thread
@@ -153,19 +152,20 @@ public class ConcurrencyTestTool {
     // Creating PutThread
     Thread putThread = new Thread(
         new PutThread(putGetHelper, generatedBlobAccessInfos, totalPutCount, currentPutCount, maxParallelPutCount,
-            maxFailuresPerPutBatchToStopPuts, sleepTimeBetweenBatchPutsInMs, threadLocalRandom, measurementIntervalMs));
+            maxFailuresPerPutBatchToStopPuts, sleepTimeBetweenBatchPutsInMs, threadLocalRandom,
+            measurementIntervalInSecs));
 
     // Creating Get thread
     Thread getThread = new Thread(
         new GetThread(putGetHelper, generatedBlobAccessInfos, maxGetCountPerBlob, currentPutCount, getCompletedCount,
             burstCountGet, parallelGetCount, maxFailuresPerGetBatchToStopGets, sleepTimeBetweenBatchGetsInMs,
-            deleteAndValidate, threadLocalRandom, deletedBlobIds, measurementIntervalMs));
+            deleteAndValidate, threadLocalRandom, deletedBlobIds, measurementIntervalInSecs));
 
     Thread deleteThread = null;
     if (deleteAndValidate) {
       logger.trace("Initiating Delete thread ");
       DeleteThread deleteBlobThread =
-          new DeleteThread(putGetHelper, totalPutCount, deletedBlobIds, measurementIntervalMs);
+          new DeleteThread(putGetHelper, totalPutCount, deletedBlobIds, measurementIntervalInSecs);
       deleteThread = new Thread(deleteBlobThread);
       deleteThread.start();
     }
@@ -207,7 +207,7 @@ public class ConcurrencyTestTool {
     public PutThread(PutGetHelper putHelper, CopyOnWriteArrayList<BlobAccessInfo> generatedBlobAccessInfos,
         final int totalPutCount, AtomicInteger currentPutCount, int maxParallelRequest,
         int maxFailuresPerPutBatchToStopPuts, long sleepTimeBetweenBatchPutsInMs, ThreadLocalRandom threadLocalRandom,
-        long measurementIntervalMs) {
+        long measurementIntervalInSecs) {
       this.putHelper = putHelper;
       this.generatedBlobAccessInfos = generatedBlobAccessInfos;
       this.totalPutCount = totalPutCount;
@@ -216,7 +216,7 @@ public class ConcurrencyTestTool {
       this.maxFailuresPerPutBatchToStopPuts = maxFailuresPerPutBatchToStopPuts;
       this.sleepTimeBetweenBatchPutsInMs = sleepTimeBetweenBatchPutsInMs;
       this.threadLocalRandom = threadLocalRandom;
-      this.metricsCollector = new MetricsCollector(measurementIntervalMs, "PUTs");
+      this.metricsCollector = new MetricsCollector(measurementIntervalInSecs, "PUTs");
     }
 
     @Override
@@ -231,6 +231,7 @@ public class ConcurrencyTestTool {
           for (int j = 0; j < burstCount; j++) {
             Callback<Pair<String, byte[]>> callback = new Callback<Pair<String, byte[]>>() {
               long callBakStartTimeInNs = SystemTime.getInstance().nanoseconds();
+
               @Override
               public void onCompletion(Pair<String, byte[]> result, Exception exception) {
                 long callBackendTimeInNs = SystemTime.getInstance().nanoseconds();
@@ -316,7 +317,7 @@ public class ConcurrencyTestTool {
         int maxGetCountPerBlob, final AtomicInteger totalPutCount, AtomicInteger getCompletedCount,
         int maxBurstCountPerBlob, int parallelGetCount, int maxFailuresPerGetBatch, long sleepTimeBetweenBatchGetsInMs,
         boolean deleteOnExit, ThreadLocalRandom threadLocalRandom, BlockingQueue<String> deleteBlobIds,
-        long measurementIntervalMs) {
+        long measurementIntervalInSecs) {
       this.getHelper = getHelper;
       this.generatedBlobAccessInfos = generatedBlobAccessInfos;
       this.maxGetCountPerBlob = maxGetCountPerBlob;
@@ -329,7 +330,7 @@ public class ConcurrencyTestTool {
       this.sleepTimeBetweenBatchGetsInMs = sleepTimeBetweenBatchGetsInMs;
       this.threadLocalRandom = threadLocalRandom;
       this.deleteBlobIds = deleteBlobIds;
-      this.metricsCollector = new MetricsCollector(measurementIntervalMs, "GETs");
+      this.metricsCollector = new MetricsCollector(measurementIntervalInSecs, "GETs");
     }
 
     @Override
@@ -368,6 +369,7 @@ public class ConcurrencyTestTool {
               for (int j = 0; j < burstCount; j++) {
                 Callback<Void> callback = new Callback<Void>() {
                   long callBackStartTimeInNs = SystemTime.getInstance().nanoseconds();
+
                   @Override
                   public void onCompletion(Void result, Exception exception) {
                     long callBackEndTimeInNs = SystemTime.getInstance().nanoseconds();
@@ -420,12 +422,12 @@ public class ConcurrencyTestTool {
     private MetricsCollector metricsCollector;
 
     public DeleteThread(PutGetHelper deleteHelper, int putCount, BlockingQueue<String> deleteBlobIds,
-        long measurementIntervalMs) {
+        long measurementIntervalInSecs) {
       this.putCount = putCount;
       this.deleteHelper = deleteHelper;
       this.deleteBlobIds = deleteBlobIds;
       this.countDownLatch = new CountDownLatch(putCount);
-      this.metricsCollector = new MetricsCollector(measurementIntervalMs, "DELETEs");
+      this.metricsCollector = new MetricsCollector(measurementIntervalInSecs, "DELETEs");
     }
 
     public void run() {
@@ -509,18 +511,18 @@ public class ConcurrencyTestTool {
    * Class to assist in collecting and reporting metrics
    */
   class MetricsCollector {
-    String operation;
-    final long measurementIntervalNs;
-    ArrayList<Long> latenciesForBlobs;
-    AtomicLong timePassedInNanoSeconds = new AtomicLong(0);
-    AtomicLong numberOfOperations = new AtomicLong(0);
-    AtomicLong maxLatencyInNanoSeconds = new AtomicLong(0);
-    AtomicLong minLatencyInNanoSeconds = new AtomicLong(Long.MAX_VALUE);
-    AtomicLong totalLatencyInNanoSeconds = new AtomicLong(0);
+    private String operation;
+    private final long measurementIntervalInSecs;
+    private ArrayList<Long> requestLatencies;
+    private AtomicLong timePassedInNanoSeconds = new AtomicLong(0);
+    private AtomicLong numberOfOperations = new AtomicLong(0);
+    private AtomicLong maxLatencyInNanoSeconds = new AtomicLong(0);
+    private AtomicLong minLatencyInNanoSeconds = new AtomicLong(Long.MAX_VALUE);
+    private AtomicLong totalLatencyInNanoSeconds = new AtomicLong(0);
 
-    MetricsCollector(long measurementIntervalNs, String operation) {
-      this.measurementIntervalNs = measurementIntervalNs;
-      latenciesForBlobs = new ArrayList<Long>();
+    MetricsCollector(long measurementIntervalInSecs, String operation) {
+      this.measurementIntervalInSecs = measurementIntervalInSecs;
+      requestLatencies = new ArrayList<Long>();
       this.operation = operation;
     }
 
@@ -528,13 +530,13 @@ public class ConcurrencyTestTool {
      * Updates the wall clock time spent so far
      * @param timePassedInNs the spent so far in Nanoseconds
      */
-    void updateTimePassedSoFar(long timePassedInNs) {
+    synchronized void updateTimePassedSoFar(long timePassedInNs) {
       timePassedInNanoSeconds.addAndGet(timePassedInNs);
-      if (timePassedInNanoSeconds.get() >= measurementIntervalNs) {
+      if (timePassedInNanoSeconds.get() >= measurementIntervalInSecs * SystemTime.NsPerSec) {
         reportMetrics();
         numberOfOperations.set(0);
         timePassedInNanoSeconds.set(0);
-        latenciesForBlobs.clear();
+        requestLatencies.clear();
         maxLatencyInNanoSeconds.set(0);
         minLatencyInNanoSeconds.set(Long.MAX_VALUE);
         totalLatencyInNanoSeconds.set(0);
@@ -542,33 +544,41 @@ public class ConcurrencyTestTool {
     }
 
     /**
-     * Reports the metric values like avg, min and max
+     * Reports the stats for latencies like avg, 95th, 99th, min and max
      */
     void reportMetrics() {
-      Collections.sort(latenciesForBlobs);
-      int index99 = (int) (latenciesForBlobs.size() * 0.99) - 1;
-      int index95 = (int) (latenciesForBlobs.size() * 0.95) - 1;
-      String message =
-          operation + " " + numberOfOperations + "," + (double) latenciesForBlobs.get(index99) / SystemTime.NsPerSec
-              + "," + (double) latenciesForBlobs.get(index95) / SystemTime.NsPerSec + "," + (
-              ((double) totalLatencyInNanoSeconds.get()) / SystemTime.NsPerSec / numberOfOperations.get());
-      logger.info(message);
+      if (requestLatencies.size() > 5) {
+        Collections.sort(requestLatencies);
+        int index99 = (int) (requestLatencies.size() * 0.99) - 1;
+        int index95 = (int) (requestLatencies.size() * 0.95) - 1;
+        String message = operation + ",totalOps=" + numberOfOperations + ",99thInMs="
+            + (double) requestLatencies.get(index99) / SystemTime.NsPerMs + ",95thInMs="
+            + (double) requestLatencies.get(index95) / SystemTime.NsPerMs + ",AvgInMs=" + (
+            ((double) totalLatencyInNanoSeconds.get()) / SystemTime.NsPerMs / numberOfOperations.get()) +
+            ",minInMs=" + (minLatencyInNanoSeconds.get() / SystemTime.NsPerMs) + ",maxInMs=" + (
+            maxLatencyInNanoSeconds.get() / SystemTime.NsPerMs);
+        logger.info(
+            "==================================================================================================");
+        logger.info(message);
+        logger.info(
+            "==================================================================================================");
+      }
     }
 
     /**
      * Updates the latency for the request
-     * @param latencyPerBlob latency taken by the request
+     * @param requestLatency latency taken by the request
      */
-    void updateLatency(long latencyPerBlob) {
+    void updateLatency(long requestLatency) {
       numberOfOperations.incrementAndGet();
-      latenciesForBlobs.add(latencyPerBlob);
-      if (maxLatencyInNanoSeconds.get() < latencyPerBlob) {
-        maxLatencyInNanoSeconds.set(latencyPerBlob);
+      requestLatencies.add(requestLatency);
+      if (maxLatencyInNanoSeconds.get() < requestLatency) {
+        maxLatencyInNanoSeconds.set(requestLatency);
       }
-      if (minLatencyInNanoSeconds.get() > latencyPerBlob) {
-        minLatencyInNanoSeconds.set(latencyPerBlob);
+      if (minLatencyInNanoSeconds.get() > requestLatency) {
+        minLatencyInNanoSeconds.set(requestLatency);
       }
-      totalLatencyInNanoSeconds.addAndGet(latencyPerBlob);
+      totalLatencyInNanoSeconds.addAndGet(requestLatency);
     }
   }
 
@@ -878,7 +888,7 @@ public class ConcurrencyTestTool {
     public final int port;
     public final String putGetHelperFactoryStr;
     public final boolean deleteAndValidate;
-    public final long measurementIntervalNs;
+    public final long measurementIntervalInSecs;
     public final boolean enabledVerboseLogging;
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -996,11 +1006,11 @@ public class ConcurrencyTestTool {
               .ofType(Boolean.class)
               .defaultsTo(true);
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
-          parser.accepts("measurementIntervalInNs", "The interval in second to report performance result")
+          parser.accepts("measurementIntervalInSecs", "The interval in seconds to report performance result")
               .withOptionalArg()
               .describedAs("The CPU time spent for putting/getting/deleting blobs, not wall time")
               .ofType(Long.class)
-              .defaultsTo(300L);
+              .defaultsTo(60L);
       ArgumentAcceptingOptionSpec<Boolean> enableVerboseLoggingOpt =
           parser.accepts("enableVerboseLogging", "Enables verbose logging if set to true")
               .withOptionalArg()
@@ -1038,7 +1048,7 @@ public class ConcurrencyTestTool {
       this.port = options.valueOf(portNumberOpt);
       this.putGetHelperFactoryStr = options.valueOf(putGetHelperFactoryOpt);
       this.deleteAndValidate = options.valueOf(deleteAndValidateOpt);
-      this.measurementIntervalNs = options.valueOf(measurementIntervalOpt);
+      this.measurementIntervalInSecs = options.valueOf(measurementIntervalOpt);
       this.enabledVerboseLogging = options.valueOf(enableVerboseLoggingOpt);
     }
 

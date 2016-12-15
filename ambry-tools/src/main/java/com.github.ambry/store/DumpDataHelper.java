@@ -59,7 +59,7 @@ class DumpDataHelper {
   DumpDataHelper(ClusterMap clusterMap, int bytesPerSec) {
     this._clusterMap = clusterMap;
     if(bytesPerSec != -1){
-      this.throttler = new Throttler(bytesPerSec, 50, true, SystemTime.getInstance());
+      this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
     }
   }
 

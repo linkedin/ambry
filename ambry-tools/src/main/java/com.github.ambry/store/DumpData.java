@@ -141,7 +141,7 @@ public class DumpData {
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> bytesPerSecOpt =
-          parser.accepts("bytesPerSec", "Allowed bytes per sec")
+          parser.accepts("bytesPerSec", "Allowed bytes per sec for the purpose of throttling")
               .withRequiredArg()
               .describedAs("bytesPerSec")
               .ofType(Integer.class)
