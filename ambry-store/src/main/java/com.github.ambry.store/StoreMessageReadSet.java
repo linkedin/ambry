@@ -41,8 +41,8 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  private static final short VERSION_0 = 0;
-  private static final short VERSION_1 = 1;
+  static final short VERSION_0 = 0;
+  static final short VERSION_1 = 1;
 
   private static final short VERSION_LENGTH = 2;
   private static final short SIZE_LENGTH = 8;
