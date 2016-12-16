@@ -19,8 +19,6 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -145,7 +143,7 @@ public class DumpData {
               .withRequiredArg()
               .describedAs("bytesPerSec")
               .ofType(Integer.class)
-              .defaultsTo(-1);
+              .defaultsTo(0);
 
       OptionSet options = parser.parse(args);
 

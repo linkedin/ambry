@@ -58,7 +58,7 @@ class DumpDataHelper {
 
   DumpDataHelper(ClusterMap clusterMap, int bytesPerSec) {
     this._clusterMap = clusterMap;
-    if(bytesPerSec != -1){
+    if (bytesPerSec > 0) {
       this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
     }
   }
@@ -265,7 +265,7 @@ class DumpDataHelper {
     } else {
       throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
     }
-    if(throttler != null){
+    if (throttler != null) {
       throttler.maybeThrottle(totalRecordSize);
     }
     return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,

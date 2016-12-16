@@ -223,19 +223,16 @@ public class ConcurrencyTestTool {
     public void run() {
       try {
         while (currentPutCount.get() < totalPutCount) {
-          long startTimeInNs = SystemTime.getInstance().nanoseconds();
+          long startTimeInMs = SystemTime.getInstance().milliseconds();
           int burstCount = threadLocalRandom.nextInt(maxParallelRequest) + 1;
           logger.info("PutThread producing " + burstCount + " times ");
           final CountDownLatch countDownLatch = new CountDownLatch(burstCount);
           final AtomicInteger failureCount = new AtomicInteger(0);
           for (int j = 0; j < burstCount; j++) {
             Callback<Pair<String, byte[]>> callback = new Callback<Pair<String, byte[]>>() {
-              long callBakStartTimeInNs = SystemTime.getInstance().nanoseconds();
 
               @Override
               public void onCompletion(Pair<String, byte[]> result, Exception exception) {
-                long callBackendTimeInNs = SystemTime.getInstance().nanoseconds();
-                metricsCollector.updateLatency(callBackendTimeInNs - callBakStartTimeInNs);
                 if (exception == null) {
                   if (currentPutCount.get() < totalPutCount) {
                     generatedBlobAccessInfos.add(new BlobAccessInfo(result.getFirst(), result.getSecond()));
@@ -248,10 +245,10 @@ public class ConcurrencyTestTool {
                 countDownLatch.countDown();
               }
             };
-            putHelper.putBlob(callback);
+            putHelper.putBlob(callback, metricsCollector);
           }
           countDownLatch.await(5, TimeUnit.MINUTES);
-          metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().nanoseconds() - startTimeInNs);
+          metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().nanoseconds() - startTimeInMs);
           if (failureCount.get() > maxFailuresPerPutBatchToStopPuts) {
             logger.error(failureCount.get() + "  failures during this batch, hence exiting the Put Thread");
             break;
@@ -292,10 +289,10 @@ public class ConcurrencyTestTool {
    * verified. Blobs and its metadata information are fetched from {@code generatedBlobAccessInfos}. On each phase,
    * the get thread fetches {@code parallelGetCount} number of blobs from the {@code generatedBlobAccessInfos} and
    * issues random (max of {@code maxBurstCountPerblob} number of burst GET calls(and validates) to Ambry via
-   * {@link PutGetHelper#getBlobAndValidate(String, byte[], Object, Callback)}. Each blob is fetched for a maximum of
+   * {@link PutGetHelper#getBlobAndValidate(String, byte[], Object, Callback, MetricsCollector)}. Each blob is fetched for a maximum of
    * {@code maxGetCountPerBlob} times. On reaching the threshold, they are removed from the
    * {@code generatedBlobAccessInfos} and deletion is called via
-   * {@link PutGetHelper#deleteBlobAndValidate(String, Object, Callback)} if {@code deleteOnExit} is set. On completion
+   * {@link PutGetHelper#deleteBlobAndValidate(String, Object, Callback, MetricsCollector)} if {@code deleteOnExit} is set. On completion
    * of one phase, the thread proceeds onto the next phase after sleeping for max of {@code sleepTimeBetweenBatchGetsInMs} ms.
    */
   class GetThread implements Runnable {
@@ -339,7 +336,7 @@ public class ConcurrencyTestTool {
         try {
           int size = generatedBlobAccessInfos.size();
           if (size > 0) {
-            long startTimeInNs = SystemTime.getInstance().nanoseconds();
+            long startTimeInMs = SystemTime.getInstance().milliseconds();
             List<Pair<BlobAccessInfo, Integer>> blobInfoBurstCountPairList = new ArrayList<>();
             List<String> toBeDeletedBlobsPerBatch = new ArrayList<>();
             int blobCountPerBatch = Math.min(size, parallelGetCount);
@@ -368,12 +365,9 @@ public class ConcurrencyTestTool {
               final CountDownLatch countDownLatch = new CountDownLatch(burstCount);
               for (int j = 0; j < burstCount; j++) {
                 Callback<Void> callback = new Callback<Void>() {
-                  long callBackStartTimeInNs = SystemTime.getInstance().nanoseconds();
 
                   @Override
                   public void onCompletion(Void result, Exception exception) {
-                    long callBackEndTimeInNs = SystemTime.getInstance().nanoseconds();
-                    metricsCollector.updateLatency(callBackEndTimeInNs - callBackStartTimeInNs);
                     countDownLatch.countDown();
                     blobAccessInfo.burstGetReferenceCount.decrementAndGet();
                     if (countDownLatch.getCount() == 0) {
@@ -387,11 +381,11 @@ public class ConcurrencyTestTool {
                 };
                 blobAccessInfo.burstGetReferenceCount.incrementAndGet();
                 getHelper.getBlobAndValidate(blobAccessInfo.blobId, blobAccessInfo.blobContent,
-                    getHelper.getErrorCodeForNoError(), callback);
+                    getHelper.getErrorCodeForNoError(), callback, metricsCollector);
               }
             }
             countDownLatchForBatch.await(5, TimeUnit.MINUTES);
-            metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().nanoseconds() - startTimeInNs);
+            metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().milliseconds() - startTimeInMs);
             if (deleteOnExit) {
               deleteBlobIds.addAll(toBeDeletedBlobsPerBatch);
             }
@@ -435,17 +429,14 @@ public class ConcurrencyTestTool {
         try {
           final String blobIdStr = deleteBlobIds.poll(50, TimeUnit.MILLISECONDS);
           if (blobIdStr != null) {
-            long startTimeInNs = SystemTime.getInstance().nanoseconds();
+            long startTimeInMs = SystemTime.getInstance().milliseconds();
             deletedCount.incrementAndGet();
             logger.trace("Deleting blob " + blobIdStr);
             Callback<Void> callback = new Callback<Void>() {
-              long callBackStartTimeNs = SystemTime.getInstance().nanoseconds();
 
               @Override
               public void onCompletion(Void result, Exception exception) {
-                long callBackEndTimeNs = SystemTime.getInstance().nanoseconds();
-                metricsCollector.updateLatency(callBackEndTimeNs - callBackStartTimeNs);
-                metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().nanoseconds() - startTimeInNs);
+                metricsCollector.updateTimePassedSoFar(SystemTime.getInstance().milliseconds() - startTimeInMs);
                 logger.trace("Deletion completed for " + blobIdStr);
                 countDownLatch.countDown();
                 if (exception != null) {
@@ -453,7 +444,8 @@ public class ConcurrencyTestTool {
                 }
               }
             };
-            deleteHelper.deleteBlobAndValidate(blobIdStr, deleteHelper.getErrorCodeForNoError(), callback);
+            deleteHelper.deleteBlobAndValidate(blobIdStr, deleteHelper.getErrorCodeForNoError(), callback,
+                metricsCollector);
           }
         } catch (InterruptedException e) {
           logger.error("Delete operation interrupted", e);
@@ -475,9 +467,10 @@ public class ConcurrencyTestTool {
     /**
      * Request to upload a blob to ambry
      * @param callback the {@link Callback} that will be called on completion
+     * @param metricsCollector the {@link MetricsCollector} to collect and report metrics
      * @return a {@link FutureResult} which will contain the result eventually
      */
-    Future<T> putBlob(Callback<T> callback);
+    Future<T> putBlob(Callback<T> callback, MetricsCollector metricsCollector);
 
     /**
      * Request to fetch the blob pertaining to the {@code blobId} passed in and verify for its content
@@ -485,18 +478,22 @@ public class ConcurrencyTestTool {
      * @param blobContent the content of the blob that needs to be verified against
      * @param expectedErrorCode the expected error code for the Get call
      * @param callback the {@link Callback} that will be called on completion
+     * @param metricsCollector the {@link MetricsCollector} to collect and report metrics
      * @return the {@link FutureResult} that will contain the result eventually
      */
-    Future<T> getBlobAndValidate(String blobId, byte[] blobContent, T expectedErrorCode, Callback<T> callback);
+    Future<T> getBlobAndValidate(String blobId, byte[] blobContent, T expectedErrorCode, Callback<T> callback,
+        MetricsCollector metricsCollector);
 
     /**
      * Deletes a blob from ambry pertaining to the {@code blobId} passed in and verifies that subsequent Get fails
      * @param blobId the blobId the of that blob that needs to be fetched
      * @param expectedErrorCode the expected error code for the Delete call
      * @param callback the {@link Callback} that will be called on completion
+     * @param metricsCollector the {@link MetricsCollector} to collect and report metrics
      * @return the {@link FutureResult} that will contain the result eventually
      */
-    Future<T> deleteBlobAndValidate(String blobId, T expectedErrorCode, Callback<T> callback);
+    Future<T> deleteBlobAndValidate(String blobId, T expectedErrorCode, Callback<T> callback,
+        MetricsCollector metricsCollector);
 
     /**
      * Returns the default Error code that is expected for a Get or a Delete call
@@ -514,11 +511,11 @@ public class ConcurrencyTestTool {
     private String operation;
     private final long measurementIntervalInSecs;
     private ArrayList<Long> requestLatencies;
-    private AtomicLong timePassedInNanoSeconds = new AtomicLong(0);
+    private AtomicLong timePassedInMs = new AtomicLong(0);
     private AtomicLong numberOfOperations = new AtomicLong(0);
-    private AtomicLong maxLatencyInNanoSeconds = new AtomicLong(0);
-    private AtomicLong minLatencyInNanoSeconds = new AtomicLong(Long.MAX_VALUE);
-    private AtomicLong totalLatencyInNanoSeconds = new AtomicLong(0);
+    private AtomicLong maxLatencyInMs = new AtomicLong(0);
+    private AtomicLong minLatencyInMs = new AtomicLong(Long.MAX_VALUE);
+    private AtomicLong totalLatencyInMs = new AtomicLong(0);
 
     MetricsCollector(long measurementIntervalInSecs, String operation) {
       this.measurementIntervalInSecs = measurementIntervalInSecs;
@@ -527,19 +524,20 @@ public class ConcurrencyTestTool {
     }
 
     /**
-     * Updates the wall clock time spent so far
-     * @param timePassedInNs the spent so far in Nanoseconds
+     * Updates the wall clock time spent so far. This is used for reporting purpose.
+     * For every {@code measurementIntervalInSecs}, we report the metrics and clear the stats.
+     * @param timePassedInMs the time spent so far in Millisecs
      */
-    synchronized void updateTimePassedSoFar(long timePassedInNs) {
-      timePassedInNanoSeconds.addAndGet(timePassedInNs);
-      if (timePassedInNanoSeconds.get() >= measurementIntervalInSecs * SystemTime.NsPerSec) {
+    synchronized void updateTimePassedSoFar(long timePassedInMs) {
+      this.timePassedInMs.addAndGet(timePassedInMs);
+      if (this.timePassedInMs.get() >= measurementIntervalInSecs * SystemTime.MsPerSec) {
         reportMetrics();
         numberOfOperations.set(0);
-        timePassedInNanoSeconds.set(0);
+        this.timePassedInMs.set(0);
         requestLatencies.clear();
-        maxLatencyInNanoSeconds.set(0);
-        minLatencyInNanoSeconds.set(Long.MAX_VALUE);
-        totalLatencyInNanoSeconds.set(0);
+        maxLatencyInMs.set(0);
+        minLatencyInMs.set(Long.MAX_VALUE);
+        totalLatencyInMs.set(0);
       }
     }
 
@@ -551,12 +549,11 @@ public class ConcurrencyTestTool {
         Collections.sort(requestLatencies);
         int index99 = (int) (requestLatencies.size() * 0.99) - 1;
         int index95 = (int) (requestLatencies.size() * 0.95) - 1;
-        String message = operation + ",totalOps=" + numberOfOperations + ",99thInMs="
-            + (double) requestLatencies.get(index99) / SystemTime.NsPerMs + ",95thInMs="
-            + (double) requestLatencies.get(index95) / SystemTime.NsPerMs + ",AvgInMs=" + (
-            ((double) totalLatencyInNanoSeconds.get()) / SystemTime.NsPerMs / numberOfOperations.get()) +
-            ",minInMs=" + (minLatencyInNanoSeconds.get() / SystemTime.NsPerMs) + ",maxInMs=" + (
-            maxLatencyInNanoSeconds.get() / SystemTime.NsPerMs);
+        String message =
+            operation + ":totalOps=" + numberOfOperations + ", 99thInMs=" + (double) requestLatencies.get(index99)
+                + ", 95thInMs=" + (double) requestLatencies.get(index95) + ", AvgInMs=" + (
+                ((double) totalLatencyInMs.get()) / numberOfOperations.get()) +
+                ", minInMs=" + minLatencyInMs.get() + ", maxInMs=" + (maxLatencyInMs.get());
         logger.info(
             "==================================================================================================");
         logger.info(message);
@@ -572,13 +569,13 @@ public class ConcurrencyTestTool {
     void updateLatency(long requestLatency) {
       numberOfOperations.incrementAndGet();
       requestLatencies.add(requestLatency);
-      if (maxLatencyInNanoSeconds.get() < requestLatency) {
-        maxLatencyInNanoSeconds.set(requestLatency);
+      if (maxLatencyInMs.get() < requestLatency) {
+        maxLatencyInMs.set(requestLatency);
       }
-      if (minLatencyInNanoSeconds.get() > requestLatency) {
-        minLatencyInNanoSeconds.set(requestLatency);
+      if (minLatencyInMs.get() > requestLatency) {
+        minLatencyInMs.set(requestLatency);
       }
-      totalLatencyInNanoSeconds.addAndGet(requestLatency);
+      totalLatencyInMs.addAndGet(requestLatency);
     }
   }
 
@@ -606,24 +603,26 @@ public class ConcurrencyTestTool {
      * {@inheritDoc}
      * Uploads a blob to the server directly and returns the blobId along with the content
      * @param callback the {@link Callback} that will be called on completion
+     * @param metricsCollector the {@link MetricsCollector} to collect and report metrics
      * @return a {@link Future} which will contain the result eventually
      */
     @Override
-    public Future putBlob(final Callback callback) {
+    public Future putBlob(final Callback callback, MetricsCollector metricsCollector) {
       int randomNum = localRandom.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
       final byte[] blob = new byte[randomNum];
       byte[] usermetadata = new byte[new Random().nextInt(1024)];
       BlobProperties props = new BlobProperties(randomNum, "test");
       final FutureResult futureResult = new FutureResult();
       try {
-        final long startTime = SystemTime.getInstance().nanoseconds();
+        final long startTimeInMs = SystemTime.getInstance().milliseconds();
         ByteBufferReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob));
         router.putBlob(props, usermetadata, putChannel, new Callback<String>() {
           @Override
           public void onCompletion(String result, Exception exception) {
-            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTime;
-            logger.trace(" Time taken to put blob id " + result + " in ms " + latencyPerBlob / SystemTime.NsPerMs
-                + " for blob of size " + blob.length);
+            long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeInMs;
+            metricsCollector.updateLatency(latencyPerBlob);
+            logger.trace(" Time taken to put blob id " + result + " in ms " + latencyPerBlob + " for blob of size "
+                + blob.length);
             Exception exceptionToReturn = null;
             Pair<String, byte[]> toReturn = null;
             if (result != null) {
@@ -654,24 +653,25 @@ public class ConcurrencyTestTool {
      * @param blobContent the content of the blob that needs to be verified against
      * @param expectedErrorCode the expected error code for the Get call
      * @param callback the {@link Callback} that will be called on completion
+     * @param metricsCollector the {@link MetricsCollector} to collect and report metrics
      */
     @Override
     public Future getBlobAndValidate(final String blobIdStr, final byte[] blobContent,
-        final RouterErrorCode expectedErrorCode, final Callback callback) {
+        final RouterErrorCode expectedErrorCode, final Callback callback, MetricsCollector metricsCollector) {
       final FutureResult futureResult = new FutureResult();
       try {
-        final Long startTimeGetBlobNs = SystemTime.getInstance().nanoseconds();
+        final Long startTimeGetBlobMs = SystemTime.getInstance().milliseconds();
         router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), new Callback<GetBlobResult>() {
           @Override
           public void onCompletion(GetBlobResult getBlobResult, Exception exception) {
-            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlobNs;
-            logger.trace("Time taken to get blob " + blobIdStr + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
+            long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeGetBlobMs;
+            logger.trace("Time taken to get blob " + blobIdStr + " in ms " + latencyPerBlob);
             Exception exceptionToReturn = null;
             if (getBlobResult != null) {
               logger.trace("OnCompletion returned for blob " + blobIdStr + " with non null result ");
               Thread compareThread = new Thread(
                   new CompareRunnable(blobIdStr, blobContent, getBlobResult.getBlobDataChannel(), futureResult,
-                      callback));
+                      callback, metricsCollector, startTimeGetBlobMs));
               Utils.newThread(compareThread, true).start();
             } else {
               logger.trace("OnCompletion returned for blob " + blobIdStr + " with exception ");
@@ -717,14 +717,18 @@ public class ConcurrencyTestTool {
       private final ReadableStreamChannel readableStreamChannel;
       private final FutureResult futureResult;
       private final Callback callback;
+      private final MetricsCollector metricsCollector;
+      private final long startTimeInMs;
 
       CompareRunnable(String blobId, byte[] putContent, ReadableStreamChannel readableStreamChannel,
-          FutureResult futureResult, Callback callback) {
+          FutureResult futureResult, Callback callback, MetricsCollector metricsCollector, long startTimeInMs) {
         this.blobId = blobId;
         this.putContent = putContent;
         this.readableStreamChannel = readableStreamChannel;
         this.futureResult = futureResult;
         this.callback = callback;
+        this.metricsCollector = metricsCollector;
+        this.startTimeInMs = startTimeInMs;
       }
 
       public void run() {
@@ -769,6 +773,9 @@ public class ConcurrencyTestTool {
         } catch (IllegalStateException e) {
           exceptionToReturn = e;
         } finally {
+          if (metricsCollector != null) {
+            metricsCollector.updateLatency(SystemTime.getInstance().milliseconds() - startTimeInMs);
+          }
           futureResult.done(null, exceptionToReturn);
           if (callback != null) {
             callback.onCompletion(null, exceptionToReturn);
@@ -784,18 +791,20 @@ public class ConcurrencyTestTool {
      * @param blobId the blobId the of that blob that needs to be fetched
      * @param expectedErrorCode the expected error code for the Delete call
      * @param callback the {@link Callback} that will be called on completion
+     * @param metricsCollector the {@link MetricsCollector} to collect and report metrics
      */
     @Override
     public Future deleteBlobAndValidate(final String blobId, final RouterErrorCode expectedErrorCode,
-        final Callback callback) {
+        final Callback callback, MetricsCollector metricsCollector) {
       final FutureResult futureResult = new FutureResult();
       try {
-        final Long startTimeGetBlob = SystemTime.getInstance().nanoseconds();
+        final Long startTimeGetBlobInMs = SystemTime.getInstance().milliseconds();
         router.deleteBlob(blobId, new Callback<Void>() {
           @Override
           public void onCompletion(Void result, Exception exception) {
-            long latencyPerBlob = SystemTime.getInstance().nanoseconds() - startTimeGetBlob;
-            logger.trace(" Time taken to delete blob " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
+            long latencyPerBlob = SystemTime.getInstance().milliseconds() - startTimeGetBlobInMs;
+            metricsCollector.updateLatency(latencyPerBlob);
+            logger.trace(" Time taken to delete blob " + blobId + " in ms " + latencyPerBlob);
             final AtomicReference<Exception> exceptionToReturn = new AtomicReference<>();
             if (exception == null) {
               logger.trace("Deletion of " + blobId + " succeeded. Issuing Get to confirm the deletion ");
@@ -811,7 +820,7 @@ public class ConcurrencyTestTool {
                     }
                   }
                 }
-              });
+              }, null);
             } else {
               if (exception instanceof RouterException) {
                 RouterException routerException = (RouterException) exception;
