@@ -134,7 +134,7 @@ public class ConsistencyCheckerTool {
 
   private void collectData(File[] replicas, ArrayList<String> replicasList, Map<String, BlobStatus> blobIdToStatusMap,
       AtomicLong totalKeysProcessed) throws IOException, InterruptedException {
-    DumpData dumpData = new DumpData(map, -1);
+    DumpIndexTool dumpIndexTool = new DumpIndexTool(map);
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
       try {
@@ -143,8 +143,8 @@ public class ConsistencyCheckerTool {
         Arrays.sort(indexFiles, PersistentIndex.INDEX_FILE_COMPARATOR);
         for (File indexFile : indexFiles) {
           keysProcessedforReplica +=
-              dumpData.dumpIndex(indexFile, replica.getName(), replicasList, new ArrayList<String>(), blobIdToStatusMap,
-                  indexStats, false);
+              dumpIndexTool.dumpIndex(indexFile, replica.getName(), replicasList, new ArrayList<String>(),
+                  blobIdToStatusMap, indexStats, false);
         }
         logger.debug("Total keys processed for {} is {}", replica.getName(), keysProcessedforReplica);
         totalKeysProcessed.addAndGet(keysProcessedforReplica);

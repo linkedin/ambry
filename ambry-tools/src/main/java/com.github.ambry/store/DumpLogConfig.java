@@ -14,16 +14,16 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 
 
 /**
  * Configuration parameters required by {@link DumpDataTool}
  */
-public class DumpDataConfig {
-
+public class DumpLogConfig {
   /**
-   * "The index file that needs to be dumped for comparison purposes
+   * Refers to log file that needs to be dumped
    */
   @Config("file.to.read")
   public final String fileToRead;
@@ -41,26 +41,35 @@ public class DumpDataConfig {
   public final String partitionLayoutFilePath;
 
   /**
-   * The type of operation to perform
+   * List of blobIds (comma separated values) to filter
    */
-  @Config("type.of.operation")
-  public final String typeOfOperation;
+  @Config("blobId.list")
+  public final String blobIdList;
 
   /**
-   * Path referring to replica root directory
+   * The offset in the log to start dumping from
    */
-  @Config("replica.root.directory")
-  public final String replicaRootDirecotry;
+  @Config("log.start.offset")
+  @Default("0")
+  public final long logStartOffset;
 
   /**
-   * Create a {@link DumpDataConfig} instance.
+   * The offset in the log until which to dump data
+   */
+  @Config("log.end.offset")
+  @Default("-1")
+  public final long logEndOffset;
+
+  /**
+   * Create a {@link DumpLogConfig} instance.
    * @param verifiableProperties the properties map to refer to.
    */
-  public DumpDataConfig(VerifiableProperties verifiableProperties) {
+  public DumpLogConfig(VerifiableProperties verifiableProperties) {
     fileToRead = verifiableProperties.getString("file.to.read");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
-    typeOfOperation = verifiableProperties.getString("type.of.operation");
-    replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
+    blobIdList = verifiableProperties.getString("blobId.list", "");
+    logStartOffset = verifiableProperties.getInt("log.start.offset", -1);
+    logEndOffset = verifiableProperties.getInt("log.end.offset", -1);
   }
 }

@@ -20,10 +20,9 @@ import com.github.ambry.config.VerifiableProperties;
 /**
  * Configuration parameters required by {@link DumpDataTool}
  */
-public class DumpDataConfig {
-
+public class DumpReplicaTokenConfig {
   /**
-   * "The index file that needs to be dumped for comparison purposes
+   * Refers to replicatoken file that needs to be dumped
    */
   @Config("file.to.read")
   public final String fileToRead;
@@ -41,26 +40,12 @@ public class DumpDataConfig {
   public final String partitionLayoutFilePath;
 
   /**
-   * The type of operation to perform
-   */
-  @Config("type.of.operation")
-  public final String typeOfOperation;
-
-  /**
-   * Path referring to replica root directory
-   */
-  @Config("replica.root.directory")
-  public final String replicaRootDirecotry;
-
-  /**
-   * Create a {@link DumpDataConfig} instance.
+   * Create a {@link DumpReplicaTokenConfig} instance.
    * @param verifiableProperties the properties map to refer to.
    */
-  public DumpDataConfig(VerifiableProperties verifiableProperties) {
+  public DumpReplicaTokenConfig(VerifiableProperties verifiableProperties) {
     fileToRead = verifiableProperties.getString("file.to.read");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
-    typeOfOperation = verifiableProperties.getString("type.of.operation");
-    replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
   }
 }

@@ -14,16 +14,17 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 
 
 /**
  * Configuration parameters required by {@link DumpDataTool}
  */
-public class DumpDataConfig {
-
+public class DumpIndexConfig {
   /**
-   * "The index file that needs to be dumped for comparison purposes
+   * "The file that needs to be dumped. Index file incase of "DumpIndexTool", "CompareIndexToLog",
+   * log file incase of "DumpLogTool" and replicatoken file in case of "DumpReplicatoken"
    */
   @Config("file.to.read")
   public final String fileToRead;
@@ -47,20 +48,51 @@ public class DumpDataConfig {
   public final String typeOfOperation;
 
   /**
+   * List of blobIds (comma separated values) to filter
+   */
+  @Config("blobId.list")
+  public final String blobIdList;
+
+  /**
    * Path referring to replica root directory
    */
   @Config("replica.root.directory")
   public final String replicaRootDirecotry;
 
   /**
-   * Create a {@link DumpDataConfig} instance.
+   * Count of active blobs
+   */
+  @Config("active.blobs.count")
+  @Default("-1")
+  public final long activeBlobsCount;
+
+  /**
+   * True if active blobs onlhy needs to be dumped, false otherwise
+   */
+  @Config("active.blobs.only")
+  @Default("false")
+  public final boolean activeBlobsOnly;
+
+  /**
+   * True if blob stats needs to be logged, false otherwise
+   */
+  @Config("log.blob.stats")
+  @Default("false")
+  public final boolean logBlobStats;
+
+  /**
+   * Create a {@link DumpIndexConfig} instance.
    * @param verifiableProperties the properties map to refer to.
    */
-  public DumpDataConfig(VerifiableProperties verifiableProperties) {
+  public DumpIndexConfig(VerifiableProperties verifiableProperties) {
     fileToRead = verifiableProperties.getString("file.to.read");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     typeOfOperation = verifiableProperties.getString("type.of.operation");
+    blobIdList = verifiableProperties.getString("blobId.list", "");
     replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
+    activeBlobsCount = verifiableProperties.getInt("active.blobs.count", -1);
+    activeBlobsOnly = verifiableProperties.getBoolean("active.blobs.only");
+    logBlobStats = verifiableProperties.getBoolean("log.blob.stats");
   }
 }
