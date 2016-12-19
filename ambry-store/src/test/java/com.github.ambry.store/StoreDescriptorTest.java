@@ -13,11 +13,13 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.UtilsTest;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.UUID;
 import junit.framework.Assert;
 import org.junit.Test;
@@ -34,17 +36,20 @@ public class StoreDescriptorTest {
    */
   @Test
   public void testStoreDescriptor() throws IOException {
-    String tempDirPath = "/tmp/";
-    File storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
+
+    File tempDir = Files.createTempDirectory("storeDir-" + UtilsTest.getRandomString(10)).toFile();
+    tempDir.deleteOnExit();
+    File storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     storeDescriptorFile.delete();
 
-    StoreDescriptor storeDescriptor = new StoreDescriptor(tempDirPath);
+    StoreDescriptor storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
     // store descriptor file should have been created.
-    StoreDescriptor newStoreDescriptor = new StoreDescriptor(tempDirPath);
+    StoreDescriptor newStoreDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
     Assert.assertEquals("IncarnationId mismatch ", storeDescriptor.getIncarnationId(),
         newStoreDescriptor.getIncarnationId());
 
     // Create StoreDescriptor file with new incarnationId
+    storeDescriptorFile.delete();
     UUID incarnationIdUUID = UUID.randomUUID();
     int size = StoreDescriptor.VERSION_SIZE +
         StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
@@ -55,13 +60,13 @@ public class StoreDescriptorTest {
     byteBuffer.put(incarnationIdUUID.toString().getBytes());
     byteBuffer.flip();
 
-    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
+    storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     storeDescriptorFile.createNewFile();
     DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
     dataOutputStream.write(toBytes);
     dataOutputStream.close();
 
-    storeDescriptor = new StoreDescriptor(tempDirPath);
+    storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
     Assert.assertEquals("IncarnationId mismatch ", incarnationIdUUID, storeDescriptor.getIncarnationId());
 
     // wrong version
@@ -74,14 +79,14 @@ public class StoreDescriptorTest {
     byteBuffer.put(incarnationIdUUID.toString().getBytes());
     byteBuffer.flip();
 
-    storeDescriptorFile = new File(tempDirPath + "/" + StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
+    storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     storeDescriptorFile.createNewFile();
     dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
     dataOutputStream.write(toBytes);
     dataOutputStream.close();
 
     try {
-      storeDescriptor = new StoreDescriptor(tempDirPath);
+      storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
       Assert.fail("Wrong version should have thrown exception ");
     } catch (IllegalArgumentException e) {
 

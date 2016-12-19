@@ -154,32 +154,20 @@ public class StoreFindToken implements FindToken {
           case JournalBased:
             // read incarnationId
             String incarnationId = Utils.readIntString(stream);
-            UUID incarnationIdUUID = null;
-            if (!incarnationId.isEmpty()) {
-              incarnationIdUUID = UUID.fromString(incarnationId);
-            }
+            UUID incarnationIdUUID = UUID.fromString(incarnationId);
             // read sessionId
             sessionId = Utils.readIntString(stream);
-            sessionIdUUID = null;
-            if (!sessionId.isEmpty()) {
-              sessionIdUUID = UUID.fromString(sessionId);
-            }
+            sessionIdUUID = UUID.fromString(sessionId);
             Offset logOffset = Offset.fromBytes(stream);
             storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID);
             break;
           case IndexBased:
             // read incarnationId
             incarnationId = Utils.readIntString(stream);
-            incarnationIdUUID = null;
-            if (!incarnationId.isEmpty()) {
-              incarnationIdUUID = UUID.fromString(incarnationId);
-            }
+            incarnationIdUUID = UUID.fromString(incarnationId);
             // read sessionId
             sessionId = Utils.readIntString(stream);
-            sessionIdUUID = null;
-            if (!sessionId.isEmpty()) {
-              sessionIdUUID = UUID.fromString(sessionId);
-            }
+            sessionIdUUID = UUID.fromString(sessionId);
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             storeFindToken = new StoreFindToken(factory.getStoreKey(stream), indexSegmentStartOffset, sessionIdUUID,
                 incarnationIdUUID);

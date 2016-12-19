@@ -70,7 +70,7 @@ class StoreDescriptor {
   }
 
   /**
-   * Returns the incarnationId pertaining to the store
+   * @return the incarnationId of the store
    */
   public UUID getIncarnationId() {
     return incarnationId;
