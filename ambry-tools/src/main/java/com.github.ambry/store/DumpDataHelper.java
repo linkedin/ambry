@@ -319,7 +319,7 @@ class DumpDataHelper {
    * @param coveredRanges a {@link Map} of startOffset to endOffset of ranges covered by records in the log
    * @throws IOException
    */
-  boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, String blobId, IndexValue indexValue,
+  /*boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, String blobId, IndexValue indexValue,
       Map<Long, Long> coveredRanges) throws Exception {
     long offset = indexValue.getOffset().getOffset();
     try {
@@ -350,7 +350,7 @@ class DumpDataHelper {
       logger.error("Unknown exception thrown " + e.getMessage() + " ", e);
     }
     return false;
-  }
+  }*/
 
   /**
    * Compares values from index to that in the Log
@@ -358,7 +358,7 @@ class DumpDataHelper {
    * @param indexValue the {@link IndexValue} to be used in comparison
    * @param logBlobRecordInfo the {@link LogBlobRecordInfo} to be used in comparison
    */
-  private void compareIndexValueToLogEntry(String blobId, IndexValue indexValue, LogBlobRecordInfo logBlobRecordInfo) {
+ /* private void compareIndexValueToLogEntry(String blobId, IndexValue indexValue, LogBlobRecordInfo logBlobRecordInfo) {
     boolean isDeleted = indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
     boolean isExpired = isExpired(indexValue.getExpiresAtMs());
     if (isDeleted != logBlobRecordInfo.isDeleted) {
@@ -375,7 +375,7 @@ class DumpDataHelper {
       logger.error("BlobId value mismatch for " + logBlobRecordInfo.blobId + " Index value " + blobId + ", Log value "
           + logBlobRecordInfo.blobId);
     }
-  }
+  }*/
 
   /**
    * Updates the {@link Map} of blobIds to {@link LogBlobRecord} with the information about the passed in
@@ -407,7 +407,7 @@ class DumpDataHelper {
    * @param timeToLive time in milliseconds referring to the time to live for the blob
    * @return {@code true} if blob has expired, {@code false} otherwise
    */
-  private boolean isExpired(Long timeToLive) {
+  boolean isExpired(Long timeToLive) {
     return timeToLive != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > timeToLive;
   }
 
