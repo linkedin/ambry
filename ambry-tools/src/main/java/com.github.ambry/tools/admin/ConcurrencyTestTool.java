@@ -510,7 +510,7 @@ public class ConcurrencyTestTool {
   class MetricsCollector {
     private String operation;
     private final long measurementIntervalInSecs;
-    private ArrayList<Long> requestLatencies;
+    private CopyOnWriteArrayList<Long> requestLatencies;
     private AtomicLong timePassedInMs = new AtomicLong(0);
     private AtomicLong numberOfOperations = new AtomicLong(0);
     private AtomicLong maxLatencyInMs = new AtomicLong(0);
@@ -519,7 +519,7 @@ public class ConcurrencyTestTool {
 
     MetricsCollector(long measurementIntervalInSecs, String operation) {
       this.measurementIntervalInSecs = measurementIntervalInSecs;
-      requestLatencies = new ArrayList<Long>();
+      requestLatencies = new CopyOnWriteArrayList<>();
       this.operation = operation;
     }
 
@@ -549,16 +549,17 @@ public class ConcurrencyTestTool {
         Collections.sort(requestLatencies);
         int index99 = (int) (requestLatencies.size() * 0.99) - 1;
         int index95 = (int) (requestLatencies.size() * 0.95) - 1;
-        String message =
+        StringBuilder message = new StringBuilder();
+        message.append(
+            "==================================================================================================");
+        message.append(
             operation + ":totalOps=" + numberOfOperations + ", 99thInMs=" + (double) requestLatencies.get(index99)
                 + ", 95thInMs=" + (double) requestLatencies.get(index95) + ", AvgInMs=" + (
                 ((double) totalLatencyInMs.get()) / numberOfOperations.get()) +
-                ", minInMs=" + minLatencyInMs.get() + ", maxInMs=" + (maxLatencyInMs.get());
-        logger.info(
+                ", minInMs=" + minLatencyInMs.get() + ", maxInMs=" + (maxLatencyInMs.get()));
+        message.append(
             "==================================================================================================");
-        logger.info(message);
-        logger.info(
-            "==================================================================================================");
+        logger.info(message.toString());
       }
     }
 
