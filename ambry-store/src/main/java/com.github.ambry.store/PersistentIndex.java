@@ -581,25 +581,22 @@ class PersistentIndex {
   FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
     long startTimeInMs = time.milliseconds();
     try {
-      boolean tokenWasReset;
       Offset logEndOffsetBeforeFind = log.getEndOffset();
-      AtomicReference<StoreFindToken> storeFindTokenAtomicReference = new AtomicReference<>((StoreFindToken) token);
-      tokenWasReset = resetTokenIfRequired(storeFindTokenAtomicReference);
-      StoreFindToken storeToken = storeFindTokenAtomicReference.get();
+      AtomicReference<StoreFindToken> storeToken = new AtomicReference<>((StoreFindToken) token);
+      boolean tokenReset = resetTokenIfRequired(storeToken);
       logger.trace("Time used to validate token: {}", (time.milliseconds() - startTimeInMs));
 
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
-      if (!storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
+      if (!storeToken.get().getType().equals(StoreFindToken.Type.IndexBased)) {
         startTimeInMs = time.milliseconds();
-        boolean inclusive = tokenWasReset;
-        Offset offsetToStart = storeToken.getOffset();
-        if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
+        Offset offsetToStart = storeToken.get().getOffset();
+        if (storeToken.get().getType().equals(StoreFindToken.Type.Uninitialized)) {
           offsetToStart = log.getStartOffset();
-          inclusive = true;
+          tokenReset = true;
         }
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
         // check journal
-        List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
+        List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, tokenReset);
         logger.trace("Journal based token, Time used to get entries: {}", (time.milliseconds() - startTimeInMs));
 
         if (entries != null) {
@@ -650,7 +647,7 @@ class PersistentIndex {
             logger.trace("Journal based to segment based token, Time used to update delete state: {}",
                 (time.milliseconds() - startTimeInMs));
           } else {
-            newToken = storeToken;
+            newToken = storeToken.get();
           }
 
           startTimeInMs = time.milliseconds();
@@ -667,8 +664,8 @@ class PersistentIndex {
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
         StoreFindToken newToken =
-            findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-                new FindEntriesCondition(maxTotalSizeOfEntries));
+            findEntriesFromSegmentStartOffset(storeToken.get().getOffset(), storeToken.get().getStoreKey(),
+                messageEntries, new FindEntriesCondition(maxTotalSizeOfEntries));
         logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
 
         startTimeInMs = time.milliseconds();

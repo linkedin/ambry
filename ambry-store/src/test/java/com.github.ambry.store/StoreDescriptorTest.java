@@ -37,7 +37,7 @@ public class StoreDescriptorTest {
   @Test
   public void testStoreDescriptor() throws IOException {
 
-    File tempDir = Files.createTempDirectory("storeDir-" + UtilsTest.getRandomString(10)).toFile();
+    File tempDir = StoreTestUtils.createTempDirectory("storeDir");
     tempDir.deleteOnExit();
     File storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     storeDescriptorFile.delete();
