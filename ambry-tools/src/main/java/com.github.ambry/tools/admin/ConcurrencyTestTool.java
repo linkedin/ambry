@@ -510,7 +510,7 @@ public class ConcurrencyTestTool {
   class MetricsCollector {
     private String operation;
     private final long measurementIntervalInSecs;
-    private CopyOnWriteArrayList<Long> requestLatencies;
+    private ArrayList<Long> requestLatencies;
     private AtomicLong timePassedInMs = new AtomicLong(0);
     private AtomicLong numberOfOperations = new AtomicLong(0);
     private AtomicLong maxLatencyInMs = new AtomicLong(0);
@@ -519,7 +519,7 @@ public class ConcurrencyTestTool {
 
     MetricsCollector(long measurementIntervalInSecs, String operation) {
       this.measurementIntervalInSecs = measurementIntervalInSecs;
-      requestLatencies = new CopyOnWriteArrayList<>();
+      requestLatencies = new ArrayList<>();
       this.operation = operation;
     }
 
@@ -551,14 +551,14 @@ public class ConcurrencyTestTool {
         int index95 = (int) (requestLatencies.size() * 0.95) - 1;
         StringBuilder message = new StringBuilder();
         message.append(
-            "==================================================================================================");
+            "==================================================================================================\n");
         message.append(
             operation + ":totalOps=" + numberOfOperations + ", 99thInMs=" + (double) requestLatencies.get(index99)
                 + ", 95thInMs=" + (double) requestLatencies.get(index95) + ", AvgInMs=" + (
                 ((double) totalLatencyInMs.get()) / numberOfOperations.get()) +
-                ", minInMs=" + minLatencyInMs.get() + ", maxInMs=" + (maxLatencyInMs.get()));
+                ", minInMs=" + minLatencyInMs.get() + ", maxInMs=" + (maxLatencyInMs.get()) + "\n");
         message.append(
-            "==================================================================================================");
+            "==================================================================================================\n");
         logger.info(message.toString());
       }
     }

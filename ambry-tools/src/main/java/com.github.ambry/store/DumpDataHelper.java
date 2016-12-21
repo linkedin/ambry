@@ -60,6 +60,8 @@ class DumpDataHelper {
     this._clusterMap = clusterMap;
     if (bytesPerSec > 0) {
       this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
+    } else if (bytesPerSec < 0) {
+      throw new IllegalArgumentException("BytesPerSec " + bytesPerSec + " cannot be negative ");
     }
   }
 
