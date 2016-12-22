@@ -25,6 +25,7 @@ import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -52,10 +53,16 @@ import org.slf4j.LoggerFactory;
 class DumpDataHelper {
 
   private final ClusterMap _clusterMap;
+  private Throttler throttler;
   private static final Logger logger = LoggerFactory.getLogger(DumpDataHelper.class);
 
-  DumpDataHelper(ClusterMap clusterMap) {
+  DumpDataHelper(ClusterMap clusterMap, int bytesPerSec) {
     this._clusterMap = clusterMap;
+    if (bytesPerSec > 0) {
+      this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
+    } else if (bytesPerSec < 0) {
+      throw new IllegalArgumentException("BytesPerSec " + bytesPerSec + " cannot be negative ");
+    }
   }
 
   /**
@@ -212,7 +219,7 @@ class DumpDataHelper {
    * @throws MessageFormatException
    */
   LogBlobRecordInfo readSingleRecordFromLog(RandomAccessFile randomAccessFile, long currentOffset)
-      throws IOException, MessageFormatException {
+      throws IOException, MessageFormatException, InterruptedException {
     String messageheader = null;
     BlobId blobId = null;
     String blobProperty = null;
@@ -259,6 +266,9 @@ class DumpDataHelper {
       }
     } else {
       throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
+    }
+    if (throttler != null) {
+      throttler.maybeThrottle(totalRecordSize);
     }
     return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,
         isDeleted, isExpired, timeToLiveInSeconds, totalRecordSize);

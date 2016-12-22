@@ -85,6 +85,12 @@ java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLay
 --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog --fileToRead [logFile]
 ```
 
+#### Dump log file with throttling
+```bash
+java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile]
+--partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog --fileToRead [logFile] --bytesPerSec 1000
+```
+
 #### Dump log starting at offset x and ending at offset y
 ```bash
 java -cp ambry.jar com.github.ambry.store.DumpData
@@ -189,10 +195,10 @@ rootDir
 ```
 
 
-###ConcurrentTestTool
+###ConcurrencyTestTool
 ####Sample test run
 
-Ensure that ambry server is running at the given hostName and port
+Ensure that ambry servers in the HardwareLayout are up running
 
 ```bash
 java -cp ambry.jar com.github.ambry.tools.admin.ConcurrencyTestTool --hardwareLayout [HardwareLayoutFile]

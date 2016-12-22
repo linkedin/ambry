@@ -134,7 +134,7 @@ public class ConsistencyCheckerTool {
 
   private void collectData(File[] replicas, ArrayList<String> replicasList, Map<String, BlobStatus> blobIdToStatusMap,
       AtomicLong totalKeysProcessed) throws IOException, InterruptedException {
-    DumpData dumpData = new DumpData(map);
+    DumpData dumpData = new DumpData(map, -1);
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
       try {

@@ -62,8 +62,8 @@ public class DumpData {
   private DumpDataHelper dumpDataHelper;
   private static final Logger logger = LoggerFactory.getLogger(DumpData.class);
 
-  public DumpData(ClusterMap map) {
-    dumpDataHelper = new DumpDataHelper(map);
+  public DumpData(ClusterMap map, int bytesPerSec) {
+    dumpDataHelper = new DumpDataHelper(map, bytesPerSec);
   }
 
   public static void main(String args[]) {
@@ -138,6 +138,14 @@ public class DumpData {
               .defaultsTo("false")
               .ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<Integer> bytesPerSecOpt = parser.accepts("bytesPerSec",
+          "Allowed bytes per sec for the purpose of throttling. Any value greater than 0 "
+              + "means throttling will be done at that rate. 0 disables throttling and negative will throw IllegalArgument Exception")
+          .withRequiredArg()
+          .describedAs("bytesPerSec")
+          .ofType(Integer.class)
+          .defaultsTo(0);
+
       OptionSet options = parser.parse(args);
 
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<>();
@@ -167,7 +175,8 @@ public class DumpData {
       String replicaRootDirectory = options.valueOf(replicaRootDirectoryOpt);
       boolean activeBlobsOnly = Boolean.parseBoolean(options.valueOf(activeBlobsOnlyOpt));
       boolean logBlobStats = Boolean.parseBoolean(options.valueOf(logBlobStatsOpt));
-      DumpData dumpData = new DumpData(map);
+      int bytesPerSec = options.valueOf(bytesPerSecOpt);
+      DumpData dumpData = new DumpData(map, bytesPerSec);
       long startOffset = -1;
       long endOffset = -1;
       if (startOffsetStr != null) {
