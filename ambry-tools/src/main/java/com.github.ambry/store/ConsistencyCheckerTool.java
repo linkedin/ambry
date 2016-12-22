@@ -13,9 +13,8 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
-import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.File;
 import java.io.IOException;
@@ -23,12 +22,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.atomic.AtomicLong;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
+import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,79 +34,59 @@ import org.slf4j.LoggerFactory;
  * 2) In the index file boundaries on all replicas in a partition
  */
 public class ConsistencyCheckerTool {
+  private final VerifiableProperties verifiableProperties;
+  /**
+   * File path referring to the hardware layout
+   */
+  @Config("hardware.layout.file.path")
+  private final String hardwareLayoutFilePath;
+
+  /**
+   * File path referring to the partition layout
+   */
+  @Config("partition.layout.file.path")
+  private final String partitionLayoutFilePath;
+
+  /**
+   * Path referring to root directory containing one directory per replica
+   */
+  @Config("partition.root.directory")
+  private final String partitionRootDirecotry;
+
+  /**
+   * True if acceptable inconsistent blobs should be part of the output or not
+   */
+  @Config("include.acceptable.inconsistent.blobs")
+  @Default("false")
+  private final boolean includeAcceptableInconsistentBlobs;
 
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
-  private final ClusterMap map;
-  private boolean includeAcceptableInconsistentBlobs;
 
-  public ConsistencyCheckerTool(ClusterMap map, boolean includeAcceptableInconsistentBlobs) {
-    this.map = map;
-    this.includeAcceptableInconsistentBlobs = includeAcceptableInconsistentBlobs;
+  private ConsistencyCheckerTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
+    hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
+    partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
+    partitionRootDirecotry = verifiableProperties.getString("partition.root.directory");
+    includeAcceptableInconsistentBlobs = verifiableProperties.getBoolean("include.acceptable.inconsistent.blobs");
+    if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
+      throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
+    }
+    this.verifiableProperties = verifiableProperties;
   }
+
+  ;
 
   public static void main(String args[]) {
     try {
-      OptionParser parser = new OptionParser();
-
-      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file")
-              .withRequiredArg()
-              .describedAs("hardware_layout")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file")
-              .withRequiredArg()
-              .describedAs("partition_layout")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> rootDirectoryForPartitionOpt = parser.accepts("rootDirectoryForPartition",
-          "Directory which contains all replicas for a partition which in turn will have all index files "
-              + "for the respective replica, for Operation ConsistencyCheckForIndex ")
-          .withRequiredArg()
-          .describedAs("root_directory_partition")
-          .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> includeAcceptableInconsistentBlobsOpt =
-          parser.accepts("includeAcceptableInconsistentBlobs", "To include acceptable inconsistent blobs")
-              .withRequiredArg()
-              .describedAs("Whether to output acceptable inconsistent blobs or not")
-              .defaultsTo("false")
-              .ofType(String.class);
-
-      OptionSet options = parser.parse(args);
-
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
-      listOpt.add(hardwareLayoutOpt);
-      listOpt.add(partitionLayoutOpt);
-      listOpt.add(rootDirectoryForPartitionOpt);
-
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt)) {
-          System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
-
-      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
-      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
-      String rootDirectoryForPartition = options.valueOf(rootDirectoryForPartitionOpt);
-      boolean includeAcceptableInconsistentBlobs =
-          Boolean.parseBoolean(options.valueOf(includeAcceptableInconsistentBlobsOpt));
-
-      ConsistencyCheckerTool consistencyCheckerTool =
-          new ConsistencyCheckerTool(map, includeAcceptableInconsistentBlobs);
-      consistencyCheckerTool.checkConsistency(rootDirectoryForPartition);
+      VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+      ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool(verifiableProperties);
+      consistencyCheckerTool.checkConsistency();
     } catch (Exception e) {
       System.err.println("Consistency checker exited with Exception: " + e);
     }
   }
 
-  private boolean checkConsistency(String directoryForConsistencyCheck) throws Exception {
-    File rootDir = new File(directoryForConsistencyCheck);
+  private boolean checkConsistency() throws Exception {
+    File rootDir = new File(partitionRootDirecotry);
     logger.info("Root directory for Partition" + rootDir);
     ArrayList<String> replicaList = populateReplicaList(rootDir);
     logger.trace("Replica List " + replicaList);
@@ -133,8 +108,8 @@ public class ConsistencyCheckerTool {
   }
 
   private void collectData(File[] replicas, ArrayList<String> replicasList, Map<String, BlobStatus> blobIdToStatusMap,
-      AtomicLong totalKeysProcessed) throws IOException, InterruptedException {
-    DumpIndexTool dumpIndexTool = new DumpIndexTool(map);
+      AtomicLong totalKeysProcessed) throws IOException, InterruptedException, JSONException {
+    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties);
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
       try {

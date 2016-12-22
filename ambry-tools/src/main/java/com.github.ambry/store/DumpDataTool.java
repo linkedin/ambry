@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.Config;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -34,9 +35,7 @@ import java.util.Properties;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
+import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +43,7 @@ import static com.github.ambry.store.PersistentIndex.*;
 
 
 /**
- * DumpDataTool tool to assist in dumping data from data files in Ambry
+ * Tool to assist in dumping data from data files in Ambry
  * Supported operations are
  * 1. Compare Index entries to Log entries
  * 2. Compare all entries in all indexes in a replica to Log entries
@@ -52,53 +51,81 @@ import static com.github.ambry.store.PersistentIndex.*;
  */
 public class DumpDataTool {
 
-  private DumpDataHelper dumpDataHelper;
+  private final ClusterMap clusterMap;
+  /**
+   * "The index file that needs to be dumped for comparison purposes
+   */
+  @Config("file.to.read")
+  private final String fileToRead;
+
+  /**
+   * File path referring to the hardware layout
+   */
+  @Config("hardware.layout.file.path")
+  private final String hardwareLayoutFilePath;
+
+  /**
+   * File path referring to the partition layout
+   */
+  @Config("partition.layout.file.path")
+  private final String partitionLayoutFilePath;
+
+  /**
+   * The type of operation to perform
+   */
+  @Config("type.of.operation")
+  private final String typeOfOperation;
+
+  /**
+   * Path referring to replica root directory
+   */
+  @Config("replica.root.directory")
+  private final String replicaRootDirecotry;
+
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
 
-  public DumpDataTool(ClusterMap map) {
-    dumpDataHelper = new DumpDataHelper(map);
+  private DumpDataTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
+    fileToRead = verifiableProperties.getString("file.to.read");
+    hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
+    partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
+    typeOfOperation = verifiableProperties.getString("type.of.operation");
+    replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
+    if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
+      throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
+    }
+    clusterMap = new ClusterMapManager(hardwareLayoutFilePath, partitionLayoutFilePath,
+        new ClusterMapConfig(new VerifiableProperties(new Properties())));
   }
 
   public static void main(String args[]) {
     try {
-
-      OptionParser parser = new OptionParser();
-      ArgumentAcceptingOptionSpec<String> propsFileOpt = parser.accepts("propsFile", "Properties file path")
-          .withRequiredArg()
-          .describedAs("propsFile")
-          .ofType(String.class);
-
-      OptionSet options = parser.parse(args);
-      String propsFilePath = options.valueOf(propsFileOpt);
-      Properties properties = Utils.loadProps(propsFilePath);
-      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      DumpDataConfig config = new DumpDataConfig(verifiableProperties);
-
-      if (!new File(config.hardwareLayoutFilePath).exists() || !new File(config.partitionLayoutFilePath).exists()) {
-        throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
-      }
-      ClusterMap map = new ClusterMapManager(config.hardwareLayoutFilePath, config.partitionLayoutFilePath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
-      DumpDataTool dumpDataTool = new DumpDataTool(map);
-
-      logger.info("Type of Operation " + config.typeOfOperation);
-      if (config.fileToRead != null) {
-        logger.info("File to read " + config.fileToRead);
-      }
-
-      switch (config.typeOfOperation) {
-        case "CompareIndexToLog":
-          dumpDataTool.compareIndexEntriesToLogContent(new File(config.fileToRead), false);
-          break;
-        case "CompareReplicaIndexesToLog":
-          dumpDataTool.compareReplicaIndexEntriestoLogContent(config.replicaRootDirecotry);
-          break;
-        default:
-          logger.error("Unknown typeOfOperation " + config.typeOfOperation);
-          break;
-      }
+      VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+      DumpDataTool dumpDataTool = new DumpDataTool(verifiableProperties);
+      dumpDataTool.doOperation();
     } catch (Exception e) {
       logger.error("Closed with exception ", e);
+    }
+  }
+
+  /**
+   * Executes the operation with the help of properties passed
+   * @throws IOException
+   */
+  private void doOperation() throws Exception {
+    logger.info("Type of Operation " + typeOfOperation);
+    if (fileToRead != null) {
+      logger.info("File to read " + fileToRead);
+    }
+    switch (typeOfOperation) {
+      case "CompareIndexToLog":
+        compareIndexEntriesToLogContent(new File(fileToRead), false);
+        break;
+      case "CompareReplicaIndexesToLog":
+        compareReplicaIndexEntriestoLogContent(replicaRootDirecotry);
+        break;
+      default:
+        logger.error("Unknown typeOfOperation " + typeOfOperation);
+        break;
     }
   }
 
@@ -108,7 +135,7 @@ public class DumpDataTool {
    * @param replicaRootDirectory the root directory of the replica
    * @throws Exception
    */
-  public void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory) throws Exception {
+  private void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory) throws Exception {
     logger.info("Comparing Index entries to Log ");
     File[] indexFiles = new File(replicaRootDirectory).listFiles(INDEX_FILE_FILTER);
     if (indexFiles == null) {
@@ -161,10 +188,9 @@ public class DumpDataTool {
    *                               index.
    * @throws Exception
    */
-  public void compareIndexEntriesToLogContent(File indexFile, boolean checkLogEndOffsetMatch) throws Exception {
+  private void compareIndexEntriesToLogContent(File indexFile, boolean checkLogEndOffsetMatch) throws Exception {
     logger.info("Dumping index {}", indexFile.getAbsolutePath());
-    StoreKeyFactory storeKeyFactory =
-        Utils.getObj("com.github.ambry.commons.BlobIdFactory", dumpDataHelper.getClusterMap());
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
     StoreMetrics metrics = new StoreMetrics(indexFile.getParent(), new MetricRegistry());
     IndexSegment segment =
@@ -190,8 +216,8 @@ public class DumpDataTool {
                 logger.trace("Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
                     originalOffset, value.getOffset(), startOffset);
               } else {
-                LogBlobRecordInfo logBlobRecordInfo =
-                    dumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset);
+                DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
+                    DumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset, clusterMap);
                 coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
                 logger.trace("PUT Record {} with start offset {} and end offset {} for a delete msg {} at offset {} ",
                     logBlobRecordInfo.blobId, originalOffset, (originalOffset + logBlobRecordInfo.totalRecordSize),
@@ -224,11 +250,12 @@ public class DumpDataTool {
    * @param coveredRanges a {@link Map} of startOffset to endOffset of ranges covered by records in the log
    * @throws IOException
    */
-  boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, String blobId, IndexValue indexValue,
+  private boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, String blobId, IndexValue indexValue,
       Map<Long, Long> coveredRanges) throws Exception {
     long offset = indexValue.getOffset().getOffset();
     try {
-      LogBlobRecordInfo logBlobRecordInfo = dumpDataHelper.readSingleRecordFromLog(randomAccessFile, offset);
+      DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
+          DumpDataHelper.readSingleRecordFromLog(randomAccessFile, offset, clusterMap);
       if (coveredRanges != null) {
         coveredRanges.put(offset, offset + logBlobRecordInfo.totalRecordSize);
       }
@@ -261,11 +288,12 @@ public class DumpDataTool {
    * Compares values from index to that in the Log
    * @param blobId the blobId for which comparison is made
    * @param indexValue the {@link IndexValue} to be used in comparison
-   * @param logBlobRecordInfo the {@link LogBlobRecordInfo} to be used in comparison
+   * @param logBlobRecordInfo the {@link DumpDataHelper.LogBlobRecordInfo} to be used in comparison
    */
-  private void compareIndexValueToLogEntry(String blobId, IndexValue indexValue, LogBlobRecordInfo logBlobRecordInfo) {
+  private void compareIndexValueToLogEntry(String blobId, IndexValue indexValue,
+      DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo) {
     boolean isDeleted = indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
-    boolean isExpired = dumpDataHelper.isExpired(indexValue.getExpiresAtMs());
+    boolean isExpired = DumpDataHelper.isExpired(indexValue.getExpiresAtMs());
     if (isDeleted != logBlobRecordInfo.isDeleted) {
       logger.error(
           "Deleted value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isDeleted + ", Log value "
