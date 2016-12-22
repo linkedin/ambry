@@ -16,8 +16,6 @@ package com.github.ambry.store;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.utils.SystemTime;
@@ -43,49 +41,19 @@ import org.slf4j.LoggerFactory;
 public class DumpLogTool {
   private final ClusterMap clusterMap;
   private Throttler throttler = null;
-  /**
-   * Refers to log file that needs to be dumped
-   */
-  @Config("file.to.read")
+  // Refers to log file that needs to be dumped
   private final String fileToRead;
-
-  /**
-   * File path referring to the hardware layout
-   */
-  @Config("hardware.layout.file.path")
+  // File path referring to the hardware layout
   private final String hardwareLayoutFilePath;
-
-  /**
-   * File path referring to the partition layout
-   */
-  @Config("partition.layout.file.path")
+  // File path referring to the partition layout
   private final String partitionLayoutFilePath;
-
-  /**
-   * List of blobIds (comma separated values) to filter
-   */
-  @Config("blobId.list")
+  // List of blobIds (comma separated values) to filter
   private final String blobIdList;
-
-  /**
-   * The offset in the log to start dumping from
-   */
-  @Config("log.start.offset")
-  @Default("0")
+  // The offset in the log to start dumping from
   private final long logStartOffset;
-
-  /**
-   * The offset in the log until which to dump data
-   */
-  @Config("log.end.offset")
-  @Default("-1")
+  // The offset in the log until which to dump data
   private final long logEndOffset;
-
-  /**
-   * The throttling value in bytes per sec
-   */
-  @Config("bytes.per.sec")
-  @Default("0")
+  // The throttling value in bytes per sec
   private final long bytesPerSec;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpLogTool.class);
@@ -150,7 +118,7 @@ public class DumpLogTool {
    */
   private void dumpLog(File logFile, long startOffset, long endOffset, ArrayList<String> blobs) throws IOException {
     Map<String, LogBlobStatus> blobIdToLogRecord = new HashMap<>();
-    dumpLog(logFile, startOffset, endOffset, blobs, blobIdToLogRecord, true);
+    dumpLog(logFile, startOffset, endOffset, blobs, blobIdToLogRecord);
     long totalInConsistentBlobs = 0;
     for (String blobId : blobIdToLogRecord.keySet()) {
       LogBlobStatus logBlobStatus = blobIdToLogRecord.get(blobId);
@@ -170,11 +138,10 @@ public class DumpLogTool {
    * @param blobs List of blobIds to be filtered for. {@code null} if no filtering required
    * @param blobIdToLogRecord {@link HashMap} of blobId to {@link LogBlobStatus} to hold the information about blobs
    *                                         in the log after parsing
-   * @param logRecord {@code true} if log record has to be logged, {@code false} otherwise
    * @throws IOException
    */
   private void dumpLog(File file, long startOffset, long endOffset, ArrayList<String> blobs,
-      Map<String, LogBlobStatus> blobIdToLogRecord, boolean logRecord) throws IOException {
+      Map<String, LogBlobStatus> blobIdToLogRecord) throws IOException {
     logger.info("Dumping log file " + file.getAbsolutePath());
     long currentOffset = 0;
     RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
@@ -201,39 +168,29 @@ public class DumpLogTool {
         if (!logBlobRecordInfo.isDeleted) {
           if (blobs != null) {
             if (blobs.contains(logBlobRecordInfo.blobId.getID())) {
-              if (logRecord) {
-                logger.info(logBlobRecordInfo.messageHeader + "\n " + logBlobRecordInfo.blobId + "\n"
-                    + logBlobRecordInfo.blobProperty + "\n" + logBlobRecordInfo.userMetadata + "\n"
-                    + logBlobRecordInfo.blobDataOutput);
-              }
+              logger.trace("{}\n{}\n{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+                  logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput);
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
             }
           } else {
-            if (logRecord) {
-              logger.info(logBlobRecordInfo.messageHeader + "\n " + logBlobRecordInfo.blobId + "\n"
-                  + logBlobRecordInfo.blobProperty + "\n" + logBlobRecordInfo.userMetadata + "\n"
-                  + logBlobRecordInfo.blobDataOutput + " end offset " + (currentOffset
-                  + logBlobRecordInfo.totalRecordSize));
-              updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
-                  !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
-            }
+            logger.info("{}\n{}\n{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+                logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput,
+                (currentOffset + logBlobRecordInfo.totalRecordSize));
+            updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
+                !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
           }
         } else {
           if (blobs != null) {
             if (blobs.contains(logBlobRecordInfo.blobId.getID())) {
-              if (logRecord) {
-                logger.info(logBlobRecordInfo.messageHeader + "\n " + logBlobRecordInfo.blobId + "\n"
-                    + logBlobRecordInfo.deleteMsg);
-              }
+              logger.trace("{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+                  logBlobRecordInfo.deleteMsg);
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
             }
           } else {
-            if (logRecord) {
-              logger.info(logBlobRecordInfo.messageHeader + "\n " + logBlobRecordInfo.blobId + "\n"
-                  + logBlobRecordInfo.deleteMsg + " end offset " + (currentOffset + logBlobRecordInfo.totalRecordSize));
-            }
+            logger.trace("{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+                logBlobRecordInfo.deleteMsg, (currentOffset + logBlobRecordInfo.totalRecordSize));
             updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                 !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
           }
@@ -254,13 +211,11 @@ public class DumpLogTool {
         currentOffset++;
         lastBlobFailed = true;
       } catch (EOFException e) {
-        e.printStackTrace();
         logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + ", Cause :" + e.getCause()
             + ", Msg :" + e.getMessage() + ", stacktrace ", e);
         throw (e);
       } catch (Exception e) {
         if (!lastBlobFailed) {
-          e.printStackTrace();
           logger.error(
               "Unknown exception thrown with Cause " + e.getCause() + ", Msg :" + e.getMessage() + ", stacktrace ", e);
           logger.info("Trying out next offset " + (currentOffset + 1));

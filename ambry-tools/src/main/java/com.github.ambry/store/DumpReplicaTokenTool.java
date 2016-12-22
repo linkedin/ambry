@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.Config;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -36,22 +35,11 @@ import org.slf4j.LoggerFactory;
 public class DumpReplicaTokenTool {
 
   private final ClusterMap clusterMap;
-  /**
-   * Refers to replicatoken file that needs to be dumped
-   */
-  @Config("file.to.read")
+  // Refers to replicatoken file that needs to be dumped
   public final String fileToRead;
-
-  /**
-   * File path referring to the hardware layout
-   */
-  @Config("hardware.layout.file.path")
+  // File path referring to the hardware layout
   public final String hardwareLayoutFilePath;
-
-  /**
-   * File path referring to the partition layout
-   */
-  @Config("partition.layout.file.path")
+  // File path referring to the partition layout
   public final String partitionLayoutFilePath;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);

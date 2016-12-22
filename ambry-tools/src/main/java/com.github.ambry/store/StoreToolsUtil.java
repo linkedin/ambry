@@ -25,7 +25,7 @@ import joptsimple.OptionSet;
 /**
  * Common utilities used by many store tools
  */
-public class StoreToolsUtil {
+class StoreToolsUtil {
 
   /**
    * Fetches the properties from Property file and generates the {@link VerifiableProperties}

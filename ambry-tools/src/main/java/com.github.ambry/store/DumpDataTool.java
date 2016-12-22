@@ -50,11 +50,8 @@ import static com.github.ambry.store.PersistentIndex.*;
  * 3. Compare Log entries to index entries
  */
 public class DumpDataTool {
-
   private final ClusterMap clusterMap;
-  /**
-   * "The index file that needs to be dumped for comparison purposes
-   */
+  // The index file that needs to be dumped for comparison purposes
   @Config("file.to.read")
   private final String fileToRead;
 

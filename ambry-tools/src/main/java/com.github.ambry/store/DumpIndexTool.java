@@ -17,8 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
@@ -47,63 +45,24 @@ import org.slf4j.LoggerFactory;
  * 5. Dump N random blobs for a replica
  */
 public class DumpIndexTool {
-
   private final ClusterMap clusterMap;
-  /**
-   * "The file that needs to be dumped. Index file incase of "DumpIndexTool", "CompareIndexToLog",
-   * log file incase of "DumpLogTool" and replicatoken file in case of "DumpReplicatoken"
-   */
-  @Config("file.to.read")
+  // The index file that needs to be dumped
   private final String fileToRead;
-  /**
-   * File path referring to the hardware layout
-   */
-  @Config("hardware.layout.file.path")
+  // File path referring to the hardware layout
   private final String hardwareLayoutFilePath;
-
-  /**
-   * File path referring to the partition layout
-   */
-  @Config("partition.layout.file.path")
+  // File path referring to the partition layout
   private final String partitionLayoutFilePath;
-
-  /**
-   * The type of operation to perform
-   */
-  @Config("type.of.operation")
+  // The type of operation to perform
   private final String typeOfOperation;
-
-  /**
-   * List of blobIds (comma separated values) to filter
-   */
-  @Config("blobId.list")
+  // List of blobIds (comma separated values) to filter
   private final String blobIdList;
-
-  /**
-   * Path referring to replica root directory
-   */
-  @Config("replica.root.directory")
+  // Path referring to replica root directory
   private final String replicaRootDirecotry;
-
-  /**
-   * Count of active blobs
-   */
-  @Config("active.blobs.count")
-  @Default("-1")
+  // Count of active blobs
   private final long activeBlobsCount;
-
-  /**
-   * True if active blobs onlhy needs to be dumped, false otherwise
-   */
-  @Config("active.blobs.only")
-  @Default("false")
+  // True if active blobs onlhy needs to be dumped, false otherwise
   private final boolean activeBlobsOnly;
-
-  /**
-   * True if blob stats needs to be logged, false otherwise
-   */
-  @Config("log.blob.stats")
-  @Default("false")
+  // True if blob stats needs to be logged, false otherwise
   private final boolean logBlobStats;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
