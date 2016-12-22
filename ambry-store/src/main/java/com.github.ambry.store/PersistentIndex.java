@@ -593,6 +593,8 @@ class PersistentIndex {
         if (storeToken.get().getType().equals(StoreFindToken.Type.Uninitialized)) {
           offsetToStart = log.getStartOffset();
           tokenReset = true;
+        } else if (!tokenReset) { // journal based and token wasn't reset
+          tokenReset = ((StoreFindToken) token).getInclusive() == 1 ? true : false;
         }
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
         // check journal
@@ -648,8 +650,10 @@ class PersistentIndex {
                 (time.milliseconds() - startTimeInMs));
           } else {
             newToken = storeToken.get();
+            if (tokenReset) {
+              newToken.setInclusive();
+            }
           }
-
           startTimeInMs = time.milliseconds();
           eliminateDuplicates(messageEntries);
           logger.trace("Journal based to segment based token, Time used to eliminate duplicates: {}",

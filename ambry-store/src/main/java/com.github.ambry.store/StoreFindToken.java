@@ -50,21 +50,40 @@ public class StoreFindToken implements FindToken {
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final int UNINITIALIZED_OFFSET = -1;
 
-  private final Type type;
-  private final Offset offset;
-  private final StoreKey storeKey;
-  private final UUID sessionId;
-  private final UUID incarnationId;
-  private long bytesRead;
+  private final Type type; // refers to the type of the token
+  private final Offset offset; // refers to the offset in the log. Could be either of Journal or Index based token
+  private final StoreKey storeKey; // refers to the store key incase of Index based token
+  private byte inclusive = 0; // incase of journal based token, represents if the blob at the offset(of the token)
+  // is inclusive or not
+  private final UUID sessionId; // refers to the sessionId of the store. On every restart a new sessionId is created
+  private final UUID incarnationId; // refers to the incarnationId of the store. On every re-creation of the store,
+  // a new incarnationId is created
+  private long bytesRead; // refers to the bytes read so far (from the beginning of the log)
 
+  /**
+   * Uninitialized token. Refers to the starting of the log.
+   */
   StoreFindToken() {
     this(Type.Uninitialized, null, null, null, null);
   }
 
+  /**
+   * Index based token. Refers to an index start offset and a store key expected to belong to that index segment.
+   * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence.
+   * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
+   * @param sessionId the sessionId of the store
+   * @param incarnationId the incarnationId of the store
+   */
   StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId) {
     this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId);
   }
 
+  /**
+   * Journal based token. Refers to an offset in the journal
+   * @param offset the offset that this token refers to in the journal
+   * @param sessionId the sessionId of the store
+   * @param incarnationId the incarnationId of the store
+   */
   StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId) {
     this(Type.JournalBased, offset, null, sessionId, incarnationId);
   }
@@ -88,6 +107,10 @@ public class StoreFindToken implements FindToken {
 
   void setBytesRead(long bytesRead) {
     this.bytesRead = bytesRead;
+  }
+
+  void setInclusive() {
+    this.inclusive = 1;
   }
 
   static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory) throws IOException {
@@ -159,7 +182,11 @@ public class StoreFindToken implements FindToken {
             sessionId = Utils.readIntString(stream);
             sessionIdUUID = UUID.fromString(sessionId);
             Offset logOffset = Offset.fromBytes(stream);
+            byte inclusive = stream.readByte();
             storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID);
+            if (inclusive == 1) {
+              storeFindToken.setInclusive();
+            }
             break;
           case IndexBased:
             // read incarnationId
@@ -194,12 +221,16 @@ public class StoreFindToken implements FindToken {
     return offset;
   }
 
-  public UUID getSessionId() {
+  UUID getSessionId() {
     return sessionId;
   }
 
-  public UUID getIncarnationId() {
+  UUID getIncarnationId() {
     return incarnationId;
+  }
+
+  byte getInclusive() {
+    return inclusive;
   }
 
   @Override
@@ -221,7 +252,8 @@ public class StoreFindToken implements FindToken {
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
     bufWrap.putShort(VERSION_1);
-    // TODO: when switching to VERSION_2, write in this order: type, incarnationId, sessionId, offset and storeKey
+    // TODO: when switching to VERSION_2, write in this order: type, incarnationId, sessionId, offset, storeKey and
+    // inclusive
     // add sessionId
     bufWrap.putInt(sessionIdBytes.length);
     bufWrap.put(sessionIdBytes);
@@ -229,6 +261,7 @@ public class StoreFindToken implements FindToken {
     bufWrap.putShort((short) type.ordinal());
     // add offset
     bufWrap.put(offsetBytes);
+    // add inclusive when switching to VERSION_2 only for Journal based token
     // add StoreKey
     bufWrap.put(storeKeyBytes);
     return buf;
@@ -271,6 +304,9 @@ public class StoreFindToken implements FindToken {
     if (offset != null ? !offset.equals(that.offset) : that.offset != null) {
       return false;
     }
+    if (inclusive != that.inclusive) {
+      return false;
+    }
     return storeKey != null ? storeKey.equals(that.storeKey) : that.storeKey == null;
   }
 
@@ -278,6 +314,7 @@ public class StoreFindToken implements FindToken {
   public int hashCode() {
     int result = type.hashCode();
     result = 31 * result + (offset != null ? offset.hashCode() : 0);
+    result = 31 * result + inclusive;
     result = 31 * result + (storeKey != null ? storeKey.hashCode() : 0);
     return result;
   }

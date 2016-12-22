@@ -49,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import junit.framework.Assert;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -706,6 +707,7 @@ public class IndexTest {
     // it will be the current log end offset = firstRecordFileSpan.getEndOffset()).
     StoreFindToken expectedEndToken = new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId);
     expectedEndToken.setBytesRead(bytesRead);
+    expectedEndToken.setInclusive();
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.EMPTY_SET, expectedEndToken);
 
     // create a token that is not past the index end offset on startup after recovery. Should work as expected
@@ -725,12 +727,66 @@ public class IndexTest {
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
 
     // create a token that is not past the index end offset on startup after recovery, but with old incarnationId.
-    // again the token should be reset internally,all keys should be returned and the returned token should be correct
+    // again the token should be reset internally, all keys should be returned and the returned token should be correct
     // (offset in it will be the starting offset of last entry which is firstRecordFileSpan.getStartOffset())
     startToken = new StoreFindToken(lastRecordOffset, oldSessionId, oldIncarnationId);
     expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
+
+    // test cases where no new puts/deletes have gone in after restart.
+    // after restart, replica 1(assuming no new puts have gone in) will return a journal based token referring to
+    // logEndOffsetOnStartUp to replica2.
+    // But on the subsequent findEntriesSince() call, this token is considered to be non-inclusive and hence
+    // replica1 will start returning entries from the next blob which resides after logEndOffSetOnStartup.
+    // In other words, one blob will be missed out in findEntriesSince()
+    recovery = new MessageStoreRecovery() {
+      @Override
+      public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+          throws IOException {
+        return Collections.emptyList();
+      }
+    };
+    reloadIndex(true);
+    lastRecordOffset = index.journal.getLastOffset();
+    bytesRead = log.getDifference(firstRecordFileSpan.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    // create a token that will be past the index end offset on start up after restart.
+    startToken = new StoreFindToken(
+        new Offset(log.getEndOffset().getName(), (lastRecordOffset.getOffset() + 2 * PUT_RECORD_SIZE)), oldSessionId,
+        incarnationId);
+    // end token should point to offset of last entry i.e. firstRecordFileSpan.getEndOffset()
+    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId);
+    expectedEndToken.setBytesRead(bytesRead);
+    expectedEndToken.setInclusive();
+    // Fetch the FindToken returned from findEntriesSince
+    FindInfo findInfo = index.findEntriesSince(startToken, Long.MAX_VALUE);
+    Assert.assertEquals("EndToken mismatch ", expectedEndToken, findInfo.getFindToken());
+    Assert.assertEquals("No entries should have been returned ", 0, findInfo.getMessageEntries().size());
+
+    // add 2 new entries to the log
+    Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
+    appendToLog(PUT_RECORD_SIZE);
+    FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, PUT_RECORD_SIZE);
+    IndexValue value = new IndexValue(PUT_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
+    MockId id = getUniqueId();
+    index.addToIndex(new IndexEntry(id, value), fileSpan);
+    allKeys.put(id, new Pair<>(value, null));
+    endOffsetOfPrevMsg = fileSpan.getEndOffset();
+    appendToLog(PUT_RECORD_SIZE);
+
+    FileSpan fileSpan2 = log.getFileSpanForMessage(endOffsetOfPrevMsg, PUT_RECORD_SIZE);
+    IndexValue value2 = new IndexValue(PUT_RECORD_SIZE, fileSpan2.getStartOffset(), Utils.Infinite_Time);
+    MockId id2 = getUniqueId();
+    index.addToIndex(new IndexEntry(id2, value2), fileSpan2);
+    allKeys.put(id2, new Pair<>(value2, null));
+
+    Set<MockId> expectedEntries = new HashSet<>();
+    expectedEntries.add(id);
+    expectedEntries.add(id2);
+    bytesRead = log.getDifference(fileSpan2.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    expectedEndToken = new StoreFindToken(fileSpan2.getStartOffset(), sessionId, incarnationId);
+    expectedEndToken.setBytesRead(bytesRead);
+    doFindEntriesSinceTest((StoreFindToken) findInfo.getFindToken(), Long.MAX_VALUE, expectedEntries, expectedEndToken);
   }
 
   /**

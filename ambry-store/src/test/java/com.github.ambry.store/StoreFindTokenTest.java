@@ -79,6 +79,10 @@ public class StoreFindTokenTest {
     StoreFindToken otherIndexToken = new StoreFindToken(key, offset, sessionId, null);
     StoreFindToken journalToken = new StoreFindToken(offset, sessionId, null);
     StoreFindToken otherJournalToken = new StoreFindToken(offset, sessionId, null);
+    StoreFindToken inclusiveJournalToken = new StoreFindToken(offset, sessionId, null);
+    inclusiveJournalToken.setInclusive();
+    StoreFindToken otherInclusiveJournalToken = new StoreFindToken(offset, sessionId, null);
+    otherInclusiveJournalToken.setInclusive();
 
     // equality
     compareTokens(initToken, initToken);
@@ -87,6 +91,7 @@ public class StoreFindTokenTest {
     compareTokens(indexToken, otherIndexToken);
     compareTokens(journalToken, journalToken);
     compareTokens(journalToken, otherJournalToken);
+    compareTokens(inclusiveJournalToken, otherInclusiveJournalToken);
 
     // equality even if session IDs are different
     compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, null));
@@ -100,10 +105,13 @@ public class StoreFindTokenTest {
     List<Pair<StoreFindToken, StoreFindToken>> unequalPairs = new ArrayList<>();
     unequalPairs.add(new Pair<>(initToken, indexToken));
     unequalPairs.add(new Pair<>(initToken, journalToken));
+    unequalPairs.add(new Pair<>(initToken, inclusiveJournalToken));
     unequalPairs.add(new Pair<>(indexToken, journalToken));
+    unequalPairs.add(new Pair<>(indexToken, inclusiveJournalToken));
     unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(key, otherOffset, sessionId, null)));
     unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(otherKey, offset, sessionId, null)));
     unequalPairs.add(new Pair<>(journalToken, new StoreFindToken(otherOffset, sessionId, null)));
+    unequalPairs.add(new Pair<>(inclusiveJournalToken, journalToken));
 
     for (Pair<StoreFindToken, StoreFindToken> unequalPair : unequalPairs) {
       StoreFindToken first = unequalPair.getFirst();
