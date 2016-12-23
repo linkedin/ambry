@@ -13,13 +13,11 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.utils.UtilsTest;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
 import java.util.UUID;
 import junit.framework.Assert;
 import org.junit.Test;

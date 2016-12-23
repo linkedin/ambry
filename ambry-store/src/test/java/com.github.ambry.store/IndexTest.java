@@ -647,7 +647,7 @@ public class IndexTest {
     addDeleteEntry(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
 
     // token with log end offset should not return anything
-    StoreFindToken token = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId);
+    StoreFindToken token = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, false);
     token.setBytesRead(log.getUsedCapacity());
     doFindEntriesSinceTest(token, Long.MAX_VALUE, Collections.EMPTY_SET, token);
 
@@ -681,7 +681,7 @@ public class IndexTest {
 
     // if there is no bad shutdown but the store token is past the index end offset, it is an error state
     StoreFindToken startToken =
-        new StoreFindToken(secondRecordFileSpan.getStartOffset(), new UUID(1, 1), incarnationId);
+        new StoreFindToken(secondRecordFileSpan.getStartOffset(), new UUID(1, 1), incarnationId, false);
     doFindEntriesSinceFailureTest(startToken, StoreErrorCodes.Unknown_Error);
 
     UUID oldSessionId = sessionId;
@@ -702,44 +702,43 @@ public class IndexTest {
     long bytesRead =
         log.getDifference(firstRecordFileSpan.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
     // create a token that will be past the index end offset on startup after recovery.
-    startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, incarnationId);
+    startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, incarnationId, false);
     // token should get reset internally, no keys should be returned and the returned token should be correct (offset in
     // it will be the current log end offset = firstRecordFileSpan.getEndOffset()).
-    StoreFindToken expectedEndToken = new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId);
+    StoreFindToken expectedEndToken =
+        new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId, true);
     expectedEndToken.setBytesRead(bytesRead);
-    expectedEndToken.setInclusive();
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.EMPTY_SET, expectedEndToken);
 
     // create a token that is not past the index end offset on startup after recovery. Should work as expected
-    startToken = new StoreFindToken(lastRecordOffset, oldSessionId, incarnationId);
-    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId);
+    startToken = new StoreFindToken(lastRecordOffset, oldSessionId, incarnationId, false);
+    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.singleton(newId), expectedEndToken);
 
     // same test as above, but with old incarnationId
     bytesRead = log.getDifference(firstRecordFileSpan.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
     // create a token that will be past the index end offset on startup after recovery with old incarnationId
-    startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, oldIncarnationId);
+    startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, oldIncarnationId, false);
     // token should get reset internally, returning all the keys and the returned token should be correct (offset in
     // it will be the starting offset of last entry which is firstRecordFileSpan.getStartOffset())
-    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId);
+    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
 
     // create a token that is not past the index end offset on startup after recovery, but with old incarnationId.
     // again the token should be reset internally, all keys should be returned and the returned token should be correct
     // (offset in it will be the starting offset of last entry which is firstRecordFileSpan.getStartOffset())
-    startToken = new StoreFindToken(lastRecordOffset, oldSessionId, oldIncarnationId);
-    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId);
+    startToken = new StoreFindToken(lastRecordOffset, oldSessionId, oldIncarnationId, false);
+    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
 
     // test cases where no new puts/deletes have gone in after restart.
     // after restart, replica 1(assuming no new puts have gone in) will return a journal based token referring to
     // logEndOffsetOnStartUp to replica2.
-    // But on the subsequent findEntriesSince() call, this token is considered to be non-inclusive and hence
-    // replica1 will start returning entries from the next blob which resides after logEndOffSetOnStartup.
-    // In other words, one blob will be missed out in findEntriesSince()
+    // On the subsequent findEntriesSince() call, the index should start returning entries starting from that offset
+    // and should not consider it as non-inclusive offset
     recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -753,11 +752,10 @@ public class IndexTest {
     // create a token that will be past the index end offset on start up after restart.
     startToken = new StoreFindToken(
         new Offset(log.getEndOffset().getName(), (lastRecordOffset.getOffset() + 2 * PUT_RECORD_SIZE)), oldSessionId,
-        incarnationId);
+        incarnationId, false);
     // end token should point to offset of last entry i.e. firstRecordFileSpan.getEndOffset()
-    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId);
+    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId, true);
     expectedEndToken.setBytesRead(bytesRead);
-    expectedEndToken.setInclusive();
     // Fetch the FindToken returned from findEntriesSince
     FindInfo findInfo = index.findEntriesSince(startToken, Long.MAX_VALUE);
     Assert.assertEquals("EndToken mismatch ", expectedEndToken, findInfo.getFindToken());
@@ -784,7 +782,7 @@ public class IndexTest {
     expectedEntries.add(id);
     expectedEntries.add(id2);
     bytesRead = log.getDifference(fileSpan2.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
-    expectedEndToken = new StoreFindToken(fileSpan2.getStartOffset(), sessionId, incarnationId);
+    expectedEndToken = new StoreFindToken(fileSpan2.getStartOffset(), sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest((StoreFindToken) findInfo.getFindToken(), Long.MAX_VALUE, expectedEntries, expectedEndToken);
   }
@@ -810,7 +808,7 @@ public class IndexTest {
     addDeleteEntry(idToDelete);
 
     // token with log end offset should not return anything
-    StoreFindToken token = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId);
+    StoreFindToken token = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, false);
     doFindDeletedEntriesSinceTest(token, Long.MAX_VALUE, Collections.EMPTY_SET, token);
 
     findDeletedEntriesSinceToIndexBasedTest();
@@ -1584,7 +1582,7 @@ public class IndexTest {
     // ------------------
     // 3. Journal -> Index
     // create a journal based token for an offset that isn't in the journal
-    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId);
+    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId, false);
     doFindEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
   }
 
@@ -1598,7 +1596,7 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceToJournalBasedTest() throws StoreException {
-    StoreFindToken absoluteEndToken = new StoreFindToken(logOrder.lastKey(), sessionId, incarnationId);
+    StoreFindToken absoluteEndToken = new StoreFindToken(logOrder.lastKey(), sessionId, incarnationId, false);
     absoluteEndToken.setBytesRead(log.getUsedCapacity());
 
     // ------------------
@@ -1621,11 +1619,11 @@ public class IndexTest {
     // ------------------
     // 3. Journal -> Journal
     // a. Token no longer in journal
-    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId);
+    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId, false);
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), absoluteEndToken);
 
     // b. Token still in journal
-    startToken = new StoreFindToken(index.journal.getFirstOffset(), sessionId, incarnationId);
+    startToken = new StoreFindToken(index.journal.getFirstOffset(), sessionId, incarnationId, false);
     expectedKeys = new HashSet<>();
     for (Map.Entry<Offset, Pair<MockId, IndexValue>> entry : logOrder.tailMap(startToken.getOffset(), false)
         .entrySet()) {
@@ -1673,7 +1671,7 @@ public class IndexTest {
       Pair<IndexValue, IndexValue> putDelete = allKeys.get(id);
       // size returned is the size of the delete if the key has been deleted.
       long size = putDelete.getSecond() != null ? putDelete.getSecond().getSize() : putDelete.getFirst().getSize();
-      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, sessionId, incarnationId);
+      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, sessionId, incarnationId, false);
       Offset endOffset = log.getFileSpanForMessage(startOffset, size).getEndOffset();
       expectedEndToken.setBytesRead(log.getDifference(endOffset, logAbsoluteZero));
       doFindEntriesSinceTest(startToken, size, Collections.singleton(id), expectedEndToken);
@@ -1708,7 +1706,7 @@ public class IndexTest {
     maxSize += size;
 
     Offset endOffset = log.getFileSpanForMessage(nextIndexSegmentStartOffset, size).getEndOffset();
-    StoreFindToken expectedEndToken = new StoreFindToken(nextIndexSegmentStartOffset, sessionId, incarnationId);
+    StoreFindToken expectedEndToken = new StoreFindToken(nextIndexSegmentStartOffset, sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(log.getDifference(endOffset, new Offset(log.getFirstSegment().getName(), 0)));
     doFindEntriesSinceTest(startToken, maxSize, expectedKeys, expectedEndToken);
   }
@@ -1840,7 +1838,7 @@ public class IndexTest {
     // ------------------
     // 3. Journal -> Index
     // create a journal based token for an offset that isn't in the journal
-    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId);
+    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId, false);
     doFindDeletedEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
   }
 
@@ -1854,7 +1852,7 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findDeletedEntriesSinceToJournalBasedTest() throws StoreException {
-    StoreFindToken absoluteEndToken = new StoreFindToken(logOrder.lastKey(), sessionId, incarnationId);
+    StoreFindToken absoluteEndToken = new StoreFindToken(logOrder.lastKey(), sessionId, incarnationId, false);
 
     // ------------------
     // 1. Uninitialized -> Journal
@@ -1874,11 +1872,12 @@ public class IndexTest {
     // ------------------
     // 3. Journal -> Journal
     // a. Token no longer in journal
-    startToken = new StoreFindToken(allKeys.get(firstDeletedKey).getSecond().getOffset(), sessionId, incarnationId);
+    startToken =
+        new StoreFindToken(allKeys.get(firstDeletedKey).getSecond().getOffset(), sessionId, incarnationId, false);
     doFindDeletedEntriesSinceTest(startToken, Long.MAX_VALUE, deletedKeys, absoluteEndToken);
 
     // b. Token still in journal
-    startToken = new StoreFindToken(index.journal.getFirstOffset(), sessionId, incarnationId);
+    startToken = new StoreFindToken(index.journal.getFirstOffset(), sessionId, incarnationId, false);
     expectedKeys.clear();
     for (Map.Entry<Offset, Pair<MockId, IndexValue>> entry : logOrder.tailMap(startToken.getOffset(), false)
         .entrySet()) {
@@ -1929,7 +1928,7 @@ public class IndexTest {
       boolean isDeleted = putDelete.getSecond() != null;
       // size returned is the size of the delete if the key has been deleted.
       long size = isDeleted ? putDelete.getSecond().getSize() : putDelete.getFirst().getSize();
-      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, sessionId, incarnationId);
+      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, sessionId, incarnationId, false);
       doFindDeletedEntriesSinceTest(startToken, size, isDeleted ? Collections.singleton(id) : Collections.EMPTY_SET,
           expectedEndToken);
       startToken = expectedEndToken;
@@ -1966,7 +1965,7 @@ public class IndexTest {
     }
     maxSize += size;
 
-    StoreFindToken expectedEndToken = new StoreFindToken(nextIndexSegmentStartOffset, sessionId, incarnationId);
+    StoreFindToken expectedEndToken = new StoreFindToken(nextIndexSegmentStartOffset, sessionId, incarnationId, false);
     doFindDeletedEntriesSinceTest(startToken, maxSize, expectedKeys, expectedEndToken);
   }
 

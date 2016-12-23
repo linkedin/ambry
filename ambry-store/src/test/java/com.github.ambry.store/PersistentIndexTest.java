@@ -1651,7 +1651,7 @@ public class PersistentIndexTest {
           new MockJournal(tempDirStr, 2 * config.storeIndexMaxNumberOfInmemElements,
               config.storeMaxNumberOfEntriesToReturnFromJournal), newIncarnationId);
 
-      token = new StoreFindToken(toOffset(300), new UUID(0, 0), newIncarnationId);
+      token = new StoreFindToken(toOffset(300), new UUID(0, 0), newIncarnationId, false);
       // info pointing to offset 300 with new incarnationId
       info = index.findEntriesSince(token, 300);
       mEntries = info.getMessageEntries();
@@ -1661,7 +1661,8 @@ public class PersistentIndexTest {
       Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId4);
 
       // with old incarnation Id
-      StoreFindToken tokenWithDiffIncarnationId = new StoreFindToken(toOffset(300), new UUID(0, 0), incarnationId);
+      StoreFindToken tokenWithDiffIncarnationId =
+          new StoreFindToken(toOffset(300), new UUID(0, 0), incarnationId, false);
       FindInfo infowithDiffIncarnationId = index.findEntriesSince(tokenWithDiffIncarnationId, 300);
       Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
           ((StoreFindToken) (info.getFindToken())).getIncarnationId());

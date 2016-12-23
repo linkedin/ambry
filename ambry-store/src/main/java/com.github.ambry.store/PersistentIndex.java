@@ -36,7 +36,6 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -582,23 +581,19 @@ class PersistentIndex {
     long startTimeInMs = time.milliseconds();
     try {
       Offset logEndOffsetBeforeFind = log.getEndOffset();
-      AtomicReference<StoreFindToken> storeToken = new AtomicReference<>((StoreFindToken) token);
-      boolean tokenReset = resetTokenIfRequired(storeToken);
+      StoreFindToken storeToken = resetTokenIfRequired((StoreFindToken) token);
       logger.trace("Time used to validate token: {}", (time.milliseconds() - startTimeInMs));
 
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
-      if (!storeToken.get().getType().equals(StoreFindToken.Type.IndexBased)) {
+      if (!storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
         startTimeInMs = time.milliseconds();
-        Offset offsetToStart = storeToken.get().getOffset();
-        if (storeToken.get().getType().equals(StoreFindToken.Type.Uninitialized)) {
+        Offset offsetToStart = storeToken.getOffset();
+        if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
           offsetToStart = log.getStartOffset();
-          tokenReset = true;
-        } else if (!tokenReset) { // journal based and token wasn't reset
-          tokenReset = ((StoreFindToken) token).getInclusive() == 1 ? true : false;
         }
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
         // check journal
-        List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, tokenReset);
+        List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, storeToken.getInclusive());
         logger.trace("Journal based token, Time used to get entries: {}", (time.milliseconds() - startTimeInMs));
 
         if (entries != null) {
@@ -628,7 +623,7 @@ class PersistentIndex {
           logger.trace("Journal based token, Time used to eliminate duplicates: {}",
               (time.milliseconds() - startTimeInMs));
 
-          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId);
+          StoreFindToken storeFindToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false);
           long bytesRead = getTotalBytesRead(storeFindToken, messageEntries, logEndOffsetBeforeFind);
           storeFindToken.setBytesRead(bytesRead);
           return new FindInfo(messageEntries, storeFindToken);
@@ -649,10 +644,7 @@ class PersistentIndex {
             logger.trace("Journal based to segment based token, Time used to update delete state: {}",
                 (time.milliseconds() - startTimeInMs));
           } else {
-            newToken = storeToken.get();
-            if (tokenReset) {
-              newToken.setInclusive();
-            }
+            newToken = storeToken;
           }
           startTimeInMs = time.milliseconds();
           eliminateDuplicates(messageEntries);
@@ -668,8 +660,8 @@ class PersistentIndex {
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
         StoreFindToken newToken =
-            findEntriesFromSegmentStartOffset(storeToken.get().getOffset(), storeToken.get().getStoreKey(),
-                messageEntries, new FindEntriesCondition(maxTotalSizeOfEntries));
+            findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
+                new FindEntriesCondition(maxTotalSizeOfEntries));
         logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
 
         startTimeInMs = time.milliseconds();
@@ -696,12 +688,10 @@ class PersistentIndex {
 
   /**
    * Validate the {@link StoreFindToken} and reset if required
-   * @param storeFindTokenAtomicReference the atomic reference to the {@link StoreFindToken}
+   * @param storeToken the atomic reference to the {@link StoreFindToken}
    * @return {@code true} is {@link StoreFindToken} was reset, {@code false} otherwise
    */
-  private boolean resetTokenIfRequired(AtomicReference<StoreFindToken> storeFindTokenAtomicReference) {
-    boolean tokenReset = false;
-    StoreFindToken storeToken = storeFindTokenAtomicReference.get();
+  private StoreFindToken resetTokenIfRequired(StoreFindToken storeToken) {
     UUID remoteIncarnationId = storeToken.getIncarnationId();
     // if incarnationId is null, for backwards compatability purposes, the token is considered as good.
     /// if not null, we check for a match
@@ -710,8 +700,7 @@ class PersistentIndex {
       // incarnationId mismatch, hence resetting the token to beginning
       logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
           + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
-      storeFindTokenAtomicReference.set(new StoreFindToken());
-      tokenReset = true;
+      storeToken = new StoreFindToken();
     }
     // validate token
     else if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
@@ -723,8 +712,7 @@ class PersistentIndex {
             && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
           logger.info("Index : " + dataDir + " resetting offset after not clean shutdown " + logEndOffsetOnStartup
               + " before offset " + storeToken.getOffset());
-          storeFindTokenAtomicReference.set(new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId));
-          tokenReset = true;
+          storeToken = new StoreFindToken(logEndOffsetOnStartup, sessionId, incarnationId, true);
         }
       } else if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized)
           && storeToken.getOffset().compareTo(logEndOffsetOnStartup) > 0) {
@@ -735,7 +723,7 @@ class PersistentIndex {
             "Invalid token. Provided offset is outside the log range after clean shutdown");
       }
     }
-    return tokenReset;
+    return storeToken;
   }
 
   private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,
@@ -853,7 +841,7 @@ class PersistentIndex {
       }
     }
     if (newTokenOffsetInJournal != null) {
-      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId);
+      return new StoreFindToken(newTokenOffsetInJournal, sessionId, incarnationId, false);
     } else if (messageEntries.size() == 0 && !findEntriesCondition.hasEndTime()) {
       // If the condition does not have an endtime, then since we have entered a segment, we should return at least one
       // message
@@ -1031,7 +1019,7 @@ class PersistentIndex {
               break;
             }
           }
-          newToken = new StoreFindToken(offsetEnd, sessionId, incarnationId);
+          newToken = new StoreFindToken(offsetEnd, sessionId, incarnationId, false);
         } else {
           // Case 3: offset based, but offset out of journal
           Map.Entry<Offset, IndexSegment> entry = indexes.floorEntry(offsetToStart);

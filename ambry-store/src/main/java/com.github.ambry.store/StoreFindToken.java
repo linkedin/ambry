@@ -53,7 +53,7 @@ public class StoreFindToken implements FindToken {
   private final Type type; // refers to the type of the token
   private final Offset offset; // refers to the offset in the log. Could be either of Journal or Index based token
   private final StoreKey storeKey; // refers to the store key incase of Index based token
-  private byte inclusive = 0; // incase of journal based token, represents if the blob at the offset(of the token)
+  private final byte inclusive; // incase of journal based token, represents if the blob at the offset(of the token)
   // is inclusive or not
   private final UUID sessionId; // refers to the sessionId of the store. On every restart a new sessionId is created
   private final UUID incarnationId; // refers to the incarnationId of the store. On every re-creation of the store,
@@ -64,7 +64,7 @@ public class StoreFindToken implements FindToken {
    * Uninitialized token. Refers to the starting of the log.
    */
   StoreFindToken() {
-    this(Type.Uninitialized, null, null, null, null);
+    this(Type.Uninitialized, null, null, null, null, true);
   }
 
   /**
@@ -75,7 +75,7 @@ public class StoreFindToken implements FindToken {
    * @param incarnationId the incarnationId of the store
    */
   StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId) {
-    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId);
+    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false);
   }
 
   /**
@@ -83,12 +83,15 @@ public class StoreFindToken implements FindToken {
    * @param offset the offset that this token refers to in the journal
    * @param sessionId the sessionId of the store
    * @param incarnationId the incarnationId of the store
+   * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
+   *                  {@code false} otherwise
    */
-  StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId) {
-    this(Type.JournalBased, offset, null, sessionId, incarnationId);
+  StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive) {
+    this(Type.JournalBased, offset, null, sessionId, incarnationId, inclusive);
   }
 
-  private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId) {
+  private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId,
+      boolean inclusive) {
     if (!type.equals(Type.Uninitialized)) {
       if (offset == null || sessionId == null) {
         //TODO: check if incarnationId is not null once we start writing incarnationId to the StoreFindToken
@@ -101,16 +104,13 @@ public class StoreFindToken implements FindToken {
     this.offset = offset;
     this.storeKey = key;
     this.sessionId = sessionId;
+    this.inclusive = inclusive ? (byte) 1 : 0;
     this.incarnationId = incarnationId;
     this.bytesRead = -1;
   }
 
   void setBytesRead(long bytesRead) {
     this.bytesRead = bytesRead;
-  }
-
-  void setInclusive() {
-    this.inclusive = 1;
   }
 
   static StoreFindToken fromBytes(DataInputStream stream, StoreKeyFactory factory) throws IOException {
@@ -136,7 +136,7 @@ public class StoreFindToken implements FindToken {
           storeFindToken = new StoreFindToken(factory.getStoreKey(stream), new Offset(logSegmentName, indexStartOffset),
               sessionIdUUID, null);
         } else if (offset != UNINITIALIZED_OFFSET) {
-          storeFindToken = new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID, null);
+          storeFindToken = new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID, null, false);
         } else {
           storeFindToken = new StoreFindToken();
         }
@@ -156,7 +156,7 @@ public class StoreFindToken implements FindToken {
             break;
           case JournalBased:
             Offset logOffset = Offset.fromBytes(stream);
-            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, null);
+            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, null, false);
             break;
           case IndexBased:
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
@@ -183,10 +183,7 @@ public class StoreFindToken implements FindToken {
             sessionIdUUID = UUID.fromString(sessionId);
             Offset logOffset = Offset.fromBytes(stream);
             byte inclusive = stream.readByte();
-            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID);
-            if (inclusive == 1) {
-              storeFindToken.setInclusive();
-            }
+            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == 1);
             break;
           case IndexBased:
             // read incarnationId
@@ -229,8 +226,8 @@ public class StoreFindToken implements FindToken {
     return incarnationId;
   }
 
-  byte getInclusive() {
-    return inclusive;
+  boolean getInclusive() {
+    return inclusive == 1 ? true : false;
   }
 
   @Override
@@ -274,6 +271,7 @@ public class StoreFindToken implements FindToken {
     if (incarnationId != null) {
       sb.append(" incarnationId ").append(incarnationId);
     }
+    sb.append(" inclusiveness ").append(inclusive == 1 ? true : false);
     if (!type.equals(Type.Uninitialized)) {
       if (sessionId != null) {
         sb.append(" sessionId ").append(sessionId);

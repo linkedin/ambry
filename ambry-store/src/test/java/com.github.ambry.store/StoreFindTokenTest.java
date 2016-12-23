@@ -77,12 +77,10 @@ public class StoreFindTokenTest {
     StoreFindToken otherInitToken = new StoreFindToken();
     StoreFindToken indexToken = new StoreFindToken(key, offset, sessionId, null);
     StoreFindToken otherIndexToken = new StoreFindToken(key, offset, sessionId, null);
-    StoreFindToken journalToken = new StoreFindToken(offset, sessionId, null);
-    StoreFindToken otherJournalToken = new StoreFindToken(offset, sessionId, null);
-    StoreFindToken inclusiveJournalToken = new StoreFindToken(offset, sessionId, null);
-    inclusiveJournalToken.setInclusive();
-    StoreFindToken otherInclusiveJournalToken = new StoreFindToken(offset, sessionId, null);
-    otherInclusiveJournalToken.setInclusive();
+    StoreFindToken journalToken = new StoreFindToken(offset, sessionId, null, false);
+    StoreFindToken otherJournalToken = new StoreFindToken(offset, sessionId, null, false);
+    StoreFindToken inclusiveJournalToken = new StoreFindToken(offset, sessionId, null, true);
+    StoreFindToken otherInclusiveJournalToken = new StoreFindToken(offset, sessionId, null, true);
 
     // equality
     compareTokens(initToken, initToken);
@@ -95,11 +93,11 @@ public class StoreFindTokenTest {
 
     // equality even if session IDs are different
     compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, null));
-    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), null));
+    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), null, false));
 
     // equality even if incarnationd IDs are different
     compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, UUID.randomUUID()));
-    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), UUID.randomUUID()));
+    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), UUID.randomUUID(), false));
 
     // inequality if some fields differ
     List<Pair<StoreFindToken, StoreFindToken>> unequalPairs = new ArrayList<>();
@@ -110,7 +108,7 @@ public class StoreFindTokenTest {
     unequalPairs.add(new Pair<>(indexToken, inclusiveJournalToken));
     unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(key, otherOffset, sessionId, null)));
     unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(otherKey, offset, sessionId, null)));
-    unequalPairs.add(new Pair<>(journalToken, new StoreFindToken(otherOffset, sessionId, null)));
+    unequalPairs.add(new Pair<>(journalToken, new StoreFindToken(otherOffset, sessionId, null, false)));
     unequalPairs.add(new Pair<>(inclusiveJournalToken, journalToken));
 
     for (Pair<StoreFindToken, StoreFindToken> unequalPair : unequalPairs) {
@@ -134,7 +132,7 @@ public class StoreFindTokenTest {
 
     doSerDeTest(new StoreFindToken());
     doSerDeTest(new StoreFindToken(key, offset, sessionId, null));
-    doSerDeTest(new StoreFindToken(offset, sessionId, null));
+    doSerDeTest(new StoreFindToken(offset, sessionId, null, false));
   }
 
   /**
@@ -149,7 +147,14 @@ public class StoreFindTokenTest {
 
     // no offset in JournalBased
     try {
-      new StoreFindToken(null, sessionId, null);
+      new StoreFindToken(null, sessionId, null, false);
+      fail("Construction of StoreFindToken should have failed");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+    // no offset in JournalBased
+    try {
+      new StoreFindToken(null, sessionId, null, true);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -157,7 +162,14 @@ public class StoreFindTokenTest {
 
     // no sessionId in JournalBased
     try {
-      new StoreFindToken(offset, null, null);
+      new StoreFindToken(offset, null, null, false);
+      fail("Construction of StoreFindToken should have failed");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+    // no sessionId in JournalBased
+    try {
+      new StoreFindToken(offset, null, null, true);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
