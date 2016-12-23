@@ -436,8 +436,8 @@ public class BlobValidator {
       ReplicaId replicaId2 = replicaIdIterator.next();
       ServerResponse replica2ServerResponse = replicaIdBlobContentMap.get(replicaId2);
       if (!replica1ServerResponse.equals(replica2ServerResponse)) {
-        logger.error("ServerResponse mismatch for {} from {} and {}. {} Content {}, {} Content {}", blobId, replicaId1,
-            replicaId2, replicaId1, replica1ServerResponse, replicaId2, replica2ServerResponse);
+        logger.error("ServerResponse mismatch for {} from {} and {}. Response from {} : {}, Response from {} : {}",
+            blobId, replicaId1, replicaId2, replicaId1, replica1ServerResponse, replicaId2, replica2ServerResponse);
       }
     }
   }
