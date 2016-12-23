@@ -253,7 +253,7 @@ public class BlobValidator {
 
       BlobValidator blobValidator = new BlobValidator(connectionPool);
 
-      Set<BlobId> blobIdSet = blobValidator.generateBlobId(blobIdListStr, blobIdFilePath, map);
+      Set<BlobId> blobIdSet = blobValidator.generateBlobIds(blobIdListStr, blobIdFilePath, map);
       if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_REPLICA")) {
         blobValidator.validate(new String[]{replicaHost});
         blobValidator.validateBlobOnReplica(blobIdSet, map, replicaHost, replicaPort, expiredBlobs);
@@ -288,7 +288,15 @@ public class BlobValidator {
     }
   }
 
-  private Set<BlobId> generateBlobId(String blobIdListStr, String blobIdsFilePath, ClusterMap map) throws IOException {
+  /**
+   * Generate list of blobs to be filtered based on the arguments
+   * @param blobIdListStr Comma separated list of blobIds. Could be {@code null}
+   * @param blobIdsFilePath File path referring to a file containing one blobId per line. Could be {@code null}
+   * @param map the {@link ClusterMap} to use to generate the BlobId
+   * @return Set of BlobIds to be filtered.
+   * @throws IOException
+   */
+  private Set<BlobId> generateBlobIds(String blobIdListStr, String blobIdsFilePath, ClusterMap map) throws IOException {
     Set<String> blobIdStrSet = new HashSet<String>();
     if (blobIdListStr != null) {
       String[] blobArray = blobIdListStr.split(",");
@@ -428,10 +436,8 @@ public class BlobValidator {
       ReplicaId replicaId2 = replicaIdIterator.next();
       ServerResponse replica2ServerResponse = replicaIdBlobContentMap.get(replicaId2);
       if (!replica1ServerResponse.equals(replica2ServerResponse)) {
-        logger.error(
-            "ServerResponse mismatch for " + blobId + " from " + replicaId1 + " and " + replicaId2 + " mismatch" +
-                ". " + replicaId1 + " Content " + replica1ServerResponse + ", " + replicaId2 + " Content "
-                + replica2ServerResponse);
+        logger.error("ServerResponse mismatch for {} from {} and {}. {} Content {}, {} Content {}", blobId, replicaId1,
+            replicaId2, replicaId1, replica1ServerResponse, replicaId2, replica2ServerResponse);
       }
     }
   }
