@@ -22,6 +22,8 @@ import java.util.UUID;
 import junit.framework.Assert;
 import org.junit.Test;
 
+import static org.junit.Assert.*;
+
 
 /**
  * Tests {@link StoreDescriptor}
@@ -36,18 +38,15 @@ public class StoreDescriptorTest {
   public void testStoreDescriptor() throws IOException {
 
     File tempDir = StoreTestUtils.createTempDirectory("storeDir");
-    tempDir.deleteOnExit();
     File storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
-    storeDescriptorFile.delete();
-
     StoreDescriptor storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
     // store descriptor file should have been created.
     StoreDescriptor newStoreDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
     Assert.assertEquals("IncarnationId mismatch ", storeDescriptor.getIncarnationId(),
         newStoreDescriptor.getIncarnationId());
 
+    assertTrue("Store descriptor file could not be deleted", storeDescriptorFile.delete());
     // Create StoreDescriptor file with new incarnationId
-    storeDescriptorFile.delete();
     UUID incarnationIdUUID = UUID.randomUUID();
     int size = StoreDescriptor.VERSION_SIZE +
         StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
@@ -59,7 +58,7 @@ public class StoreDescriptorTest {
     byteBuffer.flip();
 
     storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
-    storeDescriptorFile.createNewFile();
+    assertTrue("Store descriptor file could not be created", storeDescriptorFile.createNewFile());
     DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
     dataOutputStream.write(toBytes);
     dataOutputStream.close();
@@ -67,7 +66,8 @@ public class StoreDescriptorTest {
     storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
     Assert.assertEquals("IncarnationId mismatch ", incarnationIdUUID, storeDescriptor.getIncarnationId());
 
-    // wrong version
+    // check for wrong version
+    assertTrue("Store descriptor file could not be deleted", storeDescriptorFile.delete());
     size = StoreDescriptor.VERSION_SIZE +
         StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
     toBytes = new byte[size];
@@ -78,16 +78,15 @@ public class StoreDescriptorTest {
     byteBuffer.flip();
 
     storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
-    storeDescriptorFile.createNewFile();
+    assertTrue("Store descriptor file could not be created", storeDescriptorFile.createNewFile());
     dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
     dataOutputStream.write(toBytes);
     dataOutputStream.close();
 
     try {
-      storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
-      Assert.fail("Wrong version should have thrown exception ");
+      new StoreDescriptor(tempDir.getAbsolutePath());
+      Assert.fail("Wrong version should have thrown IllegalArgumentException ");
     } catch (IllegalArgumentException e) {
-
     }
   }
 }

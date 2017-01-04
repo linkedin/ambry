@@ -688,12 +688,12 @@ class PersistentIndex {
 
   /**
    * Validate the {@link StoreFindToken} and reset if required
-   * @param storeToken the atomic reference to the {@link StoreFindToken}
-   * @return {@code true} is {@link StoreFindToken} was reset, {@code false} otherwise
+   * @param storeToken the {@link StoreFindToken} that needs to be validated
+   * @return the new {@link StoreFindToken} after validating
    */
   private StoreFindToken resetTokenIfRequired(StoreFindToken storeToken) {
     UUID remoteIncarnationId = storeToken.getIncarnationId();
-    // if incarnationId is null, for backwards compatability purposes, the token is considered as good.
+    // if incarnationId is null, for backwards compatibility purposes, the token is considered as good.
     /// if not null, we check for a match
     if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) &&
         remoteIncarnationId != null && !remoteIncarnationId.equals(incarnationId)) {
@@ -701,9 +701,7 @@ class PersistentIndex {
       logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
           + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);
       storeToken = new StoreFindToken();
-    }
-    // validate token
-    else if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
+    } else if (storeToken.getSessionId() == null || storeToken.getSessionId().compareTo(sessionId) != 0) {
       // the session has changed. check if we had an unclean shutdown on startup
       if (!cleanShutdown) {
         // if we had an unclean shutdown and the token offset is larger than the logEndOffsetOnStartup

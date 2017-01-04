@@ -152,24 +152,10 @@ public class StoreFindTokenTest {
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
-    // no offset in JournalBased
-    try {
-      new StoreFindToken(null, sessionId, null, true);
-      fail("Construction of StoreFindToken should have failed");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
 
     // no sessionId in JournalBased
     try {
       new StoreFindToken(offset, null, null, false);
-      fail("Construction of StoreFindToken should have failed");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-    // no sessionId in JournalBased
-    try {
-      new StoreFindToken(offset, null, null, true);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

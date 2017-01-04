@@ -49,16 +49,21 @@ public class StoreFindToken implements FindToken {
 
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final int UNINITIALIZED_OFFSET = -1;
-
-  private final Type type; // refers to the type of the token
-  private final Offset offset; // refers to the offset in the log. Could be either of Journal or Index based token
-  private final StoreKey storeKey; // refers to the store key incase of Index based token
-  private final byte inclusive; // incase of journal based token, represents if the blob at the offset(of the token)
+  // refers to the type of the token
+  private final Type type;
+  // refers to the offset in the log. Could be either of Journal or Index based token
+  private final Offset offset;
+  // refers to the store key incase of Index based token
+  // incase of journal based token, represents if the blob at the offset(of the token)
+  private final StoreKey storeKey;
   // is inclusive or not
-  private final UUID sessionId; // refers to the sessionId of the store. On every restart a new sessionId is created
-  private final UUID incarnationId; // refers to the incarnationId of the store. On every re-creation of the store,
-  // a new incarnationId is created
-  private long bytesRead; // refers to the bytes read so far (from the beginning of the log)
+  private final byte inclusive;
+  // refers to the sessionId of the store. On every restart a new sessionId is created
+  private final UUID sessionId;
+  // refers to the incarnationId of the store. On every re-creation of the store, a new incarnationId is created
+  private final UUID incarnationId;
+  // refers to the bytes read so far (from the beginning of the log)
+  private long bytesRead;
 
   /**
    * Uninitialized token. Refers to the starting of the log.
@@ -68,8 +73,8 @@ public class StoreFindToken implements FindToken {
   }
 
   /**
-   * Index based token. Refers to an index start offset and a store key expected to belong to that index segment.
-   * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence.
+   * Index based token. Refers to an index segment start offset and a store key that belongs to that index segment
+   * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence
    * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
    * @param sessionId the sessionId of the store
    * @param incarnationId the incarnationId of the store

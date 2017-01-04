@@ -38,9 +38,9 @@ class StoreDescriptor {
 
   /**
    * Instantiates the {@link StoreDescriptor} for the store. If the respective file is present, reads the bytes
-   * to understand the storeId and the incarnationId. If not, creates a new one with a random Unique identifier.
+   * to understand the incarnationId. If not, creates a new one with a random Unique identifier as the new incarnationId
    * @param dataDir the directory path to locate the Store Descriptor file
-   * @throws IOException
+   * @throws IOException when file creation or read or write to file fails
    */
   public StoreDescriptor(String dataDir) throws IOException {
     File storeDescriptorFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME);
@@ -50,14 +50,14 @@ class StoreDescriptor {
       switch (version) {
         case VERSION_0:
           // read incarnationId
-          String incarnationId = Utils.readIntString(dataInputStream);
-          this.incarnationId = UUID.fromString(incarnationId);
+          String incarnationIdStr = Utils.readIntString(dataInputStream);
+          incarnationId = UUID.fromString(incarnationIdStr);
           break;
         default:
           throw new IllegalArgumentException("Unrecognized version in StoreDescriptor: " + version);
       }
     } else {
-      this.incarnationId = UUID.randomUUID();
+      incarnationId = UUID.randomUUID();
       if (storeDescriptorFile.createNewFile()) {
         DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
         dataOutputStream.write(toBytes());
