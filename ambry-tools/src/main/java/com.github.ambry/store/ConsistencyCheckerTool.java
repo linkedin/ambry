@@ -13,8 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.config.Config;
-import com.github.ambry.config.Default;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.File;
 import java.io.IOException;
@@ -35,29 +33,16 @@ import org.slf4j.LoggerFactory;
  */
 public class ConsistencyCheckerTool {
   private final VerifiableProperties verifiableProperties;
-  /**
-   * File path referring to the hardware layout
-   */
-  @Config("hardware.layout.file.path")
+  // File path referring to the hardware layout
   private final String hardwareLayoutFilePath;
 
-  /**
-   * File path referring to the partition layout
-   */
-  @Config("partition.layout.file.path")
+  // File path referring to the partition layout
   private final String partitionLayoutFilePath;
 
-  /**
-   * Path referring to root directory containing one directory per replica
-   */
-  @Config("partition.root.directory")
+  // Path referring to root directory containing one directory per replica
   private final String partitionRootDirecotry;
 
-  /**
-   * True if acceptable inconsistent blobs should be part of the output or not
-   */
-  @Config("include.acceptable.inconsistent.blobs")
-  @Default("false")
+  // True if acceptable inconsistent blobs should be part of the output or not
   private final boolean includeAcceptableInconsistentBlobs;
 
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
@@ -66,14 +51,13 @@ public class ConsistencyCheckerTool {
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     partitionRootDirecotry = verifiableProperties.getString("partition.root.directory");
-    includeAcceptableInconsistentBlobs = verifiableProperties.getBoolean("include.acceptable.inconsistent.blobs");
+    includeAcceptableInconsistentBlobs =
+        verifiableProperties.getBoolean("include.acceptable.inconsistent.blobs", false);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
     this.verifiableProperties = verifiableProperties;
   }
-
-  ;
 
   public static void main(String args[]) {
     try {

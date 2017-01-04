@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.Config;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -52,31 +51,18 @@ import static com.github.ambry.store.PersistentIndex.*;
 public class DumpDataTool {
   private final ClusterMap clusterMap;
   // The index file that needs to be dumped for comparison purposes
-  @Config("file.to.read")
   private final String fileToRead;
 
-  /**
-   * File path referring to the hardware layout
-   */
-  @Config("hardware.layout.file.path")
+  // File path referring to the hardware layout
   private final String hardwareLayoutFilePath;
 
-  /**
-   * File path referring to the partition layout
-   */
-  @Config("partition.layout.file.path")
+  // File path referring to the partition layout
   private final String partitionLayoutFilePath;
 
-  /**
-   * The type of operation to perform
-   */
-  @Config("type.of.operation")
+  // The type of operation to perform
   private final String typeOfOperation;
 
-  /**
-   * Path referring to replica root directory
-   */
-  @Config("replica.root.directory")
+  // Path referring to replica root directory
   private final String replicaRootDirecotry;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
@@ -94,14 +80,10 @@ public class DumpDataTool {
         new ClusterMapConfig(new VerifiableProperties(new Properties())));
   }
 
-  public static void main(String args[]) {
-    try {
-      VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-      DumpDataTool dumpDataTool = new DumpDataTool(verifiableProperties);
-      dumpDataTool.doOperation();
-    } catch (Exception e) {
-      logger.error("Closed with exception ", e);
-    }
+  public static void main(String args[]) throws Exception {
+    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    DumpDataTool dumpDataTool = new DumpDataTool(verifiableProperties);
+    dumpDataTool.doOperation();
   }
 
   /**
