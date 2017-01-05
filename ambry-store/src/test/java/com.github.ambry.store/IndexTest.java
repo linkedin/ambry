@@ -757,28 +757,17 @@ public class IndexTest {
     assertEquals("EndToken mismatch ", expectedEndToken, findInfo.getFindToken());
     assertEquals("No entries should have been returned ", 0, findInfo.getMessageEntries().size());
 
-    // add 2 new entries to the log
-    Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
-    appendToLog(PUT_RECORD_SIZE);
-    FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, PUT_RECORD_SIZE);
-    IndexValue value = new IndexValue(PUT_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
-    MockId id = getUniqueId();
-    index.addToIndex(new IndexEntry(id, value), fileSpan);
-    allKeys.put(id, new Pair<IndexValue, IndexValue>(value, null));
-    endOffsetOfPrevMsg = fileSpan.getEndOffset();
-    appendToLog(PUT_RECORD_SIZE);
-
-    FileSpan fileSpan2 = log.getFileSpanForMessage(endOffsetOfPrevMsg, PUT_RECORD_SIZE);
-    IndexValue value2 = new IndexValue(PUT_RECORD_SIZE, fileSpan2.getStartOffset(), Utils.Infinite_Time);
-    MockId id2 = getUniqueId();
-    index.addToIndex(new IndexEntry(id2, value2), fileSpan2);
-    allKeys.put(id2, new Pair<IndexValue, IndexValue>(value2, null));
+    // add 2 entries to index and log
+    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    Pair<MockId, IndexValue> indexEntry1 = logOrder.lastEntry().getValue();
+    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    Pair<MockId, IndexValue> indexEntry2 = logOrder.lastEntry().getValue();
 
     Set<MockId> expectedEntries = new HashSet<>();
-    expectedEntries.add(id);
-    expectedEntries.add(id2);
-    bytesRead = log.getDifference(fileSpan2.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
-    expectedEndToken = new StoreFindToken(fileSpan2.getStartOffset(), sessionId, incarnationId, false);
+    expectedEntries.add(indexEntry1.getFirst());
+    expectedEntries.add(indexEntry2.getFirst());
+    bytesRead = log.getDifference(index.getCurrentEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    expectedEndToken = new StoreFindToken(index.journal.getLastOffset(), sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest((StoreFindToken) findInfo.getFindToken(), Long.MAX_VALUE, expectedEntries, expectedEndToken);
   }
