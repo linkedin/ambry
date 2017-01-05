@@ -78,14 +78,10 @@ public class DumpLogTool {
     }
   }
 
-  public static void main(String args[]) {
-    try {
-      VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-      DumpLogTool dumpLogTool = new DumpLogTool(verifiableProperties);
-      dumpLogTool.doOperation();
-    } catch (Exception e) {
-      logger.error("Closed with exception ", e);
-    }
+  public static void main(String args[]) throws IOException, JSONException {
+    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    DumpLogTool dumpLogTool = new DumpLogTool(verifiableProperties);
+    dumpLogTool.doOperation();
   }
 
   /**

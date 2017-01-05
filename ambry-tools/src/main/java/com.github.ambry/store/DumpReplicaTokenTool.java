@@ -57,14 +57,10 @@ public class DumpReplicaTokenTool {
         new ClusterMapConfig(new VerifiableProperties(new Properties())));
   }
 
-  public static void main(String args[]) {
-    try {
-      VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-      DumpReplicaTokenTool dumpReplicaTokenTool = new DumpReplicaTokenTool(verifiableProperties);
-      dumpReplicaTokenTool.dumpReplicaToken();
-    } catch (Exception e) {
-      logger.error("Closed with exception ", e);
-    }
+  public static void main(String args[]) throws Exception {
+    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    DumpReplicaTokenTool dumpReplicaTokenTool = new DumpReplicaTokenTool(verifiableProperties);
+    dumpReplicaTokenTool.dumpReplicaToken();
   }
 
   /**

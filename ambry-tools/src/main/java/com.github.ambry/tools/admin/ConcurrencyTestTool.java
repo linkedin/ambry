@@ -429,7 +429,7 @@ public class ConcurrencyTestTool {
         try {
           final String blobIdStr = deleteBlobIds.poll(50, TimeUnit.MILLISECONDS);
           if (blobIdStr != null) {
-            long startTimeInMs = SystemTime.getInstance().milliseconds();
+            final long startTimeInMs = SystemTime.getInstance().milliseconds();
             deletedCount.incrementAndGet();
             logger.trace("Deleting blob " + blobIdStr);
             Callback<Void> callback = new Callback<Void>() {
@@ -608,7 +608,7 @@ public class ConcurrencyTestTool {
      * @return a {@link Future} which will contain the result eventually
      */
     @Override
-    public Future putBlob(final Callback callback, MetricsCollector metricsCollector) {
+    public Future putBlob(final Callback callback, final MetricsCollector metricsCollector) {
       int randomNum = localRandom.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
       final byte[] blob = new byte[randomNum];
       byte[] usermetadata = new byte[new Random().nextInt(1024)];
@@ -658,7 +658,7 @@ public class ConcurrencyTestTool {
      */
     @Override
     public Future getBlobAndValidate(final String blobIdStr, final byte[] blobContent,
-        final RouterErrorCode expectedErrorCode, final Callback callback, MetricsCollector metricsCollector) {
+        final RouterErrorCode expectedErrorCode, final Callback callback, final MetricsCollector metricsCollector) {
       final FutureResult futureResult = new FutureResult();
       try {
         final Long startTimeGetBlobMs = SystemTime.getInstance().milliseconds();
@@ -796,7 +796,7 @@ public class ConcurrencyTestTool {
      */
     @Override
     public Future deleteBlobAndValidate(final String blobId, final RouterErrorCode expectedErrorCode,
-        final Callback callback, MetricsCollector metricsCollector) {
+        final Callback callback, final MetricsCollector metricsCollector) {
       final FutureResult futureResult = new FutureResult();
       try {
         final Long startTimeGetBlobInMs = SystemTime.getInstance().milliseconds();

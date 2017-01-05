@@ -84,14 +84,10 @@ public class DumpIndexTool {
         new ClusterMapConfig(verifiableProperties));
   }
 
-  public static void main(String args[]) {
-    try {
-      VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-      DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties);
-      dumpIndexTool.doOperation();
-    } catch (Exception e) {
-      logger.error("Closed with exception ", e);
-    }
+  public static void main(String args[]) throws Exception {
+    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties);
+    dumpIndexTool.doOperation();
   }
 
   /**

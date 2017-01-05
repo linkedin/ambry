@@ -59,14 +59,10 @@ public class ConsistencyCheckerTool {
     this.verifiableProperties = verifiableProperties;
   }
 
-  public static void main(String args[]) {
-    try {
-      VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-      ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool(verifiableProperties);
-      consistencyCheckerTool.checkConsistency();
-    } catch (Exception e) {
-      System.err.println("Consistency checker exited with Exception: " + e);
-    }
+  public static void main(String args[]) throws Exception {
+    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool(verifiableProperties);
+    consistencyCheckerTool.checkConsistency();
   }
 
   private boolean checkConsistency() throws Exception {
