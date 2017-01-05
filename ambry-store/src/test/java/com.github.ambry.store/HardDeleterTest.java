@@ -34,7 +34,9 @@ import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 
@@ -42,6 +44,136 @@ import org.junit.Test;
  * Tests for {@link HardDeleter}.
  */
 public class HardDeleterTest {
+
+  class HardDeleteTestHelper implements MessageStoreHardDelete {
+    private long nextOffset;
+    private long sizeOfEntry;
+    private MockIndex index;
+    private Log log;
+    private String logSegmentName;
+    HashMap<Long, MessageInfo> offsetMap;
+
+    HardDeleteTestHelper(long offset, long size) {
+      nextOffset = offset;
+      sizeOfEntry = size;
+      offsetMap = new HashMap<>();
+    }
+
+    void setIndex(MockIndex index, Log log) {
+      this.index = index;
+      this.log = log;
+      logSegmentName = log.getFirstSegment().getName();
+    }
+
+    void add(MockId id) throws IOException, StoreException {
+      Offset offset = new Offset(logSegmentName, nextOffset);
+      index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, offset, (byte) 0, 12345)),
+          new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
+      ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
+      log.appendFrom(byteBuffer);
+      offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
+      nextOffset += sizeOfEntry;
+    }
+
+    void delete(MockId id) throws IOException, StoreException {
+      Offset offset = new Offset(logSegmentName, nextOffset);
+      index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
+      ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
+      log.appendFrom(byteBuffer);
+      nextOffset += sizeOfEntry;
+    }
+
+    @Override
+    public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
+        List<byte[]> recoveryInfoList) {
+      class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
+        int count;
+        MessageReadSet readSet;
+
+        MockMessageStoreHardDeleteIterator(MessageReadSet readSet) {
+          this.readSet = readSet;
+          this.count = readSet.count();
+        }
+
+        @Override
+        public boolean hasNext() {
+          return count > 0;
+        }
+
+        @Override
+        public HardDeleteInfo next() {
+          if (!hasNext()) {
+            throw new NoSuchElementException();
+          }
+          --count;
+          ByteBuffer buf = ByteBuffer.allocate((int) sizeOfEntry);
+          byte[] recoveryInfo = new byte[100];
+          Arrays.fill(recoveryInfo, (byte) 0);
+          ByteBufferInputStream stream = new ByteBufferInputStream(buf);
+          ReadableByteChannel channel = Channels.newChannel(stream);
+          HardDeleteInfo hardDeleteInfo = new HardDeleteInfo(channel, 100, 100, recoveryInfo);
+          return hardDeleteInfo;
+        }
+
+        @Override
+        public void remove() {
+          throw new UnsupportedOperationException();
+        }
+      }
+
+      return new MockMessageStoreHardDeleteIterator(readSet);
+    }
+
+    @Override
+    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
+      return offsetMap.get(offset);
+    }
+  }
+
+  private MockIndex index = null;
+  private HardDeleteTestHelper helper = null;
+  private MockTime time = null;
+  private ScheduledExecutorService scheduler;
+  private Log log;
+
+  @Before
+  public void setup() throws Exception {
+    File rootDirectory = StoreTestUtils.createTempDirectory("ambry");
+    File indexFile = new File(rootDirectory.getAbsolutePath());
+    for (File c : indexFile.listFiles()) {
+      c.delete();
+    }
+    scheduler = Utils.newScheduler(1, false);
+    log = new Log(rootDirectory.getAbsolutePath(), 10000, 10000,
+        new StoreMetrics(rootDirectory.getAbsolutePath(), new MetricRegistry()));
+    Properties props = new Properties();
+    // the test will set the tokens, so disable the index persistor.
+    props.setProperty("store.data.flush.interval.seconds", "3600");
+    props.setProperty("store.deleted.message.retention.days", "1");
+    props.setProperty("store.index.max.number.of.inmem.elements", "2");
+    // the following determines the number of entries that will be fetched at most. We need this to test the
+    // case where the endToken does not reach the journal.
+    props.setProperty("store.hard.delete.bytes.per.sec", "40");
+    StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+    StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+    time = new MockTime(SystemTime.getInstance().milliseconds());
+
+    helper = new HardDeleteTestHelper(0, 200);
+    index = new MockIndex(rootDirectory.getAbsolutePath(), scheduler, log, config, factory, helper, time,
+        UUID.randomUUID());
+    helper.setIndex(index, log);
+    // Setting this below will not enable the hard delete thread. This being a unit test, the methods
+    // are going to be called directly. We simply want to set the running flag to avoid those methods
+    // from bailing out prematurely.
+    index.setHardDeleteRunningStatus(true);
+  }
+
+  @After
+  public void cleanup() throws StoreException, IOException {
+    scheduler.shutdown();
+    index.close();
+    log.close();
+  }
 
   @Test
   public void testHardDelete() {
@@ -58,119 +190,7 @@ public class HardDeleterTest {
     // perform more deletes.
     // do recovery.
 
-    class HardDeleteTestHelper implements MessageStoreHardDelete {
-      private long nextOffset;
-      private long sizeOfEntry;
-      private MockIndex index;
-      private Log log;
-      private String logSegmentName;
-      HashMap<Long, MessageInfo> offsetMap;
-
-      HardDeleteTestHelper(long offset, long size) {
-        nextOffset = offset;
-        sizeOfEntry = size;
-        offsetMap = new HashMap<>();
-      }
-
-      void setIndex(MockIndex index, Log log) {
-        this.index = index;
-        this.log = log;
-        logSegmentName = log.getFirstSegment().getName();
-      }
-
-      void add(MockId id) throws IOException, StoreException {
-        Offset offset = new Offset(logSegmentName, nextOffset);
-        index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, offset, (byte) 0, 12345)),
-            new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
-        ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
-        log.appendFrom(byteBuffer);
-        offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
-        nextOffset += sizeOfEntry;
-      }
-
-      void delete(MockId id) throws IOException, StoreException {
-        Offset offset = new Offset(logSegmentName, nextOffset);
-        index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
-        ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
-        log.appendFrom(byteBuffer);
-        nextOffset += sizeOfEntry;
-      }
-
-      @Override
-      public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-          List<byte[]> recoveryInfoList) {
-        class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
-          int count;
-          MessageReadSet readSet;
-
-          MockMessageStoreHardDeleteIterator(MessageReadSet readSet) {
-            this.readSet = readSet;
-            this.count = readSet.count();
-          }
-
-          @Override
-          public boolean hasNext() {
-            return count > 0;
-          }
-
-          @Override
-          public HardDeleteInfo next() {
-            if (!hasNext()) {
-              throw new NoSuchElementException();
-            }
-            --count;
-            ByteBuffer buf = ByteBuffer.allocate((int) sizeOfEntry);
-            byte[] recoveryInfo = new byte[100];
-            Arrays.fill(recoveryInfo, (byte) 0);
-            ByteBufferInputStream stream = new ByteBufferInputStream(buf);
-            ReadableByteChannel channel = Channels.newChannel(stream);
-            HardDeleteInfo hardDeleteInfo = new HardDeleteInfo(channel, 100, 100, recoveryInfo);
-            return hardDeleteInfo;
-          }
-
-          @Override
-          public void remove() {
-            throw new UnsupportedOperationException();
-          }
-        }
-
-        return new MockMessageStoreHardDeleteIterator(readSet);
-      }
-
-      @Override
-      public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
-        return offsetMap.get(offset);
-      }
-    }
-
     try {
-      String logFile = tempFile().getParent();
-      File indexFile = new File(logFile);
-      for (File c : indexFile.listFiles()) {
-        c.delete();
-      }
-      ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-      Log log = new Log(logFile, 10000, 10000, new StoreMetrics(logFile, new MetricRegistry()));
-      Properties props = new Properties();
-      // the test will set the tokens, so disable the index persistor.
-      props.setProperty("store.data.flush.interval.seconds", "3600");
-      props.setProperty("store.deleted.message.retention.days", "1");
-      props.setProperty("store.index.max.number.of.inmem.elements", "2");
-      // the following determines the number of entries that will be fetched at most. We need this to test the
-      // case where the endToken does not reach the journal.
-      props.setProperty("store.hard.delete.bytes.per.sec", "40");
-      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
-      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockTime time = new MockTime(SystemTime.getInstance().milliseconds());
-
-      HardDeleteTestHelper helper = new HardDeleteTestHelper(0, 200);
-      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory, helper, time, UUID.randomUUID());
-      helper.setIndex(index, log);
-      // Setting this below will not enable the hard delete thread. This being a unit test, the methods
-      // are going to be called directly. We simply want to set the running flag to avoid those methods
-      // from bailing out prematurely.
-      index.setHardDeleteRunningStatus(true);
-
       MockId blobId01 = new MockId("id01");
       MockId blobId02 = new MockId("id02");
       MockId blobId03 = new MockId("id03");
@@ -257,13 +277,13 @@ public class HardDeleterTest {
       tokenMovedForward = index.hardDelete();
       Assert.assertTrue(tokenMovedForward);
 
-      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
       // journal:                                       [10 10d* 1d 8]
 
       tokenMovedForward = index.hardDelete();
       Assert.assertTrue(tokenMovedForward);
 
-      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+      // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
       // journal:                                       [10 10d 1d 8*]
       // All caught up, so token should not have moved forward.
       tokenMovedForward = index.hardDelete();
@@ -283,14 +303,5 @@ public class HardDeleterTest {
       e.printStackTrace();
       org.junit.Assert.assertEquals(false, true);
     }
-  }
-
-  /**
-   * Create a temporary file
-   */
-  File tempFile() throws IOException {
-    File f = File.createTempFile("ambry", ".tmp");
-    f.deleteOnExit();
-    return f;
   }
 }

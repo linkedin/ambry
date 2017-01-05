@@ -502,6 +502,90 @@ public class IndexTest {
   }
 
   /**
+   * Tests that hard delete pause and resume where in hard deletes is done by the daemon thread and  not explicitly
+   * invoked by the tests
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void hardDeletePauseResumeTest() throws InterruptedException, IOException, StoreException {
+    properties.put("store.deleted.message.retention.days", Integer.toString(1));
+    properties.put("store.hard.delete.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
+    properties.setProperty("store.data.flush.interval.seconds", "3600");
+    // enable daemon thread to run hard deletes
+    properties.put("store.enable.hard.delete", "true");
+    reloadIndex(false);
+    assertTrue("Hard delete is not running", index.hardDeleter.isRunning());
+    // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
+    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    // give it some time so that hard delete completes one cycle
+    Thread.sleep(50);
+    verifyEntriesForHardDeletes(true);
+    index.hardDeleter.preLogFlush();
+    index.hardDeleter.postLogFlush();
+    long expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    assertEquals("Hard delete has not processed all keys", expectedProgress, index.hardDeleter.getProgress());
+
+    index.hardDeleter.pause();
+    addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    // delete two entries
+    ArrayList<MockId> idsToDelete = new ArrayList<>();
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : idsToDelete) {
+      addDeleteEntry(id);
+    }
+    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    Thread.sleep(50);
+    verifyEntriesForHardDeletes(false);
+    index.hardDeleter.preLogFlush();
+    index.hardDeleter.postLogFlush();
+    assertEquals("Hard delete should not have progressed", expectedProgress, index.hardDeleter.getProgress());
+
+    // pause should be idempotent
+    index.hardDeleter.pause();
+    index.hardDeleter.preLogFlush();
+    index.hardDeleter.postLogFlush();
+    assertEquals("Hard delete should not have progressed", expectedProgress, index.hardDeleter.getProgress());
+
+    index.hardDeleter.resume();
+    // after resuming. hard deletes should progress. Give it some time to hard delete next range
+    Thread.sleep(50);
+    verifyEntriesForHardDeletes(true);
+    index.hardDeleter.preLogFlush();
+    index.hardDeleter.postLogFlush();
+    expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    assertEquals("Hard delete has not processed all keys", expectedProgress, index.hardDeleter.getProgress());
+
+    // check that resume is no-op when pause is not called
+    addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    // delete two entries
+    idsToDelete = new ArrayList<>();
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : idsToDelete) {
+      addDeleteEntry(id);
+    }
+    index.hardDeleter.resume();
+    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    Thread.sleep(50);
+    verifyEntriesForHardDeletes(false);
+    index.hardDeleter.preLogFlush();
+    index.hardDeleter.postLogFlush();
+    expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    assertEquals("Hard delete has not processed all keys", expectedProgress, index.hardDeleter.getProgress());
+
+    // once hard deletes starts to write "pause" flag in token, check below sccenario
+    // pause hard deletes
+    // reload index
+    // check that hard deletes is paused
+    // add new entries and delete some of them
+    // resume hard deletes
+    // confirm that new deleted entries are zeroed out
+  }
+
+  /**
    * Tests that expired values are correctly handled.
    * @throws InterruptedException
    * @throws IOException
@@ -846,6 +930,63 @@ public class IndexTest {
     findEntriesSinceInEmptyIndexTest(true);
   }
 
+  /**
+   * Tests the Index persistor for all cases
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void indexPersistorTest() throws InterruptedException, IOException, StoreException {
+    // add a PUT entry and reload the index. Index should contain the new entry since index.close() should have
+    // persisted the index
+    Offset indexEndOffset = index.getCurrentEndOffset();
+    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    Pair<MockId, IndexValue> mockIdIndexValuePair = logOrder.lastEntry().getValue();
+    reloadIndex(false);
+    assertEquals("Index End offset mismatch ",
+        new Offset(indexEndOffset.getName(), indexEndOffset.getOffset() + PUT_RECORD_SIZE),
+        index.getCurrentEndOffset());
+    verifyValue(mockIdIndexValuePair.getFirst(), index.findKey(mockIdIndexValuePair.getFirst()));
+
+    // add new entries which may not be persisted
+    // call persist and reload the index (index.close() is never called)
+    indexEndOffset = index.getCurrentEndOffset();
+    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    mockIdIndexValuePair = logOrder.lastEntry().getValue();
+    index.persistIndex();
+    metricRegistry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    index =
+        new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
+            UUID.randomUUID());
+    sessionId =
+        ((StoreFindToken) index.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE).getFindToken()).getSessionId();
+    assertEquals("Index End offset mismatch ",
+        new Offset(indexEndOffset.getName(), indexEndOffset.getOffset() + PUT_RECORD_SIZE),
+        index.getCurrentEndOffset());
+    verifyValue(mockIdIndexValuePair.getFirst(), index.findKey(mockIdIndexValuePair.getFirst()));
+
+    // add entries to index alone.
+    // index.persist() should throw an exception since log end offset is < index end offset
+    FileSpan fileSpan = new FileSpan(index.getCurrentEndOffset(),
+        new Offset(index.getCurrentEndOffset().getName(), index.getCurrentEndOffset().getOffset() + PUT_RECORD_SIZE));
+    IndexValue value = new IndexValue(PUT_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
+    MockId newId = getUniqueId();
+    index.addToIndex(new IndexEntry(newId, value), fileSpan);
+    try {
+      index.persistIndex();
+      fail("Should have thrown exception since index has entries which log does not have");
+    } catch (StoreException e) {
+    }
+    // append to log so that log and index are in sync with each other
+    appendToLog(PUT_RECORD_SIZE);
+    // add to allKeys() so that doFindEntriesSinceTest() works correctly.
+    allKeys.put(newId,
+        new Pair<IndexValue, IndexValue>(new IndexValue(PUT_RECORD_SIZE, fileSpan.getStartOffset()), null));
+  }
+
   // helpers
 
   // general
@@ -1046,6 +1187,37 @@ public class IndexTest {
   }
 
   /**
+   * Verify that deleted entries are hard deleted or not based on the {@code hardDeleted} flag
+   * @param hardDeleted {@code true} if entries are hard deleted, {@code false} otherwise
+   * @throws IOException
+   */
+  private void verifyEntriesForHardDeletes(boolean hardDeleted) throws IOException {
+    for (MockId id : deletedKeys) {
+      IndexValue putValue = allKeys.get(id).getFirst();
+      Offset offset = putValue.getOffset();
+      LogSegment segment = log.getSegment(offset.getName());
+      long size = putValue.getSize() - HARD_DELETE_START_OFFSET - HARD_DELETE_LAST_PART_SIZE;
+      ByteBuffer readBuf = ByteBuffer.allocate((int) size);
+      segment.readInto(readBuf, offset.getOffset() + HARD_DELETE_START_OFFSET);
+      readBuf.flip();
+      if (hardDeleted) {
+        while (readBuf.hasRemaining()) {
+          assertEquals("Hard delete has not zeroed out the data", (byte) 0, readBuf.get());
+        }
+      } else {
+        boolean foundOnes = false;
+        while (readBuf.hasRemaining()) {
+          if (Byte.compare(readBuf.get(), (byte) 1) == 0) {
+            foundOnes = true;
+            break;
+          }
+        }
+        assertFalse("Hard delete should not have zeroed out ", foundOnes);
+      }
+    }
+  }
+
+  /**
    * Reloads the index. Uses the class variables as parameters. For e.g, if a particular implementation of
    * {@link MessageStoreRecovery} is desired, it can be set to {@link #recovery} and this function called. The newly
    * created index will use that implementation of {@link MessageStoreRecovery}.
@@ -1164,6 +1336,8 @@ public class IndexTest {
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
     properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
+    properties.put("store.data.flush.delay.seconds", Integer.toString(0));
+    properties.put("store.enable.hard.delete", "false");
     // the segment capacity property is never used, so it is not set.
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, metrics);
