@@ -18,6 +18,10 @@ import java.util.HashSet;
 import java.util.Set;
 
 
+/**
+ * Holds status of a blob from the perspective of an Index. If multiple index entries are found for the same blob,
+ * everything is captured in a single instance of this class
+ */
 class BlobStatus {
   private final Set<String> available;
   private final Set<String> deletedOrExpired;

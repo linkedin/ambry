@@ -11,8 +11,8 @@ This will generate ambry.jar in "target" folder under root directory.
 This jar will assist using these tools.
 
 
-## DumpData
-This tool is used to dump the data parsing the storage files.
+## DumpLogTool, DumpIndexTool, DumpReplicaTokenTool and DumpDataTool
+These tools are used to dump the data parsing the storage files.
 
 #### Operations supported
 * Dumping log file
@@ -40,49 +40,78 @@ This tool exposes some admin APIs to get more information for debugging purposes
 
 #### Dump Index
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile]
- --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile]
+java -cp ambry.jar com.github.ambry.store.DumpIndexTool --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=DumpIndex
+fileToRead=[indexFile]
 ```
 
 #### Dump index filtering for a list of blobs
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
-[PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile] --listOfBlobs [blobid1,blobid2,blobid3]
+java -cp ambry.jar com.github.ambry.store.DumpIndexTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=DumpIndex
+fileToRead=[indexFile]
+listOfBlobs=blobid1,blobid2,blobid3
 ```
 
 #### Dump all indexes in a replica
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
-[PartitionLayoutFile] --typeOfOperation DumpIndexesForReplica --replicaRootDirectory [replicaRootDirecotry]
---avoidTraceLogging true
+java -cp ambry.jar com.github.ambry.store.DumpIndexTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=DumpIndexesForReplica
+replicaRootDirectory=[replicaRootDirecotry]
 ```
 
 #### Dump Active blobs in an index
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
-[PartitionLayoutFile] --typeOfOperation DumpIndex --fileToRead [indexFile] --activeBlobsOnly true
+java -cp ambry.jar com.github.ambry.store.DumpIndexTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=DumpIndex
+fileToRead=[indexFile]
+activeBlobsOnly=true
 ```
 
 #### Dump all active blobs in a replica
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
-[PartitionLayoutFile] --typeOfOperation DumpIndexesForReplica --replicaRootDirectory [replicaRootDirecotry]
---activeBlobsOnly true --avoidTraceLogging true
+java -cp ambry.jar com.github.ambry.store.DumpIndexTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=DumpIndexesForReplica
+replicaRootDirectory=[replicaRootDirecotry]
+activeBlobsOnly=true
 ```
 
 #### Dump N Random active blobs for a given replica
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile] --partitionLayout
-[PartitionLayoutFile] --typeOfOperation DumpNRandomActiveBlobsForReplica --replicaRootDirectory [replicaRootDirecotry]
---activeBlobsCount 10000 --avoidTraceLogging true
+java -cp ambry.jar com.github.ambry.store.DumpIndexTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=DumpNRandomActiveBlobsForReplica
+replicaRootDirectory=[replicaRootDirecotry]
+activeBlobsCount=1000
+avoidTraceLogging=true
 ```
 
 ### Dumping Log
 
 #### Dump log file
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog --fileToRead [logFile]
+java -cp ambry.jar com.github.ambry.store.DumpLogTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+fileToRead=[LogFile]
 ```
 
 #### Dump log file with throttling
@@ -93,38 +122,56 @@ java -cp ambry.jar com.github.ambry.store.DumpData --hardwareLayout [HardwareLay
 
 #### Dump log starting at offset x and ending at offset y
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog
---fileToRead [logFile] --startOffset x --endOffset y
+java -cp ambry.jar com.github.ambry.store.DumpLogTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+fileToRead=[LogFile]
+startOffset=x
+endOffset=y
 ```
 
 #### Dump log filtering with a set of blobs
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation DumpLog
---fileToRead [logFile] --listOfBlobs [blobid1,blobid2,blobid3]
+java -cp ambry.jar com.github.ambry.store.DumpLogTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+fileToRead=[LogFile]
+listOfBlobs=blobId1,blobId2,blobId3
 ```
 
-### Comparing index entries to log entries(or in other words, trying to read a log record based on index info for
-### every entry in the index)
+### Comparison operations
+
+#### Comparing index entries to log entries(or in other words, trying to read a log record based on index info for
+#### every entry in the index)
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation CompareIndexToLog
---fileToRead [indexFile] --logFileToDump [logFile]
+java -cp ambry.jar com.github.ambry.store.DumpDataTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=CompareIndexToLog
+fileToRead=[indexFile]
 ```
 
-### Comparing all index entries for a replica to log entries
+#### Comparing all index entries for a replica to log entries
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation
-CompareReplicaIndexesToLog --replicaRootDirectory [replicaRootDirectory] --logFileToDump [logFile]
+java -cp ambry.jar com.github.ambry.store.DumpDataTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+typeOfOperation=CompareReplicaIndexesToLog
+fileToRead=[indexFile]
+replicaRootDirectory=[replicaRootDirecotry]
 ```
 
-### Compare Log Entries to Indexes
+### Dumping ReplicaToken file
 ```bash
-java -cp ambry.jar com.github.ambry.store.DumpData
---hardwareLayout [HardwareLayoutFile] --partitionLayout [PartitionLayoutFile] --typeOfOperation
-CompareLogToIndex --replicaRootDirectory [replicaRootDirectory] --logFileToDump [logFile]
+java -cp ambry.jar com.github.ambry.store.DumpReplicaTokenTool  --propsFile [Config file path]
+//Contents of config file
+hardwareLayout=[HardwareLayoutFile]
+partitionLayout=[PartitionLayoutFile]
+fileToRead=[replicaTokenFile]
 ```
 
 ### BlobValidator
