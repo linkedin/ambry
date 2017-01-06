@@ -64,7 +64,6 @@ import static org.junit.Assert.*;
 public class IndexTest {
   private static final StoreKeyFactory STORE_KEY_FACTORY;
   private static final byte[] RECOVERY_INFO = new byte[100];
-  private UUID incarnationId = UUID.randomUUID();
 
   static {
     try {
@@ -130,6 +129,8 @@ public class IndexTest {
   private PersistentIndex index;
   // The session ID associated with the index
   private UUID sessionId;
+  // the incarnationId associated with the store
+  private UUID incarnationId = UUID.randomUUID();
 
   /**
    * Mock implementation of {@link MessageStoreHardDelete} that returns {@link MessageInfo} appropriately and
@@ -716,41 +717,32 @@ public class IndexTest {
   }
 
   /**
-   * Tests behaviour of {@link PersistentIndex#findEntriesSince(FindToken, long)} on restart of index with a corner case
+   * Tests behaviour of {@link PersistentIndex#findEntriesSince(FindToken, long)} on crash restart for the following
    * scenario
+   * After restart, lets say no new writes have gone into the store.
+   * For a findEntriesSince(offset beyond logEndOffsetOnStartup with different session id) call, index will reset the
+   * token to logEndOffsetOnStartup and returns the same.
+   * On the subsequent findEntriesSince() call, the index should start returning entries
+   * starting from that offset and should not consider that token as non-inclusive
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void findEntriesSinceOnRestartCornerCaseTest() throws IOException, StoreException {
+  public void findEntriesSinceOnCrashRestartTest() throws IOException, StoreException {
     UUID oldSessionId = sessionId;
-    // ensure that index and log end offsets are in sync
     addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    // test case description:
-    // after restart, the store(no new writes have gone into the store) will return a journal based token referring to
-    // logEndOffsetOnStartUp for a findEntriesSince(offset beyond logEndOffsetOnStartup with different session id) call
-    // On the subsequent findEntriesSince() call, the index should start returning entries
-    // starting from that offset and should not consider it as non-inclusive offset
-    recovery = new MessageStoreRecovery() {
-      @Override
-      public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-          throws IOException {
-        return Collections.emptyList();
-      }
-    };
     reloadIndex(true);
-    Offset lastRecordOffset = index.journal.getLastOffset();
-    long bytesRead =
-        log.getDifference(new Offset(log.getEndOffset().getName(), lastRecordOffset.getOffset() + PUT_RECORD_SIZE),
-            new Offset(log.getFirstSegment().getName(), 0));
     // create a token that will be past the index end offset on start up after restart.
     StoreFindToken startToken = new StoreFindToken(
-        new Offset(log.getEndOffset().getName(), (lastRecordOffset.getOffset() + (2 * PUT_RECORD_SIZE))), oldSessionId,
-        incarnationId, false);
-    // end token should point to end offset of last entry i.e. (lastRecordOffset + PUT_RECORD_SIZE)
+        new Offset(log.getEndOffset().getName(), (index.getCurrentEndOffset().getOffset() + (2 * PUT_RECORD_SIZE))),
+        oldSessionId, incarnationId, false);
+    // end token should point to end offset of last entry i.e. (index.getCurrentEndOffset().getOffset() + PUT_RECORD_SIZE)
+    long bytesRead =
+        log.getDifference(new Offset(log.getEndOffset().getName(), index.getCurrentEndOffset().getOffset()),
+            new Offset(log.getFirstSegment().getName(), 0));
     StoreFindToken expectedEndToken =
-        new StoreFindToken(new Offset(log.getEndOffset().getName(), lastRecordOffset.getOffset() + PUT_RECORD_SIZE),
-            sessionId, incarnationId, true);
+        new StoreFindToken(new Offset(log.getEndOffset().getName(), index.getCurrentEndOffset().getOffset()), sessionId,
+            incarnationId, true);
     expectedEndToken.setBytesRead(bytesRead);
     // Fetch the FindToken returned from findEntriesSince
     FindInfo findInfo = index.findEntriesSince(startToken, Long.MAX_VALUE);
@@ -758,18 +750,65 @@ public class IndexTest {
     assertEquals("No entries should have been returned ", 0, findInfo.getMessageEntries().size());
 
     // add 2 entries to index and log
-    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    Pair<MockId, IndexValue> indexEntry1 = logOrder.lastEntry().getValue();
-    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    Pair<MockId, IndexValue> indexEntry2 = logOrder.lastEntry().getValue();
-
     Set<MockId> expectedEntries = new HashSet<>();
-    expectedEntries.add(indexEntry1.getFirst());
-    expectedEntries.add(indexEntry2.getFirst());
+    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    expectedEntries.add(logOrder.lastEntry().getValue().getFirst());
+    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    expectedEntries.add(logOrder.lastEntry().getValue().getFirst());
     bytesRead = log.getDifference(index.getCurrentEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
     expectedEndToken = new StoreFindToken(index.journal.getLastOffset(), sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest((StoreFindToken) findInfo.getFindToken(), Long.MAX_VALUE, expectedEntries, expectedEndToken);
+  }
+
+  /**
+   * Tests behaviour of {@link PersistentIndex#findEntriesSince(FindToken, long)} relating to incarnationId
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void findEntriesSinceIncarnationIdTest() throws IOException, StoreException {
+    Offset lastRecordOffset = index.journal.getLastOffset();
+    appendToLog(2 * PUT_RECORD_SIZE);
+    // will be recovered
+    FileSpan firstRecordFileSpan = log.getFileSpanForMessage(index.getCurrentEndOffset(), PUT_RECORD_SIZE);
+    // will not be recovered
+    FileSpan secondRecordFileSpan = log.getFileSpanForMessage(firstRecordFileSpan.getEndOffset(), PUT_RECORD_SIZE);
+
+    UUID oldSessionId = sessionId;
+    UUID oldIncarnationId = incarnationId;
+    final MockId newId = getUniqueId();
+    // add to allKeys() so that doFindEntriesSinceTest() works correctly.
+    allKeys.put(newId,
+        new Pair<IndexValue, IndexValue>(new IndexValue(PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
+    recovery = new MessageStoreRecovery() {
+      @Override
+      public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+          throws IOException {
+        return Collections.singletonList(new MessageInfo(newId, PUT_RECORD_SIZE));
+      }
+    };
+    reloadIndex(true);
+
+    long bytesRead =
+        log.getDifference(firstRecordFileSpan.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    // create a token that will be past the index end offset on startup after recovery with old incarnationId
+    StoreFindToken startToken =
+        new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, oldIncarnationId, false);
+    // token should get reset internally, all keys should be returned and the returned token should be pointing to
+    // start offset of firstRecordFileSpan.
+    StoreFindToken expectedEndToken =
+        new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
+    expectedEndToken.setBytesRead(bytesRead);
+    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
+
+    // create a token that is not past the index end offset on startup after recovery with old incarnationId.
+    // token should get reset internally, all keys should be returned and the returned token should be be pointing to
+    // start offset of firstRecordFileSpan.
+    startToken = new StoreFindToken(lastRecordOffset, oldSessionId, oldIncarnationId, false);
+    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
+    expectedEndToken.setBytesRead(bytesRead);
+    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
   }
 
   /**
