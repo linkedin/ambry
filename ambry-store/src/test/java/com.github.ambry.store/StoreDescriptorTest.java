@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.CrcOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -45,45 +46,71 @@ public class StoreDescriptorTest {
     assertTrue("Store descriptor file could not be deleted", storeDescriptorFile.delete());
     // Create StoreDescriptor file with new incarnationId
     UUID incarnationIdUUID = UUID.randomUUID();
-    int size = StoreDescriptor.VERSION_SIZE +
-        StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
-    byte[] toBytes = new byte[size];
-    ByteBuffer byteBuffer = ByteBuffer.wrap(toBytes);
-    byteBuffer.putShort(StoreDescriptor.VERSION_0);
-    byteBuffer.putInt(incarnationIdUUID.toString().getBytes().length);
-    byteBuffer.put(incarnationIdUUID.toString().getBytes());
-    byteBuffer.flip();
+    byte[] toBytes = getBytesForStoreDescriptor(StoreDescriptor.VERSION_0, incarnationIdUUID);
 
     storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
     assertTrue("Store descriptor file could not be created", storeDescriptorFile.createNewFile());
-    DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
-    dataOutputStream.write(toBytes);
-    dataOutputStream.close();
+    createStoreFile(storeDescriptorFile, toBytes);
 
     storeDescriptor = new StoreDescriptor(tempDir.getAbsolutePath());
     assertEquals("IncarnationId mismatch ", incarnationIdUUID, storeDescriptor.getIncarnationId());
 
     // check for wrong version
     assertTrue("Store descriptor file could not be deleted", storeDescriptorFile.delete());
-    size = StoreDescriptor.VERSION_SIZE +
-        StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
-    toBytes = new byte[size];
-    byteBuffer = ByteBuffer.wrap(toBytes);
-    byteBuffer.putShort((short) 1);
-    byteBuffer.putInt(incarnationIdUUID.toString().getBytes().length);
-    byteBuffer.put(incarnationIdUUID.toString().getBytes());
-    byteBuffer.flip();
-
-    storeDescriptorFile = new File(tempDir.getAbsolutePath(), StoreDescriptor.STORE_DESCRIPTOR_FILENAME);
+    toBytes = getBytesForStoreDescriptor((short) 1, incarnationIdUUID);
     assertTrue("Store descriptor file could not be created", storeDescriptorFile.createNewFile());
-    dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
-    dataOutputStream.write(toBytes);
-    dataOutputStream.close();
-
+    createStoreFile(storeDescriptorFile, toBytes);
     try {
       new StoreDescriptor(tempDir.getAbsolutePath());
       fail("Wrong version should have thrown IllegalArgumentException ");
     } catch (IllegalArgumentException e) {
     }
+
+    // check for wrong Crc
+    assertTrue("Store descriptor file could not be deleted", storeDescriptorFile.delete());
+    assertTrue("Store descriptor file could not be created", storeDescriptorFile.createNewFile());
+    toBytes = getBytesForStoreDescriptor(StoreDescriptor.VERSION_0, incarnationIdUUID);
+    CrcOutputStream crcOutputStream = new CrcOutputStream(new FileOutputStream(storeDescriptorFile));
+    DataOutputStream dataOutputStream = new DataOutputStream(crcOutputStream);
+    dataOutputStream.write(toBytes);
+    dataOutputStream.writeLong(crcOutputStream.getValue() + 1);
+    dataOutputStream.close();
+    try {
+      new StoreDescriptor(tempDir.getAbsolutePath());
+      fail("Wrong CRC should have thrown IllegalStateException ");
+    } catch (IllegalStateException e) {
+    }
+  }
+
+  /**
+   * Generates the byte array value for a given version and incarnationId
+   * @param version the version to be used while writing
+   * @param incarnationIdUUID the incarnationId of the store
+   * @return the byte array representation of the store descriptor (excluding the crc)
+   */
+  private byte[] getBytesForStoreDescriptor(short version, UUID incarnationIdUUID) {
+    int size = StoreDescriptor.VERSION_SIZE +
+        StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
+    byte[] toBytes = new byte[size];
+    ByteBuffer byteBuffer = ByteBuffer.wrap(toBytes);
+    byteBuffer.putShort(version);
+    byteBuffer.putInt(incarnationIdUUID.toString().getBytes().length);
+    byteBuffer.put(incarnationIdUUID.toString().getBytes());
+    byteBuffer.flip();
+    return byteBuffer.array();
+  }
+
+  /**
+   * Creates a new StoreDescriptor file with the given byte array as content
+   * @param storeDescriptorFile the store descriptor file
+   * @param toBytes content that needs to go into the file
+   * @throws IOException
+   */
+  private void createStoreFile(File storeDescriptorFile, byte[] toBytes) throws IOException {
+    CrcOutputStream crcOutputStream = new CrcOutputStream(new FileOutputStream(storeDescriptorFile));
+    DataOutputStream dataOutputStream = new DataOutputStream(crcOutputStream);
+    dataOutputStream.write(toBytes);
+    dataOutputStream.writeLong(crcOutputStream.getValue());
+    dataOutputStream.close();
   }
 }

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -22,6 +24,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -36,6 +40,8 @@ class StoreDescriptor {
   public static final int INCARNATION_ID_LENGTH_SIZE = 4;
   public static final String STORE_DESCRIPTOR_FILENAME = "StoreDescriptor";
 
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+
   /**
    * Instantiates the {@link StoreDescriptor} for the store. If the respective file is present, reads the bytes
    * to understand the incarnationId. If not, creates a new one with a random Unique identifier as the new incarnationId
@@ -45,26 +51,40 @@ class StoreDescriptor {
   public StoreDescriptor(String dataDir) throws IOException {
     File storeDescriptorFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME);
     if (storeDescriptorFile.exists()) {
-      DataInputStream dataInputStream = new DataInputStream(new FileInputStream(storeDescriptorFile));
-      short version = dataInputStream.readShort();
+      CrcInputStream crcStream = new CrcInputStream(new FileInputStream(storeDescriptorFile));
+      DataInputStream stream = new DataInputStream(crcStream);
+      short version = stream.readShort();
       switch (version) {
         case VERSION_0:
           // read incarnationId
-          String incarnationIdStr = Utils.readIntString(dataInputStream);
+          String incarnationIdStr = Utils.readIntString(stream);
           incarnationId = UUID.fromString(incarnationIdStr);
+          long crc = crcStream.getValue();
+          long crcValueInFile = stream.readLong();
+          if (crc != crcValueInFile) {
+            throw new IllegalStateException(
+                "CRC mismatch for StoreDescriptor. CRC of the stream " + crc + ", CRC from file " +
+                    crcValueInFile);
+          }
           break;
         default:
           throw new IllegalArgumentException("Unrecognized version in StoreDescriptor: " + version);
       }
     } else {
       incarnationId = UUID.randomUUID();
-      if (storeDescriptorFile.createNewFile()) {
-        DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(storeDescriptorFile));
-        dataOutputStream.write(toBytes());
-        dataOutputStream.close();
+      File tempFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME + ".tmp");
+      File actual = new File(dataDir, STORE_DESCRIPTOR_FILENAME);
+      if (tempFile.createNewFile()) {
+        FileOutputStream fileStream = new FileOutputStream(tempFile);
+        CrcOutputStream crc = new CrcOutputStream(fileStream);
+        DataOutputStream writer = new DataOutputStream(crc);
+        writer.write(toBytes());
+        long crcValue = crc.getValue();
+        writer.writeLong(crcValue);
+        fileStream.getChannel().force(true);
+        tempFile.renameTo(actual);
       } else {
-        throw new IllegalStateException(
-            "StoreDescriptor file " + storeDescriptorFile.getAbsolutePath() + " cannot be created ");
+        throw new IllegalStateException("StoreDescriptor file " + tempFile.getAbsolutePath() + " cannot be created ");
       }
     }
   }
