@@ -248,7 +248,9 @@ public class BlobStoreTest {
 
   /**
    * Creates a temporary directory and sets up some test state.
+   * @throws InterruptedException
    * @throws IOException
+   * @throws StoreException
    */
   public BlobStoreTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
@@ -261,6 +263,7 @@ public class BlobStoreTest {
    * Releases all resources and deletes the temporary directory.
    * @throws InterruptedException
    * @throws IOException
+   * @throws StoreException
    */
   @After
   public void cleanup() throws InterruptedException, IOException, StoreException {
