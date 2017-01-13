@@ -24,8 +24,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -35,12 +33,10 @@ import org.slf4j.LoggerFactory;
  */
 class StoreDescriptor {
   private final UUID incarnationId;
-  public static final short VERSION_0 = 0;
-  public static final int VERSION_SIZE = 2;
-  public static final int INCARNATION_ID_LENGTH_SIZE = 4;
-  public static final String STORE_DESCRIPTOR_FILENAME = "StoreDescriptor";
-
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  static final short VERSION_0 = 0;
+  static final int VERSION_SIZE = 2;
+  static final int INCARNATION_ID_LENGTH_SIZE = 4;
+  static final String STORE_DESCRIPTOR_FILENAME = "StoreDescriptor";
 
   /**
    * Instantiates the {@link StoreDescriptor} for the store. If the respective file is present, reads the bytes
@@ -48,7 +44,7 @@ class StoreDescriptor {
    * @param dataDir the directory path to locate the Store Descriptor file
    * @throws IOException when file creation or read or write to file fails
    */
-  public StoreDescriptor(String dataDir) throws IOException {
+  StoreDescriptor(String dataDir) throws IOException {
     File storeDescriptorFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME);
     if (storeDescriptorFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(storeDescriptorFile));
@@ -82,9 +78,12 @@ class StoreDescriptor {
         long crcValue = crc.getValue();
         writer.writeLong(crcValue);
         fileStream.getChannel().force(true);
-        tempFile.renameTo(actual);
+        if (!tempFile.renameTo(actual)) {
+          throw new IllegalStateException(
+              "File " + tempFile.getAbsolutePath() + " renaming to " + actual.getAbsolutePath() + " failed ");
+        }
       } else {
-        throw new IllegalStateException("StoreDescriptor file " + tempFile.getAbsolutePath() + " cannot be created ");
+        throw new IllegalStateException("File " + tempFile.getAbsolutePath() + " creation failed ");
       }
     }
   }
@@ -92,7 +91,7 @@ class StoreDescriptor {
   /**
    * @return the incarnationId of the store
    */
-  public UUID getIncarnationId() {
+  UUID getIncarnationId() {
     return incarnationId;
   }
 

@@ -232,7 +232,7 @@ public class StoreFindToken implements FindToken {
   }
 
   boolean getInclusive() {
-    return inclusive == 1 ? true : false;
+    return inclusive == (byte) 1;
   }
 
   @Override
@@ -254,8 +254,8 @@ public class StoreFindToken implements FindToken {
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
     bufWrap.putShort(VERSION_1);
-    // TODO: when switching to VERSION_2, write in this order: type, incarnationId, sessionId, offset, storeKey and
-    // inclusive
+    // @TODO: when switching to VERSION_2, write in this order: type, incarnationId, sessionId, offset, storeKey and
+    // inclusiveness
     // add sessionId
     bufWrap.putInt(sessionIdBytes.length);
     bufWrap.put(sessionIdBytes);
@@ -263,7 +263,7 @@ public class StoreFindToken implements FindToken {
     bufWrap.putShort((short) type.ordinal());
     // add offset
     bufWrap.put(offsetBytes);
-    // add inclusive when switching to VERSION_2 only for Journal based token
+    // @TODO: add inclusive when switching to VERSION_2 only for Journal based token
     // add StoreKey
     bufWrap.put(storeKeyBytes);
     return buf;
