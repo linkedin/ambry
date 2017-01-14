@@ -208,6 +208,18 @@ class CompactionLog implements Closeable {
    * Flushes all changes to the file backing this compaction log.
    */
   private void flush() {
+    /*
+        Description of serialized format
+
+        version
+        startTime
+        index of current cycle's log
+        size of cycle log list
+        cycleLog1 (see CycleLog#toBytes())
+        cycleLog2
+        ...
+        crc
+       */
     File tempFile = new File(file.getAbsolutePath() + ".tmp");
     try (FileOutputStream fileOutputStream = new FileOutputStream(tempFile)) {
       CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
@@ -297,6 +309,16 @@ class CompactionLog implements Closeable {
      * @return serialized version of the {@link CycleLog}.
      */
     byte[] toBytes() {
+      /*
+        Description of serialized format
+
+        compactionDetails (see CompactionDetails#toBytes())
+        copyStartTime
+        switchStartTime
+        cleanupStartTime
+        cycleEndTime
+        safeToken (see StoreFindToken#toBytes())
+       */
       byte[] compactionDetailsBytes = compactionDetails.toBytes();
       byte[] safeTokenBytes = safeToken.toBytes();
       int size = compactionDetailsBytes.length + 4 * TIMESTAMP_SIZE + safeTokenBytes.length;

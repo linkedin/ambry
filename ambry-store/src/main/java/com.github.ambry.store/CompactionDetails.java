@@ -119,13 +119,25 @@ class CompactionDetails {
    * @return serialized representation of this object.
    */
   byte[] toBytes() {
-    List<byte[]> segmentNamesBytes = new ArrayList<>();
-    int size = VERSION_SIZE + REFERENCE_TIME_SIZE + SEGMENT_COUNT_SIZE
-        + logSegmentsUnderCompaction.size() * SEGMENT_NAME_LENGTH_SIZE;
+    /*
+      Description of format
+
+      version
+      referenceTime
+      size of the logSegmentsUnderCompaction list
+      segment_1_name_length segment_1_name
+      segment_2_name_length segment_2_name
+      ....
+      extra_segment_name_length extra_segment_name
+      swapSpaceCount
+     */
+
+    List<byte[]> segmentNameBytesList = new ArrayList<>();
+    int size = VERSION_SIZE + REFERENCE_TIME_SIZE + SEGMENT_COUNT_SIZE;
     for (String segmentName : logSegmentsUnderCompaction) {
       byte[] segmentNameBytes = segmentName.getBytes();
-      segmentNamesBytes.add(segmentNameBytes);
-      size += segmentNameBytes.length;
+      segmentNameBytesList.add(segmentNameBytes);
+      size += SEGMENT_NAME_LENGTH_SIZE + segmentNameBytes.length;
     }
     byte[] extraSegmentNameBytes = extraSegmentName == null ? ZERO_LENGTH_ARRAY : extraSegmentName.getBytes();
     size += SEGMENT_NAME_LENGTH_SIZE + extraSegmentNameBytes.length + SWAP_SPACE_COUNT_SIZE;
@@ -139,7 +151,7 @@ class CompactionDetails {
     // size of logSegmentsUnderCompaction
     bufWrap.putInt(logSegmentsUnderCompaction.size());
     // log segments under compaction
-    for (byte[] segmentNameBytes : segmentNamesBytes) {
+    for (byte[] segmentNameBytes : segmentNameBytesList) {
       bufWrap.putInt(segmentNameBytes.length);
       bufWrap.put(segmentNameBytes);
     }
