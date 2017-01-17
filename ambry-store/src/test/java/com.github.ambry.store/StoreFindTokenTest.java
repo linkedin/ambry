@@ -75,10 +75,12 @@ public class StoreFindTokenTest {
 
     StoreFindToken initToken = new StoreFindToken();
     StoreFindToken otherInitToken = new StoreFindToken();
-    StoreFindToken indexToken = new StoreFindToken(key, offset, sessionId);
-    StoreFindToken otherIndexToken = new StoreFindToken(key, offset, sessionId);
-    StoreFindToken journalToken = new StoreFindToken(offset, sessionId);
-    StoreFindToken otherJournalToken = new StoreFindToken(offset, sessionId);
+    StoreFindToken indexToken = new StoreFindToken(key, offset, sessionId, null);
+    StoreFindToken otherIndexToken = new StoreFindToken(key, offset, sessionId, null);
+    StoreFindToken journalToken = new StoreFindToken(offset, sessionId, null, false);
+    StoreFindToken otherJournalToken = new StoreFindToken(offset, sessionId, null, false);
+    StoreFindToken inclusiveJournalToken = new StoreFindToken(offset, sessionId, null, true);
+    StoreFindToken otherInclusiveJournalToken = new StoreFindToken(offset, sessionId, null, true);
 
     // equality
     compareTokens(initToken, initToken);
@@ -87,19 +89,27 @@ public class StoreFindTokenTest {
     compareTokens(indexToken, otherIndexToken);
     compareTokens(journalToken, journalToken);
     compareTokens(journalToken, otherJournalToken);
+    compareTokens(inclusiveJournalToken, otherInclusiveJournalToken);
 
     // equality even if session IDs are different
-    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId));
-    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1)));
+    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, null));
+    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), null, false));
+
+    // equality even if incarnationd IDs are different
+    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, UUID.randomUUID()));
+    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), UUID.randomUUID(), false));
 
     // inequality if some fields differ
     List<Pair<StoreFindToken, StoreFindToken>> unequalPairs = new ArrayList<>();
     unequalPairs.add(new Pair<>(initToken, indexToken));
     unequalPairs.add(new Pair<>(initToken, journalToken));
+    unequalPairs.add(new Pair<>(initToken, inclusiveJournalToken));
     unequalPairs.add(new Pair<>(indexToken, journalToken));
-    unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(key, otherOffset, sessionId)));
-    unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(otherKey, offset, sessionId)));
-    unequalPairs.add(new Pair<>(journalToken, new StoreFindToken(otherOffset, sessionId)));
+    unequalPairs.add(new Pair<>(indexToken, inclusiveJournalToken));
+    unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(key, otherOffset, sessionId, null)));
+    unequalPairs.add(new Pair<>(indexToken, new StoreFindToken(otherKey, offset, sessionId, null)));
+    unequalPairs.add(new Pair<>(journalToken, new StoreFindToken(otherOffset, sessionId, null, false)));
+    unequalPairs.add(new Pair<>(inclusiveJournalToken, journalToken));
 
     for (Pair<StoreFindToken, StoreFindToken> unequalPair : unequalPairs) {
       StoreFindToken first = unequalPair.getFirst();
@@ -121,8 +131,8 @@ public class StoreFindTokenTest {
     MockId key = new MockId(UtilsTest.getRandomString(10));
 
     doSerDeTest(new StoreFindToken());
-    doSerDeTest(new StoreFindToken(key, offset, sessionId));
-    doSerDeTest(new StoreFindToken(offset, sessionId));
+    doSerDeTest(new StoreFindToken(key, offset, sessionId, null));
+    doSerDeTest(new StoreFindToken(offset, sessionId, null, false));
   }
 
   /**
@@ -137,7 +147,7 @@ public class StoreFindTokenTest {
 
     // no offset in JournalBased
     try {
-      new StoreFindToken(null, sessionId);
+      new StoreFindToken(null, sessionId, null, false);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -145,7 +155,7 @@ public class StoreFindTokenTest {
 
     // no sessionId in JournalBased
     try {
-      new StoreFindToken(offset, null);
+      new StoreFindToken(offset, null, null, false);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -153,7 +163,7 @@ public class StoreFindTokenTest {
 
     // no key in IndexBased
     try {
-      new StoreFindToken(null, offset, sessionId);
+      new StoreFindToken(null, offset, sessionId, null);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -161,7 +171,7 @@ public class StoreFindTokenTest {
 
     // no offset in IndexBased
     try {
-      new StoreFindToken(key, null, sessionId);
+      new StoreFindToken(key, null, sessionId, null);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -169,7 +179,7 @@ public class StoreFindTokenTest {
 
     // no sessionId in IndexBased
     try {
-      new StoreFindToken(key, offset, null);
+      new StoreFindToken(key, offset, null, null);
       fail("Construction of StoreFindToken should have failed");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

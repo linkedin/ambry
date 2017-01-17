@@ -227,7 +227,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -268,7 +268,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       final MockId blobId1 = new MockId("id1");
       final MockId blobId2 = new MockId("id2");
       final MockId blobId3 = new MockId("id3");
@@ -287,7 +287,7 @@ public class PersistentIndexTest {
       index.close();
 
       // create a new index and ensure the index is restored
-      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
 
       IndexValue value1 = indexNew.getValue(blobId1);
       IndexValue value2 = indexNew.getValue(blobId2);
@@ -302,7 +302,7 @@ public class PersistentIndexTest {
       Properties props = new Properties();
       props.put("store.data.flush.delay.seconds", "999999");
       config = new StoreConfig(new VerifiableProperties(props));
-      indexNew = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       indexNew.addToIndex(new IndexEntry(blobId4, new IndexValue(1000, toOffset(5000), 12657)),
           new FileSpan(toOffset(5000), toOffset(6000)));
       indexNew.addToIndex(new IndexEntry(blobId5, new IndexValue(1000, toOffset(6000), 12657)),
@@ -313,7 +313,7 @@ public class PersistentIndexTest {
       } catch (StoreException e) {
         Assert.assertTrue("StoreException thrown as expected ", true);
       }
-      indexNew = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       value1 = indexNew.getValue(blobId1);
       value2 = indexNew.getValue(blobId2);
       value3 = indexNew.getValue(blobId3);
@@ -379,7 +379,7 @@ public class PersistentIndexTest {
       scheduler = Utils.newScheduler(1, false);
 
       try {
-        MockIndex indexFail = new MockIndex(tempDirStr, scheduler, log, config, factory);
+        MockIndex indexFail = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
         Assert.assertFalse(true);
       } catch (StoreException e) {
         Assert.assertTrue(true);
@@ -390,7 +390,7 @@ public class PersistentIndexTest {
       channelToModify.write(ByteBuffer.wrap(salt));  // write version 1
 
       try {
-        MockIndex indexReadFail = new MockIndex(tempDirStr, scheduler, log, config, factory);
+        MockIndex indexReadFail = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
         Assert.assertFalse(true);
       } catch (StoreException e) {
         Assert.assertTrue(true);
@@ -402,7 +402,7 @@ public class PersistentIndexTest {
       channelToModify.write(ByteBuffer.wrap(addOnlyVersion));
 
       try {
-        MockIndex indexEmptyLine = new MockIndex(tempDirStr, scheduler, log, config, factory);
+        MockIndex indexEmptyLine = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertTrue(true);
@@ -471,7 +471,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -521,7 +521,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -595,7 +595,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -640,7 +640,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       ByteBuffer buffer = ByteBuffer.allocate(6900);
       log.appendFrom(buffer);
       MockId blobId1 = new MockId("id01");
@@ -742,7 +742,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(index.findKey(blobId2).getOffset(), toOffset(100));
 
       index.close();
-      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       Assert.assertEquals(indexNew.findKey(blobId1).getOffset(), toOffset(0));
       Assert.assertEquals(indexNew.findKey(blobId2).getOffset(), toOffset(100));
     } catch (Exception e) {
@@ -772,7 +772,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       ByteBuffer buffer = ByteBuffer.allocate(2700);
       log.appendFrom(buffer);
       MockId blobId1 = new MockId("id01");
@@ -896,10 +896,18 @@ public class PersistentIndexTest {
     }
   }
 
+  /**
+   * Tests {@link PersistentIndex#findEntriesSince(FindToken, long)} for good scenarios.
+   * FindEntries should return entries upto a max of maxTotalSizeofEntries if index contains more entries
+   * starting from the storeFindToken passed in. Also the returned token is expected to point to the starting offset
+   * of the last returned entry. If index doesn't contain so many entries, it should return only until the last
+   * entry in the index. If there are no entries in the index, shouldn't return anything for findEntriessince()
+   * @throws Exception
+   */
   @Test
   public void testFindEntries() throws Exception {
     // provide empty token and ensure we get everything till max
-    StoreFindToken token = new StoreFindToken();
+    StoreFindToken tokenToTest = new StoreFindToken();
     MockClusterMap map = null;
     try {
       for (File c : tempDir.listFiles()) {
@@ -915,8 +923,8 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
-      FindInfo infoempty = index.findEntriesSince(token, 1000);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
+      FindInfo infoempty = index.findEntriesSince(tokenToTest, 1000);
       Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
@@ -975,8 +983,8 @@ public class PersistentIndexTest {
 
       index.markAsDeleted(blobId1, new FileSpan(toOffset(1500), toOffset(1600)));
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, config, factory);
-      FindInfo info = index.findEntriesSince(token, 1200);
+      index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
+      FindInfo info = index.findEntriesSince(tokenToTest, 1200);
       List<MessageInfo> messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(0).getSize(), 100);
@@ -995,7 +1003,7 @@ public class PersistentIndexTest {
       index.close();
       props = new Properties();
       config = new StoreConfig(new VerifiableProperties(props));
-      index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
 
       StoreFindToken token2 = new StoreFindToken();
       FindInfo info2 = index.findEntriesSince(token2, 300);
@@ -1003,21 +1011,25 @@ public class PersistentIndexTest {
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
+
       info2 = index.findEntriesSince(info2.getFindToken(), 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId6);
+
       info2 = index.findEntriesSince(info2.getFindToken(), 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId7);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId9);
+
       info2 = index.findEntriesSince(info2.getFindToken(), 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 3);
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId10);
       Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId12);
+
       info2 = index.findEntriesSince(info2.getFindToken(), 300);
       messageEntries = info2.getMessageEntries();
       Assert.assertEquals(messageEntries.size(), 3);
@@ -1039,6 +1051,173 @@ public class PersistentIndexTest {
     }
   }
 
+  /**
+   * Tests cases involving incarnationId and Index based offsets. If incarnationId mismatches, token should be reset
+   * and entries should be returned from the beginning. If incarnationId matches, should return entries as usual.
+   * Also the returned token should contain the current incarnationId of the store.
+   * @throws Exception
+   */
+  @Test
+  public void testFindEntriesWithIncarnationId() throws Exception {
+    // provide empty token and ensure we get everything till max
+    UUID incarnationId = UUID.randomUUID();
+    StoreFindToken token = new StoreFindToken();
+    UUID newIncarnationId = UUID.randomUUID();
+    MockClusterMap map = null;
+    try {
+      for (File c : tempDir.listFiles()) {
+        c.delete();
+      }
+      ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+      StoreMetrics metrics = new StoreMetrics(tempDirStr, new MetricRegistry());
+      Log log = new Log(tempDirStr, 10000, 10000, metrics);
+      log.appendFrom(ByteBuffer.allocate(900));
+      Properties props = new Properties();
+      props.put("store.index.max.number.of.inmem.elements", "4");
+      props.put("store.max.number.of.entries.to.return.for.find", "12");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
+      FindInfo infoempty = index.findEntriesSince(token, 1000);
+      Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
+      // when token is reset, no incarnationId will be set
+      Assert.assertEquals("IncarnationId mismatch ", null,
+          ((StoreFindToken) (infoempty.getFindToken())).getIncarnationId());
+      MockId blobId1 = new MockId("id1");
+      MockId blobId2 = new MockId("id2");
+      MockId blobId3 = new MockId("id3");
+      MockId blobId4 = new MockId("id4");
+      MockId blobId5 = new MockId("id5");
+      MockId blobId6 = new MockId("id6");
+      MockId blobId7 = new MockId("id7");
+      MockId blobId8 = new MockId("id8");
+
+      byte flags = 0;
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, toOffset(0), flags, 12345));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, toOffset(100), flags, 12567));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, toOffset(200), flags, 12567));
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, toOffset(300), flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, toOffset(400), flags, 12567));
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValue(100, toOffset(500), flags, 12567));
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValue(100, toOffset(600), flags, 12567));
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValue(100, toOffset(700), flags, 12567));
+
+      index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
+      index.addToIndex(entry2, new FileSpan(toOffset(100), toOffset(200)));
+      index.addToIndex(entry3, new FileSpan(toOffset(200), toOffset(300)));
+      index.addToIndex(entry4, new FileSpan(toOffset(300), toOffset(400)));
+      index.addToIndex(entry5, new FileSpan(toOffset(400), toOffset(500)));
+      index.addToIndex(entry6, new FileSpan(toOffset(500), toOffset(600)));
+      index.addToIndex(entry7, new FileSpan(toOffset(600), toOffset(700)));
+      index.addToIndex(entry8, new FileSpan(toOffset(700), toOffset(800)));
+
+      IndexValue value1 = index.getValue(blobId1);
+      IndexValue value2 = index.getValue(blobId2);
+      IndexValue value3 = index.getValue(blobId3);
+      Assert.assertEquals(value1.getOffset(), toOffset(0));
+      Assert.assertEquals(value2.getOffset(), toOffset(100));
+      Assert.assertEquals(value3.getOffset(), toOffset(200));
+
+      index.markAsDeleted(blobId1, new FileSpan(toOffset(800), toOffset(900)));
+      index.close();
+      index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
+      FindInfo info = index.findEntriesSince(token, 500);
+      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
+          ((StoreFindToken) (info.getFindToken())).getIncarnationId());
+      List<MessageInfo> messageEntries = info.getMessageEntries();
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(messageEntries.get(0).getSize(), 100);
+      Assert.assertEquals(messageEntries.get(0).getExpirationTimeInMs(), 12345);
+      Assert.assertEquals(messageEntries.get(0).isDeleted(), true);
+      Assert.assertEquals(messageEntries.size(), 5);
+      Assert.assertEquals(messageEntries.get(messageEntries.size() - 1).getStoreKey(), blobId5);
+
+      FindInfo info1 = index.findEntriesSince(info.getFindToken(), 300);
+      messageEntries = info1.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId6);
+      Assert.assertEquals(messageEntries.get(1).getStoreKey(), blobId7);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId8);
+      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
+          ((StoreFindToken) (info1.getFindToken())).getIncarnationId());
+
+      index.close();
+      props = new Properties();
+      config = new StoreConfig(new VerifiableProperties(props));
+      // re-incarnation
+      index = new MockIndex(tempDirStr, scheduler, log, newIncarnationId, config, factory);
+
+      StoreFindToken token2 = new StoreFindToken();
+      FindInfo info2 = index.findEntriesSince(token2, 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
+          ((StoreFindToken) (info2.getFindToken())).getIncarnationId());
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
+
+      // token with old incarnationId referring to offset 500. Should have been reset and entries should
+      // be returned from start
+      FindInfo infoTwo = index.findEntriesSince(info.getFindToken(), 300);
+      messageEntries = infoTwo.getMessageEntries();
+      Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
+          ((StoreFindToken) (infoTwo.getFindToken())).getIncarnationId());
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
+
+      // info2 pointing to offset 300
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
+          ((StoreFindToken) (info2.getFindToken())).getIncarnationId());
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId6);
+
+      // token with old incarnationId. Info1 referring to offset 300. Should have been reset and entries should be
+      // returned starting from beginning
+      infoTwo = index.findEntriesSince(info1.getFindToken(), 300);
+      Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
+          ((StoreFindToken) (infoTwo.getFindToken())).getIncarnationId());
+      messageEntries = infoTwo.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId3);
+
+      // info2 pointing to offset 600
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 3);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId7);
+      Assert.assertEquals(messageEntries.get(2).getStoreKey(), blobId1);
+
+      info2 = index.findEntriesSince(info2.getFindToken(), 300);
+      messageEntries = info2.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 0);
+
+      // infoTwo pointing to offset 300. Should continue as usual as the returned token should have matching
+      // incarnationId
+      infoTwo = index.findEntriesSince(infoTwo.getFindToken(), 600);
+      messageEntries = infoTwo.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 6);
+      Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId4);
+      Assert.assertEquals(messageEntries.get(5).getStoreKey(), blobId1);
+      infoTwo = index.findEntriesSince(infoTwo.getFindToken(), 300);
+      messageEntries = infoTwo.getMessageEntries();
+      Assert.assertEquals(messageEntries.size(), 0);
+
+      scheduler.shutdown();
+      scheduler.awaitTermination(2, TimeUnit.MINUTES);
+      log.close();
+    } finally {
+      if (map != null) {
+        map.cleanup();
+      }
+    }
+  }
+
   /* Additional tests for findEntriesSince with the mock journal. Ensure token gets reset correctly and entries are
    * read correctly and from segments or the journal as expected. Also test out boundary conditions and that we never
    * read from the latest segment.
@@ -1047,6 +1226,7 @@ public class PersistentIndexTest {
   public void testFindEntriesAdditional() throws Exception {
     // provide token referencing an offset from before
     MockClusterMap map = null;
+    StoreFindToken tokenToTest = new StoreFindToken();
     try {
       for (File c : tempDir.listFiles()) {
         c.delete();
@@ -1062,7 +1242,7 @@ public class PersistentIndexTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory,
           new MockJournal(tempDirStr, 2 * config.storeIndexMaxNumberOfInmemElements,
-              config.storeMaxNumberOfEntriesToReturnFromJournal));
+              config.storeMaxNumberOfEntriesToReturnFromJournal), tokenToTest.getIncarnationId());
       MockJournal journal = (MockJournal) index.getJournal();
 
       MockId blobId1 = new MockId("id01");
@@ -1132,7 +1312,8 @@ public class PersistentIndexTest {
       /* Ensure older tokens are reset, and no entries are returned when the store just started.
        * (when the index is created for the first time, it is similar to an unclean shutdown, so
        * this tests token getting reset in the wake of an unclean shutdown case) */
-      StoreFindToken token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0));
+      StoreFindToken token =
+          new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
       FindInfo info = index.findEntriesSince(token, 500);
       List<MessageInfo> mEntries = info.getMessageEntries();
       Assert.assertEquals(mEntries.size(), 0);
@@ -1176,7 +1357,7 @@ public class PersistentIndexTest {
       // token before:                    i  // i means index based token
       // token after :          j            // j means offset (journal) based token
 
-      token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0));
+      token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
       info = index.findEntriesSince(token, 5 * entrySize);
       mEntries = info.getMessageEntries();
       // Ensure that we got all the keys from the beginning and ordered by offset
@@ -1404,6 +1585,112 @@ public class PersistentIndexTest {
     }
   }
 
+  /**
+   * Tests that during mismatch of incarnationId, token is reset and entries are returned from beginning
+   * (when the token was as journal based token). Also, ensures that the returned token contain the new incarnationId and
+   * the follow up calls to findEntriesSince() do proceed as usual as the returned token contains the matching
+   * incarnationId
+   * @throws Exception
+   */
+  @Test
+  public void testIncarnationIdWithJournal() throws Exception {
+    MockClusterMap map = null;
+    UUID incarnationId = UUID.randomUUID();
+    UUID newIncarnationId = UUID.randomUUID();
+    try {
+      for (File c : tempDir.listFiles()) {
+        c.delete();
+      }
+      ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+      StoreMetrics metrics = new StoreMetrics(tempDirStr, new MetricRegistry());
+      Log log = new Log(tempDirStr, 10000, 10000, metrics);
+      Properties props = new Properties();
+      props.put("store.index.max.number.of.inmem.elements", "5");
+      props.put("store.max.number.of.entries.to.return.for.find", "12");
+      StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+      map = new MockClusterMap();
+      StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory,
+          new MockJournal(tempDirStr, 2 * config.storeIndexMaxNumberOfInmemElements,
+              config.storeMaxNumberOfEntriesToReturnFromJournal), incarnationId);
+
+      MockId blobId1 = new MockId("id01");
+      MockId blobId2 = new MockId("id02");
+      MockId blobId3 = new MockId("id03");
+      MockId blobId4 = new MockId("id04");
+      MockId blobId5 = new MockId("id05");
+
+      byte flags = 0;
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValue(100, toOffset(0), flags, 12345));
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValue(100, toOffset(100), flags, 12567));
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValue(100, toOffset(200), flags, 12567));
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValue(100, toOffset(300), flags, 12567));
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValue(100, toOffset(400), flags, 12567));
+
+      log.appendFrom(ByteBuffer.allocate(500));
+      index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
+      index.addToIndex(entry3, new FileSpan(toOffset(100), toOffset(200)));
+      index.addToIndex(entry2, new FileSpan(toOffset(200), toOffset(300)));
+      index.addToIndex(entry5, new FileSpan(toOffset(300), toOffset(400)));
+      index.addToIndex(entry4, new FileSpan(toOffset(400), toOffset(500)));
+
+      StoreFindToken token = new StoreFindToken();
+      FindInfo info = index.findEntriesSince(token, 400);
+      Assert.assertEquals("IncarnationId mismatch ", incarnationId,
+          ((StoreFindToken) (info.getFindToken())).getIncarnationId());
+      List<MessageInfo> mEntries = info.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 4);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
+      Assert.assertEquals(mEntries.get(3).getStoreKey(), blobId5);
+      index.close();
+
+      // instantiating index with new incarnationId
+      index = new MockIndex(tempDirStr, scheduler, log, config, factory,
+          new MockJournal(tempDirStr, 2 * config.storeIndexMaxNumberOfInmemElements,
+              config.storeMaxNumberOfEntriesToReturnFromJournal), newIncarnationId);
+
+      token = new StoreFindToken(toOffset(300), new UUID(0, 0), newIncarnationId, false);
+      // info pointing to offset 300 with new incarnationId
+      info = index.findEntriesSince(token, 300);
+      mEntries = info.getMessageEntries();
+      Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
+          ((StoreFindToken) (info.getFindToken())).getIncarnationId());
+      Assert.assertEquals(mEntries.size(), 1);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId4);
+
+      // with old incarnation Id
+      StoreFindToken tokenWithDiffIncarnationId =
+          new StoreFindToken(toOffset(300), new UUID(0, 0), incarnationId, false);
+      FindInfo infowithDiffIncarnationId = index.findEntriesSince(tokenWithDiffIncarnationId, 300);
+      Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
+          ((StoreFindToken) (info.getFindToken())).getIncarnationId());
+      mEntries = infowithDiffIncarnationId.getMessageEntries();
+      Assert.assertEquals(mEntries.size(), 3);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId1);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId3);
+      Assert.assertEquals(mEntries.get(2).getStoreKey(), blobId2);
+
+      // should proceed as usual with new returned token
+      infowithDiffIncarnationId = index.findEntriesSince(infowithDiffIncarnationId.getFindToken(), 300);
+      mEntries = infowithDiffIncarnationId.getMessageEntries();
+      Assert.assertEquals("IncarnationId mismatch ", newIncarnationId,
+          ((StoreFindToken) (info.getFindToken())).getIncarnationId());
+      Assert.assertEquals(mEntries.size(), 2);
+      Assert.assertEquals(mEntries.get(0).getStoreKey(), blobId5);
+      Assert.assertEquals(mEntries.get(1).getStoreKey(), blobId4);
+
+      scheduler.shutdown();
+      scheduler.awaitTermination(2, TimeUnit.MINUTES);
+      log.close();
+    } finally {
+      if (map != null) {
+        map.cleanup();
+      }
+    }
+  }
+
   @Test
   public void testFindDeletedEntries() throws Exception {
     // provide empty token and ensure we get everything till max
@@ -1423,7 +1710,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       FindInfo infoempty = index.findDeletedEntriesSince(token, 1000, SystemTime.getInstance().milliseconds() / 1000);
       Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
       MockId blobId1 = new MockId("id01");
@@ -1522,7 +1809,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(value3.getOriginalMessageOffset(), 200);
 
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
 
       //Segment 1: [*1* 2d 3 4 5]
       //Segment 2: [1d 6 7 8 9]
@@ -1611,7 +1898,7 @@ public class PersistentIndexTest {
       //Test end time
 
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
 
       AtomicLong beforeSegment5LastModification = new AtomicLong(index.getLastSegment().getLastModifiedTime());
       // Wait long enough for the current time in seconds to be greater than the above time. In the future we
@@ -1622,7 +1909,7 @@ public class PersistentIndexTest {
       index.markAsDeleted(blobId16, new FileSpan(toOffset(2900), toOffset(3000)));
       index.markAsDeleted(blobId5, new FileSpan(toOffset(3000), toOffset(3100)));
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
       //Segment 1: [1 2d 3 4 5]
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
@@ -1643,7 +1930,7 @@ public class PersistentIndexTest {
 
       // just close and open again to execute the shutdown logic once again.
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
 
       // close and cleanup for good.
       index.close();
@@ -1661,20 +1948,22 @@ public class PersistentIndexTest {
 class MockIndex extends PersistentIndex {
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time) throws StoreException {
+      StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId)
+      throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
-        new StoreMetrics(datadir, new MetricRegistry()), time);
+        new StoreMetrics(datadir, new MetricRegistry()), time, incarnationId);
   }
 
-  public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
+  public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, UUID incarnationId, StoreConfig config,
       StoreKeyFactory factory) throws StoreException {
-    this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+    this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance(),
+        incarnationId);
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, Journal journal) throws StoreException {
+      StoreKeyFactory factory, Journal journal, UUID incarnationId) throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-        new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance());
+        new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance(), incarnationId);
   }
 
   public void setHardDeleteRunningStatus(boolean status) {
@@ -1702,7 +1991,7 @@ class MockIndex extends PersistentIndex {
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup) throws StoreException {
     super(datadir, scheduler, log, config, factory, recovery, cleanup, new StoreMetrics(datadir, new MetricRegistry()),
-        SystemTime.getInstance());
+        SystemTime.getInstance(), null);
   }
 
   IndexValue getValue(StoreKey key) throws StoreException {

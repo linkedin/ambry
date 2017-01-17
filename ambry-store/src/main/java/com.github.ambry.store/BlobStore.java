@@ -101,8 +101,11 @@ class BlobStore implements Store {
               "Failed to acquire lock on file " + dataDir + ". Another process or thread is using this directory.",
               StoreErrorCodes.Initialization_Error);
         }
+
+        StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
-        index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time);
+        index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
+            storeDescriptor.getIncarnationId());
         metrics.initializeLogGauges(log, capacityInBytes);
         started = true;
       } catch (Exception e) {

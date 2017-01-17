@@ -39,7 +39,7 @@ class BlobIndexMetrics extends PersistentIndex {
       AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads, StoreConfig config, FileWriter writer,
       StoreKeyFactory factory) throws StoreException {
     super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
-        new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance());
+        new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance(), null);
     this.enableVerboseLogging = enableVerboseLogging;
     this.lastOffsetUsed = new AtomicLong(0);
     this.totalWrites = totalWrites;
