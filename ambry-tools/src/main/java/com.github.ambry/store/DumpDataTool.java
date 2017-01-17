@@ -67,7 +67,7 @@ public class DumpDataTool {
 
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
 
-  private DumpDataTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
+  public DumpDataTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
     fileToRead = verifiableProperties.getString("file.to.read");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
