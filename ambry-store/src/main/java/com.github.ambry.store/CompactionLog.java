@@ -25,6 +25,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 
@@ -190,7 +191,9 @@ class CompactionLog implements Closeable {
   @Override
   public void close() {
     if (file.exists() && getCompactionState().equals(State.DONE)) {
-      File savedLog = new File(file.getAbsolutePath() + "_" + startTime);
+      String dateString = new Date(startTime).toString();
+      File savedLog =
+          new File(file.getAbsolutePath() + BlobStore.SEPARATOR + startTime + BlobStore.SEPARATOR + dateString);
       if (!file.renameTo(savedLog)) {
         throw new IllegalStateException("Compaction log could not be renamed after completion of compaction");
       }
@@ -269,7 +272,7 @@ class CompactionLog implements Closeable {
     }
 
     /**
-     * Create a log for a cycle from a {@code stream}.
+     * Create a log for a compaction cycle from a {@code stream}.
      * @param stream the {@link DataInputStream} that represents the serialized object.
      * @param storeKeyFactory the {@link StoreKeyFactory} used to generate the {@link StoreFindToken}.
      * @return a {@link CycleLog} that represents a cycle.
