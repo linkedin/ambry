@@ -36,19 +36,15 @@ public class DumpReplicaTokenTool {
 
   private final ClusterMap clusterMap;
   // Refers to replicatoken file that needs to be dumped
-  public final String fileToRead;
-  // File path referring to the hardware layout
-  public final String hardwareLayoutFilePath;
-  // File path referring to the partition layout
-  public final String partitionLayoutFilePath;
+  private final String fileToRead;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
 
   public DumpReplicaTokenTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
 
     fileToRead = verifiableProperties.getString("file.to.read");
-    hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
-    partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
+    String hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
+    String partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
 
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
