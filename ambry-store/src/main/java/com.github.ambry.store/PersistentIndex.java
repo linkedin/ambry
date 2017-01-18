@@ -411,7 +411,9 @@ class PersistentIndex {
                 true).descendingMap();
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
+      int segmentsSearched = 0;
       for (Map.Entry<Offset, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
+        segmentsSearched++;
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
@@ -419,16 +421,26 @@ class PersistentIndex {
               value.getExpiresAtMs());
           if (type.equals(IndexEntryType.ANY)) {
             retValue = value;
+            if(!entry.getValue().isMapped()){
+              metrics.blobFoundInActiveSegmentCount.inc();
+            }
             break;
           } else if (type.equals(IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
             retValue = value;
+            if(!entry.getValue().isMapped()){
+              metrics.blobFoundInActiveSegmentCount.inc();
+            }
             break;
           } else if (type.equals(IndexEntryType.PUT) && !value.isFlagSet(IndexValue.Flags.Delete_Index)) {
             retValue = value;
+            if(!entry.getValue().isMapped()){
+              metrics.blobFoundInActiveSegmentCount.inc();
+            }
             break;
           }
         }
       }
+      metrics.segmentsAccessedPerBlobCount.inc(segmentsSearched);
     } finally {
       context.stop();
     }

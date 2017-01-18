@@ -266,6 +266,7 @@ class IndexSegment {
         return index.get(keyToFind);
       } else {
         // check bloom filter first
+        metrics.bloomAccessedCount.inc();
         if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
           metrics.bloomPositiveCount.inc(1);
           logger.trace(bloomFilter == null

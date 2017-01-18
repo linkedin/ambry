@@ -25,36 +25,39 @@ import com.codahale.metrics.Timer;
  * Metrics for a specific store.
  */
 public class StoreMetrics {
-  public final Timer getResponse;
-  public final Timer putResponse;
-  public final Timer deleteResponse;
-  public final Timer findEntriesSinceResponse;
-  public final Timer findMissingKeysResponse;
-  public final Timer isKeyDeletedResponse;
-  public final Timer storeStartTime;
-  public final Counter storeStartFailure;
-  public final Counter overflowWriteError;
-  public final Counter overflowReadError;
-  public final Timer recoveryTime;
-  public final Timer findTime;
-  public final Timer indexFlushTime;
-  public final Timer cleanupTokenFlushTime;
-  public final Timer hardDeleteTime;
-  public final Counter putEntryDeletedInfoMismatchCount;
-  public final Counter nonzeroMessageRecovery;
-  public final Counter bloomPositiveCount;
-  public final Counter bloomFalsePositiveCount;
-  public final Counter keySizeMismatchCount;
-  public final Counter hardDeleteDoneCount;
-  public final Counter hardDeleteFailedCount;
-  public final Counter hardDeleteIncompleteRecoveryCount;
-  public final Counter hardDeleteExceptionsCount;
-  public final Histogram segmentSizeForExists;
+  final Timer getResponse;
+  final Timer putResponse;
+  final Timer deleteResponse;
+  final Timer findEntriesSinceResponse;
+  final Timer findMissingKeysResponse;
+  final Timer isKeyDeletedResponse;
+  final Timer storeStartTime;
+  final Counter storeStartFailure;
+  final Counter overflowWriteError;
+  final Counter overflowReadError;
+  final Timer recoveryTime;
+  final Timer findTime;
+  final Timer indexFlushTime;
+  final Timer cleanupTokenFlushTime;
+  final Timer hardDeleteTime;
+  final Counter putEntryDeletedInfoMismatchCount;
+  final Counter nonzeroMessageRecovery;
+  final Counter blobFoundInActiveSegmentCount;
+  final Counter bloomAccessedCount;
+  final Counter segmentsAccessedPerBlobCount;
+  final Counter bloomPositiveCount;
+  final Counter bloomFalsePositiveCount;
+  final Counter keySizeMismatchCount;
+  final Counter hardDeleteDoneCount;
+  final Counter hardDeleteFailedCount;
+  final Counter hardDeleteIncompleteRecoveryCount;
+  final Counter hardDeleteExceptionsCount;
+  final Histogram segmentSizeForExists;
 
   private final MetricRegistry registry;
   private final String name;
 
-  public StoreMetrics(String storeId, MetricRegistry registry) {
+  StoreMetrics(String storeId, MetricRegistry registry) {
     this.registry = registry;
     name = storeId + ".";
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
@@ -78,6 +81,11 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "PutEntryDeletedInfoMismatchCount"));
     nonzeroMessageRecovery =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "NonZeroMessageRecovery"));
+    blobFoundInActiveSegmentCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BlobFoundInActiveSegmentCount"));
+    bloomAccessedCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomAccessedCount"));
+    segmentsAccessedPerBlobCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "SegmentsAccessedPerBlobCount"));
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomFalsePositiveCount"));
