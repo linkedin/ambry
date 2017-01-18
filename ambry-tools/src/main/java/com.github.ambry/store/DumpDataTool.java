@@ -90,7 +90,7 @@ public class DumpDataTool {
    * Executes the operation with the help of properties passed
    * @throws IOException
    */
-  private void doOperation() throws Exception {
+  public void doOperation() throws Exception {
     logger.info("Type of Operation " + typeOfOperation);
     if (fileToRead != null) {
       logger.info("File to read " + fileToRead);

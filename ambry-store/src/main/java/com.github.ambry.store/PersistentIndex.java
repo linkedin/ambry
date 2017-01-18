@@ -421,26 +421,17 @@ class PersistentIndex {
               value.getExpiresAtMs());
           if (type.equals(IndexEntryType.ANY)) {
             retValue = value;
-            if(!entry.getValue().isMapped()){
-              metrics.blobFoundInActiveSegmentCount.inc();
-            }
             break;
           } else if (type.equals(IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
             retValue = value;
-            if(!entry.getValue().isMapped()){
-              metrics.blobFoundInActiveSegmentCount.inc();
-            }
             break;
           } else if (type.equals(IndexEntryType.PUT) && !value.isFlagSet(IndexValue.Flags.Delete_Index)) {
             retValue = value;
-            if(!entry.getValue().isMapped()){
-              metrics.blobFoundInActiveSegmentCount.inc();
-            }
             break;
           }
         }
       }
-      metrics.segmentsAccessedPerBlobCount.inc(segmentsSearched);
+      metrics.segmentsAccessedPerBlobCount.update(segmentsSearched);
     } finally {
       context.stop();
     }
