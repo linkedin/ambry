@@ -707,7 +707,7 @@ public class AdminBlobStorageServiceTest {
    * @param getOption the options to use while getting the blob.
    * @throws Exception
    */
-  public void getNotModifiedBlobAndVerify(String blobId, GetOption getOption) throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption) throws Exception {
     JSONObject headers = new JSONObject();
     if (getOption != null) {
       headers.put(RestUtils.Headers.GET_OPTION, getOption.toString());
@@ -721,11 +721,12 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.NotModified, restResponseChannel.getStatus());
-    assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
-    assertNull("No Last-Modified header expected", restResponseChannel.getHeader("Last-Modified"));
+    assertNotNull("Date header expected", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    assertNotNull("Last-Modified header expected", restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED));
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertNull("Content-Length should have been null", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     assertEquals("No content expected as blob is not modified", 0, restResponseChannel.getResponseBody().length);
   }
 

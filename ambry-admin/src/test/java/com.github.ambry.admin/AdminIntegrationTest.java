@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
@@ -70,6 +71,8 @@ import static org.junit.Assert.*;
 public class AdminIntegrationTest {
   private static final int SERVER_PORT = 16503;
   private static final ClusterMap CLUSTER_MAP;
+  private static final VerifiableProperties ADMIN_VERIFIABLE_PROPS = buildAdminVProps();
+  private static final AdminConfig ADMIN_CONFIG = new AdminConfig(ADMIN_VERIFIABLE_PROPS);
 
   static {
     try {
@@ -98,7 +101,7 @@ public class AdminIntegrationTest {
    */
   @BeforeClass
   public static void setup() throws Exception {
-    adminRestServer = new RestServer(buildAdminVProps(), CLUSTER_MAP, new LoggingNotificationSystem());
+    adminRestServer = new RestServer(ADMIN_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem());
     router = InMemoryRouterFactory.getLatestInstance();
     adminRestServer.start();
     nettyClient = new NettyClient("localhost", SERVER_PORT);
@@ -133,7 +136,7 @@ public class AdminIntegrationTest {
     doGetHeadDeleteTest(8192, true);
 
     doGetHeadDeleteTest(10000, false);
-    doGetHeadDeleteTest(8192, true);
+    doGetHeadDeleteTest(10000, true);
   }
 
   /*
@@ -273,7 +276,7 @@ public class AdminIntegrationTest {
     }
     blobId = putBlob(headers, content, usermetadata);
     getBlobAndVerify(blobId, null, headers, content);
-    getNotModifiedBlobAndVerify(blobId, null);
+    getNotModifiedBlobAndVerify(blobId, null, false);
     getUserMetadataAndVerify(blobId, null, headers, usermetadata);
     getBlobInfoAndVerify(blobId, null, headers, usermetadata);
     getHeadAndVerify(blobId, null, headers);
@@ -365,6 +368,7 @@ public class AdminIntegrationTest {
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     ByteBuffer responseContent = getContent(response, responseParts);
     assertArrayEquals("GET content does not match original content", expectedContent.array(), responseContent.array());
+    verifyCacheHeaders(Boolean.parseBoolean(expectedHeaders.get(RestUtils.Headers.PRIVATE)), response);
     assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
   }
 
@@ -372,9 +376,10 @@ public class AdminIntegrationTest {
    * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
    * @param blobId the blob ID of the blob to GET.
    * @param getOption the options to use while getting the blob.
+   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
    * @throws Exception
    */
-  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption) throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption, boolean isPrivate) throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
     if (getOption != null) {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
@@ -384,11 +389,13 @@ public class AdminIntegrationTest {
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.NOT_MODIFIED, response.getStatus());
-    assertTrue("No Date header", response.headers().get(RestUtils.Headers.DATE) != null);
-    assertNull("No Last-Modified header expected", response.headers().get("Last-Modified"));
+    assertNotNull("Date header expected", response.headers().get(RestUtils.Headers.DATE));
+    assertNotNull("Last-Modified header expected", response.headers().get(RestUtils.Headers.LAST_MODIFIED));
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    assertNull("Content-Length should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    verifyCacheHeaders(isPrivate, response);
     assertNoContent(responseParts);
   }
 
@@ -564,7 +571,7 @@ public class AdminIntegrationTest {
     GetOption[] options = {GetOption.Include_Deleted_Blobs, GetOption.Include_All};
     for (GetOption option : options) {
       getBlobAndVerify(blobId, option, expectedHeaders, expectedContent);
-      getNotModifiedBlobAndVerify(blobId, option);
+      getNotModifiedBlobAndVerify(blobId, option, Boolean.parseBoolean(expectedHeaders.get(RestUtils.Headers.PRIVATE)));
       getUserMetadataAndVerify(blobId, option, expectedHeaders, usermetadata);
       getBlobInfoAndVerify(blobId, option, expectedHeaders, usermetadata);
       getHeadAndVerify(blobId, option, expectedHeaders);
@@ -595,5 +602,26 @@ public class AdminIntegrationTest {
   private void checkCommonGetHeadHeaders(HttpHeaders receivedHeaders) {
     assertTrue("No Date header", receivedHeaders.get(HttpHeaders.Names.DATE) != null);
     assertTrue("No Last-Modified header", receivedHeaders.get(HttpHeaders.Names.LAST_MODIFIED) != null);
+  }
+
+  /**
+   * Verifies that the right cache headers are returned.
+   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
+   * @param response the {@link HttpResponse}.
+   */
+  private void verifyCacheHeaders(boolean isPrivate, HttpResponse response) {
+    if (isPrivate) {
+      Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",
+          response.headers().get(RestUtils.Headers.CACHE_CONTROL));
+      Assert.assertEquals("Pragma value not as expected", "no-cache", response.headers().get(RestUtils.Headers.PRAGMA));
+    } else {
+      String expiresValue = response.headers().get(RestUtils.Headers.EXPIRES);
+      assertNotNull("Expires value should be non null", expiresValue);
+      assertTrue("Expires value should be in future",
+          RestUtils.getTimeFromDateString(expiresValue) > System.currentTimeMillis());
+      Assert.assertEquals("Cache-Control value not as expected", "max-age=" + ADMIN_CONFIG.adminCacheValiditySeconds,
+          response.headers().get(RestUtils.Headers.CACHE_CONTROL));
+      Assert.assertNull("Pragma value should not have been set", response.headers().get(RestUtils.Headers.PRAGMA));
+    }
   }
 }

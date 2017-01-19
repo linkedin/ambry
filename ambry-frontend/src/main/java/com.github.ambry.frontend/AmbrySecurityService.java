@@ -118,19 +118,19 @@ class AmbrySecurityService implements SecurityService {
             responseChannel.setStatus(ResponseStatus.Ok);
             RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
             if (subResource == null) {
+              responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+                  new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
               Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
               if (ifModifiedSinceMs != null
                   && RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs())
                   <= ifModifiedSinceMs) {
                 responseChannel.setStatus(ResponseStatus.NotModified);
-                responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+                setCacheHeaders(blobInfo.getBlobProperties().isPrivate(), responseChannel);
               } else {
                 options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
                 if (options.getRange() != null) {
                   responseChannel.setStatus(ResponseStatus.PartialContent);
                 }
-                responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
-                    new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
                 setGetBlobResponseHeaders(blobInfo, options, responseChannel);
               }
             } else {
@@ -232,7 +232,17 @@ class AmbrySecurityService implements SecurityService {
         restResponseChannel.setHeader("Content-Disposition", "attachment");
       }
     }
-    if (blobProperties.isPrivate()) {
+    setCacheHeaders(blobProperties.isPrivate(), restResponseChannel);
+  }
+
+  /**
+   * Sets headers that provide directions to proxies and caches.
+   * @param isPrivate whether the blob is private.
+   * @param restResponseChannel the channel that the response will be sent over
+   * @throws RestServiceException if there is any problem setting the headers
+   */
+  private void setCacheHeaders(boolean isPrivate, RestResponseChannel restResponseChannel) throws RestServiceException {
+    if (isPrivate) {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, new Date(0));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "private, no-cache, no-store, proxy-revalidate");
       restResponseChannel.setHeader(RestUtils.Headers.PRAGMA, "no-cache");
