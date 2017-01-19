@@ -199,6 +199,14 @@ public class AdminSecurityServiceTest {
     blobInfo =
         new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time), null);
     testGetBlob(blobInfo);
+    // not modified response
+    // > creation time (in secs).
+    testGetNotModifiedBlob(blobInfo, blobInfo.getBlobProperties().getCreationTimeInMs() + 1000);
+    // == creation time
+    testGetNotModifiedBlob(blobInfo, blobInfo.getBlobProperties().getCreationTimeInMs());
+    // < creation time (in secs)
+    testGetNotModifiedBlob(blobInfo, blobInfo.getBlobProperties().getCreationTimeInMs() - 1000);
+
     // Get blob for a public blob with content type as "text/html"
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "text/html", true, 10000), null);
     testGetBlob(blobInfo);
@@ -277,7 +285,7 @@ public class AdminSecurityServiceTest {
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
       Assert.assertEquals("Not modified response expected", ResponseStatus.NotModified,
           restResponseChannel.getStatus());
-      verifyHeadersForGetBlobNotModified(restResponseChannel);
+      verifyHeadersForGetBlobNotModified(restResponseChannel, blobInfo.getBlobProperties().isPrivate());
     } else {
       Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
           restResponseChannel.getStatus());
@@ -410,37 +418,49 @@ public class AdminSecurityServiceTest {
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     }
 
-    if (blobProperties.isPrivate()) {
-      Assert.assertEquals("Expires value is incorrect for private blob", 0,
-          RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES)).longValue());
+    verifyCacheHeaders(blobProperties.isPrivate(), restResponseChannel);
+  }
+
+  /**
+   * Verify the headers from the response for a Not modified blob are as expected
+   * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
+   * @param isPrivate {@code true} if blob is private, {@code false} otherwise.
+   * @throws RestServiceException if there was any problem getting the headers.
+   */
+  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel, boolean isPrivate)
+      throws RestServiceException {
+    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    Assert.assertNotNull("Last-Modified has not been set",
+        restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED));
+    Assert.assertNull("Content length should not have been set",
+        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+    verifyCacheHeaders(isPrivate, restResponseChannel);
+    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.CONTENT_TYPE);
+  }
+
+  /**
+   * Verifies that the right cache headers are returned.
+   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
+   * @param restResponseChannel the {@link RestResponseChannel} over which the response is sent.
+   */
+  private void verifyCacheHeaders(boolean isPrivate, MockRestResponseChannel restResponseChannel) {
+    if (isPrivate) {
+      Assert.assertEquals("Expires value is incorrect for private blob",
+          restResponseChannel.getHeader(RestUtils.Headers.DATE),
+          restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
       Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertEquals("Pragma value not as expected", "no-cache",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     } else {
       Assert.assertTrue("Expires value should be in the future",
-          RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES)).longValue() > System
-              .currentTimeMillis());
+          RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES))
+              > System.currentTimeMillis());
       Assert.assertEquals("Cache-Control value not as expected", "max-age=" + ADMIN_CONFIG.adminCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertNull("Pragma value should not have been set",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     }
-  }
-
-  /**
-   * Verify the headers from the response for a Not modified blob are as expected
-   * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
-   * @throws RestServiceException if there was any problem getting the headers.
-   */
-  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel)
-      throws RestServiceException {
-    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
-    Assert.assertEquals("Content length should have been 0", "0",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
-    verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.LAST_MODIFIED, RestUtils.Headers.BLOB_SIZE,
-        RestUtils.Headers.CONTENT_TYPE, RestUtils.Headers.EXPIRES, RestUtils.Headers.CACHE_CONTROL,
-        RestUtils.Headers.PRAGMA);
   }
 
   /**

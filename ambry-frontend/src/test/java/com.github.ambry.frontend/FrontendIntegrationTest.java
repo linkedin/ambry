@@ -60,6 +60,7 @@ import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -129,9 +130,9 @@ public class FrontendIntegrationTest {
   @Test
   public void postGetHeadDeleteTest() throws Exception {
     doPostGetHeadDeleteTest(0, false);
-    doPostGetHeadDeleteTest(1024, false);
-    doPostGetHeadDeleteTest(8192, false);
-    doPostGetHeadDeleteTest(10000, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, false);
   }
 
   /**
@@ -299,7 +300,7 @@ public class FrontendIntegrationTest {
       getBlobAndVerify(blobId, range, headers, content);
       getHeadAndVerify(blobId, range, headers);
     }
-    getNotModifiedBlobAndVerify(blobId);
+    getNotModifiedBlobAndVerify(blobId, false);
     getUserMetadataAndVerify(blobId, headers, usermetadata);
     getBlobInfoAndVerify(blobId, headers, usermetadata);
     deleteBlobAndVerify(blobId);
@@ -409,6 +410,7 @@ public class FrontendIntegrationTest {
       assertEquals("Content-length not as expected", expectedContentArray.length,
           HttpHeaders.getContentLength(response));
     }
+    verifyCacheHeaders(Boolean.parseBoolean(expectedHeaders.get(RestUtils.Headers.PRIVATE)), response);
     byte[] responseContentArray = getContent(responseParts, expectedContentArray.length).array();
     assertArrayEquals("GET content does not match original content", expectedContentArray, responseContentArray);
     assertTrue("Channel should be active", HttpHeaders.isKeepAlive(response));
@@ -417,22 +419,25 @@ public class FrontendIntegrationTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
    * @param blobId the blob ID of the blob to GET.
+   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
    * @throws Exception
    */
-  private void getNotModifiedBlobAndVerify(String blobId) throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId, boolean isPrivate) throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.NOT_MODIFIED, response.getStatus());
-    assertTrue("No Date header", response.headers().get(RestUtils.Headers.DATE) != null);
-    assertNull("No Last-Modified header expected", response.headers().get("Last-Modified"));
+    assertNotNull("Date header should be set", response.headers().get(RestUtils.Headers.DATE));
+    assertNotNull("Last-Modified header should be set", response.headers().get("Last-Modified"));
+    assertNull("Content-Length should not be set", response.headers().get(RestUtils.Headers.CONTENT_LENGTH));
     assertNull("Accept-Ranges should not be set", response.headers().get(RestUtils.Headers.ACCEPT_RANGES));
     assertNull("Content-Range header should not be set", response.headers().get(RestUtils.Headers.CONTENT_RANGE));
     assertNull(RestUtils.Headers.BLOB_SIZE + " should have been null ",
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
+    verifyCacheHeaders(isPrivate, response);
     assertNoContent(responseParts);
   }
 
@@ -628,6 +633,28 @@ public class FrontendIntegrationTest {
   private void checkCommonGetHeadHeaders(HttpHeaders receivedHeaders) {
     assertTrue("No Date header", receivedHeaders.get(HttpHeaders.Names.DATE) != null);
     assertTrue("No Last-Modified header", receivedHeaders.get(HttpHeaders.Names.LAST_MODIFIED) != null);
+  }
+
+  /**
+   * Verifies that the right cache headers are returned.
+   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
+   * @param response the {@link HttpResponse}.
+   */
+  private void verifyCacheHeaders(boolean isPrivate, HttpResponse response) {
+    if (isPrivate) {
+      Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",
+          response.headers().get(RestUtils.Headers.CACHE_CONTROL));
+      Assert.assertEquals("Pragma value not as expected", "no-cache", response.headers().get(RestUtils.Headers.PRAGMA));
+    } else {
+      String expiresValue = response.headers().get(RestUtils.Headers.EXPIRES);
+      assertNotNull("Expires value should be non null", expiresValue);
+      assertTrue("Expires value should be in future",
+          RestUtils.getTimeFromDateString(expiresValue) > System.currentTimeMillis());
+      Assert.assertEquals("Cache-Control value not as expected",
+          "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
+          response.headers().get(RestUtils.Headers.CACHE_CONTROL));
+      Assert.assertNull("Pragma value should not have been set", response.headers().get(RestUtils.Headers.PRAGMA));
+    }
   }
 
   /**
