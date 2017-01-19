@@ -307,8 +307,9 @@ class NettyResponseChannel implements RestResponseChannel {
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked on 200 response. Note that sending HttpContent chunks data anyway - we are just
       // explicitly specifying this in the header.
-      if (!HttpHeaders.isContentLengthSet(responseMetadata) && (responseMetadata.getStatus()
-          .equals(HttpResponseStatus.OK) || responseMetadata.getStatus().equals(HttpResponseStatus.PARTIAL_CONTENT))) {
+      if (!HttpHeaders.isContentLengthSet(responseMetadata) && (
+          responseMetadata.getStatus().equals(HttpResponseStatus.OK) || responseMetadata.getStatus()
+              .equals(HttpResponseStatus.PARTIAL_CONTENT))) {
         // This makes sure that we don't stomp on any existing transfer-encoding.
         HttpHeaders.setTransferEncodingChunked(responseMetadata);
       } else if (HttpHeaders.isContentLengthSet(responseMetadata) && HttpHeaders.getContentLength(responseMetadata) == 0
