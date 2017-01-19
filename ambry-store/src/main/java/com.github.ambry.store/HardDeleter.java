@@ -33,6 +33,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +63,6 @@ public class HardDeleter implements Runnable {
   //how long to sleep if token does not advance.
   private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * Time.MsPerSec;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
-  private final Object lock = new Object();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /* A range of entries is maintained during the hard delete operation. All the entries corresponding to an ongoing
@@ -83,7 +84,7 @@ public class HardDeleter implements Runnable {
    * startTokenBeforeLogFlush: This token is set to the current start token just before log flush and once the log is
    *                           flushed, this is used to set startTokenSafeToPersist.
    */
-  private volatile FindToken startToken;
+  private FindToken startToken;
   private FindToken startTokenBeforeLogFlush;
   private FindToken startTokenSafeToPersist;
   private FindToken endToken;
@@ -91,7 +92,10 @@ public class HardDeleter implements Runnable {
   private HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
   private Throttler throttler;
   private boolean isCaughtUp = false;
-  private AtomicBoolean paused = new AtomicBoolean(false);
+  private final AtomicBoolean paused = new AtomicBoolean(false);
+  private final ReentrantLock reentrantLock = new ReentrantLock();
+  private final Condition pauseCondition = reentrantLock.newCondition();
+  private final Condition waitingCondition = reentrantLock.newCondition();
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
       MessageStoreHardDelete hardDelete, StoreKeyFactory factory, Time time) {
@@ -113,31 +117,27 @@ public class HardDeleter implements Runnable {
     try {
       while (running.get()) {
         try {
-          if (paused.get()) {
-            synchronized (lock) {
-              while (paused.get()) {
-                try {
-                  lock.wait();
-                } catch (InterruptedException e) {
-                  logger.warn("InterruptedException thrown while hard delete is paused ", e);
-                }
-              }
+          reentrantLock.lock();
+          while (isPaused()) {
+            try {
+              pauseCondition.await();
+            } catch (InterruptedException e) {
+              logger.warn("InterruptedException thrown while hard delete thread is paused ", e);
             }
           }
-          synchronized (lock) {
+          if (running.get()) {
             if (!hardDelete()) {
               isCaughtUp = true;
               if (!running.get()) {
                 break;
               }
-              time.wait(lock, hardDeleterSleepTimeWhenCaughtUpMs);
+              time.wait(reentrantLock, hardDeleterSleepTimeWhenCaughtUpMs);
             } else if (isCaughtUp) {
               isCaughtUp = false;
               logger.info("Resumed hard deletes for {} after having caught up", dataDir);
             }
-            // notify if anyone called pause and waiting for current hard delete cycle to complete
-            lock.notify();
           }
+          reentrantLock.unlock();
         } catch (StoreException e) {
           if (e.getErrorCode() != StoreErrorCodes.Store_Shutting_Down) {
             logger.error("Caught store exception: ", e);
@@ -158,25 +158,22 @@ public class HardDeleter implements Runnable {
    * the range and then pause. Hard delete will be in paused state until {@link #resume()} is called.
    */
   void pause() throws InterruptedException {
+    reentrantLock.lock();
     if (!paused.getAndSet(true)) {
-      synchronized (lock) {
-        logger.info("HardDelete thread has been paused ");
-        // notify if hard delete thread is waiting after caught up
-        lock.notify();
-        time.wait(lock, hardDeleterSleepTimeWhenCaughtUpMs);
-      }
+      logger.info("HardDelete thread has been paused ");
     }
+    reentrantLock.unlock();
   }
 
   /**
    * Resumes hard deletes, if {@link #pause()} has been called prior to this.
    */
   void resume() {
+    reentrantLock.lock();
     if (paused.getAndSet(false)) {
-      synchronized (lock) {
-        lock.notify();
-      }
+      pauseCondition.signal();
     }
+    reentrantLock.unlock();
   }
 
   /**
@@ -340,6 +337,14 @@ public class HardDeleter implements Runnable {
   }
 
   /**
+   * Returns true if the hard delete is currently paused.
+   * @return true if paused, false otherwise.
+   */
+  boolean isPaused() {
+    return paused.get();
+  }
+
+  /**
    * Returns true if the hard delete is currently running.
    * @return true if running, false otherwise.
    */
@@ -358,11 +363,22 @@ public class HardDeleter implements Runnable {
   void shutdown() throws InterruptedException, StoreException, IOException {
     if (running.get()) {
       running.set(false);
-      synchronized (lock) {
-        lock.notify();
+      boolean isPaused = isPaused();
+      if (isPaused) {
+        reentrantLock.lock();
+        paused.set(false);
+        pauseCondition.signal();
+        reentrantLock.unlock();
+      } else {
+        synchronized (reentrantLock) {
+          reentrantLock.notify();
+        }
       }
       throttler.close();
       shutdownLatch.await();
+      if (isPaused) {
+        paused.set(true);
+      }
       pruneHardDeleteRecoveryRange();
       persistCleanupToken();
     }
@@ -399,9 +415,7 @@ public class HardDeleter implements Runnable {
             recoveryStartToken = StoreFindToken.fromBytes(stream, factory);
             recoveryEndToken = StoreFindToken.fromBytes(stream, factory);
             byte pauseByte = stream.readByte();
-            if (pauseByte == 1) {
-              paused.set(true);
-            }
+            paused.set(pauseByte == (byte) 1);
             hardDeleteRecoveryRange = new HardDeletePersistInfo(stream, factory);
             break;
           default:
@@ -438,46 +452,45 @@ public class HardDeleter implements Runnable {
            token_version
 
            Cleanup_Token_Version_V0
-           startTokenForRecovery
-           endTokenForRecovery
-           numBlobsInRange
-           --
-           blob1_blobReadOptions {version, offset, sz, ttl, key}
-           blob2_blobReadOptions
-           ....
-           blobN_blobReadOptions
-           --
-           length_of_blob1_messageStoreRecoveryInfo
-           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
-           length_of_blob2_messageStoreRecoveryInfo
-           blob2_messageStoreRecoveryInfo
-           ....
-           length_of_blobN_messageStoreRecoveryInfo
-           blobN_messageStoreRecoveryInfo
+            startTokenForRecovery
+            endTokenForRecovery
+            numBlobsInRange
+            --
+            blob1_blobReadOptions {version, offset, sz, ttl, key}
+            blob2_blobReadOptions
+            ....
+            blobN_blobReadOptions
+            --
+            length_of_blob1_messageStoreRecoveryInfo
+            blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+            length_of_blob2_messageStoreRecoveryInfo
+            blob2_messageStoreRecoveryInfo
+            ....
+            length_of_blobN_messageStoreRecoveryInfo
+            blobN_messageStoreRecoveryInfo
 
            Cleanup_Token_Version_V1
-           startTokenForRecovery
-           endTokenForRecovery
-           pause flag
-           numBlobsInRange
-           --
-           blob1_blobReadOptions {version, offset, sz, ttl, key}
-           blob2_blobReadOptions
-           ....
-           blobN_blobReadOptions
-           --
-           length_of_blob1_messageStoreRecoveryInfo
-           blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
-           length_of_blob2_messageStoreRecoveryInfo
-           blob2_messageStoreRecoveryInfo
-           ....
-           length_of_blobN_messageStoreRecoveryInfo
-           blobN_messageStoreRecoveryInfo
+            startTokenForRecovery
+            endTokenForRecovery
+            pause flag
+            numBlobsInRange
+            --
+            blob1_blobReadOptions {version, offset, sz, ttl, key}
+            blob2_blobReadOptions
+            ....
+            blobN_blobReadOptions
+            --
+            length_of_blob1_messageStoreRecoveryInfo
+            blob1_messageStoreRecoveryInfo {headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion, blobStreamSize}
+            length_of_blob2_messageStoreRecoveryInfo
+            blob2_messageStoreRecoveryInfo
+            ....
+            length_of_blobN_messageStoreRecoveryInfo
+            blobN_messageStoreRecoveryInfo
 
            --
            crc
            ---
-
          */
     if (endToken == null || ((StoreFindToken) endToken).getType().equals(StoreFindToken.Type.Uninitialized)) {
       return;
@@ -490,14 +503,13 @@ public class HardDeleter implements Runnable {
     DataOutputStream writer = new DataOutputStream(crc);
     try {
       // write the current version
-      writer.writeShort(Cleanup_Token_Version_V0);
+      writer.writeShort(Cleanup_Token_Version_V1);
       writer.write(startTokenSafeToPersist.toBytes());
       writer.write(endToken.toBytes());
-      // write pause flag in byte when writing in Cleanup_Token_Version_V1
+      writer.writeByte(isPaused() ? (byte) 1 : (byte) 0);
       writer.write(hardDeleteRecoveryRange.toBytes());
       long crcValue = crc.getValue();
       writer.writeLong(crcValue);
-
       fileStream.getChannel().force(true);
       tempFile.renameTo(actual);
     } catch (IOException e) {

@@ -119,6 +119,7 @@ public class ServerHardDeleteTest {
            startTokenForRecovery
            endTokenForRecovery
            numBlobsInRange
+           pause flag
            --
            blob1_blobReadOptions {version, offset, sz, ttl, key}
            blob2_blobReadOptions
@@ -141,7 +142,7 @@ public class ServerHardDeleteTest {
         DataInputStream stream = new DataInputStream(crcStream);
         try {
           short version = stream.readShort();
-          Assert.assertEquals(version, HardDeleter.Cleanup_Token_Version_V0);
+          Assert.assertEquals(version, HardDeleter.Cleanup_Token_Version_V1);
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", mockClusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
@@ -149,7 +150,7 @@ public class ServerHardDeleteTest {
           endToken = (StoreFindToken) factory.getFindToken(stream);
           Offset endTokenOffset = endToken.getOffset();
           parsedTokenValue = endTokenOffset == null ? -1 : endTokenOffset.getOffset();
-
+          boolean pauseFlag = stream.readByte() == (byte) 1;
           int num = stream.readInt();
           List<StoreKey> storeKeyList = new ArrayList<StoreKey>(num);
           for (int i = 0; i < num; i++) {
