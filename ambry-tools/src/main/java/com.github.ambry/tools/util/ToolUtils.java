@@ -84,6 +84,13 @@ public final class ToolUtils {
     return props;
   }
 
+  /**
+   * Ensure that the given argument list has all the required arguments. If not, exit.
+   * @param requiredArgs the list of required arguments.
+   * @param actualArgs the set of actual arguments.
+   * @param parser the {@link OptionParser} used to parse arguments.
+   * @throws IOException if there is a problem writing out usage information.
+   */
   public static void ensureOrExit(List<OptionSpec> requiredArgs, OptionSet actualArgs, OptionParser parser)
       throws IOException {
     for (OptionSpec opt : requiredArgs) {

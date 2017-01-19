@@ -22,6 +22,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -38,6 +40,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeTool.*;
@@ -59,7 +62,7 @@ public class HelixBootstrapUpgradeToolTest {
      * @param dcName the name of the datacenter.
      * @param port the port at which this Zk server should run on localhost.
      */
-    ZkInfo(String dcName, int port) throws Exception {
+    ZkInfo(String dcName, int port) throws IOException {
       this.dcName = dcName;
       this.port = port;
       File tempDir = Files.createTempDirectory(dcName).toFile();
@@ -70,7 +73,7 @@ public class HelixBootstrapUpgradeToolTest {
       startZkServer(port, dataDir, logDir);
     }
 
-    private void startZkServer(int port, String dataDir, String logDir) throws Exception {
+    private void startZkServer(int port, String dataDir, String logDir) {
       IDefaultNameSpace defaultNameSpace = new IDefaultNameSpace() {
         @Override
         public void createDefaultNameSpace(ZkClient zkClient) {
@@ -88,7 +91,7 @@ public class HelixBootstrapUpgradeToolTest {
 
   private static String tempDirPath;
   private static final HashMap<String, ZkInfo> dcsToZkInfo = new HashMap<>();
-  private final String dcs[] = new String[]{"DC0", "DC1"};
+  private static final String dcs[] = new String[]{"DC0", "DC1"};
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final String zkLayoutPath;
@@ -106,18 +109,22 @@ public class HelixBootstrapUpgradeToolTest {
     }
   }
 
-  /**
-   * Initialize ZKInfos for all dcs and start the ZK server.
-   */
-  public HelixBootstrapUpgradeToolTest() throws Exception {
+  @BeforeClass
+  public static void initialize() throws IOException {
     int port = 2200;
     for (String dcName : dcs) {
       dcsToZkInfo.put(dcName, new ZkInfo(dcName, port++));
     }
+  }
+
+  /**
+   * Initialize ZKInfos for all dcs and start the ZK server.
+   */
+  public HelixBootstrapUpgradeToolTest() throws Exception {
     hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
-    zkJson = constructZkLayoutJSON();
+    zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON();
     testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout);
   }
@@ -126,9 +133,9 @@ public class HelixBootstrapUpgradeToolTest {
    * Construct a ZK layout JSON using predetermined information.
    * @return the constructed JSON.
    */
-  private JSONObject constructZkLayoutJSON() throws JSONException {
+  private JSONObject constructZkLayoutJSON(Collection<ZkInfo> zkInfos) throws JSONException {
     JSONArray zkInfosJson = new JSONArray();
-    for (ZkInfo zkInfo : dcsToZkInfo.values()) {
+    for (ZkInfo zkInfo : zkInfos) {
       JSONObject zkInfoJson = new JSONObject();
       zkInfoJson.put("datacenter", zkInfo.dcName);
       zkInfoJson.put("hostname", "localhost");
@@ -154,6 +161,26 @@ public class HelixBootstrapUpgradeToolTest {
       throws JSONException {
     return new TestPartitionLayout(testHardwareLayout, HelixBootstrapUpgradeTool.MAX_PARTITIONS_PER_RESOURCE * 3 + 20,
         PartitionState.READ_WRITE, 1024L * 1024 * 1024, 3);
+  }
+
+  /**
+   * Test the case where the zkHosts JSON does not have an entry for every Datacenter in the static clustermap.
+   */
+  @Test
+  public void testIncompleteZKHostInfo() throws Exception {
+    if (testHardwareLayout.getDatacenterCount() > 1) {
+      JSONObject partialZkJson =
+          constructZkLayoutJSON(Collections.singleton(dcsToZkInfo.entrySet().iterator().next().getValue()));
+      Utils.writeJsonToFile(partialZkJson, zkLayoutPath);
+      Utils.writeJsonToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+      Utils.writeJsonToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+      try {
+        HelixBootstrapUpgradeTool.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "DC1");
+        Assert.fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
+      } catch (IllegalArgumentException e) {
+        // OK
+      }
+    }
   }
 
   /**
