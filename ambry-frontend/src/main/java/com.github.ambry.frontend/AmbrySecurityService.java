@@ -117,9 +117,9 @@ class AmbrySecurityService implements SecurityService {
           case GET:
             responseChannel.setStatus(ResponseStatus.Ok);
             RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
+            responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+                new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
             if (subResource == null) {
-              responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
-                  new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
               Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
               if (ifModifiedSinceMs != null
                   && RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs())
@@ -134,8 +134,6 @@ class AmbrySecurityService implements SecurityService {
                 setGetBlobResponseHeaders(blobInfo, options, responseChannel);
               }
             } else {
-              responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
-                  new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
               if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
                 setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
               }

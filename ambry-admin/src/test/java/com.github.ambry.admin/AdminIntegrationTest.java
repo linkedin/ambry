@@ -129,14 +129,14 @@ public class AdminIntegrationTest {
     doGetHeadDeleteTest(0, false);
     doGetHeadDeleteTest(0, true);
 
-    doGetHeadDeleteTest(1024, false);
-    doGetHeadDeleteTest(1024, true);
+    doGetHeadDeleteTest(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes - 1, false);
+    doGetHeadDeleteTest(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes - 1, true);
 
-    doGetHeadDeleteTest(8192, false);
-    doGetHeadDeleteTest(8192, true);
+    doGetHeadDeleteTest(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes, false);
+    doGetHeadDeleteTest(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes, true);
 
-    doGetHeadDeleteTest(10000, false);
-    doGetHeadDeleteTest(10000, true);
+    doGetHeadDeleteTest(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes * 3, false);
+    doGetHeadDeleteTest(ADMIN_CONFIG.adminChunkedGetResponseThresholdInBytes * 3, true);
   }
 
   /*

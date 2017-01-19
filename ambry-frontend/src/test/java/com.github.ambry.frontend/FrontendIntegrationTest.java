@@ -130,9 +130,9 @@ public class FrontendIntegrationTest {
   @Test
   public void postGetHeadDeleteTest() throws Exception {
     doPostGetHeadDeleteTest(0, false);
-    doPostGetHeadDeleteTest(1024, false);
-    doPostGetHeadDeleteTest(8192, false);
-    doPostGetHeadDeleteTest(10000, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, false);
   }
 
   /**
