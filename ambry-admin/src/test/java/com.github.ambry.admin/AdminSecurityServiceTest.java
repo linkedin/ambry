@@ -445,8 +445,9 @@ public class AdminSecurityServiceTest {
    */
   private void verifyCacheHeaders(boolean isPrivate, MockRestResponseChannel restResponseChannel) {
     if (isPrivate) {
-      Assert.assertEquals("Expires value is incorrect for private blob", 0,
-          RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES)).longValue());
+      Assert.assertEquals("Expires value is incorrect for private blob",
+          restResponseChannel.getHeader(RestUtils.Headers.DATE),
+          restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
       Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertEquals("Pragma value not as expected", "no-cache",

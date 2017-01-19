@@ -198,7 +198,7 @@ class AdminSecurityService implements SecurityService {
    */
   private void setCacheHeaders(boolean isPrivate, RestResponseChannel restResponseChannel) throws RestServiceException {
     if (isPrivate) {
-      restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, new Date(0));
+      restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, restResponseChannel.getHeader(RestUtils.Headers.DATE));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "private, no-cache, no-store, proxy-revalidate");
       restResponseChannel.setHeader(RestUtils.Headers.PRAGMA, "no-cache");
     } else {
