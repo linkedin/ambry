@@ -61,7 +61,7 @@ public class HardDeleter implements Runnable {
   private final int scanSizeInBytes;
   private final int messageRetentionSeconds;
   //how long to sleep if token does not advance.
-  private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * Time.MsPerSec;
+  private final long hardDeleterSleepTimeWhenCaughtUpMs;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -95,7 +95,6 @@ public class HardDeleter implements Runnable {
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private final ReentrantLock reentrantLock = new ReentrantLock();
   private final Condition pauseCondition = reentrantLock.newCondition();
-  private final Condition waitingCondition = reentrantLock.newCondition();
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
       MessageStoreHardDelete hardDelete, StoreKeyFactory factory, Time time) {
@@ -110,14 +109,15 @@ public class HardDeleter implements Runnable {
     throttler = new Throttler(config.storeHardDeleteBytesPerSec, 10, true, time);
     scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
     messageRetentionSeconds = config.storeDeletedMessageRetentionDays * Time.SecsPerDay;
+    hardDeleterSleepTimeWhenCaughtUpMs = config.storeHardDeleterSleepTimeWhenCaughtUpInMs;
   }
 
   @Override
   public void run() {
     try {
       while (running.get()) {
+        reentrantLock.lock();
         try {
-          reentrantLock.lock();
           while (isPaused()) {
             try {
               pauseCondition.await();
@@ -131,13 +131,12 @@ public class HardDeleter implements Runnable {
               if (!running.get()) {
                 break;
               }
-              time.wait(reentrantLock, hardDeleterSleepTimeWhenCaughtUpMs);
+              time.await(pauseCondition, hardDeleterSleepTimeWhenCaughtUpMs);
             } else if (isCaughtUp) {
               isCaughtUp = false;
               logger.info("Resumed hard deletes for {} after having caught up", dataDir);
             }
           }
-          reentrantLock.unlock();
         } catch (StoreException e) {
           if (e.getErrorCode() != StoreErrorCodes.Store_Shutting_Down) {
             logger.error("Caught store exception: ", e);
@@ -146,6 +145,8 @@ public class HardDeleter implements Runnable {
           }
         } catch (InterruptedException e) {
           logger.trace("Caught exception during hard deletes", e);
+        } finally {
+          reentrantLock.unlock();
         }
       }
     } finally {
@@ -154,15 +155,25 @@ public class HardDeleter implements Runnable {
   }
 
   /**
-   * Pauses hard deletes. If hard deletes is half way in hard deleting a range, it will continue to finish hard deleting
-   * the range and then pause. Hard delete will be in paused state until {@link #resume()} is called.
+   * Pauses hard deletes. This guarantees that any on-going hard deletes have been completed, flushed and persisted and
+   * the hard delete tokens are persisted before returning from pause. Hard delete will be in a paused state until
+   * {@link #resume()} is called.
    */
-  void pause() throws InterruptedException {
+  void pause() throws InterruptedException, StoreException, IOException {
+    // Locking is not strictly required here. But this ensures that any on-going hard delete cycle is complete,
+    // since acquiring the lock this means that hard deleter thread is either waiting (after caught up) or moving to
+    // next cycle
     reentrantLock.lock();
-    if (!paused.getAndSet(true)) {
-      logger.info("HardDelete thread has been paused ");
+    try {
+      if (!paused.getAndSet(true)) {
+        logger.info("HardDelete thread has been paused ");
+      }
+    } finally {
+      reentrantLock.unlock();
     }
-    reentrantLock.unlock();
+    index.persistIndex();
+    pruneHardDeleteRecoveryRange();
+    persistCleanupToken();
   }
 
   /**
@@ -170,10 +181,13 @@ public class HardDeleter implements Runnable {
    */
   void resume() {
     reentrantLock.lock();
-    if (paused.getAndSet(false)) {
-      pauseCondition.signal();
+    try {
+      if (paused.getAndSet(false)) {
+        pauseCondition.signal();
+      }
+    } finally {
+      reentrantLock.unlock();
     }
-    reentrantLock.unlock();
   }
 
   /**
@@ -363,16 +377,14 @@ public class HardDeleter implements Runnable {
   void shutdown() throws InterruptedException, StoreException, IOException {
     if (running.get()) {
       running.set(false);
-      boolean isPaused = isPaused();
-      if (isPaused) {
-        reentrantLock.lock();
-        paused.set(false);
+      // paused has to be set to false(if it was set to true) so that the hard deleter thread exits the while loop and
+      // doesn't go into an infinite loop
+      boolean isPaused = paused.getAndSet(false);
+      reentrantLock.lock();
+      try {
         pauseCondition.signal();
+      } finally {
         reentrantLock.unlock();
-      } else {
-        synchronized (reentrantLock) {
-          reentrantLock.notify();
-        }
       }
       throttler.close();
       shutdownLatch.await();

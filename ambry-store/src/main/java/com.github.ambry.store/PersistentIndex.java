@@ -87,6 +87,7 @@ class PersistentIndex {
   private final int maxInMemoryNumElements;
   private final String dataDir;
   private final MessageStoreHardDelete hardDelete;
+  private Thread hardDeleteThread = null;
   private final StoreKeyFactory factory;
   private final StoreConfig config;
   private final boolean cleanShutdown;
@@ -204,7 +205,7 @@ class PersistentIndex {
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
       if (config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
-        Thread hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
+        hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
         hardDeleteThread.start();
       } else {
         hardDeleter.close();
@@ -722,6 +723,14 @@ class PersistentIndex {
       }
     }
     return storeToken;
+  }
+
+  /**
+   * Returns the state of hard delete thread
+   * @return the state of hard delete thread
+   */
+  Thread.State getHardDeleteThreadStatus() {
+    return hardDeleteThread.getState();
   }
 
   private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,
