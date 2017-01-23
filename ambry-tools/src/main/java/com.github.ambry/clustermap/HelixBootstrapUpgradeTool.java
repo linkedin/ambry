@@ -20,6 +20,8 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
@@ -400,6 +402,7 @@ public class HelixBootstrapUpgradeTool {
         List<ReplicaId> replicaList = getReplicasInDc(partition, dcName);
         numReplicas = replicaList.size();
         String[] instances = updateInstancesAndGetInstanceNames(dcAdmin, partitionName, replicaList, sealed);
+        Collections.shuffle(Arrays.asList(instances));
         resourceISBuilder.assignPreferenceList(partitionName, instances);
       }
       resourceISBuilder.setNumReplica(numReplicas);

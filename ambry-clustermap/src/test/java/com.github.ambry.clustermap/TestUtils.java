@@ -537,7 +537,7 @@ public class TestUtils {
      * @param dataNodeCountPerDc number of datanodes to get from each datacenter.
      * @return a list of datanodes.
      */
-    public List<DataNode> getIndependentDataNodes(int dataNodeCountPerDc) {
+    List<DataNode> getIndependentDataNodes(int dataNodeCountPerDc) {
       List<DataNode> dataNodesToReturn = new ArrayList<DataNode>();
       for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
         List<DataNode> dataNodesInThisDc = new ArrayList<>();
