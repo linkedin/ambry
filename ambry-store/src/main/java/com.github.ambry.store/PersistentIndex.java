@@ -743,6 +743,14 @@ class PersistentIndex {
   }
 
   /**
+   * @param indexValue the {@link IndexValue} to be checked if deleted
+   * @return {@code true} if the value represents deleted entry, {@code false} otherwise
+   */
+  static boolean isDeleted(IndexValue indexValue) {
+    return indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
+  }
+
+  /**
    * Finds entries starting from a key from the segment with start offset initialSegmentStartOffset. The key represents
    * the position in the segment starting from where entries needs to be fetched.
    * @param initialSegmentStartOffset The segment start offset of the segment to start reading entries from.

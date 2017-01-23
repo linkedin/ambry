@@ -19,7 +19,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -33,12 +32,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -77,6 +78,7 @@ public class BlobStoreTest {
   // deliberately do not divide the capacities perfectly.
   private static final long PUT_RECORD_SIZE = 53;
   private static final long DELETE_RECORD_SIZE = 29;
+  private static final Set<MockId> EMPTY_SET = new HashSet<>();
 
   /**
    * A mock implementation of {@link MessageWriteSet} to help write to the {@link BlobStore}
@@ -205,7 +207,7 @@ public class BlobStoreTest {
   private final Set<MockId> generatedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // A map of all the keys. The key is the MockId and the value is a Pair that contains the metadata and data of the
   // message.
-  private final Map<MockId, Pair<MessageInfo, ByteBuffer>> allKeys = new ConcurrentHashMap<>();
+  private final Map<MockId, MockIdInfo> allKeys = new HashMap<>();
   // A list of keys grouped by the log segment that they belong to
   private final List<Set<MockId>> idsByLogSegment = new ArrayList<>();
   // Set of all deleted keys
@@ -372,7 +374,7 @@ public class BlobStoreTest {
 
     MockMessageStoreHardDelete hd = (MockMessageStoreHardDelete) hardDelete;
     for (MockId id : deletedKeys) {
-      hd.setMessageInfo(allKeys.get(id).getFirst());
+      hd.setMessageInfo(allKeys.get(id).msgInfo);
 
       // cannot get without StoreGetOptions
       verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
@@ -571,6 +573,46 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests {@link BlobStore#getBlobStoreStats()}
+   */
+  @Test
+  public void testBlobStoreStats() throws IOException, StoreException, InterruptedException {
+    verifyBlobStoreStats(store.getBlobStoreStats());
+
+    // put data and verify
+    idsByLogSegment.get(idsByLogSegment.size() - 1).addAll(put(2, PUT_RECORD_SIZE, Utils.Infinite_Time));
+    verifyBlobStoreStats(store.getBlobStoreStats());
+    // put data that is expired and verify
+    MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds() + 1).get(0);
+    idsByLogSegment.get(idsByLogSegment.size() - 1).add(addedId);
+    time.sleep(2);
+    liveKeys.remove(addedId);
+    expiredKeys.add(addedId);
+    verifyBlobStoreStats(store.getBlobStoreStats());
+    // delete data and verify
+    testBlobStoreStatsWithDeletes(0);
+
+    if (isLogSegmented) {
+      int[] logSegmentIndexToDelete = new int[]{1, idsByLogSegment.size() - 1};
+      for (int index : logSegmentIndexToDelete) {
+        testBlobStoreStatsWithDeletes(index);
+      }
+      // fill the current active segment to its capacity
+      long usedCapacityOfLastSegment = getUsedCapacityOfLogSegment(idsByLogSegment.size() - 1);
+      MockId id = put(1, SEGMENT_CAPACITY - usedCapacityOfLastSegment, Utils.Infinite_Time).get(0);
+      idsByLogSegment.get(idsByLogSegment.size() - 1).add(id);
+      // add data to new segment and verify
+      idsByLogSegment.add(EMPTY_SET);
+      idsByLogSegment.get(idsByLogSegment.size() - 1).addAll(put(2, PUT_RECORD_SIZE, Utils.Infinite_Time));
+      verifyBlobStoreStats(store.getBlobStoreStats());
+      // delete data from a sealed segment and verify
+      testBlobStoreStatsWithDeletes(2);
+      // delete data from the active segment and verify
+      testBlobStoreStatsWithDeletes(idsByLogSegment.size() - 1);
+    }
+  }
+
+  /**
    * Tests store shutdown and the ability to do operations when a store is shutdown or has not been started yet.
    * @throws StoreException
    */
@@ -590,6 +632,19 @@ public class BlobStoreTest {
   // helpers
   // general
 
+  class MockIdInfo {
+    MessageInfo msgInfo;
+    ByteBuffer byteBuffer;
+    int logSegmentIndexForPut;
+    int logSegmentIndexforDelete;
+
+    MockIdInfo(MessageInfo msgInfo, ByteBuffer byteBuffer, int logSegmentIndexForPut) {
+      this.msgInfo = msgInfo;
+      this.byteBuffer = byteBuffer;
+      this.logSegmentIndexForPut = logSegmentIndexForPut;
+    }
+  }
+
   /**
    * @return a {@link MockId} that is unique and has not been generated before in this run.
    */
@@ -603,7 +658,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Puts some blobs into the {@link BlobStore}.
+   * Puts some blobs into the {@link BlobStore}. Assumes new puts go into last segment as per {@link #idsByLogSegment}
    * @param count the number of blobs to PUT.
    * @param size the size of each blob.
    * @param expiresAtMs the expiry time (in ms) of each blob.
@@ -624,7 +679,7 @@ public class BlobStoreTest {
       ids.add(id);
       infos.add(info);
       buffers.add(buffer);
-      allKeys.put(id, new Pair<>(info, buffer));
+      allKeys.put(id, new MockIdInfo(info, buffer, idsByLogSegment.size() - 1));
       if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < time.milliseconds()) {
         expiredKeys.add(id);
       } else {
@@ -646,6 +701,7 @@ public class BlobStoreTest {
     ByteBuffer buffer = ByteBuffer.allocate((int) DELETE_RECORD_SIZE);
     store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
     deletedKeys.add(idToDelete);
+    allKeys.get(idToDelete).logSegmentIndexforDelete = idsByLogSegment.size() - 1;
     return info;
   }
 
@@ -664,7 +720,7 @@ public class BlobStoreTest {
     for (int i = 0; i < messageInfos.size(); i++) {
       MessageInfo messageInfo = messageInfos.get(i);
       MockId id = (MockId) messageInfo.getStoreKey();
-      MessageInfo expectedInfo = allKeys.get(id).getFirst();
+      MessageInfo expectedInfo = allKeys.get(id).msgInfo;
       assertEquals("Unexpected size in MessageInfo", expectedInfo.getSize(), messageInfo.getSize());
       assertEquals("Unexpected expiresAtMs in MessageInfo", expectedInfo.getExpirationTimeInMs(),
           messageInfo.getExpirationTimeInMs());
@@ -675,7 +731,7 @@ public class BlobStoreTest {
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
       WritableByteChannel channel = Channels.newChannel(stream);
       readSet.writeTo(i, channel, 0, expectedInfo.getSize());
-      ByteBuffer expectedData = allKeys.get(id).getSecond();
+      ByteBuffer expectedData = allKeys.get(id).byteBuffer;
       assertArrayEquals("Data obtained from reset does not match original", expectedData.array(), readBuf.array());
       examinedKeys.add(id);
     }
@@ -740,8 +796,8 @@ public class BlobStoreTest {
       sizeToWrite = segmentCapacity / 3;
       // First Index Segment
       // 1 PUT entry
-      MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
       idsByLogSegment.add(new HashSet<MockId>());
+      MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
       idsByLogSegment.get(2).add(addedId);
       // 1 DELETE for a key in the first log segment
       MockId idToDelete = getIdToDelete(idsByLogSegment.get(0));
@@ -1018,6 +1074,156 @@ public class BlobStoreTest {
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
     }
+  }
+
+  // blob Store stats test helpers
+
+  /**
+   * Verifies {@link BlobStoreStats}
+   * @param blobStoreStats the {@link BlobStoreStats} that needs to be verified
+   * @throws IOException
+   * @throws StoreException
+   */
+  private void verifyBlobStoreStats(BlobStoreStats blobStoreStats) throws IOException, StoreException {
+    // verify used capacity
+    verifyUsedCapacity(blobStoreStats.getUsedCapacity());
+    verifyUsedCapacityBySegment(blobStoreStats.getUsedCapacityBySegment().getSecond());
+    // verify valid data size
+    verifyValidDataSize(blobStoreStats.getValidDataSize().getSecond().longValue());
+    verifyValidDataSizeBySegment(blobStoreStats.getValidDataSizeBySegment().getSecond());
+    // verify total capacity
+    verifyTotalCapacity(blobStoreStats.getTotalCapacity());
+  }
+
+  /**
+   * Tests {@link BlobStoreStats}  with some delete operations
+   * @param deleteLogSegmentIndex log segment index from which a blob has to be deleted
+   * @throws StoreException
+   */
+  private void testBlobStoreStatsWithDeletes(int deleteLogSegmentIndex) throws StoreException, IOException {
+    // delete a blob in the given segment
+    MockId idToDelete = getIdToDelete(idsByLogSegment.get(deleteLogSegmentIndex));
+    delete(idToDelete);
+    idsByLogSegment.get(idsByLogSegment.size() - 1).add(idToDelete);
+    verifyBlobStoreStats(store.getBlobStoreStats());
+    verifyDeleteFailure(idToDelete, StoreErrorCodes.ID_Deleted);
+    verifyBlobStoreStats(store.getBlobStoreStats());
+    verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    verifyBlobStoreStats(store.getBlobStoreStats());
+  }
+
+  /**
+   * Verifies used capacity of the store
+   * @param usedCapacity used capacity of the store
+   */
+  private void verifyUsedCapacity(long usedCapacity) {
+    long segmentCapacity = isLogSegmented ? SEGMENT_CAPACITY : LOG_CAPACITY;
+    long usedCapacityOfSealedSegments = (idsByLogSegment.size() - 1) * segmentCapacity;
+    long lastSegmentSize = getUsedCapacityOfLogSegment(idsByLogSegment.size() - 1);
+    assertEquals("Used capacity mismatch ", usedCapacityOfSealedSegments + lastSegmentSize, usedCapacity);
+  }
+
+  /**
+   * Verify Used capacity of the store
+   * @param actualUsedCapacity actual used capacity by segment of the store
+   */
+  private void verifyUsedCapacityBySegment(SortedMap<String, Long> actualUsedCapacity) {
+    Iterator<Map.Entry<String, Long>> usedCapacityIterator = actualUsedCapacity.entrySet().iterator();
+    int count = 0;
+    while (usedCapacityIterator.hasNext()) {
+      Map.Entry<String, Long> segmentNameCapacityPair = usedCapacityIterator.next();
+      assertEquals("Used capacity mismatch for  " + segmentNameCapacityPair.getKey(),
+          getUsedCapacityOfLogSegment(count++), segmentNameCapacityPair.getValue().longValue());
+    }
+    assertTrue("No of segments mismatch ", (count == actualUsedCapacity.size()));
+  }
+
+  /**
+   * Verifies valid data size of the {@link BlobStore}
+   * @param validDataSize valid data size of the {@link BlobStore}
+   */
+  private void verifyValidDataSize(long validDataSize) {
+    assertEquals("Expected valid data size mismatch ", getValidDataSizeForKeys(liveKeys), validDataSize);
+  }
+
+  /**
+   * Verify valid data size by segment of the store
+   * @param validDataSizeBySegments valid data size of the segments
+   * @throws IOException
+   * @throws StoreException
+   */
+  private void verifyValidDataSizeBySegment(SortedMap<String, Long> validDataSizeBySegments)
+      throws IOException, StoreException {
+    Iterator<Map.Entry<String, Long>> iterator = validDataSizeBySegments.entrySet().iterator();
+    int count = 0;
+    while (iterator.hasNext()) {
+      Map.Entry<String, Long> validSizeOfSegment = iterator.next();
+      assertEquals("Valid data size mismatch for " + validSizeOfSegment.getKey(), getValidDataSizeOfLogSegment(count++),
+          validSizeOfSegment.getValue().longValue());
+    }
+    assertEquals("Store returned more segments for valid data size per segment ", count, idsByLogSegment.size());
+  }
+
+  /**
+   * Get Valid data size of the given log segment
+   * @param logSegmentIndex the log segment index for which the valid data size has to be determined
+   * @return the valid data size of the given log segment
+   */
+  private long getValidDataSizeOfLogSegment(int logSegmentIndex) {
+    long validDataSize = 0;
+    for (MockId key : idsByLogSegment.get(logSegmentIndex)) {
+      if (liveKeys.contains(key)) {
+        MessageInfo msgInfo = allKeys.get(key).msgInfo;
+        validDataSize += msgInfo.getSize();
+      }
+    }
+    return validDataSize;
+  }
+
+  /**
+   * Get the valid data size of all the keys passed in
+   * @param keys set of {@link MockId}s for which valid data size has to be determined
+   * @return the valid data size of all the keys passed in
+   */
+  private long getValidDataSizeForKeys(Set<MockId> keys) {
+    long validDataSize = 0;
+    for (MockId key : keys) {
+      MessageInfo msgInfo = allKeys.get(key).msgInfo;
+      validDataSize += msgInfo.getSize();
+    }
+    return validDataSize;
+  }
+
+  /**
+   * Get used capacity of a log segment
+   * @param logSegmentIndex the log segment index for which the used capacity has to be determined
+   * @return the used capacity of a log segment
+   */
+  private long getUsedCapacityOfLogSegment(int logSegmentIndex) {
+    long usedSegmentSize = 0;
+    Set<MockId> mockIds = idsByLogSegment.get(logSegmentIndex);
+    for (MockId id : mockIds) {
+      if (deletedKeys.contains(id) && allKeys.get(id).logSegmentIndexforDelete == logSegmentIndex) {
+        usedSegmentSize += (DELETE_RECORD_SIZE);
+        if (allKeys.get(id).logSegmentIndexForPut == logSegmentIndex) {
+          usedSegmentSize += allKeys.get(id).msgInfo.getSize();
+        }
+      } else {
+        usedSegmentSize += allKeys.get(id).msgInfo.getSize();
+      }
+    }
+    if (isLogSegmented) {
+      usedSegmentSize += LogSegment.HEADER_SIZE;
+    }
+    return usedSegmentSize;
+  }
+
+  /**
+   * Verifies total capacity of the {@link BlobStore}
+   * @param totalCapacity the total capacity of the {@link BlobStore}
+   */
+  private void verifyTotalCapacity(long totalCapacity) {
+    assertEquals("Total capacity mismatch ", LOG_CAPACITY, totalCapacity);
   }
 
   // shutdownTest() helpers

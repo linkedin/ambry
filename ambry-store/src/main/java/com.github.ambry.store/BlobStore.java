@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +51,7 @@ class BlobStore implements Store {
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final StoreMetrics metrics;
+  private BlobStoreStats blobStoreStats;
   private final Time time;
 
   private Log log;
@@ -106,6 +109,7 @@ class BlobStore implements Store {
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
             storeDescriptor.getIncarnationId());
+        blobStoreStats = new BlobStoreStats(log, index, capacityInBytes, time);
         metrics.initializeLogGauges(log, capacityInBytes);
         started = true;
       } catch (Exception e) {
@@ -301,6 +305,14 @@ class BlobStore implements Store {
   @Override
   public long getSizeInBytes() {
     return log.getUsedCapacity();
+  }
+
+  /**
+   * Returns {@link BlobStoreStats} for the {@link BlobStore}
+   * @return the {@link BlobStoreStats} for the {@link BlobStore}
+   */
+  BlobStoreStats getBlobStoreStats() {
+    return blobStoreStats;
   }
 
   @Override
