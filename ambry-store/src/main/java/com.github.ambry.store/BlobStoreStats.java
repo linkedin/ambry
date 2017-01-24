@@ -188,13 +188,12 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Check if {@code expirationTimeInMs} has passed {@code timeToCompareInMs} if not set to {@link Utils#Infinite_Time}
-   * @param expirationTimeInMs time in ms to check if {@code timeToCompareInMs} has passed the value or not
-   * @param timeToCompareInMs time in ms to be checked if {@code timeToCompareInMs} has passed {@code expirationTimeInMs}
-   * @return {@code true} if {@code timeToCompareInMs} has passed {@code expirationTimeInMs}. {@code false} otherwise or
-   * if {@code expirationTimeInMs} is set to {@link Utils#Infinite_Time}
+   * Check if {@code expirationTimeInMs} has expired compared to {@code referenceTimeInMs}
+   * @param expirationTimeInMs time in ms to be checked for expiration
+   * @param referenceTimeInMs the epoch time to use to check for expiration
+   * @return {@code true} if {@code expirationTimeInMs} expired wrt {@code referenceTimeInMs}, {@code false} otherwise
    */
-  private boolean isExpired(long expirationTimeInMs, long timeToCompareInMs) {
-    return expirationTimeInMs != Utils.Infinite_Time && timeToCompareInMs > expirationTimeInMs;
+  private boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
+    return expirationTimeInMs != Utils.Infinite_Time && referenceTimeInMs > expirationTimeInMs;
   }
 }
