@@ -37,9 +37,9 @@ class CompactionLog implements Closeable {
   private static final short VERSION_0 = 0;
 
   /**
-   * The {@link State} of the current compaction cycle.
+   * The {@link Phase} of the current compaction cycle.
    */
-  enum State {
+  enum Phase {
     PREPARE, COPY, SWITCH, CLEANUP, DONE
   }
 
@@ -119,10 +119,10 @@ class CompactionLog implements Closeable {
   }
 
   /**
-   * @return the current state of compaction.
+   * @return the current phase of compaction.
    */
-  State getCompactionState() {
-    return currentIdx >= cycleLogs.size() ? State.DONE : getCurrentCycleLog().getState();
+  Phase getCompactionPhase() {
+    return currentIdx >= cycleLogs.size() ? Phase.DONE : getCurrentCycleLog().getPhase();
   }
 
   /**
@@ -145,7 +145,7 @@ class CompactionLog implements Closeable {
    */
   void setSafeToken(StoreFindToken safeToken) {
     CycleLog cycleLog = getCurrentCycleLog();
-    if (!cycleLog.getState().equals(State.COPY)) {
+    if (!cycleLog.getPhase().equals(Phase.COPY)) {
       throw new IllegalStateException("Cannot set a safe token - not in COPY phase");
     }
     cycleLog.safeToken = safeToken;
@@ -156,7 +156,11 @@ class CompactionLog implements Closeable {
    * Marks the start of the copy phase.
    */
   void markCopyStart() {
-    getCurrentCycleLog().copyStartTime = time.milliseconds();
+    CycleLog cycleLog = getCurrentCycleLog();
+    if (!cycleLog.getPhase().equals(Phase.PREPARE)) {
+      throw new IllegalStateException("Should be in PREPARE phase to transition to COPY phase");
+    }
+    cycleLog.copyStartTime = time.milliseconds();
     flush();
   }
 
@@ -164,7 +168,11 @@ class CompactionLog implements Closeable {
    * Marks the start of the switch phase.
    */
   void markSwitchStart() {
-    getCurrentCycleLog().switchStartTime = time.milliseconds();
+    CycleLog cycleLog = getCurrentCycleLog();
+    if (!cycleLog.getPhase().equals(Phase.COPY)) {
+      throw new IllegalStateException("Should be in COPY phase to transition to SWITCH phase");
+    }
+    cycleLog.switchStartTime = time.milliseconds();
     flush();
   }
 
@@ -172,7 +180,11 @@ class CompactionLog implements Closeable {
    * Marks the start of the cleanup phase.
    */
   void markCleanupStart() {
-    getCurrentCycleLog().cleanupStartTime = time.milliseconds();
+    CycleLog cycleLog = getCurrentCycleLog();
+    if (!cycleLog.getPhase().equals(Phase.SWITCH)) {
+      throw new IllegalStateException("Should be in SWITCH phase to transition to CLEANUP phase");
+    }
+    cycleLog.cleanupStartTime = time.milliseconds();
     flush();
   }
 
@@ -180,7 +192,11 @@ class CompactionLog implements Closeable {
    * Marks the current compaction cycle as complete.
    */
   void markCycleComplete() {
-    getCurrentCycleLog().cycleEndTime = time.milliseconds();
+    CycleLog cycleLog = getCurrentCycleLog();
+    if (!cycleLog.getPhase().equals(Phase.CLEANUP)) {
+      throw new IllegalStateException("Should be in CLEANUP phase to complete cycle");
+    }
+    cycleLog.cycleEndTime = time.milliseconds();
     currentIdx++;
     flush();
   }
@@ -190,7 +206,7 @@ class CompactionLog implements Closeable {
    */
   @Override
   public void close() {
-    if (file.exists() && getCompactionState().equals(State.DONE)) {
+    if (file.exists() && getCompactionPhase().equals(Phase.DONE)) {
       String dateString = new Date(startTime).toString();
       File savedLog =
           new File(file.getAbsolutePath() + BlobStore.SEPARATOR + startTime + BlobStore.SEPARATOR + dateString);
@@ -204,6 +220,9 @@ class CompactionLog implements Closeable {
    * @return the {@link CycleLog} for the current compaction cycle.
    */
   private CycleLog getCurrentCycleLog() {
+    if (currentIdx >= cycleLogs.size()) {
+      throw new IllegalStateException("Operation not possible because there are no more compaction cycles left");
+    }
     return cycleLogs.get(currentIdx);
   }
 
@@ -290,22 +309,22 @@ class CompactionLog implements Closeable {
     }
 
     /**
-     * @return the current state of this cycle of compaction.
+     * @return the current phase of this cycle of compaction.
      */
-    State getState() {
-      State state;
+    Phase getPhase() {
+      Phase phase;
       if (copyStartTime == -1) {
-        state = State.PREPARE;
+        phase = Phase.PREPARE;
       } else if (switchStartTime == -1) {
-        state = State.COPY;
+        phase = Phase.COPY;
       } else if (cleanupStartTime == -1) {
-        state = State.SWITCH;
+        phase = Phase.SWITCH;
       } else if (cycleEndTime == -1) {
-        state = State.CLEANUP;
+        phase = Phase.CLEANUP;
       } else {
-        state = State.DONE;
+        phase = Phase.DONE;
       }
-      return state;
+      return phase;
     }
 
     /**

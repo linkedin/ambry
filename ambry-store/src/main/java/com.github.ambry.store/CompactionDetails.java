@@ -44,8 +44,8 @@ class CompactionDetails {
    * @param referenceTime the epoch time to use to get the same results from the {@link BlobStore} as when these details
    *                      were created.
    * @param logSegmentsUnderCompaction the names of the {@link LogSegment} under compaction.
-   * @param extraSegmentName the name of the segment which will provide the "extra" data. Can be {@code null} or empty
-   *                         if no extra data is required.
+   * @param extraSegmentName the name of the segment which will provide the "extra" data. Should be {@code null} if no
+   *                         extra data is required.
    * @param swapSpaceCount the number of swap spaces that will be required for compaction.
    */
   CompactionDetails(long referenceTime, List<String> logSegmentsUnderCompaction, String extraSegmentName,
@@ -74,7 +74,7 @@ class CompactionDetails {
           logSegmentsUnderCompaction.add(Utils.readIntString(stream));
         }
         String extraLogSegmentName = Utils.readIntString(stream);
-        if (extraLogSegmentName != null && extraLogSegmentName.isEmpty()) {
+        if (extraLogSegmentName.isEmpty()) {
           extraLogSegmentName = null;
         }
         int swapSpaceCount = stream.readInt();
