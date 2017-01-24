@@ -78,7 +78,7 @@ public class CompactionLogTest {
     List<CompactionDetails> detailsList = getCompactionDetails(5);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     CompactionLog log = new CompactionLog(tempDirStr, storeName, time, detailsList);
-    assertTrue("Compaction should should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
+    assertTrue("Compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     for (CompactionDetails details : detailsList) {
       verifyEquality(details, log.getCompactionDetails());
       assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, log.getCompactionPhase());
