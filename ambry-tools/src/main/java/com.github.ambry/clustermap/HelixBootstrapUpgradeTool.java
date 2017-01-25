@@ -17,17 +17,19 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
+import com.google.common.collect.Sets;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Properties;
-import java.util.TreeMap;
+import java.util.Set;
 import java.util.TreeSet;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -56,16 +58,14 @@ import org.json.JSONObject;
  * following example form:
  *
  * {
- *   "zkHosts" : [
+ *   "zkInfo" : [
  *     {
  *       "datacenter":"dc1",
- *       "hostname":"abc.example.com",
- *       "port":"2199",
+ *       "zkConnectStr":"abc.example.com:2199",
  *     },
  *     {
  *       "datacenter":"dc2",
- *       "hostname":"def.example.com",
- *       "port":"2300",
+ *       "zkConnectStr":"def.example.com:2300",
  *     }
  *   ]
  * }
@@ -88,40 +88,39 @@ public class HelixBootstrapUpgradeTool {
   private final ClusterMapManager staticClusterMap;
   private final Map<String, String> dataCenterToZkAddress = new HashMap<>();
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
-  // A mapping from partitions to Helix resource, populated at the start with what is present in Helix.
-  private final TreeMap<Long, Long> existingPartitions = new TreeMap<>();
-  // A set of resources in Helix, populated at the start with what is present in Helix.
+  // The set of partitions already present in Helix when this tool is run.
+  private final TreeSet<Long> existingPartitions = new TreeSet<>();
+  // The set of resources already present in Helix when this tool is run.
   private final TreeSet<Long> existingResources = new TreeSet<>();
   private final String localDc;
   private final String clusterName;
+  private final int maxPartitionsInOneResource;
 
-  static final int MAX_PARTITIONS_PER_RESOURCE = 100;
-  static final String CAPACITY_STR = "capacityInBytes";
-  static final String REPLICAS_STR = "Replicas";
-  static final String REPLICAS_DELIM_STR = ",";
-  static final String PORT_STR = "port";
-  static final String SSLPORT_STR = "sslPort";
-  static final String HOSTNAME_STR = "hostname";
-  static final String DATACENTER_STR = "datacenter";
-  static final String RACKID_STR = "rackId";
-  static final String SEALED_STR = "SEALED";
-  static final String ZKHOSTS_STR = "zkHosts";
+  private static final String CAPACITY_STR = "capacityInBytes";
+  private static final String REPLICAS_STR = "Replicas";
+  private static final String REPLICAS_DELIM_STR = ",";
+  private static final String SSLPORT_STR = "sslPort";
+  private static final String DATACENTER_STR = "datacenter";
+  private static final String RACKID_STR = "rackId";
+  private static final String SEALED_STR = "SEALED";
+  private static final String ZKINFO_STR = "zkInfo";
+  private static final String ZKCONNECTSTR_STR = "zkConnectStr";
+
+  static final int DEFAULT_MAX_PARTITIONS_PER_RESOURCE = 100;
 
   /**
    * @param args takes in three mandatory arguments: the hardware layout path, the partition layout path and the zk
    *             layout path.
    *             The Zk layout has to be of the following form:
    *             {
-   *               "zkHosts" : [
+   *               "zkInfo" : [
    *                 {
    *                   "datacenter":"dc1",
-   *                   "hostname":"abc.example.com",
-   *                   "port":"2199",
+   *                   "zkConnectStr":"abc.example.com:2199",
    *                 },
    *                 {
    *                   "datacenter":"dc2",
-   *                   "hostname":"def.example.com",
-   *                   "port":"2300",
+   *                   "zkConnectStr":"def.example.com:2300",
    *                 }
    *               ]
    *             }
@@ -146,18 +145,26 @@ public class HelixBootstrapUpgradeTool {
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> zkLayoutPathOpt = parser.accepts("zkLayoutPath",
-        "The path to the json file containing zookeeper connect info. This should" + " be of the following form: \n{\n"
-            + "  \"zkHosts\" : [\n" + "     {\n" + "       \"datacenter\":\"dc1\",\n"
-            + "       \"hostname\":\"abc.example.com\",\n" + "       \"port\":\"2199\",\n" + "     },\n" + "     {\n"
-            + "       \"datacenter\":\"dc2\",\n" + "       \"hostname\":\"def.example.com\",\n"
-            + "       \"port\":\"2300\",\n" + "     }\n" + "  ]\n" + "}").
+        "The path to the json file containing zookeeper connect info. This should be of the following form: \n{\n"
+            + "  \"zkInfo\" : [\n" + "     {\n" + "       \"datacenter\":\"dc1\",\n"
+            + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
+            + "       \"datacenter\":\"dc2\",\n" + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n"
+            + "     {\n" + "       \"datacenter\":\"dc3\",\n" + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n"
+            + "     }\n" + "  ]\n" + "}").
         withRequiredArg().
         describedAs("zk_connect_info_path").
         ofType(String.class);
 
-    ArgumentAcceptingOptionSpec<String> localDcOpt = parser.accepts("localDc", "The local datacenter name")
+    ArgumentAcceptingOptionSpec<String> localDcOpt =
+        parser.accepts("localDc", "(Optional argument) The local datacenter name")
+            .withRequiredArg()
+            .describedAs("local_dc")
+            .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> maxPartitionsInOneResourceOpt = parser.accepts("maxPartitionsInOneResource",
+        "(Optional argument) The maximum number of partitions that should be grouped under a Helix resource")
         .withRequiredArg()
-        .describedAs("local_dc")
+        .describedAs("max_partitions_in_one_resource")
         .ofType(String.class);
 
     OptionSet options = parser.parse(args);
@@ -169,7 +176,9 @@ public class HelixBootstrapUpgradeTool {
     listOpt.add(partitionLayoutPathOpt);
     listOpt.add(zkLayoutPathOpt);
     ToolUtils.ensureOrExit(listOpt, options, parser);
-    bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, options.valueOf(localDcOpt));
+    bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, options.valueOf(localDcOpt),
+        options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
+            : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)));
   }
 
   /**
@@ -183,10 +192,12 @@ public class HelixBootstrapUpgradeTool {
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String localDc) throws IOException, JSONException {
+      String localDc, int maxPartitionsInOneResource) throws IOException, JSONException {
     HelixBootstrapUpgradeTool clusterMapToHelixMapper =
-        new HelixBootstrapUpgradeTool(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc);
+        new HelixBootstrapUpgradeTool(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
+            maxPartitionsInOneResource);
     clusterMapToHelixMapper.updateClusterMapInHelix();
+    clusterMapToHelixMapper.validateAndClose();
   }
 
   /**
@@ -199,15 +210,18 @@ public class HelixBootstrapUpgradeTool {
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeTool(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String localDc) throws IOException, JSONException {
+      String localDc, int maxPartitionsInOneResource) throws IOException, JSONException {
     this.localDc = localDc;
+    this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     parseZkJsonAndPopulateZkInfo(zkLayoutPath);
 
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
-    staticClusterMap =
-        new File(partitionLayoutPath).exists() ? new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-            clusterMapConfig) : new ClusterMapManager(new PartitionLayout(
-            new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig)));
+    if (new File(partitionLayoutPath).exists()) {
+      staticClusterMap = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
+    } else {
+      staticClusterMap = new ClusterMapManager(new PartitionLayout(
+          new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig)));
+    }
     clusterName = staticClusterMap.partitionLayout.getClusterName();
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
       if (!dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
@@ -225,11 +239,10 @@ public class HelixBootstrapUpgradeTool {
    */
   private void parseZkJsonAndPopulateZkInfo(String zkLayoutPath) throws IOException, JSONException {
     JSONObject root = new JSONObject(Utils.readStringFromFile(zkLayoutPath));
-    JSONArray all = (root).getJSONArray(ZKHOSTS_STR);
+    JSONArray all = (root).getJSONArray(ZKINFO_STR);
     for (int i = 0; i < all.length(); i++) {
       JSONObject entry = all.getJSONObject(i);
-      dataCenterToZkAddress.put(entry.getString(DATACENTER_STR),
-          entry.getString(HOSTNAME_STR) + ":" + entry.getString(PORT_STR));
+      dataCenterToZkAddress.put(entry.getString(DATACENTER_STR), entry.getString(ZKCONNECTSTR_STR));
     }
   }
 
@@ -250,11 +263,11 @@ public class HelixBootstrapUpgradeTool {
     List<Partition> partitionsUnderNextResource = new ArrayList<>();
     for (PartitionId partitionId : staticClusterMap.partitionLayout.getPartitions()) {
       Partition partition = (Partition) partitionId;
-      if (existingPartitions.containsKey(partition.getId())) {
+      if (existingPartitions.contains(partition.getId())) {
         updatePartitionStateIfChanged(partition);
       } else {
         partitionsUnderNextResource.add(partition);
-        if (partitionsUnderNextResource.size() == MAX_PARTITIONS_PER_RESOURCE) {
+        if (partitionsUnderNextResource.size() == maxPartitionsInOneResource) {
           addNewAmbryPartitions(partitionsUnderNextResource, Long.toString(nextResource));
           partitionsUnderNextResource.clear();
           nextResource++;
@@ -276,7 +289,7 @@ public class HelixBootstrapUpgradeTool {
       // Add a cluster entry in every DC
       if (!admin.getClusters().contains(clusterName)) {
         admin.addCluster(clusterName);
-        admin.addStateModelDef(clusterName, "LeaderStandby", LeaderStandbySMD.build());
+        admin.addStateModelDef(clusterName, LeaderStandbySMD.name, LeaderStandbySMD.build());
       }
     }
   }
@@ -291,7 +304,7 @@ public class HelixBootstrapUpgradeTool {
     for (String resource : dcAdmin.getResourcesInCluster(clusterName)) {
       existingResources.add(Long.valueOf(resource));
       for (String partition : dcAdmin.getResourceIdealState(clusterName, resource).getPartitionSet()) {
-        existingPartitions.put(Long.valueOf(partition), Long.valueOf(resource));
+        existingPartitions.add(Long.valueOf(partition));
       }
     }
   }
@@ -358,14 +371,14 @@ public class HelixBootstrapUpgradeTool {
         DataNodeId node = replicaId.getDataNodeId();
         String instanceName = getInstanceName(node);
         InstanceConfig instanceConfig = dcAdmin.getInstanceConfig(clusterName, instanceName);
-        List<String> currentSealedPartitions = instanceConfig.getRecord().getListField("SEALED");
+        List<String> currentSealedPartitions = instanceConfig.getRecord().getListField(SEALED_STR);
         List<String> newSealedPartitionsList = new ArrayList<>(currentSealedPartitions);
         if (isSealed && !currentSealedPartitions.contains(partitionName)) {
           newSealedPartitionsList.add(partitionName);
         } else if (!isSealed && currentSealedPartitions.contains(partitionName)) {
           newSealedPartitionsList.remove(partitionName);
         }
-        instanceConfig.getRecord().setListField("SEALED", newSealedPartitionsList);
+        instanceConfig.getRecord().setListField(SEALED_STR, newSealedPartitionsList);
         dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
       }
     }
@@ -463,8 +476,179 @@ public class HelixBootstrapUpgradeTool {
     return replicaList;
   }
 
+  /**
+   * Get the instance name string associated with this data node in Helix.
+   * @param dataNode the {@link DataNodeId} of the data node.
+   * @return the instance name string.
+   */
   private static String getInstanceName(DataNodeId dataNode) {
     return dataNode.getHostname() + "_" + dataNode.getPort();
+  }
+
+  void validateAndClose() {
+    try {
+      verifyEquivalencyWithStatic(staticClusterMap.hardwareLayout, staticClusterMap.partitionLayout);
+    } finally {
+      for (HelixAdmin admin : adminForDc.values()) {
+        admin.close();
+      }
+    }
+  }
+
+  /**
+   * Verify that the information in Helix and the information in the static clustermap are equivalent.
+   * @param hardwareLayout the {@link HardwareLayout} of the static clustermap.
+   * @param partitionLayout the {@link PartitionLayout} of the static clustermap.
+   */
+  private void verifyEquivalencyWithStatic(HardwareLayout hardwareLayout, PartitionLayout partitionLayout) {
+    String clusterName = hardwareLayout.getClusterName();
+    for (Datacenter dc : hardwareLayout.getDatacenters()) {
+      HelixAdmin admin = adminForDc.get(dc.getName());
+      ensureOrThrow(admin != null, "No ZkInfo for datacenter " + dc.getName());
+      ensureOrThrow(admin.getClusters().contains(clusterName),
+          "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
+      verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
+      verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
+    }
+  }
+
+  /**
+   * Verify that the hardware layout information is in sync - which includes the node and disk information. Also verify
+   * that the replicas belonging to disks are in sync between the static cluster map and Helix.
+   * @param dc the datacenter whose information is to be verified.
+   * @param clusterName the cluster to be verified.
+   * @param partitionLayout the {@link PartitionLayout} of the static clustermap.
+   */
+  private void verifyDataNodeAndDiskEquivalencyInDc(Datacenter dc, String clusterName,
+      PartitionLayout partitionLayout) {
+    ClusterMapManager staticClusterMap = new ClusterMapManager(partitionLayout);
+    HelixAdmin admin = adminForDc.get(dc.getName());
+    List<String> allInstancesInHelix = admin.getInstancesInCluster(clusterName);
+    for (DataNodeId dataNodeId : dc.getDataNodes()) {
+      Map<String, List<String>> mountPathToReplicas = getMountPathToReplicas(staticClusterMap, dataNodeId);
+      DataNode dataNode = (DataNode) dataNodeId;
+      String instanceName = getInstanceName(dataNode);
+      ensureOrThrow(allInstancesInHelix.remove(instanceName), "Instance not present in Helix " + instanceName);
+      InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
+
+      Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
+      for (Disk disk : dataNode.getDisks()) {
+        Map<String, String> diskInfoInHelix = diskInfos.remove(disk.getMountPath());
+        ensureOrThrow(diskInfoInHelix != null,
+            "Disk not present for instance " + instanceName + " disk " + disk.getMountPath());
+        ensureOrThrow(disk.getRawCapacityInBytes() == Long.valueOf(diskInfoInHelix.get(CAPACITY_STR)),
+            "Capacity mismatch for instance " + instanceName + " disk " + disk.getMountPath());
+        Set<String> replicasInHelix;
+        String replicasStr = diskInfoInHelix.get(REPLICAS_STR);
+        if (replicasStr.isEmpty()) {
+          replicasInHelix = new HashSet<>();
+        } else {
+          replicasInHelix = Sets.newHashSet(replicasStr.split(REPLICAS_DELIM_STR));
+        }
+        Set<String> replicasInClusterMap;
+        List<String> replicaList = mountPathToReplicas.get(disk.getMountPath());
+        if (replicaList == null) {
+          replicasInClusterMap = new HashSet<>();
+        } else {
+          replicasInClusterMap = Sets.newHashSet(replicaList);
+        }
+        ensureOrThrow(replicasInClusterMap.equals(replicasInHelix),
+            "Replica information not consistent for instance " + instanceName + " disk " + disk.getMountPath()
+                + "\n in Helix: " + replicaList + "\n in static clustermap: " + replicasInClusterMap);
+      }
+
+      ensureOrThrow(dataNode.getSSLPort() == Integer.valueOf(instanceConfig.getRecord().getSimpleField(SSLPORT_STR)),
+          "SSL Port mismatch for instance " + instanceName);
+      ensureOrThrow(dataNode.getDatacenterName().equals(instanceConfig.getRecord().getSimpleField(DATACENTER_STR)),
+          "Datacenter mismatch for instance " + instanceName);
+      ensureOrThrow(dataNode.getRackId() == Long.valueOf(instanceConfig.getRecord().getSimpleField(RACKID_STR)),
+          "Rack Id mismatch for instance " + instanceName);
+      Set<String> sealedReplicasInHelix = Sets.newHashSet(instanceConfig.getRecord().getListField(SEALED_STR));
+      Set<String> sealedReplicasInClusterMap = new HashSet<>();
+      for (Replica replica : staticClusterMap.getReplicas(dataNodeId)) {
+        if (replica.getPartition().partitionState.equals(PartitionState.READ_ONLY)) {
+          sealedReplicasInClusterMap.add(Long.toString(replica.getPartition().getId()));
+        }
+      }
+      ensureOrThrow(sealedReplicasInClusterMap.equals(sealedReplicasInHelix),
+          "Sealed replicas info mismatch for " + "instance " + instanceName);
+    }
+    ensureOrThrow(allInstancesInHelix.isEmpty(),
+        "Following instances in Helix not found in the clustermap " + allInstancesInHelix);
+  }
+
+  /**
+   * Verify that the partition layout information is in sync.
+   * @param dc the datacenter whose information is to be verified.
+   * @param clusterName the cluster to be verified.
+   * @param partitionLayout the {@link PartitionLayout} of the static clustermap.
+   */
+  private void verifyResourcesAndPartitionEquivalencyInDc(Datacenter dc, String clusterName,
+      PartitionLayout partitionLayout) {
+    String dcName = dc.getName();
+    HelixAdmin admin = adminForDc.get(dc.getName());
+    Map<String, Set<String>> allPartitionsToInstancesInHelix = new HashMap<>();
+    for (String resourceName : admin.getResourcesInCluster(clusterName)) {
+      IdealState resourceIS = admin.getResourceIdealState(clusterName, resourceName);
+      ensureOrThrow(resourceIS.getStateModelDefRef().equals(LeaderStandbySMD.name),
+          "StateModel name mismatch for resource " + resourceName);
+      int numReplicasAtResourceLevel = Integer.valueOf(resourceIS.getReplicas());
+      Set<String> resourcePartitions = resourceIS.getPartitionSet();
+      for (String resourcePartition : resourcePartitions) {
+        Set<String> partitionInstanceSet = resourceIS.getInstanceSet(resourcePartition);
+        ensureOrThrow(numReplicasAtResourceLevel == partitionInstanceSet.size(),
+            "NumReplicas at resource level " + numReplicasAtResourceLevel
+                + " different from number of replicas for partition " + partitionInstanceSet);
+        ensureOrThrow(allPartitionsToInstancesInHelix.put(resourcePartition, partitionInstanceSet) == null,
+            "Partition " + resourcePartition + " already found under a different resource.");
+      }
+    }
+    for (PartitionId partitionId : partitionLayout.getPartitions()) {
+      Partition partition = (Partition) partitionId;
+      String partitionName = Long.toString(partition.getId());
+      Set<String> replicaHostsInHelix = allPartitionsToInstancesInHelix.remove(partitionName);
+      ensureOrThrow(replicaHostsInHelix != null, "No replicas found for partition " + partitionName + " in Helix");
+      for (Replica replica : partition.getReplicas()) {
+        if (replica.getDataNodeId().getDatacenterName().equals(dcName)) {
+          String instanceName = getInstanceName(replica.getDataNodeId());
+          ensureOrThrow(replicaHostsInHelix.remove(instanceName),
+              "Instance " + instanceName + " for the given " + "replica in the clustermap not found in Helix");
+        }
+      }
+      ensureOrThrow(replicaHostsInHelix.isEmpty(),
+          "More instances in Helix than in clustermap for partition: " + partitionName + " additional instances: "
+              + replicaHostsInHelix);
+    }
+    ensureOrThrow(allPartitionsToInstancesInHelix.isEmpty(),
+        "More partitions in Helix than in clustermap, additional" + " partitions: "
+            + allPartitionsToInstancesInHelix.keySet());
+  }
+
+  /**
+   * A helper method that returns a map of mountPaths to a list of replicas for a given {@link DataNodeId}
+   * @param staticClusterMap the static {@link ClusterMapManager}
+   * @param dataNodeId the {@link DataNodeId} of interest.
+   * @return the constructed map.
+   */
+  static Map<String, List<String>> getMountPathToReplicas(ClusterMapManager staticClusterMap, DataNodeId dataNodeId) {
+    Map<String, List<String>> mountPathToReplicas = new HashMap<>();
+    for (Replica replica : staticClusterMap.getReplicas(dataNodeId)) {
+      List<String> replicaStrs = mountPathToReplicas.get(replica.getMountPath());
+      if (replicaStrs != null) {
+        replicaStrs.add(Long.toString(replica.getPartition().getId()));
+      } else {
+        replicaStrs = new ArrayList<>();
+        replicaStrs.add(Long.toString(replica.getPartition().getId()));
+        mountPathToReplicas.put(replica.getMountPath(), replicaStrs);
+      }
+    }
+    return mountPathToReplicas;
+  }
+
+  private void ensureOrThrow(boolean condition, String errStr) {
+    if (!condition) {
+      throw new AssertionError(errStr);
+    }
   }
 }
 
