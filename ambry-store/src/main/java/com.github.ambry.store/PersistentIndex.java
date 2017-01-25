@@ -80,6 +80,7 @@ class PersistentIndex {
   final ConcurrentSkipListMap<Offset, IndexSegment> indexes = new ConcurrentSkipListMap<>();
   final Journal journal;
   final HardDeleter hardDeleter;
+  volatile Thread hardDeleteThread = null;
 
   private final Log log;
   private final Offset logAbsoluteZeroOffset;
@@ -87,7 +88,6 @@ class PersistentIndex {
   private final int maxInMemoryNumElements;
   private final String dataDir;
   private final MessageStoreHardDelete hardDelete;
-  private Thread hardDeleteThread = null;
   private final StoreKeyFactory factory;
   private final StoreConfig config;
   private final boolean cleanShutdown;
@@ -723,14 +723,6 @@ class PersistentIndex {
       }
     }
     return storeToken;
-  }
-
-  /**
-   * Returns the state of hard delete thread
-   * @return the state of hard delete thread
-   */
-  Thread.State getHardDeleteThreadStatus() {
-    return hardDeleteThread.getState();
   }
 
   private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,

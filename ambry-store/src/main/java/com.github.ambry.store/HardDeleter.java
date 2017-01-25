@@ -118,7 +118,7 @@ public class HardDeleter implements Runnable {
       while (running.get()) {
         reentrantLock.lock();
         try {
-          while (isPaused()) {
+          while (running.get() && isPaused()) {
             try {
               pauseCondition.await();
             } catch (InterruptedException e) {
@@ -160,20 +160,18 @@ public class HardDeleter implements Runnable {
    * {@link #resume()} is called.
    */
   void pause() throws InterruptedException, StoreException, IOException {
-    // Locking is not strictly required here. But this ensures that any on-going hard delete cycle is complete,
-    // since acquiring the lock this means that hard deleter thread is either waiting (after caught up) or moving to
-    // next cycle
     reentrantLock.lock();
     try {
-      if (!paused.getAndSet(true)) {
+      if (paused.compareAndSet(false, true)) {
         logger.info("HardDelete thread has been paused ");
+        pauseCondition.signal();
+        index.persistIndex();
+        pruneHardDeleteRecoveryRange();
+        persistCleanupToken();
       }
     } finally {
       reentrantLock.unlock();
     }
-    index.persistIndex();
-    pruneHardDeleteRecoveryRange();
-    persistCleanupToken();
   }
 
   /**
@@ -182,7 +180,7 @@ public class HardDeleter implements Runnable {
   void resume() {
     reentrantLock.lock();
     try {
-      if (paused.getAndSet(false)) {
+      if (paused.compareAndSet(true, false)) {
         pauseCondition.signal();
       }
     } finally {
@@ -377,9 +375,6 @@ public class HardDeleter implements Runnable {
   void shutdown() throws InterruptedException, StoreException, IOException {
     if (running.get()) {
       running.set(false);
-      // paused has to be set to false(if it was set to true) so that the hard deleter thread exits the while loop and
-      // doesn't go into an infinite loop
-      boolean isPaused = paused.getAndSet(false);
       reentrantLock.lock();
       try {
         pauseCondition.signal();
@@ -388,9 +383,6 @@ public class HardDeleter implements Runnable {
       }
       throttler.close();
       shutdownLatch.await();
-      if (isPaused) {
-        paused.set(true);
-      }
       pruneHardDeleteRecoveryRange();
       persistCleanupToken();
     }

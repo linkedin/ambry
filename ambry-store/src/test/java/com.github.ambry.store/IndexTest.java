@@ -42,7 +42,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NoSuchElementException;
 import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -115,7 +114,6 @@ public class IndexTest {
   private final String tempDirStr;
   // the time instance that will be used in the index
   private final Time time = new MockTime();
-  private final Random random = new Random();
 
   private final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
   private final Properties properties = new Properties();
@@ -490,7 +488,7 @@ public class IndexTest {
     assertTrue("Hard delete did not do any work", index.hardDeleter.hardDelete());
 
     long expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
-    waitUntilExpectedProgress(expectedProgress, 1000);
+    assertEquals("Hard delete did not make expected progress", expectedProgress, index.hardDeleter.getProgress());
     verifyEntriesForHardDeletes(deletedKeys, true);
   }
 
@@ -512,154 +510,51 @@ public class IndexTest {
     assertTrue("Hard delete is not running", index.hardDeleter.isRunning());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
     advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    // give it some time so that hard delete completes one cycle
     long expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    // give it some time so that hard delete completes one cycle
     waitUntilExpectedProgress(expectedProgress, 1000);
     verifyEntriesForHardDeletes(deletedKeys, true);
 
     index.hardDeleter.pause();
     assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    verifyHardDeleterThreadState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
-        hardDeleterSleepTimeWhenCaughtUpMs / 10);
+    waitUntilExpectedState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
+        hardDeleterSleepTimeWhenCaughtUpMs / 5);
 
-    addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
     // delete two entries
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
     Set<MockId> idsToDelete = new HashSet<>();
     idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
     idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
     for (MockId id : idsToDelete) {
       addDeleteEntry(id);
     }
     advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    waitUntilExpectedState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
+        hardDeleterSleepTimeWhenCaughtUpMs / 5);
     verifyEntriesForHardDeletes(idsToDelete, false);
     index.hardDeleter.preLogFlush();
     index.hardDeleter.postLogFlush();
     assertEquals("Hard delete should not have progressed", expectedProgress, index.hardDeleter.getProgress());
 
-    // pause should be idempotent
-    index.hardDeleter.pause();
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    verifyHardDeleterThreadState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
-        hardDeleterSleepTimeWhenCaughtUpMs / 10);
-    index.hardDeleter.preLogFlush();
-    index.hardDeleter.postLogFlush();
-    assertEquals("Hard delete should not have progressed", expectedProgress, index.hardDeleter.getProgress());
-
     index.hardDeleter.resume();
-    assertFalse("Hard deletes should not have been paused ", index.hardDeleter.isPaused());
+    assertFalse("Hard deletes should have been resumed ", index.hardDeleter.isPaused());
     expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
     // after resuming. hard deletes should progress. Give it some time to hard delete next range
     waitUntilExpectedProgress(expectedProgress, 1000);
     verifyEntriesForHardDeletes(idsToDelete, true);
+  }
 
-    // check that resume is no-op when pause is not called
-    addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    // delete two entries
-    idsToDelete.clear();
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : idsToDelete) {
-      addDeleteEntry(id);
-    }
-    index.hardDeleter.resume();
-    assertFalse("Hard deletes should not have been paused ", index.hardDeleter.isPaused());
-    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
-    // after resuming. hard deletes should progress. Give it some time to hard delete next range
-    waitUntilExpectedProgress(expectedProgress, 1000);
-    verifyEntriesForHardDeletes(idsToDelete, true);
-
-    // pause hard deletes and reload the index to verify that hard deletes has been paused
-
-    index.hardDeleter.pause();
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    verifyHardDeleterThreadState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
-        hardDeleterSleepTimeWhenCaughtUpMs / 10);
-    // delete two entries
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.clear();
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : idsToDelete) {
-      addDeleteEntry(id);
-    }
-    verifyEntriesForHardDeletes(idsToDelete, false);
-    reloadIndex(false);
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    assertEquals("Hard delete should not have progressed ", expectedProgress, index.hardDeleter.getProgress());
-
-    Set<MockId> newIdsToDelete = new HashSet<>();
-    addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : newIdsToDelete) {
-      addDeleteEntry(id);
-    }
-    idsToDelete.addAll(newIdsToDelete);
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    verifyHardDeleterThreadState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
-        hardDeleterSleepTimeWhenCaughtUpMs / 10);
-    assertEquals("Hard delete has not processed all keys", expectedProgress, index.hardDeleter.getProgress());
-    verifyEntriesForHardDeletes(idsToDelete, false);
-    // resume and verify new entries(both before and after reload) have been hard deleted
-    index.hardDeleter.resume();
-    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
-    // after resuming. hard deletes should progress. Give it some time to hard delete next range
-    waitUntilExpectedProgress(expectedProgress, 1000);
-    verifyEntriesForHardDeletes(idsToDelete, true);
-
-    // test scenario:
-    // pause hard deletes, simulate a crash. Verify the resume hard deletes new deleted blobs as expected
-    index.hardDeleter.pause();
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    verifyHardDeleterThreadState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
-        hardDeleterSleepTimeWhenCaughtUpMs / 10);
-    // delete two entries
-    idsToDelete.clear();
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : idsToDelete) {
-      addDeleteEntry(id);
-    }
-    verifyEntriesForHardDeletes(idsToDelete, false);
-    // persist index so that new entries are persisted
-    index.persistIndex();
-
-    // crash
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, new MetricRegistry());
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    index =
-        new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
-            incarnationId);
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    assertEquals("Hard delete should not have progressed ", expectedProgress, index.hardDeleter.getProgress());
-
-    newIdsToDelete.clear();
-    addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : newIdsToDelete) {
-      addDeleteEntry(id);
-    }
-    idsToDelete.addAll(newIdsToDelete);
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-    verifyHardDeleterThreadState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
-        hardDeleterSleepTimeWhenCaughtUpMs / 10);
-    assertEquals("Hard delete has not processed all keys", expectedProgress, index.hardDeleter.getProgress());
-    verifyEntriesForHardDeletes(idsToDelete, false);
-    // resume and verify new entries(which are added both before and after reload) have been hard deleted
-    index.hardDeleter.resume();
-    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
-    // after resuming. hard deletes should progress. Give it some time to hard delete next range
-    waitUntilExpectedProgress(expectedProgress, 1000);
-    verifyEntriesForHardDeletes(idsToDelete, true);
+  /**
+   * Tests that hard delete pause and resume with restart
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void hardDeletePauseResumeWithRestartTest() throws InterruptedException, IOException, StoreException {
+    testHardDeletePauseResumeWithRestartTest(false);
+    testHardDeletePauseResumeWithRestartTest(true);
   }
 
   /**
@@ -1045,12 +940,10 @@ public class IndexTest {
       index.persistIndex();
       fail("Should have thrown exception since index has entries which log does not have");
     } catch (StoreException e) {
+      assertEquals("StoreException error code mismatch ", StoreErrorCodes.Illegal_Index_State, e.getErrorCode());
     }
     // append to log so that log and index are in sync with each other
     appendToLog(PUT_RECORD_SIZE);
-    // add to allKeys() so that doFindEntriesSinceTest() works correctly.
-    allKeys.put(newId,
-        new Pair<IndexValue, IndexValue>(new IndexValue(PUT_RECORD_SIZE, fileSpan.getStartOffset()), null));
   }
 
   // helpers
@@ -1076,8 +969,12 @@ public class IndexTest {
    */
   private void appendToLog(long size) throws IOException {
     byte[] bytes = TestUtils.getRandomBytes((int) size);
-    // ensure atleast one byte is set to 1
-    bytes[random.nextInt((int) size)] = 1;
+    if (size > HARD_DELETE_START_OFFSET) {
+      // ensure atleast one byte is set to 1 for hard delete verification purposes
+      int randomByte =
+          (int) (HARD_DELETE_START_OFFSET + TestUtils.RANDOM.nextInt((int) (size - HARD_DELETE_START_OFFSET)));
+      bytes[randomByte] = 1;
+    }
     ByteBuffer buffer = ByteBuffer.wrap(bytes);
     ReadableByteChannel channel = Channels.newChannel(new ByteBufferInputStream(buffer));
     log.appendFrom(channel, buffer.capacity());
@@ -1264,8 +1161,8 @@ public class IndexTest {
   private void waitUntilExpectedProgress(long expectedProgress, int maxTimeToCheck) throws InterruptedException {
     int sleptSoFar = 0;
     while (expectedProgress != index.hardDeleter.getProgress()) {
-      sleptSoFar += 10;
-      Thread.sleep(sleptSoFar);
+      sleptSoFar += 100;
+      Thread.sleep(100);
       if (sleptSoFar == maxTimeToCheck) {
         fail("HardDelete failed to catch up in " + maxTimeToCheck);
       }
@@ -1275,18 +1172,20 @@ public class IndexTest {
   }
 
   /**
-   * Verifies that the HardDeleter thread is in the {@code expectedState} for the specified {@code timeToCheckInMs} time.
+   * Waits until the HardDeleter thread is in the {@code expectedState} for the specified {@code timeToCheckInMs} time.
    * @param expectedState Expected HardDeleter thread state
    * @param timeToCheckInMs time for which the state has to be checked for
    * @param intervalToCheckInMs interval at which the check has to be done
    */
-  private void verifyHardDeleterThreadState(Thread.State expectedState, long timeToCheckInMs, long intervalToCheckInMs)
+  private void waitUntilExpectedState(Thread.State expectedState, long timeToCheckInMs, long intervalToCheckInMs)
       throws InterruptedException {
     long timeSoFar = 0;
-    while (timeSoFar < timeToCheckInMs) {
-      assertEquals("Hard Deleter thread status mismatch ", expectedState, index.getHardDeleteThreadStatus());
-      advanceTime(intervalToCheckInMs);
+    while (expectedState != index.hardDeleteThread.getState()) {
+      Thread.sleep(intervalToCheckInMs);
       timeSoFar += intervalToCheckInMs;
+      if (timeSoFar >= timeToCheckInMs) {
+        fail("Hard Deleter thread state failed to move to " + Thread.State.WAITING + " in " + timeToCheckInMs);
+      }
     }
   }
 
@@ -1442,6 +1341,7 @@ public class IndexTest {
     properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
     properties.put("store.data.flush.delay.seconds", Integer.toString(0));
     properties.put("store.enable.hard.delete", "false");
+    properties.put("store.hard.deleter.sleep.time.when.caught.up.in.ms", "10");
     // the segment capacity property is never used, so it is not set.
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     hardDeleterSleepTimeWhenCaughtUpMs = config.storeHardDeleterSleepTimeWhenCaughtUpInMs;
@@ -1645,6 +1545,79 @@ public class IndexTest {
       lastOffset = logOrder.lowerKey(nextSegmentStartOffset);
     }
     return lastOffset;
+  }
+
+  // hardDeletePauseAndResumeOnRestart() helpers
+
+  /**
+   * Utility to test hard delete pause and resume with restart.
+   * @param deleteShutdownFile {@code true} if shutdown file needs to be deleted during reload of index, {@code false}
+   *                                       otherwise
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  private void testHardDeletePauseResumeWithRestartTest(boolean deleteShutdownFile)
+      throws InterruptedException, IOException, StoreException {
+    properties.put("store.deleted.message.retention.days", Integer.toString(1));
+    properties.put("store.hard.delete.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
+    properties.setProperty("store.data.flush.interval.seconds", "3600");
+    // enable daemon thread to run hard deletes
+    properties.put("store.enable.hard.delete", "true");
+    reloadIndex(false);
+    assertTrue("Hard delete is not running", index.hardDeleter.isRunning());
+    // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
+    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    long expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    // give it some time so that hard delete completes one cycle
+    waitUntilExpectedProgress(expectedProgress, 1000);
+    verifyEntriesForHardDeletes(deletedKeys, true);
+
+    index.hardDeleter.pause();
+    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
+    waitUntilExpectedState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
+        hardDeleterSleepTimeWhenCaughtUpMs / 5);
+
+    // delete two entries
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    Set<MockId> idsToDelete = new HashSet<>();
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : idsToDelete) {
+      addDeleteEntry(id);
+    }
+    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    waitUntilExpectedState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
+        hardDeleterSleepTimeWhenCaughtUpMs / 5);
+    verifyEntriesForHardDeletes(idsToDelete, false);
+
+    reloadIndex(deleteShutdownFile);
+    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
+    assertEquals("Hard delete should not have progressed ", expectedProgress, index.hardDeleter.getProgress());
+
+    Set<MockId> newIdsToDelete = new HashSet<>();
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : newIdsToDelete) {
+      addDeleteEntry(id);
+    }
+    idsToDelete.addAll(newIdsToDelete);
+    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
+    waitUntilExpectedState(Thread.State.WAITING, hardDeleterSleepTimeWhenCaughtUpMs + 1,
+        hardDeleterSleepTimeWhenCaughtUpMs / 5);
+    assertEquals("Hard delete should not have progressed", expectedProgress, index.hardDeleter.getProgress());
+    verifyEntriesForHardDeletes(idsToDelete, false);
+    // resume and verify new entries(both before and after reload) have been hard deleted
+    index.hardDeleter.resume();
+    assertFalse("Hard deletes should have been resumed ", index.hardDeleter.isPaused());
+    expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    // after resuming. hard deletes should progress. Give it some time to hard delete next range
+    waitUntilExpectedProgress(expectedProgress, 1000);
+    verifyEntriesForHardDeletes(idsToDelete, true);
   }
 
   // recoverySuccessTest() helpers
