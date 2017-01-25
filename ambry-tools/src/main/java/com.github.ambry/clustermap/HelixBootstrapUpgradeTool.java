@@ -379,7 +379,8 @@ public class HelixBootstrapUpgradeTool {
           newSealedPartitionsList.remove(partitionName);
         }
         instanceConfig.getRecord().setListField(SEALED_STR, newSealedPartitionsList);
-        dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        // @todo: uncomment when we move to Helix 0.6.7.
+        // dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
       }
     }
   }
@@ -453,7 +454,8 @@ public class HelixBootstrapUpgradeTool {
         newSealedPartitionsList.add(partitionName);
         instanceConfig.getRecord().setListField(SEALED_STR, newSealedPartitionsList);
       }
-      dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+      // @todo: uncomment when we move to Helix 0.6.7.
+      // dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
     }
     return instances;
   }
@@ -485,7 +487,11 @@ public class HelixBootstrapUpgradeTool {
     return dataNode.getHostname() + "_" + dataNode.getPort();
   }
 
-  void validateAndClose() {
+  /**
+   * Validate that the information in Helix is consistent with the information in the static clustermap; and close
+   * all the admin connections to ZK hosts.
+   */
+  private void validateAndClose() {
     try {
       verifyEquivalencyWithStatic(staticClusterMap.hardwareLayout, staticClusterMap.partitionLayout);
     } finally {
@@ -556,6 +562,7 @@ public class HelixBootstrapUpgradeTool {
             "Replica information not consistent for instance " + instanceName + " disk " + disk.getMountPath()
                 + "\n in Helix: " + replicaList + "\n in static clustermap: " + replicasInClusterMap);
       }
+      ensureOrThrow(diskInfos.isEmpty(), "Instance " + instanceName + " has extra disks in Helix: " + diskInfos);
 
       ensureOrThrow(dataNode.getSSLPort() == Integer.valueOf(instanceConfig.getRecord().getSimpleField(SSLPORT_STR)),
           "SSL Port mismatch for instance " + instanceName);
@@ -630,7 +637,8 @@ public class HelixBootstrapUpgradeTool {
    * @param dataNodeId the {@link DataNodeId} of interest.
    * @return the constructed map.
    */
-  static Map<String, List<String>> getMountPathToReplicas(ClusterMapManager staticClusterMap, DataNodeId dataNodeId) {
+  private static Map<String, List<String>> getMountPathToReplicas(ClusterMapManager staticClusterMap,
+      DataNodeId dataNodeId) {
     Map<String, List<String>> mountPathToReplicas = new HashMap<>();
     for (Replica replica : staticClusterMap.getReplicas(dataNodeId)) {
       List<String> replicaStrs = mountPathToReplicas.get(replica.getMountPath());
@@ -645,6 +653,11 @@ public class HelixBootstrapUpgradeTool {
     return mountPathToReplicas;
   }
 
+  /**
+   * Throw {@link AssertionError} if the given condition is false.
+   * @param condition the boolean condition to check.
+   * @param errStr the error message to associate with the assertion error.
+   */
   private void ensureOrThrow(boolean condition, String errStr) {
     if (!condition) {
       throw new AssertionError(errStr);

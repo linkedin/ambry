@@ -17,5 +17,5 @@ ext {
     commonsVersion = "1.5"
     bouncycastleVersion = "1.52"
     javaxVersion = "3.0.1"
-    helixVersion = "0.6.7"
+    helixVersion = "0.6.6"
 }
