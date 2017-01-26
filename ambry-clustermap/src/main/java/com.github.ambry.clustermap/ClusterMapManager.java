@@ -390,8 +390,9 @@ public class ClusterMapManager implements ClusterMap {
   public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter,
       long replicaCapacityInBytes, boolean attemptNonRackAwareOnFailure) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
-
-    while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes) && numPartitions > 0) {
+    int partitionsAllocated = 0;
+    while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes)
+        && partitionsAllocated < numPartitions) {
       List<Disk> disksToAllocate = new ArrayList<>();
       for (Datacenter datacenter : hardwareLayout.getDatacenters()) {
         List<Disk> disks = allocateDisksForPartition(replicaCountPerDatacenter, replicaCapacityInBytes, datacenter,
@@ -399,7 +400,8 @@ public class ClusterMapManager implements ClusterMap {
         disksToAllocate.addAll(disks);
       }
       partitions.add(partitionLayout.addNewPartition(disksToAllocate, replicaCapacityInBytes));
-      numPartitions--;
+      partitionsAllocated++;
+      System.out.println("Allocated " + partitionsAllocated + " new partitions so far.");
     }
 
     return partitions;
@@ -451,6 +453,7 @@ public class ClusterMapManager implements ClusterMap {
         allocateDisksForPartition(numberOfReplicasPerDatacenter, capacityOfReplicasInBytes, datacenterToAdd,
             attemptNonRackAwareOnFailure);
     partitionLayout.addNewReplicas((Partition) partitionId, disksForReplicas);
+    System.out.println("Added partition " + partitionId + " to datacenter " + dataCenterName);
   }
 
   @Override
