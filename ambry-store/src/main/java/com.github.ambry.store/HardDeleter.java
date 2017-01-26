@@ -118,6 +118,7 @@ public class HardDeleter implements Runnable {
       while (running.get()) {
         reentrantLock.lock();
         try {
+          // if paused
           while (running.get() && isPaused()) {
             try {
               pauseCondition.await();
@@ -125,6 +126,7 @@ public class HardDeleter implements Runnable {
               logger.warn("InterruptedException thrown while hard delete thread is paused ", e);
             }
           }
+          // if not paused
           if (running.get()) {
             if (!hardDelete()) {
               isCaughtUp = true;
