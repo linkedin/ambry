@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
  * Note: The initial implementation of this class will scan the indexes completely when any of the API calls are made.
  * It may not persist any data. Going forward, this will change. We may persist the data, collect stats more
  * "intelligently", actively push data from the {@link BlobStore} or any other multitude of things.
+ * This is not thread safe for now as the {@link PersistentIndex} as such is not threadsafe.
  */
 class BlobStoreStats implements StoreStats {
   private final Log log;
@@ -50,9 +51,10 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Gets the total size of valid data of the store
+   * Gets the total size of valid data of the store. Any blob that is not deleted nor expired are considered to be valid
    * @return the valid data size
    */
+  @Override
   public Pair<Long, Long> getValidDataSize() {
     try {
       return getValidDataSize(null);
@@ -65,9 +67,11 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Gets the current used capacity of the {@link Store}.
+   * Gets the current used capacity of the {@link Store}.  Total bytes that are not available for new content are
+   * considered to be used.
    * @return the used capacity of the {@link Store}
    */
+  @Override
   public long getUsedCapacity() {
     return log.getUsedCapacity();
   }
@@ -76,12 +80,13 @@ class BlobStoreStats implements StoreStats {
    * Gets the total capacity of the {@link Store}.
    * @return the total capacity of the {@link Store}.
    */
+  @Override
   public long getTotalCapacity() {
     return capacityInBytes;
   }
 
   /**
-   * Gets the size of valid data of all log segments
+   * Gets the size of valid data of all log segments. Any blob that is not deleted nor expired are considered to be valid.
    @return a {@link Pair} of reference time at which stats was collected to a {@link SortedMap} of log segment name
    to the respective valid data size
    */
@@ -92,7 +97,8 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Gets the used capacity of each log segment.
+   * Gets the used capacity of each log segment. Total bytes that are not available for new content are considered
+   * to be used.
    * @return a {@link Pair} of reference time at which stats was collected to a {@link SortedMap} of log segment name
   to the respective used capacity
    */
@@ -193,7 +199,7 @@ class BlobStoreStats implements StoreStats {
    * @param referenceTimeInMs the epoch time to use to check for expiration
    * @return {@code true} if {@code expirationTimeInMs} expired wrt {@code referenceTimeInMs}, {@code false} otherwise
    */
-  private boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
+  private static boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
     return expirationTimeInMs != Utils.Infinite_Time && referenceTimeInMs > expirationTimeInMs;
   }
 }

@@ -28,13 +28,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -116,18 +116,18 @@ class BlobStoreTestUtils {
   }
 
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
-  final Set<MockId> generatedKeys = new HashSet<>();
+  final Set<MockId> generatedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // A map of all the keys. The key is the MockId and the value is a Pair that contains the metadata and data of the
   // message.
-  final Map<MockId, MockIdInfo> allKeys = new HashMap<>();
+  final Map<MockId, MockIdInfo> allKeys = new ConcurrentHashMap<>();
   // A list of keys grouped by the log segment that they belong to
   final List<Set<MockId>> idsByLogSegment = new ArrayList<>();
   // Set of all deleted keys
-  final Set<MockId> deletedKeys = new HashSet<>();
+  final Set<MockId> deletedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // Set of all expired keys
-  final Set<MockId> expiredKeys = new HashSet<>();
+  final Set<MockId> expiredKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // Set of all keys that are not deleted/expired
-  final Set<MockId> liveKeys = new HashSet<>();
+  final Set<MockId> liveKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
 
   // Indicates whether the log is segmented
   final boolean isLogSegmented;

@@ -22,19 +22,20 @@ import com.github.ambry.utils.Pair;
 interface StoreStats {
 
   /**
-   * Gets the total size of valid data of the store
+   * Gets the total size of valid data of the store. Any blob that is not deleted nor expired are considered to be valid
    * @return the valid data size of the {@link Store} at a specific point in time
    */
   public Pair<Long, Long> getValidDataSize();
 
   /**
-   * Gets the current used capacity of the {@link Store}.
+   * Gets the current used capacity of the {@link Store}. Total bytes that are not available for new content are
+   * considered to be used.
    * @return the used data size of the {@link Store}
    */
   public long getUsedCapacity();
 
   /**
-   * Gets the total capacity of the {@link Store}.
+   * Gets the total capacity of the {@link Store}. This represents the total disk capacity occupied by the {@link Store}
    * @return the total capacity of the {@link Store}.
    */
   public long getTotalCapacity();

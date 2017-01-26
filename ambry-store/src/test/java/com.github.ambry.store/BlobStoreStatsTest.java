@@ -37,6 +37,7 @@ import static org.junit.Assert.*;
 public class BlobStoreStatsTest {
 
   private BlobStoreTestUtils blobStoreTestUtils;
+  private static final Set<MockId> EMPTY_SET = new HashSet<>();
 
   /**
    * Running for both segmented and non-segmented log.
@@ -102,7 +103,7 @@ public class BlobStoreStatsTest {
           Utils.Infinite_Time).get(0);
       blobStoreTestUtils.idsByLogSegment.get(blobStoreTestUtils.idsByLogSegment.size() - 1).add(id);
       // add data to new segment and verify
-      blobStoreTestUtils.idsByLogSegment.add(new HashSet<MockId>());
+      blobStoreTestUtils.idsByLogSegment.add(EMPTY_SET);
       blobStoreTestUtils.idsByLogSegment.get(blobStoreTestUtils.idsByLogSegment.size() - 1)
           .addAll(blobStoreTestUtils.put(2, blobStoreTestUtils.PUT_RECORD_SIZE, Utils.Infinite_Time));
       verifyBlobStoreStats(blobStoreTestUtils.store.getBlobStoreStats());
