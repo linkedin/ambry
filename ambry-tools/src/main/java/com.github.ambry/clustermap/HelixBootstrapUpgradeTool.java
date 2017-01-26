@@ -493,7 +493,7 @@ public class HelixBootstrapUpgradeTool {
    */
   private void validateAndClose() {
     try {
-      verifyEquivalencyWithStatic(staticClusterMap.hardwareLayout, staticClusterMap.partitionLayout);
+      verifyEquivalencyWithStaticClusterMap(staticClusterMap.hardwareLayout, staticClusterMap.partitionLayout);
     } finally {
       for (HelixAdmin admin : adminForDc.values()) {
         admin.close();
@@ -506,7 +506,7 @@ public class HelixBootstrapUpgradeTool {
    * @param hardwareLayout the {@link HardwareLayout} of the static clustermap.
    * @param partitionLayout the {@link PartitionLayout} of the static clustermap.
    */
-  private void verifyEquivalencyWithStatic(HardwareLayout hardwareLayout, PartitionLayout partitionLayout) {
+  private void verifyEquivalencyWithStaticClusterMap(HardwareLayout hardwareLayout, PartitionLayout partitionLayout) {
     String clusterName = hardwareLayout.getClusterName();
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
       HelixAdmin admin = adminForDc.get(dc.getName());
@@ -627,7 +627,7 @@ public class HelixBootstrapUpgradeTool {
               + replicaHostsInHelix);
     }
     ensureOrThrow(allPartitionsToInstancesInHelix.isEmpty(),
-        "More partitions in Helix than in clustermap, additional" + " partitions: "
+        "More partitions in Helix than in clustermap, additional partitions: "
             + allPartitionsToInstancesInHelix.keySet());
   }
 
