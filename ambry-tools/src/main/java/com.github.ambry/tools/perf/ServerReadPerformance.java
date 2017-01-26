@@ -163,18 +163,12 @@ public class ServerReadPerformance {
 
       OptionSet options = parser.parse(args);
 
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
+      ArrayList<OptionSpec> listOpt = new ArrayList<>();
       listOpt.add(logToReadOpt);
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
 
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt)) {
-          System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
+      ToolUtils.ensureOrExit(listOpt, options, parser);
 
       long measurementIntervalNs = options.valueOf(measurementIntervalOpt) * SystemTime.NsPerSec;
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
@@ -194,7 +188,7 @@ public class ServerReadPerformance {
       String logToRead = options.valueOf(logToReadOpt);
 
       int readsPerSecond = options.valueOf(readsPerSecondOpt);
-      boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;
+      boolean enableVerboseLogging = options.has(verboseLoggingOpt);
       if (enableVerboseLogging) {
         System.out.println("Enabled verbose logging");
       }

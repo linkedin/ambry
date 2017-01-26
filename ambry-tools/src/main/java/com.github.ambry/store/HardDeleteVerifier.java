@@ -22,6 +22,7 @@ import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -137,19 +138,13 @@ public class HardDeleteVerifier {
 
       OptionSet options = parser.parse(args);
 
-      ArrayList<OptionSpec<?>> requiredOpts = new ArrayList<OptionSpec<?>>();
+      ArrayList<OptionSpec> requiredOpts = new ArrayList<>();
       requiredOpts.add(hardwareLayoutOpt);
       requiredOpts.add(partitionLayoutOpt);
       requiredOpts.add(dataDirOpt);
       requiredOpts.add(outFileOpt);
 
-      for (OptionSpec opt : requiredOpts) {
-        if (!options.has(opt)) {
-          System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
+      ToolUtils.ensureOrExit(requiredOpts, options, parser);
 
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);

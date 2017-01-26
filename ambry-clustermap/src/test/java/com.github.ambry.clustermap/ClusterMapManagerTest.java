@@ -89,7 +89,7 @@ public class ClusterMapManagerTest {
     assertEquals(partitionIds.size(), testPartitionLayout.getPartitionCount());
     for (int i = 0; i < partitionIds.size(); i++) {
       PartitionId partitionId = partitionIds.get(i);
-      assertEquals(partitionId.getReplicaIds().size(), testPartitionLayout.getReplicaCount());
+      assertEquals(partitionId.getReplicaIds().size(), testPartitionLayout.getTotalReplicaCount());
 
       DataInputStream partitionStream =
           new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(partitionId.getBytes())));
@@ -132,14 +132,15 @@ public class ClusterMapManagerTest {
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
     ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
+    int dcCount = testHardwareLayout.getDatacenterCount();
 
     List<PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
     assertEquals(partitionIds.size(), 0);
-    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100 * 1024 * 1024 * 1024L);
+    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(3), 100 * 1024 * 1024 * 1024L);
     partitionIds = clusterMapManager.getWritablePartitionIds();
     assertEquals(partitionIds.size(), 1);
     PartitionId partitionId = partitionIds.get(0);
-    assertEquals(partitionId.getReplicaIds().size(), 6);
+    assertEquals(partitionId.getReplicaIds().size(), 3 * dcCount);
   }
 
   @Test
@@ -264,12 +265,14 @@ public class ClusterMapManagerTest {
       }
     }
 
-    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(6), 100 * 1024 * 1024 * 1024L);
+    clusterMapManager.addNewPartition(testHardwareLayout.getIndependentDisks(3), 100 * 1024 * 1024 * 1024L);
+    int dcCount = testHardwareLayout.getDatacenterCount();
 
-    // Confirm 100GB has been used on 6 distinct DataNodes / Disks.
+    // Confirm 100GB has been used on 3 distinct DataNodes / Disks in each datacenter.
     assertEquals(clusterMapManager.getRawCapacityInBytes(), raw);
-    assertEquals(clusterMapManager.getAllocatedRawCapacityInBytes(), 6 * 100 * 1024 * 1024 * 1024L);
-    assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), free - (6 * 100 * 1024 * 1024 * 1024L));
+    assertEquals(clusterMapManager.getAllocatedRawCapacityInBytes(), dcCount * 3 * 100 * 1024 * 1024 * 1024L);
+    assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(),
+        free - (dcCount * 3 * 100 * 1024 * 1024 * 1024L));
 
     for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
       for (DataNode dataNode : datacenter.getDataNodes()) {

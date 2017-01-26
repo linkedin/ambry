@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionLayout;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
@@ -96,17 +97,12 @@ public class PartitionManager {
 
       OptionSet options = parser.parse(args);
 
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
+      ArrayList<OptionSpec> listOpt = new ArrayList<OptionSpec>();
       listOpt.add(hardwareLayoutPathOpt);
       listOpt.add(operationTypeOpt);
 
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt)) {
-          System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
+      ToolUtils.ensureOrExit(listOpt, options, parser);
+
       String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
       String outputPartitionLayoutPath =
@@ -133,13 +129,7 @@ public class PartitionManager {
         listOpt.add(numberOfPartitionsOpt);
         listOpt.add(numberOfReplicasPerDatacenterOpt);
         listOpt.add(replicaCapacityInBytesOpt);
-        for (OptionSpec opt : listOpt) {
-          if (!options.has(opt)) {
-            System.err.println("Missing required argument \"" + opt + "\"");
-            parser.printHelpOn(System.err);
-            System.exit(1);
-          }
-        }
+        ToolUtils.ensureOrExit(listOpt, options, parser);
         int numberOfPartitions = options.valueOf(numberOfPartitionsOpt);
         int numberOfReplicas = options.valueOf(numberOfReplicasPerDatacenterOpt);
         long replicaCapacityInBytes = options.valueOf(replicaCapacityInBytesOpt);
@@ -149,13 +139,7 @@ public class PartitionManager {
         listOpt.add(partitionIdsToAddReplicasToOpt);
         listOpt.add(datacenterToAddReplicasToOpt);
         listOpt.add(partitionLayoutPathOpt);
-        for (OptionSpec opt : listOpt) {
-          if (!options.has(opt)) {
-            System.err.println("Missing required argument \"" + opt + "\"");
-            parser.printHelpOn(System.err);
-            System.exit(1);
-          }
-        }
+        ToolUtils.ensureOrExit(listOpt, options, parser);
         String partitionIdsToAddReplicas = options.valueOf(partitionIdsToAddReplicasToOpt);
         String datacenterToAddReplicasTo = options.valueOf(datacenterToAddReplicasToOpt);
         if (partitionIdsToAddReplicas.compareToIgnoreCase(".") == 0) {

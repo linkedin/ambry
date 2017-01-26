@@ -154,18 +154,12 @@ public class AdminTool {
 
       OptionSet options = parser.parse(args);
 
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
+      ArrayList<OptionSpec> listOpt = new ArrayList<>();
       listOpt.add(hardwareLayoutOpt);
       listOpt.add(partitionLayoutOpt);
       listOpt.add(typeOfOperationOpt);
       listOpt.add(ambryBlobIdOpt);
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt)) {
-          System.err.println("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
+      ToolUtils.ensureOrExit(listOpt, options, parser);
 
       ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
           sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);

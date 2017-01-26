@@ -13,7 +13,9 @@
  */
 package com.github.ambry.tools.util;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -80,5 +82,23 @@ public final class ToolUtils {
     props.put("connectionpool.read.timeout.ms", "10000");
     props.put("connectionpool.connect.timeout.ms", "2000");
     return props;
+  }
+
+  /**
+   * Ensure that the given argument list has all the required arguments. If not, exit.
+   * @param requiredArgs the list of required arguments.
+   * @param actualArgs the set of actual arguments.
+   * @param parser the {@link OptionParser} used to parse arguments.
+   * @throws IOException if there is a problem writing out usage information.
+   */
+  public static void ensureOrExit(List<OptionSpec> requiredArgs, OptionSet actualArgs, OptionParser parser)
+      throws IOException {
+    for (OptionSpec opt : requiredArgs) {
+      if (!actualArgs.has(opt)) {
+        System.err.println("Missing required argument \"" + opt + "\"");
+        parser.printHelpOn(System.err);
+        System.exit(1);
+      }
+    }
   }
 }
