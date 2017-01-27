@@ -57,7 +57,7 @@ public class StoreMetrics {
   private final MetricRegistry registry;
   private final String name;
 
-  StoreMetrics(String storeId, MetricRegistry registry) {
+  public StoreMetrics(String storeId, MetricRegistry registry) {
     this.registry = registry;
     name = storeId + ".";
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
