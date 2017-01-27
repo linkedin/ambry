@@ -86,7 +86,7 @@ public class CompactionLogTest {
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, log.getCompactionPhase());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(5), 0),
-              new UUID(1, 1));
+              new UUID(1, 1), new UUID(1, 1));
       log.setSafeToken(safeToken);
       assertEquals("Returned token not the same as the one that was set", safeToken, log.getSafeToken());
       log.markSwitchStart();
@@ -123,7 +123,7 @@ public class CompactionLogTest {
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, log.getCompactionPhase());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(5), 0),
-              new UUID(1, 1));
+              new UUID(1, 1), new UUID(1, 1));
       log.setSafeToken(safeToken);
 
       log.close();
@@ -284,7 +284,7 @@ public class CompactionLogTest {
     if (!log.getCompactionPhase().equals(CompactionLog.Phase.COPY)) {
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(5), 0),
-              new UUID(1, 1));
+              new UUID(1, 1), new UUID(1, 1));
       try {
         log.setSafeToken(safeToken);
         fail("Setting safe token should have failed");

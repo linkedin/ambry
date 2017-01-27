@@ -89,8 +89,8 @@ public class StoreDescriptorTest {
    * @return the byte array representation of the store descriptor (excluding the crc)
    */
   private byte[] getBytesForStoreDescriptor(short version, UUID incarnationIdUUID) {
-    int size = StoreDescriptor.VERSION_SIZE +
-        StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString().getBytes().length;
+    int size = StoreDescriptor.VERSION_SIZE + StoreDescriptor.INCARNATION_ID_LENGTH_SIZE + incarnationIdUUID.toString()
+        .getBytes().length;
     byte[] toBytes = new byte[size];
     ByteBuffer byteBuffer = ByteBuffer.wrap(toBytes);
     byteBuffer.putShort(version);
