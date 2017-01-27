@@ -32,6 +32,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Assert;
 import org.junit.Test;
@@ -163,7 +164,7 @@ public class HardDeleterTest {
       MockTime time = new MockTime(SystemTime.getInstance().milliseconds());
 
       HardDeleteTestHelper helper = new HardDeleteTestHelper(0, 200);
-      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory, helper, time, null);
+      MockIndex index = new MockIndex(logFile, scheduler, log, config, factory, helper, time, UUID.randomUUID());
       helper.setIndex(index, log);
       // Setting this below will not enable the hard delete thread. This being a unit test, the methods
       // are going to be called directly. We simply want to set the running flag to avoid those methods
