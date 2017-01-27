@@ -96,13 +96,6 @@ public class StoreConfig {
   @Default("9223372036854775807")
   public final long storeSegmentSizeInBytes;
 
-  /**
-   * Hard deleter sleep time when caught up in ms
-   */
-  @Config("store.hard.deleter.sleep.time.when.caught.up.in.ms")
-  @Default("10000")
-  public final long storeHardDeleterSleepTimeWhenCaughtUpInMs;
-
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -119,8 +112,6 @@ public class StoreConfig {
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =
         verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
-    storeHardDeleterSleepTimeWhenCaughtUpInMs =
-        verifiableProperties.getLong("store.hard.deleter.sleep.time.when.caught.up.in.ms", 10000);
   }
 }
 

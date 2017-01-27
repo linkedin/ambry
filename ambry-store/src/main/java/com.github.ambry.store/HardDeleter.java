@@ -61,7 +61,7 @@ public class HardDeleter implements Runnable {
   private final int scanSizeInBytes;
   private final int messageRetentionSeconds;
   //how long to sleep if token does not advance.
-  private final long hardDeleterSleepTimeWhenCaughtUpMs;
+  private final long hardDeleterSleepTimeWhenCaughtUpMs = 10 * Time.MsPerSec;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -109,7 +109,6 @@ public class HardDeleter implements Runnable {
     throttler = new Throttler(config.storeHardDeleteBytesPerSec, 10, true, time);
     scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
     messageRetentionSeconds = config.storeDeletedMessageRetentionDays * Time.SecsPerDay;
-    hardDeleterSleepTimeWhenCaughtUpMs = config.storeHardDeleterSleepTimeWhenCaughtUpInMs;
   }
 
   @Override
@@ -166,7 +165,6 @@ public class HardDeleter implements Runnable {
     try {
       if (paused.compareAndSet(false, true)) {
         logger.info("HardDelete thread has been paused ");
-        pauseCondition.signal();
         index.persistIndex();
         pruneHardDeleteRecoveryRange();
         persistCleanupToken();
