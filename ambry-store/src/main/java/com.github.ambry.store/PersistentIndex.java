@@ -695,8 +695,8 @@ class PersistentIndex {
     UUID remoteIncarnationId = storeToken.getIncarnationId();
     // if incarnationId is null, for backwards compatibility purposes, the token is considered as good.
     /// if not null, we check for a match
-    if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) &&
-        remoteIncarnationId != null && !remoteIncarnationId.equals(incarnationId)) {
+    if (!storeToken.getType().equals(StoreFindToken.Type.Uninitialized) && remoteIncarnationId != null
+        && !remoteIncarnationId.equals(incarnationId)) {
       // incarnationId mismatch, hence resetting the token to beginning
       logger.info("Index : {} resetting offset after incarnation, new incarnation Id {}, "
           + "incarnationId from store token {}", dataDir, incarnationId, remoteIncarnationId);

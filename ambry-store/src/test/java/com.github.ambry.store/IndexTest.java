@@ -706,8 +706,8 @@ public class IndexTest {
           log.getDifference(firstRecordFileSpan.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
       // create a token that will be past the index end offset on startup after recovery.
       startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, incarnationIdToTest, false);
-      // token should get reset internally, no keys should be returned and the returned token should be correct (offset in
-      // it will be the current log end offset = firstRecordFileSpan.getEndOffset()).
+      // token should get reset internally, no keys should be returned and the returned token should be correct (offset
+      // in it will be the current log end offset = firstRecordFileSpan.getEndOffset()).
       StoreFindToken expectedEndToken =
           new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId, true);
       expectedEndToken.setBytesRead(bytesRead);
@@ -737,17 +737,13 @@ public class IndexTest {
     UUID oldSessionId = sessionId;
     addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
     reloadIndex(true);
-    // create a token that will be past the index end offset on start up after restart.
+    // create a token that will be past the log end offset on start up after restart.
     StoreFindToken startToken = new StoreFindToken(
-        new Offset(log.getEndOffset().getName(), (index.getCurrentEndOffset().getOffset() + (2 * PUT_RECORD_SIZE))),
+        new Offset(log.getEndOffset().getName(), (log.getEndOffset().getOffset() + (2 * PUT_RECORD_SIZE))),
         oldSessionId, incarnationId, false);
-    // end token should point to end offset of last entry i.e. (index.getCurrentEndOffset().getOffset() + PUT_RECORD_SIZE)
-    long bytesRead =
-        log.getDifference(new Offset(log.getEndOffset().getName(), index.getCurrentEndOffset().getOffset()),
-            new Offset(log.getFirstSegment().getName(), 0));
-    StoreFindToken expectedEndToken =
-        new StoreFindToken(new Offset(log.getEndOffset().getName(), index.getCurrentEndOffset().getOffset()), sessionId,
-            incarnationId, true);
+    // end token should point to log end offset on startup
+    long bytesRead = log.getDifference(log.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    StoreFindToken expectedEndToken = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, true);
     expectedEndToken.setBytesRead(bytesRead);
     // Fetch the FindToken returned from findEntriesSince
     FindInfo findInfo = index.findEntriesSince(startToken, Long.MAX_VALUE);

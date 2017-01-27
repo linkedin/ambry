@@ -59,8 +59,7 @@ class StoreDescriptor {
           long crcValueInFile = stream.readLong();
           if (crc != crcValueInFile) {
             throw new IllegalStateException(
-                "CRC mismatch for StoreDescriptor. CRC of the stream " + crc + ", CRC from file " +
-                    crcValueInFile);
+                "CRC mismatch for StoreDescriptor. CRC of the stream " + crc + ", CRC from file " + crcValueInFile);
           }
           break;
         default:
@@ -101,8 +100,7 @@ class StoreDescriptor {
    */
   private byte[] toBytes() {
     byte[] incarnationIdBytes = incarnationId.toString().getBytes();
-    int size = VERSION_SIZE + INCARNATION_ID_LENGTH_SIZE +
-        incarnationIdBytes.length;
+    int size = VERSION_SIZE + INCARNATION_ID_LENGTH_SIZE + incarnationIdBytes.length;
     byte[] buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
