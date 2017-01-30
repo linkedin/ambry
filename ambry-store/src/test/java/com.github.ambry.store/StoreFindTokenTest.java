@@ -84,23 +84,21 @@ public class StoreFindTokenTest {
     StoreFindToken otherInclusiveJournalToken = new StoreFindToken(offset, sessionId, incarnationId, true);
 
     // equality
-    compareTokens(initToken, initToken, StoreFindToken.VERSION_2);
-    compareTokens(initToken, otherInitToken, StoreFindToken.VERSION_2);
-    compareTokens(indexToken, indexToken, StoreFindToken.VERSION_2);
-    compareTokens(indexToken, otherIndexToken, StoreFindToken.VERSION_2);
-    compareTokens(journalToken, journalToken, StoreFindToken.VERSION_2);
-    compareTokens(journalToken, otherJournalToken, StoreFindToken.VERSION_2);
-    compareTokens(inclusiveJournalToken, otherInclusiveJournalToken, StoreFindToken.VERSION_2);
+    compareTokens(initToken, initToken);
+    compareTokens(initToken, otherInitToken);
+    compareTokens(indexToken, indexToken);
+    compareTokens(indexToken, otherIndexToken);
+    compareTokens(journalToken, journalToken);
+    compareTokens(journalToken, otherJournalToken);
+    compareTokens(inclusiveJournalToken, otherInclusiveJournalToken);
 
     // equality even if session IDs are different
-    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_2);
-    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), incarnationId, false),
-        StoreFindToken.VERSION_2);
+    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, incarnationId));
+    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), incarnationId, false));
 
     // equality even if incarnation IDs are different
-    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, UUID.randomUUID()), StoreFindToken.VERSION_2);
-    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), UUID.randomUUID(), false),
-        StoreFindToken.VERSION_2);
+    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, UUID.randomUUID()));
+    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), UUID.randomUUID(), false));
 
     // inequality if some fields differ
     List<Pair<StoreFindToken, StoreFindToken>> unequalPairs = new ArrayList<>();
@@ -134,10 +132,42 @@ public class StoreFindTokenTest {
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(UtilsTest.getRandomString(10));
 
-    doSerDeTest(new StoreFindToken());
-    doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId));
-    doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false));
-    doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true));
+    if (numSegments == 1) {
+      // UnInitialized
+      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+
+      // Journal based token
+      // incarnationId cannot be null for VERSION_2
+      doSerDeTest(new StoreFindToken(offset, sessionId, null, false), StoreFindToken.VERSION_0,
+          StoreFindToken.VERSION_0);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_0,
+          StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+      // inclusiveness is present only in VERSION_2
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
+
+      // Index based
+      // incarnationId cannot be null for VERSION_2
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, null), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1);
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_0,
+          StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+    } else {
+      // UnInitialized
+      doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
+
+      // Journal based token
+      // incarnationId cannot be null for VERSION_2
+      doSerDeTest(new StoreFindToken(offset, sessionId, null, false), StoreFindToken.VERSION_1);
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_1,
+          StoreFindToken.VERSION_2);
+      // inclusiveness is present only in VERSION_2
+      doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
+
+      // Index based
+      // incarnationId cannot be null for VERSION_2
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, null), StoreFindToken.VERSION_1);
+      doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_1,
+          StoreFindToken.VERSION_2);
+    }
   }
 
   /**
@@ -171,48 +201,13 @@ public class StoreFindTokenTest {
   // general
 
   /**
-   * Compares two tokens to ensure their equality test passes and that their hash codes matches for recent
-   * versions
+   * Compares two tokens to ensure their equality test passes and that their hash codes match.
    * @param reference the reference {@link StoreFindToken}
    * @param toCheck the {@link StoreFindToken} to check
-   * @param version the StoreFindToken version to be tested
    */
-  private void compareTokens(StoreFindToken reference, StoreFindToken toCheck, short version) {
-    switch (version) {
-      case StoreFindToken.VERSION_0:
-      case StoreFindToken.VERSION_1:
-        assertTrue("Tokens do not match ", compareTokensOfOldVersions(reference, toCheck));
-        break;
-      case StoreFindToken.VERSION_2:
-        assertEquals("Tokens do not match", reference, toCheck);
-        assertEquals("Hash code does not match", reference.hashCode(), toCheck.hashCode());
-        break;
-    }
-  }
-
-  /**
-   * Compare equality of {@link StoreFindToken}s if they are of older versions(VERSION_0, VERSION_1)
-   * @param reference the reference {@link StoreFindToken}
-   * @param toCheck the {@link StoreFindToken} to check
-   * @return {@code true} if both the tokens are equal, {@code false} otherwise
-   */
-  private boolean compareTokensOfOldVersions(StoreFindToken reference, StoreFindToken toCheck) {
-    if (reference == toCheck) {
-      return true;
-    }
-    if (reference.getType() != toCheck.getType()) {
-      return false;
-    }
-    if (reference.getSessionId() != null ? !reference.getSessionId().equals(toCheck.getSessionId())
-        : toCheck.getSessionId() != null) {
-      return false;
-    }
-    if (reference.getOffset() != null ? !reference.getOffset().equals(toCheck.getOffset())
-        : toCheck.getOffset() != null) {
-      return false;
-    }
-    return reference.getStoreKey() != null ? reference.getStoreKey().equals(toCheck.getStoreKey())
-        : toCheck.getStoreKey() == null;
+  private void compareTokens(StoreFindToken reference, StoreFindToken toCheck) {
+    assertEquals("Tokens do not match", reference, toCheck);
+    assertEquals("Hash code does not match", reference.hashCode(), toCheck.hashCode());
   }
 
   // serDeTest() helpers
@@ -221,19 +216,16 @@ public class StoreFindTokenTest {
    * Serializes {@code token} in all formats and ensures that the {@link StoreFindToken} obtained from the
    * deserialization matches the original.
    * @param token the {@link StoreFindToken} that has to be serialized/deserialized.
+   * @param versions {@link List} of valid versions that the token to be tested for
    * @throws IOException
    */
-  private void doSerDeTest(StoreFindToken token) throws IOException {
-    short i = numSegments > 1 ? (short) 1 : (short) 0;
-    for (; i <= 2; i++) {
-      DataInputStream stream = getSerializedStream(token, i);
+  private void doSerDeTest(StoreFindToken token, Short... versions) throws IOException {
+    for (Short version : versions) {
+      DataInputStream stream = getSerializedStream(token, version);
       StoreFindToken deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
-      compareTokens(token, deSerToken, i);
+      compareTokens(token, deSerToken);
       assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
-      if (i == 2) {
-        assertEquals("IncarnationId does not match", token.getIncarnationId(), deSerToken.getIncarnationId());
-        assertEquals("Inclusiveness does not match", token.getInclusive(), deSerToken.getInclusive());
-      }
+      assertEquals("Stream should have ended ", 0, stream.available());
     }
   }
 
@@ -283,14 +275,11 @@ public class StoreFindTokenTest {
       case StoreFindToken.VERSION_1:
         sessionId = token.getSessionId();
         key = token.getStoreKey();
-        Offset offset = token.getOffset();
+        byte[] offsetBytes = token.getOffset() != null ? token.getOffset().toBytes() : new byte[0];
         // version size + sessionId length size + session id size + type + log offset / index segment start offset size
         // + store key size
-        size = 2 + 4 + (sessionId == null ? 0 : sessionId.toString().getBytes().length) + 2 +
-            +(key == null ? 0 : key.sizeInBytes());
-        if (token.getType() != StoreFindToken.Type.Uninitialized) {
-          size += offset.toBytes().length;
-        }
+        size = 2 + 4 + (sessionId == null ? 0 : sessionId.toString().getBytes().length) + 2 + offsetBytes.length + (
+            key == null ? 0 : key.sizeInBytes());
         bytes = new byte[size];
         bufWrap = ByteBuffer.wrap(bytes);
         // add version
@@ -304,11 +293,7 @@ public class StoreFindTokenTest {
         // add type
         type = token.getType();
         bufWrap.putShort((byte) type.ordinal());
-        if (type != StoreFindToken.Type.Uninitialized) {
-          // add offset
-          bufWrap.put(token.getOffset().toBytes());
-        }
-        // add storekey
+        bufWrap.put(offsetBytes);
         if (key != null) {
           bufWrap.put(key.toBytes());
         }

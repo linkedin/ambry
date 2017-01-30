@@ -102,8 +102,7 @@ public class StoreFindToken implements FindToken {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
       } else if (type.equals(Type.IndexBased) && key == null) {
-        throw new IllegalArgumentException(
-            "StoreKey cannot be null for an index based token");
+        throw new IllegalArgumentException("StoreKey cannot be null for an index based token");
       }
     }
     this.type = type;
@@ -178,31 +177,17 @@ public class StoreFindToken implements FindToken {
         type = Type.values()[stream.readShort()];
         switch (type) {
           case Uninitialized:
-            // read incarnationId
-            String incarnationId = Utils.readIntString(stream);
-            UUID incarnationIdUUID = null;
-            if (!incarnationId.isEmpty()) {
-              incarnationIdUUID = UUID.fromString(incarnationId);
-            }
-            // read sessionId
-            sessionId = Utils.readIntString(stream);
-            sessionIdUUID = null;
-            if (!sessionId.isEmpty()) {
-              sessionIdUUID = UUID.fromString(sessionId);
-            }
-            byte inclusive = stream.readByte();
-            storeFindToken =
-                new StoreFindToken(type, null, null, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1);
+            storeFindToken = new StoreFindToken();
             break;
           case JournalBased:
             // read incarnationId
-            incarnationId = Utils.readIntString(stream);
-            incarnationIdUUID = UUID.fromString(incarnationId);
+            String incarnationId = Utils.readIntString(stream);
+            UUID incarnationIdUUID = UUID.fromString(incarnationId);
             // read sessionId
             sessionId = Utils.readIntString(stream);
             sessionIdUUID = UUID.fromString(sessionId);
             Offset logOffset = Offset.fromBytes(stream);
-            inclusive = stream.readByte();
+            byte inclusive = stream.readByte();
             storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, incarnationIdUUID, inclusive == (byte) 1);
             break;
           case IndexBased:
@@ -214,8 +199,6 @@ public class StoreFindToken implements FindToken {
             sessionIdUUID = UUID.fromString(sessionId);
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             StoreKey storeKey = factory.getStoreKey(stream);
-            // discard inclusiveness. not applicable for Index based token
-            inclusive = stream.readByte();
             storeFindToken = new StoreFindToken(storeKey, indexSegmentStartOffset, sessionIdUUID, incarnationIdUUID);
             break;
           default:
@@ -266,25 +249,37 @@ public class StoreFindToken implements FindToken {
     byte[] sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
     byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
     byte[] storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
-    int size = VERSION_SIZE + TYPE_SIZE + INCARNATION_ID_LENGTH_SIZE + incarnationIdBytes.length +
-        SESSION_ID_LENGTH_SIZE + sessionIdBytes.length + offsetBytes.length + storeKeyBytes.length
-        + INCLUSIVE_BYTE_SIZE;
+    int size = VERSION_SIZE + TYPE_SIZE;
+    if (type != Type.Uninitialized) {
+      size += INCARNATION_ID_LENGTH_SIZE + incarnationIdBytes.length + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length
+          + offsetBytes.length;
+      if (type == Type.JournalBased) {
+        size += INCLUSIVE_BYTE_SIZE;
+      } else if (type == Type.IndexBased) {
+        size += storeKeyBytes.length;
+      }
+    }
     byte[] buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // add version
     bufWrap.putShort(VERSION_2);
     // add type
     bufWrap.putShort((short) type.ordinal());
-    // add incarnationId
-    bufWrap.putInt(incarnationIdBytes.length);
-    bufWrap.put(incarnationIdBytes);
-    // add sessionId
-    bufWrap.putInt(sessionIdBytes.length);
-    bufWrap.put(sessionIdBytes);
-    // add offset
-    bufWrap.put(offsetBytes);
-    bufWrap.put(storeKeyBytes);
-    bufWrap.put(getInclusive() ? (byte) 1 : (byte) 0);
+    if (type != Type.Uninitialized) {
+      // add incarnationId
+      bufWrap.putInt(incarnationIdBytes.length);
+      bufWrap.put(incarnationIdBytes);
+      // add sessionId
+      bufWrap.putInt(sessionIdBytes.length);
+      bufWrap.put(sessionIdBytes);
+      // add offset
+      bufWrap.put(offsetBytes);
+      if (type == Type.JournalBased) {
+        bufWrap.put(getInclusive() ? (byte) 1 : (byte) 0);
+      } else if (type == Type.IndexBased) {
+        bufWrap.put(storeKeyBytes);
+      }
+    }
     return buf;
   }
 
