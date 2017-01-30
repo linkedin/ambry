@@ -418,8 +418,7 @@ public class HardDeleter implements Runnable {
           case Cleanup_Token_Version_V1:
             recoveryStartToken = StoreFindToken.fromBytes(stream, factory);
             recoveryEndToken = StoreFindToken.fromBytes(stream, factory);
-            byte pauseByte = stream.readByte();
-            paused.set(pauseByte == (byte) 1);
+            paused.set(stream.readByte() == (byte) 1);
             hardDeleteRecoveryRange = new HardDeletePersistInfo(stream, factory);
             break;
           default:

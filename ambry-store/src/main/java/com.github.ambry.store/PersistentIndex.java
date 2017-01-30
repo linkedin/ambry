@@ -80,7 +80,7 @@ class PersistentIndex {
   final ConcurrentSkipListMap<Offset, IndexSegment> indexes = new ConcurrentSkipListMap<>();
   final Journal journal;
   final HardDeleter hardDeleter;
-  volatile Thread hardDeleteThread = null;
+  final Thread hardDeleteThread;
 
   private final Log log;
   private final Offset logAbsoluteZeroOffset;
@@ -208,6 +208,7 @@ class PersistentIndex {
         hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
         hardDeleteThread.start();
       } else {
+        hardDeleteThread = null;
         hardDeleter.close();
       }
       metrics.initializeHardDeleteMetric(hardDeleter, log);
