@@ -128,10 +128,11 @@ public class BlobStoreStatsTest {
   private void verifyBlobStoreStats(BlobStoreStats blobStoreStats) throws IOException, StoreException {
     // verify used capacity
     verifyUsedCapacity(blobStoreStats.getUsedCapacity());
-    verifyUsedCapacityBySegment(blobStoreStats.getUsedCapacityBySegment().getSecond());
+    verifyUsedCapacityBySegment(blobStoreStats.getUsedCapacityBySegment());
     // verify valid data size
-    verifyValidDataSize(blobStoreStats.getValidDataSize().getSecond().longValue());
-    verifyValidDataSizeBySegment(blobStoreStats.getValidDataSizeBySegment().getSecond());
+    TimeRange timeRange = new TimeRange(System.currentTimeMillis(), 0);
+    verifyValidDataSize(blobStoreStats.getValidDataSize(timeRange).getSecond().longValue(), timeRange.getStart());
+    verifyValidDataSizeBySegment(blobStoreStats.getValidDataSizeBySegment(timeRange).getSecond(), timeRange.getStart());
     // verify total capacity
     verifyTotalCapacity(blobStoreStats.getTotalCapacity());
   }
@@ -181,27 +182,29 @@ public class BlobStoreStatsTest {
   }
 
   /**
-   * Verifies valid data size of the {@link BlobStore}
+   * Verifies total valid data size of the {@link BlobStore}
    * @param validDataSize valid data size of the {@link BlobStore}
+   * @param referenceTimeInMs the reference time in Ms to be used to determine valid data
    */
-  private void verifyValidDataSize(long validDataSize) {
-    assertEquals("Expected valid data size mismatch ", getValidDataSizeForKeys(blobStoreTestUtils.liveKeys),
+  private void verifyValidDataSize(long validDataSize, long referenceTimeInMs) {
+    assertEquals("Expected valid data size mismatch ", getValidDataSizeOfStore(referenceTimeInMs),
         validDataSize);
   }
 
   /**
    * Verify valid data size by segment of the store
    * @param validDataSizeBySegments valid data size of the segments
+   * @param referenceTimeInMs the reference time in Ms to be used to determine valid data
    * @throws IOException
    * @throws StoreException
    */
-  private void verifyValidDataSizeBySegment(SortedMap<String, Long> validDataSizeBySegments)
+  private void verifyValidDataSizeBySegment(SortedMap<String, Long> validDataSizeBySegments, long referenceTimeInMs)
       throws IOException, StoreException {
     Iterator<Map.Entry<String, Long>> iterator = validDataSizeBySegments.entrySet().iterator();
     int count = 0;
     while (iterator.hasNext()) {
       Map.Entry<String, Long> validSizeOfSegment = iterator.next();
-      assertEquals("Valid data size mismatch for " + validSizeOfSegment.getKey(), getValidDataSizeOfLogSegment(count++),
+      assertEquals("Valid data size mismatch for " + validSizeOfSegment.getKey(), getValidDataSizeOfLogSegment(count++, referenceTimeInMs),
           validSizeOfSegment.getValue().longValue());
     }
     assertEquals("Store returned more segments for valid data size per segment ", count,
@@ -211,14 +214,26 @@ public class BlobStoreStatsTest {
   /**
    * Get Valid data size of the given log segment
    * @param logSegmentIndex the log segment index for which the valid data size has to be determined
+   * @param referenceTimeInMs the reference time in Ms to be used to determine valid data
    * @return the valid data size of the given log segment
    */
-  private long getValidDataSizeOfLogSegment(int logSegmentIndex) {
+  private long getValidDataSizeOfLogSegment(int logSegmentIndex, long referenceTimeInMs) {
     long validDataSize = 0;
     for (MockId key : blobStoreTestUtils.idsByLogSegment.get(logSegmentIndex)) {
+      BlobStoreTestUtils.MockIdInfo mockIdInfo = blobStoreTestUtils.allKeys.get(key);
       if (blobStoreTestUtils.liveKeys.contains(key)) {
-        MessageInfo msgInfo = blobStoreTestUtils.allKeys.get(key).msgInfo;
-        validDataSize += msgInfo.getSize();
+        // put record with no deletes or expiry
+        validDataSize += mockIdInfo.msgInfo.getSize();
+      } else if(blobStoreTestUtils.expiredKeys.contains(key) && !isExpired(mockIdInfo.msgInfo.getExpirationTimeInMs(), referenceTimeInMs)){
+        // put record that is expired at > t ref
+        validDataSize += mockIdInfo.msgInfo.getSize();
+      } else if(blobStoreTestUtils.deletedKeys.contains(key) && mockIdInfo.deleteTimeInMs > referenceTimeInMs){
+        // put record that is deleted at > t ref
+        // TODO needs fixing based on last modified time of the index segment
+        validDataSize += mockIdInfo.msgInfo.getSize();
+      } else if(mockIdInfo.logSegmentIndexforDelete == logSegmentIndex){
+        // delete record
+        validDataSize += BlobStoreTestUtils.DELETE_RECORD_SIZE;
       }
     }
     return validDataSize;
@@ -226,16 +241,43 @@ public class BlobStoreStatsTest {
 
   /**
    * Get the valid data size of all the keys passed in
-   * @param keys set of {@link MockId}s for which valid data size has to be determined
    * @return the valid data size of all the keys passed in
    */
-  private long getValidDataSizeForKeys(Set<MockId> keys) {
+  private long getValidDataSizeOfStore(long referenceTimeInMs) {
     long validDataSize = 0;
-    for (MockId key : keys) {
-      MessageInfo msgInfo = blobStoreTestUtils.allKeys.get(key).msgInfo;
-      validDataSize += msgInfo.getSize();
+    System.out.println("\n\n Test stats \n");
+    for (MockId key : blobStoreTestUtils.allKeys.keySet()) {
+      BlobStoreTestUtils.MockIdInfo mockIdInfo = blobStoreTestUtils.allKeys.get(key);
+      if(blobStoreTestUtils.liveKeys.contains(key)) {
+        System.out.println("1. adding valid put record " + key+" : "+ mockIdInfo.msgInfo.getSize());
+        // put record w/ no deletes or expiry
+        validDataSize += mockIdInfo.msgInfo.getSize();
+      } else if (blobStoreTestUtils.expiredKeys.contains(key) && !BlobStoreStats.isExpired(mockIdInfo.msgInfo.getExpirationTimeInMs(), referenceTimeInMs)){
+        // put record w/ expirationTime > reference Time
+        validDataSize += mockIdInfo.msgInfo.getSize();
+        System.out.println("2. adding valid expired record " + key+" : "+ mockIdInfo.msgInfo.getSize());
+      } else if (blobStoreTestUtils.deletedKeys.contains(key)){
+        // delete record
+        validDataSize += BlobStoreTestUtils.DELETE_RECORD_SIZE;
+        System.out.println("3. adding valid delete record " + key+" : "+ mockIdInfo.msgInfo.getSize());
+        if(mockIdInfo.deleteTimeInMs > referenceTimeInMs){
+          // put record that is deleted at time > reference time
+          validDataSize += mockIdInfo.msgInfo.getSize();
+          System.out.println("4. adding valid put size for delete record deleted at " + key+" : "+ mockIdInfo.msgInfo.getSize());
+        }
+      }
     }
     return validDataSize;
+  }
+
+  /**
+   * Check if {@code expirationTimeInMs} has expired compared to {@code referenceTimeInMs}
+   * @param expirationTimeInMs time in ms to be checked for expiration
+   * @param referenceTimeInMs the epoch time to use to check for expiration
+   * @return {@code true} if {@code expirationTimeInMs} expired wrt {@code referenceTimeInMs}, {@code false} otherwise
+   */
+  private static boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
+    return expirationTimeInMs != Utils.Infinite_Time && referenceTimeInMs > expirationTimeInMs;
   }
 
   /**

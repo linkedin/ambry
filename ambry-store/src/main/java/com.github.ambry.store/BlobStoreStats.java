@@ -18,8 +18,11 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,7 +42,6 @@ class BlobStoreStats implements StoreStats {
   private final Log log;
   private final PersistentIndex index;
   private final long capacityInBytes;
-  private final Time time;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -47,17 +49,19 @@ class BlobStoreStats implements StoreStats {
     this.log = log;
     this.index = index;
     this.capacityInBytes = capacityInBytes;
-    this.time = time;
   }
 
   /**
-   * Gets the total size of valid data of the store. Any blob that is not deleted nor expired are considered to be valid
-   * @return the valid data size
+   * Gets the size of valid data at at a particular point in time. The caller specifies a reference time and acceptable resolution
+   * for the stats in the form of a {@code timeRange}. The store will return data for a point in time within the specified range.
+   * @param timeRange the time range for the expected output. Defines both the reference time and the acceptable resolution.
+   * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second element is the valid data
+   * size
    */
   @Override
-  public Pair<Long, Long> getValidDataSize() {
+  public Pair<Long, Long> getValidDataSize(TimeRange timeRange) {
     try {
-      return getValidDataSize(null);
+      return getValidDataSizeOfAllSegments(timeRange.getStart(), null);
     } catch (IOException e) {
       logger.error("IOException thrown while calculating valid data size ", e);
     } catch (StoreException e) {
@@ -86,24 +90,25 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Gets the size of valid data of all log segments. Any blob that is not deleted nor expired are considered to be valid.
-   @return a {@link Pair} of reference time at which stats was collected to a {@link SortedMap} of log segment name
-   to the respective valid data size
+   * Gets the size of valid data at at a particular point in time for all log segments. The caller specifies a reference time and
+   * acceptable resolution for the stats in the form of a {@code timeRange}. The store will return data for a point in time within
+   * the specified range.
+   * @param timeRange the time range for the expected output. Defines both the reference time and the acceptable resolution.
+   * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second element is the valid data
+   * size for each segment in the form of a {@link SortedMap} of segment names to valid data sizes.
    */
-  Pair<Long, SortedMap<String, Long>> getValidDataSizeBySegment() throws IOException, StoreException {
+  Pair<Long, SortedMap<String, Long>> getValidDataSizeBySegment(TimeRange timeRange) throws IOException, StoreException {
     SortedMap<String, Long> validDataSize = new TreeMap<>();
-    Pair<Long, Long> validDataSizeBySegment = getValidDataSize(validDataSize);
+    Pair<Long, Long> validDataSizeBySegment = getValidDataSizeOfAllSegments(timeRange.getStart(), validDataSize);
     return new Pair<>(validDataSizeBySegment.getFirst(), validDataSize);
   }
 
   /**
    * Gets the used capacity of each log segment. Total bytes that are not available for new content are considered
    * to be used.
-   * @return a {@link Pair} of reference time at which stats was collected to a {@link SortedMap} of log segment name
-  to the respective used capacity
+   * @return a {@link SortedMap} of log segment name to the respective used capacity
    */
-  Pair<Long, SortedMap<String, Long>> getUsedCapacityBySegment() {
-    long referenceTime = time.milliseconds();
+  SortedMap<String, Long> getUsedCapacityBySegment() {
     SortedMap<String, Long> usedCapacityBySegments = new TreeMap<>();
     Iterator<IndexSegment> indexSegmentIterator = index.indexes.values().iterator();
     IndexSegment indexSegment = null;
@@ -123,70 +128,94 @@ class BlobStoreStats implements StoreStats {
       String logSegmentName = indexSegment.getLogSegmentName();
       usedCapacityBySegments.put(logSegmentName, log.getSegment(logSegmentName).getEndOffset());
     }
-    return new Pair<>(referenceTime, usedCapacityBySegments);
+    return usedCapacityBySegments;
   }
 
   /**
    * Derives valid data size for the store
+   * @param timeRefInMs the time reference in Ms that is of interest at which valid data size is required
    * @param validDataSizeBySegments the {@link SortedMap} that needs to be updated with valid data size value
    *                                for every segment. Could be {@code null} if interested only in total valid data size
    * @return a {@link Pair} of reference time and total valid data size
    * @throws IOException
    * @throws StoreException
    */
-  private Pair<Long, Long> getValidDataSize(SortedMap<String, Long> validDataSizeBySegments)
+  private Pair<Long, Long> getValidDataSizeOfAllSegments(long timeRefInMs, SortedMap<String, Long> validDataSizeBySegments)
       throws IOException, StoreException {
     long validDataSize = 0;
     long totalValidDataSize = 0;
-    long referenceTime = time.milliseconds();
-    Iterator<IndexSegment> indexSegmentIterator = index.indexes.values().iterator();
+    Offset lastEligibleStartOffset = getLastEligibleStartOffsetForDelete(timeRefInMs);
     IndexSegment indexSegment = null;
-    if (indexSegmentIterator.hasNext()) {
-      indexSegment = indexSegmentIterator.next();
-      validDataSize += getValidDataSizePerIndexSegment(indexSegment, referenceTime);
-    }
-    while (indexSegmentIterator.hasNext()) {
-      IndexSegment nextIndexSegment = indexSegmentIterator.next();
-      if (nextIndexSegment.getLogSegmentName().equals(indexSegment.getLogSegmentName())) {
-        // index segment refers to same log segment as previous index segment
-        validDataSize += getValidDataSizePerIndexSegment(nextIndexSegment, referenceTime);
-      } else {
-        // index segment refers to a new log segment compared to previous index segment
-        String logSegmentName = indexSegment.getLogSegmentName();
-        totalValidDataSize += validDataSize;
-        if (validDataSizeBySegments != null) {
-          validDataSizeBySegments.put(logSegmentName, validDataSize);
+    for(Map.Entry<Offset,IndexSegment> indexSegmentEntry: index.indexes.entrySet()){
+      if(indexSegmentEntry.getKey().compareTo(lastEligibleStartOffset) == -1){
+        // index segment is considered valid
+        IndexSegment nextIndexSegment = indexSegmentEntry.getValue();
+        if (indexSegment == null || nextIndexSegment.getLogSegmentName().equals(indexSegment.getLogSegmentName())) {
+          // index segment refers to same log segment as previous index segment
+          validDataSize += getValidDataSizePerIndexSegment(nextIndexSegment,
+              new FileSpan(nextIndexSegment.getStartOffset(), lastEligibleStartOffset), timeRefInMs);
+        } else {
+          // index segment refers to a new log segment compared to previous index segment
+          String logSegmentName = indexSegment.getLogSegmentName();
+          totalValidDataSize += validDataSize;
+          if (validDataSizeBySegments != null) {
+            validDataSizeBySegments.put(logSegmentName, validDataSize);
+          }
+          validDataSize = getValidDataSizePerIndexSegment(nextIndexSegment,
+              new FileSpan(nextIndexSegment.getStartOffset(), lastEligibleStartOffset),  timeRefInMs);
         }
         indexSegment = nextIndexSegment;
-        validDataSize = getValidDataSizePerIndexSegment(nextIndexSegment, referenceTime);
       }
     }
-    if (index.indexes.size() > 1) {
+    if (indexSegment != null) {
       String logSegmentName = indexSegment.getLogSegmentName();
       totalValidDataSize += validDataSize;
       if (validDataSizeBySegments != null) {
         validDataSizeBySegments.put(logSegmentName, validDataSize);
       }
     }
-    return new Pair<>(referenceTime, totalValidDataSize);
+    return new Pair<>(timeRefInMs, totalValidDataSize);
   }
+
+
+  private Offset getLastEligibleStartOffsetForDelete(long referenceTimeInMs) {
+    Offset latestEligibleOffset = index.indexes.lastKey();
+    for (IndexSegment indexSegment : index.indexes.values()) {
+      if (indexSegment.getLastModifiedTime() > referenceTimeInMs) {
+        latestEligibleOffset = indexSegment.getStartOffset();
+        break;
+      }
+    }
+    return latestEligibleOffset;
+  }
+
 
   /**
    * Get valid data size of an index segment
    * @param indexSegment the {@link IndexSegment} for which valid data size has to be determined
-   * @param referenceTimeInMs time in ms used as reference to check for expiration
+   * @param forwardSearchSpan the {@link FileSpan} within which search has to be done to determine validity of data
+   * @param referenceTime time in ms used as reference to check for expiration
    * @return the valid data size of the given index segment
    * @throws IOException
    * @throws StoreException
    */
-  private long getValidDataSizePerIndexSegment(IndexSegment indexSegment, long referenceTimeInMs)
+  private long getValidDataSizePerIndexSegment(IndexSegment indexSegment, FileSpan forwardSearchSpan, long referenceTime)
       throws IOException, StoreException {
+    long validSize = 0;
     List<MessageInfo> messageInfos = new ArrayList<>();
     indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos, new AtomicLong(0));
-    long validSize = 0;
-    for (MessageInfo messageInfo : messageInfos) {
-      IndexValue value = index.findKey(messageInfo.getStoreKey());
-      if (!PersistentIndex.isDeleted(value) && !isExpired(messageInfo.getExpirationTimeInMs(), referenceTimeInMs)) {
+    for(MessageInfo messageInfo: messageInfos) {
+      IndexValue value = index.findKey(messageInfo.getStoreKey(), forwardSearchSpan);
+      if (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time && !value.isFlagSet(
+          IndexValue.Flags.Delete_Index)) {
+        // put record w/o any expiration and not deleted
+          validSize += messageInfo.getSize();
+      } else if(!messageInfo.isDeleted() && (isExpired(messageInfo.getExpirationTimeInMs(), referenceTime) || value.isFlagSet(
+          IndexValue.Flags.Delete_Index))){
+        // a put record either expired or deleted(in future index segment) wrt reference time
+         validSize += messageInfo.getSize();
+      } else if (messageInfo.isDeleted()) {
+        // delete record
         validSize += messageInfo.getSize();
       }
     }
@@ -199,7 +228,7 @@ class BlobStoreStats implements StoreStats {
    * @param referenceTimeInMs the epoch time to use to check for expiration
    * @return {@code true} if {@code expirationTimeInMs} expired wrt {@code referenceTimeInMs}, {@code false} otherwise
    */
-  private static boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
+  static boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
     return expirationTimeInMs != Utils.Infinite_Time && referenceTimeInMs > expirationTimeInMs;
   }
 }
