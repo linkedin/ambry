@@ -92,14 +92,8 @@ public class StoreFindTokenTest {
     compareTokens(journalToken, otherJournalToken);
     compareTokens(inclusiveJournalToken, otherInclusiveJournalToken);
 
-    UUID newSessionId = sessionId;
-    while (newSessionId == sessionId) {
-      newSessionId = UUID.randomUUID();
-    }
-    UUID newIncarnationId = incarnationId;
-    while (newIncarnationId == incarnationId) {
-      newIncarnationId = UUID.randomUUID();
-    }
+    UUID newSessionId = getRandomUUID(sessionId);
+    UUID newIncarnationId = getRandomUUID(incarnationId);
 
     // equality even if session IDs are different
     compareTokens(indexToken, new StoreFindToken(key, offset, newSessionId, incarnationId));
@@ -194,7 +188,7 @@ public class StoreFindTokenTest {
     testConstructionFailure(key, sessionId, incarnationId, null);
     // no session id
     testConstructionFailure(key, null, incarnationId, offset);
-    // no incarnation Id
+    // no incarnation Id. TODO: Uncomment this once incarnationId validation for not null is enabled in StoreFindToken
     // testConstructionFailure(key, sessionId, null, offset);
 
     // no key in IndexBased
@@ -341,5 +335,20 @@ public class StoreFindTokenTest {
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
+  }
+
+  // UUID generation helpers
+
+  /**
+   * Generate random {@link UUID} different from {@code oldUUID}
+   * @param oldUUID the new {@link UUID} generated that should be different from this {@link UUID}
+   * @return the newly generated random {@link UUID}
+   */
+  private UUID getRandomUUID(UUID oldUUID) {
+    UUID newUUID = oldUUID;
+    while (newUUID == oldUUID) {
+      newUUID = UUID.randomUUID();
+    }
+    return newUUID;
   }
 }
