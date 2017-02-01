@@ -66,8 +66,8 @@ public class StoreFindTokenTest {
    */
   @Test
   public void equalityTest() {
-    UUID sessionId = new UUID(0, 0);
-    UUID incarnationId = new UUID(0, 0);
+    UUID sessionId = UUID.randomUUID();
+    UUID incarnationId = UUID.randomUUID();
     String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
     Offset offset = new Offset(logSegmentName, 0);
     Offset otherOffset = new Offset(logSegmentName, 1);
@@ -92,13 +92,22 @@ public class StoreFindTokenTest {
     compareTokens(journalToken, otherJournalToken);
     compareTokens(inclusiveJournalToken, otherInclusiveJournalToken);
 
+    UUID newSessionId = sessionId;
+    while (newSessionId == sessionId) {
+      newSessionId = UUID.randomUUID();
+    }
+    UUID newIncarnationId = incarnationId;
+    while (newIncarnationId == incarnationId) {
+      newIncarnationId = UUID.randomUUID();
+    }
+
     // equality even if session IDs are different
-    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, incarnationId));
-    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), incarnationId, false));
+    compareTokens(indexToken, new StoreFindToken(key, offset, newSessionId, incarnationId));
+    compareTokens(journalToken, new StoreFindToken(offset, newSessionId, incarnationId, false));
 
     // equality even if incarnation IDs are different
-    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, UUID.randomUUID()));
-    compareTokens(journalToken, new StoreFindToken(offset, new UUID(1, 1), UUID.randomUUID(), false));
+    compareTokens(indexToken, new StoreFindToken(key, offset, sessionId, newIncarnationId));
+    compareTokens(journalToken, new StoreFindToken(offset, sessionId, newIncarnationId, false));
 
     // inequality if some fields differ
     List<Pair<StoreFindToken, StoreFindToken>> unequalPairs = new ArrayList<>();
@@ -126,8 +135,8 @@ public class StoreFindTokenTest {
    */
   @Test
   public void serDeTest() throws IOException {
-    UUID sessionId = new UUID(0, 0);
-    UUID incarnationId = new UUID(0, 0);
+    UUID sessionId = UUID.randomUUID();
+    UUID incarnationId = UUID.randomUUID();
     String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(UtilsTest.getRandomString(10));
@@ -139,7 +148,7 @@ public class StoreFindTokenTest {
       // Journal based token
       // incarnationId cannot be null for VERSION_2
       doSerDeTest(new StoreFindToken(offset, sessionId, null, false), StoreFindToken.VERSION_0,
-          StoreFindToken.VERSION_0);
+          StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_0,
           StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
       // inclusiveness is present only in VERSION_2
@@ -175,8 +184,8 @@ public class StoreFindTokenTest {
    */
   @Test
   public void constructionErrorCasesTest() {
-    UUID sessionId = new UUID(0, 0);
-    UUID incarnationId = new UUID(0, 0);
+    UUID sessionId = UUID.randomUUID();
+    UUID incarnationId = UUID.randomUUID();
     String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(UtilsTest.getRandomString(10));
