@@ -270,20 +270,22 @@ class IndexSegment {
         }
         toReturn = value;
       } else {
-        boolean bloomPositive = false;
-        if (bloomFilter == null) {
-          logger.trace("IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {}",
-              indexFile.getAbsolutePath(), startOffset, keyToFind);
+
+        if (bloomFilter != null && !bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
+          // true negative
+          if (bloomFilter != null) {
+            metrics.bloomAccessedCount.inc();
+          }
         } else {
-          metrics.bloomAccessedCount.inc();
-          if (bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
+          if (bloomFilter == null) {
+            logger.trace("IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {}",
+                indexFile.getAbsolutePath(), startOffset, keyToFind);
+          } else {
+            metrics.bloomAccessedCount.inc();
             metrics.bloomPositiveCount.inc(1);
             logger.trace("IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
-            bloomPositive = true;
           }
-        }
-        if (bloomFilter == null || bloomPositive) {
           // binary search on the mapped file
           ByteBuffer duplicate = mmap.duplicate();
           int low = 0;
@@ -306,8 +308,8 @@ class IndexSegment {
               high = mid - 1;
             }
           }
-          if (toReturn == null && bloomPositive) {
-            metrics.bloomFalsePositiveCount.inc(1);
+          if (bloomFilter != null && toReturn == null) {
+            metrics.bloomFalsePositiveCount.inc();
           }
         }
       }
