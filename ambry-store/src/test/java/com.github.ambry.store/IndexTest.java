@@ -1534,8 +1534,7 @@ public class IndexTest {
 
     if (reloadIndex) {
       reloadIndex(true);
-      assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
-      assertEquals("Hard delete should not have progressed ", expectedProgress, index.hardDeleter.getProgress());
+      assertEquals("Hard deletes should have been paused ", Thread.State.WAITING, index.hardDeleteThread.getState());
 
       Set<MockId> newIdsToDelete = new HashSet<>();
       addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1548,7 +1547,6 @@ public class IndexTest {
       idsToDelete.addAll(newIdsToDelete);
       // advance time so that deleted entries becomes eligible to be hard deleted
       advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-      waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
     }
 
     // resume and verify new entries have been hard deleted
