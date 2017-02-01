@@ -260,14 +260,15 @@ class IndexSegment {
    * @throws StoreException
    */
   IndexValue find(StoreKey keyToFind) throws StoreException {
+    IndexValue toReturn = null;
     try {
       rwLock.readLock().lock();
-      if (!(mapped.get())) {
+      if (!mapped.get()) {
         IndexValue value = index.get(keyToFind);
         if (value != null) {
           metrics.blobFoundInActiveSegmentCount.inc();
         }
-        return value;
+        toReturn = value;
       } else {
         boolean bloomPositive = false;
         if (bloomFilter == null) {
@@ -297,18 +298,18 @@ class IndexSegment {
             if (result == 0) {
               byte[] buf = new byte[valueSize];
               duplicate.get(buf);
-              return new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf));
+              toReturn = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf));
+              break;
             } else if (result < 0) {
               low = mid + 1;
             } else {
               high = mid - 1;
             }
           }
-          if (bloomPositive) {
+          if (toReturn == null && bloomPositive) {
             metrics.bloomFalsePositiveCount.inc(1);
           }
         }
-        return null;
       }
     } catch (IOException e) {
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while searching", e,
@@ -316,6 +317,7 @@ class IndexSegment {
     } finally {
       rwLock.readLock().unlock();
     }
+    return toReturn;
   }
 
   private int numberOfEntries(ByteBuffer mmap) {
