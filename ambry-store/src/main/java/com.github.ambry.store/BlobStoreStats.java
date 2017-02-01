@@ -18,9 +18,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -42,6 +39,7 @@ class BlobStoreStats implements StoreStats {
   private final Log log;
   private final PersistentIndex index;
   private final long capacityInBytes;
+  private final Time time;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -49,6 +47,7 @@ class BlobStoreStats implements StoreStats {
     this.log = log;
     this.index = index;
     this.capacityInBytes = capacityInBytes;
+    this.time = time;
   }
 
   /**
@@ -97,7 +96,8 @@ class BlobStoreStats implements StoreStats {
    * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second element is the valid data
    * size for each segment in the form of a {@link SortedMap} of segment names to valid data sizes.
    */
-  Pair<Long, SortedMap<String, Long>> getValidDataSizeBySegment(TimeRange timeRange) throws IOException, StoreException {
+  Pair<Long, SortedMap<String, Long>> getValidDataSizeBySegment(TimeRange timeRange)
+      throws IOException, StoreException {
     SortedMap<String, Long> validDataSize = new TreeMap<>();
     Pair<Long, Long> validDataSizeBySegment = getValidDataSizeOfAllSegments(timeRange.getStart(), validDataSize);
     return new Pair<>(validDataSizeBySegment.getFirst(), validDataSize);
@@ -110,50 +110,38 @@ class BlobStoreStats implements StoreStats {
    */
   SortedMap<String, Long> getUsedCapacityBySegment() {
     SortedMap<String, Long> usedCapacityBySegments = new TreeMap<>();
-    Iterator<IndexSegment> indexSegmentIterator = index.indexes.values().iterator();
-    IndexSegment indexSegment = null;
-    if (indexSegmentIterator.hasNext()) {
-      indexSegment = indexSegmentIterator.next();
-    }
-    while (indexSegmentIterator.hasNext()) {
-      IndexSegment nextIndexSegment = indexSegmentIterator.next();
-      if (!nextIndexSegment.getLogSegmentName().equals(indexSegment.getLogSegmentName())) {
-        // index segment refers to a new log segment compared to previous index segment
-        String logSegmentName = indexSegment.getLogSegmentName();
-        usedCapacityBySegments.put(logSegmentName, log.getSegment(logSegmentName).getEndOffset());
-        indexSegment = nextIndexSegment;
-      }
-    }
-    if (index.indexes.size() > 1) {
-      String logSegmentName = indexSegment.getLogSegmentName();
-      usedCapacityBySegments.put(logSegmentName, log.getSegment(logSegmentName).getEndOffset());
+    LogSegment logSegment = log.getFirstSegment();
+    while (logSegment != null) {
+      usedCapacityBySegments.put(logSegment.getName(), logSegment.getEndOffset());
+      logSegment = log.getNextSegment(logSegment);
     }
     return usedCapacityBySegments;
   }
 
   /**
    * Derives valid data size for the store
-   * @param timeRefInMs the time reference in Ms that is of interest at which valid data size is required
+   * @param referenceTimeInSecs the reference time in Secs that is of interest at which valid data size is required
    * @param validDataSizeBySegments the {@link SortedMap} that needs to be updated with valid data size value
    *                                for every segment. Could be {@code null} if interested only in total valid data size
    * @return a {@link Pair} of reference time and total valid data size
    * @throws IOException
    * @throws StoreException
    */
-  private Pair<Long, Long> getValidDataSizeOfAllSegments(long timeRefInMs, SortedMap<String, Long> validDataSizeBySegments)
-      throws IOException, StoreException {
+  private Pair<Long, Long> getValidDataSizeOfAllSegments(long referenceTimeInSecs,
+      SortedMap<String, Long> validDataSizeBySegments) throws IOException, StoreException {
     long validDataSize = 0;
     long totalValidDataSize = 0;
-    Offset lastEligibleStartOffset = getLastEligibleStartOffsetForDelete(timeRefInMs);
+    Offset lastEligibleStartOffset = getLastEligibleStartOffsetForDelete(referenceTimeInSecs);
     IndexSegment indexSegment = null;
-    for(Map.Entry<Offset,IndexSegment> indexSegmentEntry: index.indexes.entrySet()){
-      if(indexSegmentEntry.getKey().compareTo(lastEligibleStartOffset) == -1){
-        // index segment is considered valid
+    for (Map.Entry<Offset, IndexSegment> indexSegmentEntry : index.indexes.entrySet()) {
+      if (indexSegmentEntry.getValue().getLastModifiedTime() <= referenceTimeInSecs) {
+        // index segment is considered valid wrt referenceTimeInSecs
         IndexSegment nextIndexSegment = indexSegmentEntry.getValue();
         if (indexSegment == null || nextIndexSegment.getLogSegmentName().equals(indexSegment.getLogSegmentName())) {
-          // index segment refers to same log segment as previous index segment
-          validDataSize += getValidDataSizePerIndexSegment(nextIndexSegment,
-              new FileSpan(nextIndexSegment.getStartOffset(), lastEligibleStartOffset), timeRefInMs);
+          // index segment is null or refers to same log segment as previous index segment
+          FileSpan forwardFileSpan = (lastEligibleStartOffset == index.getCurrentEndOffset()) ? null
+              : new FileSpan(nextIndexSegment.getStartOffset(), lastEligibleStartOffset);
+          validDataSize += getValidDataSizePerIndexSegment(nextIndexSegment, forwardFileSpan, referenceTimeInSecs);
         } else {
           // index segment refers to a new log segment compared to previous index segment
           String logSegmentName = indexSegment.getLogSegmentName();
@@ -162,9 +150,11 @@ class BlobStoreStats implements StoreStats {
             validDataSizeBySegments.put(logSegmentName, validDataSize);
           }
           validDataSize = getValidDataSizePerIndexSegment(nextIndexSegment,
-              new FileSpan(nextIndexSegment.getStartOffset(), lastEligibleStartOffset),  timeRefInMs);
+              new FileSpan(nextIndexSegment.getStartOffset(), lastEligibleStartOffset), referenceTimeInSecs);
         }
         indexSegment = nextIndexSegment;
+      } else {
+        break;
       }
     }
     if (indexSegment != null) {
@@ -174,21 +164,28 @@ class BlobStoreStats implements StoreStats {
         validDataSizeBySegments.put(logSegmentName, validDataSize);
       }
     }
-    return new Pair<>(timeRefInMs, totalValidDataSize);
+    return new Pair<>(referenceTimeInSecs, totalValidDataSize);
   }
 
-
-  private Offset getLastEligibleStartOffsetForDelete(long referenceTimeInMs) {
-    Offset latestEligibleOffset = index.indexes.lastKey();
+  /**
+   * Finds the last eligible index start offset whose last modified time surpases {@code referenceTimeInSecs}
+   * @param referenceTimeInSecs the reference time against which the last eligible index start offset needs to be found
+   * @return the last eligible index start offset whose last modified time surpases {@code referenceTimeInSecs}
+   */
+  private Offset getLastEligibleStartOffsetForDelete(long referenceTimeInSecs) {
+    if (index.indexes.lastEntry().getValue().getLastModifiedTime() < referenceTimeInSecs) {
+      return index.getCurrentEndOffset();
+    }
+    IndexSegment latestIndexSegment = null;
     for (IndexSegment indexSegment : index.indexes.values()) {
-      if (indexSegment.getLastModifiedTime() > referenceTimeInMs) {
-        latestEligibleOffset = indexSegment.getStartOffset();
+      if (indexSegment.getLastModifiedTime() < referenceTimeInSecs) {
+        latestIndexSegment = indexSegment;
+      } else {
         break;
       }
     }
-    return latestEligibleOffset;
+    return latestIndexSegment.getStartOffset();
   }
-
 
   /**
    * Get valid data size of an index segment
@@ -199,21 +196,21 @@ class BlobStoreStats implements StoreStats {
    * @throws IOException
    * @throws StoreException
    */
-  private long getValidDataSizePerIndexSegment(IndexSegment indexSegment, FileSpan forwardSearchSpan, long referenceTime)
-      throws IOException, StoreException {
+  private long getValidDataSizePerIndexSegment(IndexSegment indexSegment, FileSpan forwardSearchSpan,
+      long referenceTime) throws IOException, StoreException {
     long validSize = 0;
     List<MessageInfo> messageInfos = new ArrayList<>();
     indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos, new AtomicLong(0));
-    for(MessageInfo messageInfo: messageInfos) {
+    for (MessageInfo messageInfo : messageInfos) {
       IndexValue value = index.findKey(messageInfo.getStoreKey(), forwardSearchSpan);
       if (messageInfo.getExpirationTimeInMs() == Utils.Infinite_Time && !value.isFlagSet(
           IndexValue.Flags.Delete_Index)) {
         // put record w/o any expiration and not deleted
-          validSize += messageInfo.getSize();
-      } else if(!messageInfo.isDeleted() && (isExpired(messageInfo.getExpirationTimeInMs(), referenceTime) || value.isFlagSet(
-          IndexValue.Flags.Delete_Index))){
-        // a put record either expired or deleted(in future index segment) wrt reference time
-         validSize += messageInfo.getSize();
+        validSize += messageInfo.getSize();
+      } else if (!messageInfo.isDeleted() && !(isExpired(messageInfo.getExpirationTimeInMs(), referenceTime)
+          || value.isFlagSet(IndexValue.Flags.Delete_Index))) {
+        // a put record either expired or deleted(in future index segment) within referenceTimeInMs
+        validSize += messageInfo.getSize();
       } else if (messageInfo.isDeleted()) {
         // delete record
         validSize += messageInfo.getSize();
@@ -225,10 +222,10 @@ class BlobStoreStats implements StoreStats {
   /**
    * Check if {@code expirationTimeInMs} has expired compared to {@code referenceTimeInMs}
    * @param expirationTimeInMs time in ms to be checked for expiration
-   * @param referenceTimeInMs the epoch time to use to check for expiration
+   * @param referenceTimeInSecs the epoch time to use to check for expiration
    * @return {@code true} if {@code expirationTimeInMs} expired wrt {@code referenceTimeInMs}, {@code false} otherwise
    */
-  static boolean isExpired(long expirationTimeInMs, long referenceTimeInMs) {
-    return expirationTimeInMs != Utils.Infinite_Time && referenceTimeInMs > expirationTimeInMs;
+  static boolean isExpired(long expirationTimeInMs, long referenceTimeInSecs) {
+    return expirationTimeInMs != Utils.Infinite_Time && (referenceTimeInSecs * Time.MsPerSec) > expirationTimeInMs;
   }
 }
