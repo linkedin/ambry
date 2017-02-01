@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.router.Callback;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -23,18 +24,22 @@ import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import java.io.IOException;
@@ -100,7 +105,7 @@ public class NettyResponseChannelTest {
     for (int i = 0; i < ITERATIONS; i++) {
       boolean isKeepAlive = i != (ITERATIONS - 1);
       HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
-      HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
+      HttpUtil.setKeepAlive(httpRequest, isKeepAlive);
       channel.writeInbound(httpRequest);
       ArrayList<String> contents = new ArrayList<>();
       for (int j = 0; j <= i; j++) {
@@ -112,8 +117,8 @@ public class NettyResponseChannelTest {
       verifyCallbacks(processor);
       // first outbound has to be response.
       HttpResponse response = (HttpResponse) channel.readOutbound();
-      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-      assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpHeaders.isTransferEncodingChunked(response));
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+      assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpUtil.isTransferEncodingChunked(response));
       // content echoed back.
       for (String srcOfTruth : contents) {
         String returnedContent = RestTestUtils.getContentString((HttpContent) channel.readOutbound());
@@ -145,14 +150,14 @@ public class NettyResponseChannelTest {
       httpHeaders.set(MockNettyMessageProcessor.CHUNK_COUNT_HEADER_NAME, i);
       HttpRequest httpRequest =
           RestTestUtils.createRequest(HttpMethod.POST, TestingUri.ResponseWithContentLength.toString(), httpHeaders);
-      HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
+      HttpUtil.setKeepAlive(httpRequest, isKeepAlive);
       channel.writeInbound(httpRequest);
       verifyCallbacks(processor);
 
       // first outbound has to be response.
       HttpResponse response = (HttpResponse) channel.readOutbound();
-      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-      long contentLength = HttpHeaders.getContentLength(response, -1);
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+      long contentLength = HttpUtil.getContentLength(response, -1);
       assertEquals("Unexpected Content-Length", MockNettyMessageProcessor.CHUNK.length * i, contentLength);
       if (contentLength == 0) {
         // special case. Since Content-Length is set, the response should be an instance of FullHttpResponse.
@@ -187,8 +192,8 @@ public class NettyResponseChannelTest {
     channel.writeInbound(httpRequest);
     // There should be a response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
-    assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpHeaders.isTransferEncodingChunked(response));
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    assertTrue("Response must say 'Transfer-Encoding : chunked'", HttpUtil.isTransferEncodingChunked(response));
     // since this is Transfer-Encoding:chunked, there should be a LastHttpContent
     assertTrue("Did not receive end marker", channel.readOutbound() instanceof LastHttpContent);
     assertTrue("Channel should be alive", channel.isActive());
@@ -197,12 +202,12 @@ public class NettyResponseChannelTest {
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.set(MockNettyMessageProcessor.CHUNK_COUNT_HEADER_NAME, 0);
     httpRequest = RestTestUtils.createRequest(HttpMethod.GET, TestingUri.ImmediateResponseComplete.toString(), headers);
-    HttpHeaders.setKeepAlive(httpRequest, false);
+    HttpUtil.setKeepAlive(httpRequest, false);
     channel.writeInbound(httpRequest);
     // There should be a response.
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Response must have Content-Length set to 0", 0, HttpHeaders.getContentLength(response, -1));
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Response must have Content-Length set to 0", 0, HttpUtil.getContentLength(response, -1));
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     // since Content-Length is set, the response should be an instance of FullHttpResponse.
     assertTrue("Response not instance of FullHttpResponse", response instanceof FullHttpResponse);
     assertFalse("Channel should not be alive", channel.isActive());
@@ -297,14 +302,14 @@ public class NettyResponseChannelTest {
     String lastContent = "@@randomLastContent@@@";
     EmbeddedChannel channel = createEmbeddedChannel();
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.GET, TestingUri.FillWriteBuffer.toString(), null);
-    HttpHeaders.setKeepAlive(httpRequest, false);
+    HttpUtil.setKeepAlive(httpRequest, false);
     channel.writeInbound(httpRequest);
     channel.writeInbound(createContent(content, false));
     channel.writeInbound(createContent(lastContent, true));
 
     // first outbound has to be response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     // content echoed back.
     StringBuilder returnedContent = new StringBuilder();
     while (returnedContent.length() < content.length()) {
@@ -328,7 +333,7 @@ public class NettyResponseChannelTest {
   @Test
   public void headersPresenceTest() throws ParseException {
     HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.CopyHeaders.toString());
-    HttpHeaders.setKeepAlive(request, false);
+    HttpUtil.setKeepAlive(request, false);
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
@@ -345,12 +350,12 @@ public class NettyResponseChannelTest {
   @Test
   public void nullHeadersSetTest() {
     HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetNullHeader.toString());
-    HttpHeaders.setKeepAlive(request, false);
+    HttpUtil.setKeepAlive(request, false);
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.status());
     assertFalse("Channel not closed on the server", channel.isActive());
   }
 
@@ -360,12 +365,12 @@ public class NettyResponseChannelTest {
   @Test
   public void setRequestTest() {
     HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetRequest.toString());
-    HttpHeaders.setKeepAlive(request, false);
+    HttpUtil.setKeepAlive(request, false);
     EmbeddedChannel channel = createEmbeddedChannel();
     channel.writeInbound(request);
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.status());
     assertFalse("Channel not closed on the server", channel.isActive());
   }
 
@@ -380,8 +385,8 @@ public class NettyResponseChannelTest {
     // ask for every status to be set
     for (ResponseStatus expectedResponseStatus : ResponseStatus.values()) {
       HttpRequest request = createRequestWithHeaders(HttpMethod.GET, TestingUri.SetStatus.toString());
-      HttpHeaders.setHeader(request, MockNettyMessageProcessor.STATUS_HEADER_NAME, expectedResponseStatus);
-      HttpHeaders.setKeepAlive(request, false);
+      request.headers().set(MockNettyMessageProcessor.STATUS_HEADER_NAME, expectedResponseStatus);
+      HttpUtil.setKeepAlive(request, false);
       EmbeddedChannel channel = createEmbeddedChannel();
       channel.writeInbound(request);
 
@@ -408,7 +413,7 @@ public class NettyResponseChannelTest {
           RestTestUtils.createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(),
               httpHeaders));
       HttpResponse response = (HttpResponse) channel.readOutbound();
-      assertEquals("Unexpected response status", entry.getValue(), response.getStatus());
+      assertEquals("Unexpected response status", entry.getValue(), response.status());
       boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
       if (entry.getValue() == HttpResponseStatus.BAD_REQUEST) {
         assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
@@ -427,7 +432,7 @@ public class NettyResponseChannelTest {
       boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(entry.getValue());
       assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
       assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
-          HttpHeaders.isKeepAlive(response));
+          HttpUtil.isKeepAlive(response));
       if (!shouldBeAlive) {
         channel = createEmbeddedChannel();
       }
@@ -462,8 +467,8 @@ public class NettyResponseChannelTest {
     channel.writeInbound(request);
 
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.getStatus());
-    assertFalse("Inconsistent value for Connection header", HttpHeaders.isKeepAlive(response));
+    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    assertFalse("Inconsistent value for Connection header", HttpUtil.isKeepAlive(response));
     // drain the channel of content.
     while (channel.readOutbound() != null) {
     }
@@ -552,7 +557,7 @@ public class NettyResponseChannelTest {
     // no exceptions.
     channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
   }
 
   /**
@@ -583,7 +588,7 @@ public class NettyResponseChannelTest {
     httpHeaders.set(MockNettyMessageProcessor.CHUNK_COUNT_HEADER_NAME, chunkCount);
     HttpRequest httpRequest =
         RestTestUtils.createRequest(HttpMethod.POST, TestingUri.WriteMoreThanContentLength.toString(), httpHeaders);
-    HttpHeaders.setKeepAlive(httpRequest, false);
+    HttpUtil.setKeepAlive(httpRequest, true);
     channel.writeInbound(httpRequest);
 
     try {
@@ -612,15 +617,15 @@ public class NettyResponseChannelTest {
   private HttpRequest createRequestWithHeaders(HttpMethod httpMethod, String uri) {
     long currentTime = System.currentTimeMillis();
     HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, null);
-    HttpHeaders.setHeader(request, HttpHeaders.Names.CONTENT_TYPE, "dummy/content-type");
-    HttpHeaders.setHeader(request, HttpHeaders.Names.CONTENT_LENGTH, 100);
-    HttpHeaders.setHeader(request, HttpHeaders.Names.LOCATION, "dummyLocation");
-    HttpHeaders.setDateHeader(request, HttpHeaders.Names.LAST_MODIFIED, new Date(currentTime));
-    HttpHeaders.setDateHeader(request, HttpHeaders.Names.EXPIRES, new Date(currentTime + 1));
-    HttpHeaders.setHeader(request, HttpHeaders.Names.CACHE_CONTROL, "dummyCacheControl");
-    HttpHeaders.setHeader(request, HttpHeaders.Names.PRAGMA, "dummyPragma");
-    HttpHeaders.setDateHeader(request, HttpHeaders.Names.DATE, new Date(currentTime + 2));
-    HttpHeaders.setHeader(request, MockNettyMessageProcessor.CUSTOM_HEADER_NAME, "customHeaderValue");
+    request.headers().set(HttpHeaderNames.CONTENT_TYPE, "dummy/content-type");
+    request.headers().set(HttpHeaderNames.CONTENT_LENGTH, 100);
+    request.headers().set(HttpHeaderNames.LOCATION, "dummyLocation");
+    request.headers().set(HttpHeaderNames.LAST_MODIFIED, new Date(currentTime));
+    request.headers().set(HttpHeaderNames.EXPIRES, new Date(currentTime + 1));
+    request.headers().set(HttpHeaderNames.CACHE_CONTROL, "dummyCacheControl");
+    request.headers().set(HttpHeaderNames.PRAGMA, "dummyPragma");
+    request.headers().set(HttpHeaderNames.DATE, new Date(currentTime + 2));
+    request.headers().set(MockNettyMessageProcessor.CUSTOM_HEADER_NAME, "customHeaderValue");
     return request;
   }
 
@@ -631,39 +636,34 @@ public class NettyResponseChannelTest {
    * @throws ParseException
    */
   private void checkHeaders(HttpRequest request, HttpResponse response) throws ParseException {
-    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.getStatus());
-    assertEquals(HttpHeaders.Names.CONTENT_TYPE + " does not match",
-        HttpHeaders.getHeader(request, HttpHeaders.Names.CONTENT_TYPE),
-        HttpHeaders.getHeader(response, HttpHeaders.Names.CONTENT_TYPE));
-    assertEquals(HttpHeaders.Names.CONTENT_LENGTH + " does not match",
-        HttpHeaders.getHeader(request, HttpHeaders.Names.CONTENT_LENGTH),
-        HttpHeaders.getHeader(response, HttpHeaders.Names.CONTENT_LENGTH));
-    assertEquals(HttpHeaders.Names.LOCATION + " does not match",
-        HttpHeaders.getHeader(request, HttpHeaders.Names.LOCATION),
-        HttpHeaders.getHeader(response, HttpHeaders.Names.LOCATION));
-    assertEquals(HttpHeaders.Names.LAST_MODIFIED + " does not match",
-        HttpHeaders.getDateHeader(request, HttpHeaders.Names.LAST_MODIFIED),
-        HttpHeaders.getDateHeader(response, HttpHeaders.Names.LAST_MODIFIED));
-    assertEquals(HttpHeaders.Names.EXPIRES + " does not match",
-        HttpHeaders.getDateHeader(request, HttpHeaders.Names.EXPIRES),
-        HttpHeaders.getDateHeader(response, HttpHeaders.Names.EXPIRES));
-    assertEquals(HttpHeaders.Names.CACHE_CONTROL + " does not match",
-        HttpHeaders.getHeader(request, HttpHeaders.Names.CACHE_CONTROL),
-        HttpHeaders.getHeader(response, HttpHeaders.Names.CACHE_CONTROL));
-    assertEquals(HttpHeaders.Names.PRAGMA + " does not match", HttpHeaders.getHeader(request, HttpHeaders.Names.PRAGMA),
-        HttpHeaders.getHeader(response, HttpHeaders.Names.PRAGMA));
-    assertEquals(HttpHeaders.Names.DATE + " does not match", HttpHeaders.getDateHeader(request, HttpHeaders.Names.DATE),
-        HttpHeaders.getDateHeader(response, HttpHeaders.Names.DATE));
+    assertEquals("Unexpected response status", HttpResponseStatus.ACCEPTED, response.status());
+    assertEquals(HttpHeaderNames.CONTENT_TYPE + " does not match", request.headers().get(HttpHeaderNames.CONTENT_TYPE),
+        response.headers().get(HttpHeaderNames.CONTENT_TYPE));
+    assertEquals(HttpHeaderNames.CONTENT_LENGTH + " does not match",
+        request.headers().get(HttpHeaderNames.CONTENT_LENGTH), response.headers().get(HttpHeaderNames.CONTENT_LENGTH));
+    assertEquals(HttpHeaderNames.LOCATION + " does not match", request.headers().get(HttpHeaderNames.LOCATION),
+        response.headers().get(HttpHeaderNames.LOCATION));
+    assertEquals(HttpHeaderNames.LAST_MODIFIED + " does not match",
+        request.headers().getTimeMillis(HttpHeaderNames.LAST_MODIFIED),
+        response.headers().getTimeMillis(HttpHeaderNames.LAST_MODIFIED));
+    assertEquals(HttpHeaderNames.EXPIRES + " does not match", request.headers().getTimeMillis(HttpHeaderNames.EXPIRES),
+        response.headers().getTimeMillis(HttpHeaderNames.EXPIRES));
+    assertEquals(HttpHeaderNames.CACHE_CONTROL + " does not match",
+        request.headers().get(HttpHeaderNames.CACHE_CONTROL), response.headers().get(HttpHeaderNames.CACHE_CONTROL));
+    assertEquals(HttpHeaderNames.PRAGMA + " does not match", request.headers().get(HttpHeaderNames.PRAGMA),
+        response.headers().get(HttpHeaderNames.PRAGMA));
+    assertEquals(HttpHeaderNames.DATE + " does not match", request.headers().getTimeMillis(HttpHeaderNames.DATE),
+        response.headers().getTimeMillis(HttpHeaderNames.DATE));
     assertEquals(MockNettyMessageProcessor.CUSTOM_HEADER_NAME + " does not match",
-        HttpHeaders.getHeader(request, MockNettyMessageProcessor.CUSTOM_HEADER_NAME),
-        HttpHeaders.getHeader(response, MockNettyMessageProcessor.CUSTOM_HEADER_NAME));
+        request.headers().get(MockNettyMessageProcessor.CUSTOM_HEADER_NAME),
+        response.headers().get(MockNettyMessageProcessor.CUSTOM_HEADER_NAME));
   }
 
   // keepAliveTest() helpers.
 
   /**
-   * Does the keep-alive test by setting the {@link HttpHeaders.Names#CONNECTION} to its two possible values and tests
-   * that the response has the appropriate value for the {@link HttpHeaders.Names#CONNECTION}.
+   * Does the keep-alive test by setting the {@link HttpHeaderNames#CONNECTION} to its two possible values and tests
+   * that the response has the appropriate value for the {@link HttpHeaderNames#CONNECTION}.
    * @param channel the {@link EmbeddedChannel} to send the request over.
    * @param httpMethod the {@link HttpMethod} of the request.
    * @param errorCode the {@link RestServiceErrorCode} to induce at {@link MockNettyMessageProcessor}. {@code null} if
@@ -683,11 +683,11 @@ public class NettyResponseChannelTest {
         httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, errorCode);
       }
       if (!keepAlive) {
-        httpHeaders.set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
+        httpHeaders.set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
       }
       channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri.toString(), httpHeaders));
       HttpResponse response = (HttpResponse) channel.readOutbound();
-      assertEquals("Unexpected response status", expectedResponseStatus, response.getStatus());
+      assertEquals("Unexpected response status", expectedResponseStatus, response.status());
       if (!(response instanceof FullHttpResponse)) {
         // empty the channel
         while (channel.readOutbound() != null) {
@@ -697,7 +697,7 @@ public class NettyResponseChannelTest {
           && !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(expectedResponseStatus);
       assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
       assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
-          HttpHeaders.isKeepAlive(response));
+          HttpUtil.isKeepAlive(response));
       if (!shouldBeAlive) {
         channel.close();
         channel = createEmbeddedChannel();
@@ -823,7 +823,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   // 1. The Content-Length is set to 3 * CHUNK.length
   // 2. The content is sent in two chunks both of which contain the same data.
   // 3. The last chunk will be sent as LastHttpContent.
-  static final byte[] CHUNK = RestTestUtils.getRandomBytes(1024);
+  static final byte[] CHUNK = TestUtils.getRandomBytes(1024);
   static final String CHUNK_COUNT_HEADER_NAME = "chunkCount";
 
   // the write callbacks to verify if any. This is reset at the beginning of every request.
@@ -842,15 +842,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   }
 
   @Override
-  public void channelInactive(ChannelHandlerContext ctx) {
-    request = null;
-    restResponseChannel = null;
-  }
-
-  @Override
   public void channelRead0(ChannelHandlerContext ctx, HttpObject obj) throws Exception {
     if (obj != null && obj instanceof HttpRequest) {
-      if (obj.getDecoderResult().isSuccess()) {
+      if (obj.decoderResult().isSuccess()) {
         handleRequest((HttpRequest) obj);
       } else {
         throw new RestServiceException("Malformed request received - " + obj, RestServiceErrorCode.MalformedRequest);
@@ -887,7 +881,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         assertFalse("Request channel is not closed", request.isOpen());
         break;
       case ImmediateResponseComplete:
-        int chunkCount = HttpHeaders.getIntHeader(httpRequest, CHUNK_COUNT_HEADER_NAME, -1);
+        int chunkCount = httpRequest.headers().getInt(CHUNK_COUNT_HEADER_NAME, -1);
         if (chunkCount > 0) {
           restResponseChannel.onResponseComplete(new RestServiceException(
               "Invalid value for header : [" + CHUNK_COUNT_HEADER_NAME + "]. Can only be 0 for [/" + uri + "]",
@@ -900,8 +894,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         assertFalse("Request channel is not closed", request.isOpen());
         break;
       case FillWriteBuffer:
-        ctx.channel().config().setWriteBufferLowWaterMark(1);
-        ctx.channel().config().setWriteBufferHighWaterMark(2);
+        WriteBufferWaterMark writeBufferWaterMark = new WriteBufferWaterMark(1, 2);
+        ctx.channel().config().setWriteBufferWaterMark(writeBufferWaterMark);
         break;
       case ModifyResponseMetadataAfterWrite:
         restResponseChannel.write(ByteBuffer.wrap(new byte[0]), null);
@@ -943,7 +937,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         // this should close the channel and the test will check for that.
         break;
       case ResponseWithContentLength:
-        chunkCount = HttpHeaders.getIntHeader(httpRequest, CHUNK_COUNT_HEADER_NAME, -1);
+        chunkCount = httpRequest.headers().getInt(CHUNK_COUNT_HEADER_NAME, -1);
         if (chunkCount == -1) {
           restResponseChannel.onResponseComplete(
               new RestServiceException("Request should contain header : [" + CHUNK_COUNT_HEADER_NAME + "]",
@@ -973,7 +967,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         setRequestTest();
         break;
       case SetStatus:
-        restResponseChannel.setStatus(ResponseStatus.valueOf(HttpHeaders.getHeader(httpRequest, STATUS_HEADER_NAME)));
+        restResponseChannel.setStatus(ResponseStatus.valueOf(httpRequest.headers().get(STATUS_HEADER_NAME)));
         restResponseChannel.onResponseComplete(null);
         assertFalse("Request channel is not closed", request.isOpen());
         break;
@@ -993,7 +987,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         writeCallbacksToVerify.add(callback);
         break;
       case WriteMoreThanContentLength:
-        chunkCount = HttpHeaders.getIntHeader(httpRequest, CHUNK_COUNT_HEADER_NAME, -1);
+        chunkCount = httpRequest.headers().getInt(CHUNK_COUNT_HEADER_NAME, -1);
         if (chunkCount == -1) {
           restResponseChannel.onResponseComplete(
               new RestServiceException("Request should contain header : [" + CHUNK_COUNT_HEADER_NAME + "]",
@@ -1044,56 +1038,54 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
     assertEquals("ResponseStatus differs from what was set", ResponseStatus.Accepted, restResponseChannel.getStatus());
 
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE,
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_TYPE));
+        httpRequest.headers().get(HttpHeaderNames.CONTENT_TYPE));
     assertEquals("Value of [" + RestUtils.Headers.CONTENT_TYPE + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_TYPE),
-        restResponseChannel.getHeader(HttpHeaders.Names.CONTENT_TYPE));
+        httpRequest.headers().get(HttpHeaderNames.CONTENT_TYPE),
+        restResponseChannel.getHeader(HttpHeaderNames.CONTENT_TYPE.toString()));
 
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
-        Long.parseLong(HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_LENGTH)));
+        Long.parseLong(httpRequest.headers().get(HttpHeaderNames.CONTENT_LENGTH)));
     assertEquals("Value of [" + RestUtils.Headers.CONTENT_LENGTH + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CONTENT_LENGTH),
-        restResponseChannel.getHeader(HttpHeaders.Names.CONTENT_LENGTH));
+        httpRequest.headers().get(HttpHeaderNames.CONTENT_LENGTH),
+        restResponseChannel.getHeader(HttpHeaderNames.CONTENT_LENGTH.toString()));
 
-    restResponseChannel.setHeader(RestUtils.Headers.LOCATION,
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.LOCATION));
+    restResponseChannel.setHeader(RestUtils.Headers.LOCATION, httpRequest.headers().get(HttpHeaderNames.LOCATION));
     assertEquals("Value of [" + RestUtils.Headers.LOCATION + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.LOCATION),
-        restResponseChannel.getHeader(HttpHeaders.Names.LOCATION));
+        httpRequest.headers().get(HttpHeaderNames.LOCATION),
+        restResponseChannel.getHeader(HttpHeaderNames.LOCATION.toString()));
 
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
-        HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.LAST_MODIFIED));
+        new Date(httpRequest.headers().getTimeMillis(HttpHeaderNames.LAST_MODIFIED)));
     assertEquals("Value of [" + RestUtils.Headers.LAST_MODIFIED + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.LAST_MODIFIED),
-        restResponseChannel.getHeader(HttpHeaders.Names.LAST_MODIFIED));
+        httpRequest.headers().get(HttpHeaderNames.LAST_MODIFIED),
+        restResponseChannel.getHeader(HttpHeaderNames.LAST_MODIFIED.toString()));
 
     restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
-        HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.EXPIRES));
+        new Date(httpRequest.headers().getTimeMillis(HttpHeaderNames.EXPIRES)));
     assertEquals("Value of [" + RestUtils.Headers.EXPIRES + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.EXPIRES),
-        restResponseChannel.getHeader(HttpHeaders.Names.EXPIRES));
+        httpRequest.headers().get(HttpHeaderNames.EXPIRES),
+        restResponseChannel.getHeader(HttpHeaderNames.EXPIRES.toString()));
 
     restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CACHE_CONTROL));
+        httpRequest.headers().get(HttpHeaderNames.CACHE_CONTROL));
     assertEquals("Value of [" + RestUtils.Headers.CACHE_CONTROL + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.CACHE_CONTROL),
-        restResponseChannel.getHeader(HttpHeaders.Names.CACHE_CONTROL));
+        httpRequest.headers().get(HttpHeaderNames.CACHE_CONTROL),
+        restResponseChannel.getHeader(HttpHeaderNames.CACHE_CONTROL.toString()));
 
-    restResponseChannel.setHeader(RestUtils.Headers.PRAGMA,
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.PRAGMA));
+    restResponseChannel.setHeader(RestUtils.Headers.PRAGMA, httpRequest.headers().get(HttpHeaderNames.PRAGMA));
     assertEquals("Value of [" + RestUtils.Headers.PRAGMA + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.PRAGMA),
-        restResponseChannel.getHeader(HttpHeaders.Names.PRAGMA));
+        httpRequest.headers().get(HttpHeaderNames.PRAGMA),
+        restResponseChannel.getHeader(HttpHeaderNames.PRAGMA.toString()));
 
     restResponseChannel.setHeader(RestUtils.Headers.DATE,
-        HttpHeaders.getDateHeader(httpRequest, HttpHeaders.Names.DATE));
+        new Date(httpRequest.headers().getTimeMillis(HttpHeaderNames.DATE)));
     assertEquals("Value of [" + RestUtils.Headers.DATE + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, HttpHeaders.Names.DATE),
-        restResponseChannel.getHeader(HttpHeaders.Names.DATE));
+        httpRequest.headers().get(HttpHeaderNames.DATE),
+        restResponseChannel.getHeader(HttpHeaderNames.DATE.toString()));
 
-    restResponseChannel.setHeader(CUSTOM_HEADER_NAME, HttpHeaders.getHeader(httpRequest, CUSTOM_HEADER_NAME));
+    restResponseChannel.setHeader(CUSTOM_HEADER_NAME, httpRequest.headers().get(CUSTOM_HEADER_NAME));
     assertEquals("Value of [" + CUSTOM_HEADER_NAME + "] differs from what was set",
-        HttpHeaders.getHeader(httpRequest, CUSTOM_HEADER_NAME), restResponseChannel.getHeader(CUSTOM_HEADER_NAME));
+        httpRequest.headers().get(CUSTOM_HEADER_NAME), restResponseChannel.getHeader(CUSTOM_HEADER_NAME));
   }
 
   /**

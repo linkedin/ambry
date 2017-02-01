@@ -23,6 +23,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Time;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -37,11 +38,11 @@ import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpChunkedInput;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
@@ -340,7 +341,7 @@ public class NettyPerfClient {
           logger.trace(
               "Final content received on channel {}. Took {} ms. Total chunks received - {}. Total size received - {}",
               ctx.channel(), requestRoundTripTime, chunksReceived, sizeReceived);
-          if (HttpHeaders.isKeepAlive(response) && isRunning) {
+          if (HttpUtil.isKeepAlive(response) && isRunning) {
             logger.trace("Sending new request on channel {}", ctx.channel());
             sendRequest(ctx);
           } else if (!isRunning) {
@@ -348,7 +349,7 @@ public class NettyPerfClient {
             ctx.close();
           } else {
             perfClientMetrics.requestResponseError.inc();
-            logger.error("Channel {} not kept alive. Last response status was {}", ctx.channel(), response.getStatus());
+            logger.error("Channel {} not kept alive. Last response status was {}", ctx.channel(), response.status());
             ctx.close();
           }
         }
@@ -389,7 +390,7 @@ public class NettyPerfClient {
       reset();
       perfClientMetrics.requestRate.mark();
       ctx.writeAndFlush(request);
-      if (request.getMethod().equals(HttpMethod.POST)) {
+      if (request.method().equals(HttpMethod.POST)) {
         ctx.writeAndFlush(chunkedInput);
       }
       logger.trace("Request {} scheduled to be sent on channel {}", requestId, ctx.channel());
@@ -402,10 +403,10 @@ public class NettyPerfClient {
       if (chunk != null) {
         chunkedInput = new HttpChunkedInput(new RepeatedBytesInput());
         request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, uri);
-        HttpHeaders.setContentLength(request, totalSize);
-        HttpHeaders.addHeader(request, RestUtils.Headers.BLOB_SIZE, totalSize);
-        HttpHeaders.addHeader(request, RestUtils.Headers.SERVICE_ID, "PerfNettyClient");
-        HttpHeaders.addHeader(request, RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+        HttpUtil.setContentLength(request, totalSize);
+        request.headers().add(RestUtils.Headers.BLOB_SIZE, totalSize);
+        request.headers().add(RestUtils.Headers.SERVICE_ID, "PerfNettyClient");
+        request.headers().add(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
       } else {
         request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
       }
@@ -454,6 +455,11 @@ public class NettyPerfClient {
 
       @Override
       public ByteBuf readChunk(ChannelHandlerContext ctx) throws Exception {
+        return readChunk(ctx.alloc());
+      }
+
+      @Override
+      public ByteBuf readChunk(ByteBufAllocator allocator) throws Exception {
         ByteBuf buf = null;
         if (streamed == 0) {
           startTime = System.currentTimeMillis();
@@ -470,6 +476,16 @@ public class NettyPerfClient {
           lastChunkSendTime = currentChunkSendTime;
         }
         return buf;
+      }
+
+      @Override
+      public long length() {
+        return totalSize;
+      }
+
+      @Override
+      public long progress() {
+        return streamed;
       }
     }
   }

@@ -47,7 +47,7 @@ import org.slf4j.LoggerFactory;
  * Multipart decoding also creates copies of the data. This affects latency and increases memory pressure.
  */
 class NettyMultipartRequest extends NettyRequest {
-  private final Queue<HttpContent> rawRequestContents = new LinkedBlockingQueue<HttpContent>();
+  private final Queue<HttpContent> rawRequestContents = new LinkedBlockingQueue<>();
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private boolean readyForRead = false;
@@ -63,10 +63,10 @@ class NettyMultipartRequest extends NettyRequest {
    * @throws RestServiceException if the HTTP method defined in {@code request} is not recognized as a
    *                                {@link RestMethod}.
    */
-  public NettyMultipartRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics)
-      throws RestServiceException {
+  NettyMultipartRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics) throws RestServiceException {
     super(request, channel, nettyMetrics);
     // reset auto read state.
+    channel.config().setRecvByteBufAllocator(savedAllocator);
     setAutoRead(true);
     if (!getRestMethod().equals(RestMethod.POST)) {
       throw new IllegalArgumentException("NettyMultipartRequest cannot be created for " + getRestMethod());

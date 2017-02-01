@@ -18,4 +18,5 @@ ext {
     bouncycastleVersion = "1.52"
     javaxVersion = "3.0.1"
     helixVersion = "0.6.6"
+    nettyVersion = "4.1.4.Final"
 }

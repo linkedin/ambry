@@ -17,10 +17,10 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,8 +63,8 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
       requestArrivalTimeInMs = System.currentTimeMillis();
       request = (HttpRequest) obj;
       logMessage.append(ctx.channel().remoteAddress()).append(" ");
-      logMessage.append(request.getMethod().toString()).append(" ");
-      logMessage.append(request.getUri()).append(", ");
+      logMessage.append(request.method().toString()).append(" ");
+      logMessage.append(request.uri()).append(", ");
       logHeaders("Request", request, publicAccessLogger.getRequestHeaders());
       logMessage.append(", ");
     } else if (obj instanceof LastHttpContent) {
@@ -87,9 +87,9 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         HttpResponse response = (HttpResponse) msg;
         logHeaders("Response", response, publicAccessLogger.getResponseHeaders());
         logMessage.append(", ");
-        logMessage.append("status=").append(response.getStatus().code());
+        logMessage.append("status=").append(response.status().code());
         logMessage.append(", ");
-        if (HttpHeaders.isTransferEncodingChunked(response)) {
+        if (HttpUtil.isTransferEncodingChunked(response)) {
           responseFirstChunkStartTimeInMs = System.currentTimeMillis();
         } else {
           shouldReset = true;
@@ -139,7 +139,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         logMessage.append("[").append(header).append("=").append(message.headers().get(header)).append("] ");
       }
     }
-    boolean isChunked = HttpHeaders.isTransferEncodingChunked(message);
+    boolean isChunked = HttpUtil.isTransferEncodingChunked(message);
     logMessage.append("[isChunked=").append(isChunked).append("]");
     logMessage.append(")");
   }
@@ -174,7 +174,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
 
   /**
    * Logs error message
-   * @param msg
+   * @param msg the message to log
    */
   private void logError(String msg) {
     logDurations();

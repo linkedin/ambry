@@ -17,6 +17,7 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -30,9 +31,10 @@ import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
@@ -43,7 +45,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Queue;
@@ -105,7 +106,7 @@ class NettyResponseChannel implements RestResponseChannel {
    * @param ctx the {@link ChannelHandlerContext} to use.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
    */
-  public NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
+  NettyResponseChannel(ChannelHandlerContext ctx, NettyMetrics nettyMetrics) {
     this.ctx = ctx;
     this.nettyMetrics = nettyMetrics;
     chunkedWriteHandler = ctx.pipeline().get(ChunkedWriteHandler.class);
@@ -121,7 +122,16 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     Chunk chunk = new Chunk(src, callback);
     chunksToWrite.add(chunk);
-    if (!isOpen()) {
+    if (HttpUtil.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpUtil.getContentLength(
+        finalResponseMetadata)) {
+      Exception exception = new IllegalStateException(
+          "Size of provided content [" + totalBytesReceived.get() + "] is greater than Content-Length set ["
+              + HttpUtil.getContentLength(finalResponseMetadata) + "]");
+      if (!writeFuture.isDone()) {
+        writeFuture.setFailure(exception);
+      }
+      writeFuture.addListener(new CleanupCallback(exception));
+    } else if (!isOpen()) {
       // the isOpen() check is not before addition to the queue because chunks need to be acknowledged in the order
       // they were received. If we don't add it to the queue and clean up, chunks may be acknowledged out of order.
       logger.debug("Scheduling a chunk cleanup on channel {} because response channel is closed", ctx.channel());
@@ -135,15 +145,6 @@ class NettyResponseChannel implements RestResponseChannel {
         if (!writeFuture.isDone()) {
           writeFuture.setFailure(exception);
         }
-      }
-      writeFuture.addListener(new CleanupCallback(exception));
-    } else if (HttpHeaders.isContentLengthSet(finalResponseMetadata)
-        && totalBytesReceived.get() > HttpHeaders.getContentLength(finalResponseMetadata)) {
-      Exception exception = new IllegalStateException(
-          "Size of provided content [" + totalBytesReceived.get() + "] is greater than Content-Length set ["
-              + HttpHeaders.getContentLength(finalResponseMetadata) + "]");
-      if (!writeFuture.isDone()) {
-        writeFuture.setFailure(exception);
       }
       writeFuture.addListener(new CleanupCallback(exception));
     } else {
@@ -229,7 +230,7 @@ class NettyResponseChannel implements RestResponseChannel {
   public void setStatus(ResponseStatus status) throws RestServiceException {
     responseMetadata.setStatus(getHttpResponseStatus(status));
     responseStatus = status;
-    logger.trace("Set status to {} for response on channel {}", responseMetadata.getStatus(), ctx.channel());
+    logger.trace("Set status to {} for response on channel {}", responseMetadata.status(), ctx.channel());
   }
 
   @Override
@@ -239,7 +240,20 @@ class NettyResponseChannel implements RestResponseChannel {
 
   @Override
   public void setHeader(String headerName, Object headerValue) throws RestServiceException {
-    setResponseHeader(headerName, headerValue);
+    if (headerName != null && headerValue != null) {
+      long startTime = System.currentTimeMillis();
+      responseMetadata.headers().set(headerName, headerValue);
+      if (responseMetadataWriteInitiated.get()) {
+        nettyMetrics.deadResponseAccessError.inc();
+        throw new IllegalStateException("Response metadata changed after it has already been written to the channel");
+      } else {
+        logger.trace("Header {} set to {} for channel {}", headerName, responseMetadata.headers().get(headerName),
+            ctx.channel());
+        nettyMetrics.headerSetTimeInMs.update(System.currentTimeMillis() - startTime);
+      }
+    } else {
+      throw new IllegalArgumentException("Header name [" + headerName + "] or header value [" + headerValue + "] null");
+    }
   }
 
   @Override
@@ -248,7 +262,7 @@ class NettyResponseChannel implements RestResponseChannel {
     if (response == null) {
       response = responseMetadata;
     }
-    return HttpHeaders.getHeader(response, headerName);
+    return response.headers().get(headerName);
   }
 
   /**
@@ -260,7 +274,7 @@ class NettyResponseChannel implements RestResponseChannel {
     if (request != null) {
       if (this.request == null) {
         this.request = request;
-        HttpHeaders.setKeepAlive(responseMetadata, request.isKeepAlive());
+        HttpUtil.setKeepAlive(responseMetadata, request.isKeepAlive());
       } else {
         throw new IllegalStateException(
             "Request has already been set inside NettyResponseChannel for channel {} " + ctx.channel());
@@ -307,20 +321,19 @@ class NettyResponseChannel implements RestResponseChannel {
       // or Transfer-Encoding:chunked, never both. So we check for Content-Length - if it is not there, we add
       // Transfer-Encoding:chunked on 200 response. Note that sending HttpContent chunks data anyway - we are just
       // explicitly specifying this in the header.
-      if (!HttpHeaders.isContentLengthSet(responseMetadata) && (
-          responseMetadata.getStatus().equals(HttpResponseStatus.OK) || responseMetadata.getStatus()
-              .equals(HttpResponseStatus.PARTIAL_CONTENT))) {
+      if (!HttpUtil.isContentLengthSet(responseMetadata) && (responseMetadata.status().equals(HttpResponseStatus.OK)
+          || responseMetadata.status().equals(HttpResponseStatus.PARTIAL_CONTENT))) {
         // This makes sure that we don't stomp on any existing transfer-encoding.
-        HttpHeaders.setTransferEncodingChunked(responseMetadata);
-      } else if (HttpHeaders.isContentLengthSet(responseMetadata) && HttpHeaders.getContentLength(responseMetadata) == 0
+        HttpUtil.setTransferEncodingChunked(responseMetadata, true);
+      } else if (HttpUtil.isContentLengthSet(responseMetadata) && HttpUtil.getContentLength(responseMetadata) == 0
           && !(responseMetadata instanceof FullHttpResponse)) {
         // if the Content-Length is 0, we can send a FullHttpResponse since there is no content expected.
         FullHttpResponse fullHttpResponse =
-            new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, responseMetadata.getStatus());
+            new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, responseMetadata.status());
         fullHttpResponse.headers().set(responseMetadata.headers());
         responseMetadata = fullHttpResponse;
       }
-      logger.trace("Sending response with status {} on channel {}", responseMetadata.getStatus(), ctx.channel());
+      logger.trace("Sending response with status {} on channel {}", responseMetadata.status(), ctx.channel());
       finalResponseMetadata = responseMetadata;
       ChannelPromise writePromise = ctx.newPromise().addListener(listener);
       ctx.writeAndFlush(responseMetadata, writePromise);
@@ -329,34 +342,6 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.responseMetadataProcessingTimeInMs.update(writeProcessingTime);
     }
     return writtenThisTime;
-  }
-
-  /**
-   * Sets the value of response headers after making sure that the response metadata is not already sent.
-   * @param headerName The name of the header.
-   * @param headerValue The intended value of the header.
-   * @throws IllegalArgumentException if any of {@code headerName} or {@code headerValue} is null.
-   * @throws IllegalStateException if response metadata has already been written to the channel.
-   */
-  private void setResponseHeader(String headerName, Object headerValue) {
-    if (headerName != null && headerValue != null) {
-      long startTime = System.currentTimeMillis();
-      if (headerValue instanceof Date) {
-        HttpHeaders.setDateHeader(responseMetadata, headerName, (Date) headerValue);
-      } else {
-        HttpHeaders.setHeader(responseMetadata, headerName, headerValue);
-      }
-      if (responseMetadataWriteInitiated.get()) {
-        nettyMetrics.deadResponseAccessError.inc();
-        throw new IllegalStateException("Response metadata changed after it has already been written to the channel");
-      } else {
-        logger.trace("Header {} set to {} for channel {}", headerName, responseMetadata.headers().get(headerName),
-            ctx.channel());
-        nettyMetrics.headerSetTimeInMs.update(System.currentTimeMillis() - startTime);
-      }
-    } else {
-      throw new IllegalArgumentException("Header name [" + headerName + "] or header value [" + headerValue + "] null");
-    }
   }
 
   /**
@@ -405,16 +390,16 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     logger.trace("Constructed error response for the client - [{} - {}]", status, errReason);
     FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
-    HttpHeaders.setDate(response, new GregorianCalendar().getTime());
-    HttpHeaders.setContentLength(response, 0);
+    response.headers().set(HttpHeaderNames.DATE, new GregorianCalendar().getTime());
+    HttpUtil.setContentLength(response, 0);
     if (errReason != null) {
-      HttpHeaders.setHeader(response, FAILURE_REASON_HEADER, errReason);
+      response.headers().set(FAILURE_REASON_HEADER, errReason);
     }
-    HttpHeaders.setHeader(response, HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+    response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
     boolean keepAlive =
-        !forceClose && HttpHeaders.isKeepAlive(responseMetadata) && request != null && !request.getRestMethod()
+        !forceClose && HttpUtil.isKeepAlive(responseMetadata) && request != null && !request.getRestMethod()
             .equals(RestMethod.POST) && !CLOSE_CONNECTION_ERROR_STATUSES.contains(status);
-    HttpHeaders.setKeepAlive(response, keepAlive);
+    HttpUtil.setKeepAlive(response, keepAlive);
     return response;
   }
 
@@ -602,7 +587,7 @@ class NettyResponseChannel implements RestResponseChannel {
     /**
      * Information on whether this is the last chunk.
      * <p/>
-     * This value will be {@code true} for at most one chunk. If {@link HttpHeaders.Names#CONTENT_LENGTH} is not set,
+     * This value will be {@code true} for at most one chunk. If {@link HttpHeaderNames#CONTENT_LENGTH} is not set,
      * there will be no chunks with this value as {@code true}.
      */
     final boolean isLast;
@@ -624,7 +609,7 @@ class NettyResponseChannel implements RestResponseChannel {
       chunksToWriteCount.incrementAndGet();
 
       // if we are here, it means that finalResponseMetadata has been set and there is no danger of it being null
-      long contentLength = HttpHeaders.getContentLength(finalResponseMetadata, -1);
+      long contentLength = HttpUtil.getContentLength(finalResponseMetadata, -1);
       isLast = contentLength != -1 && writeCompleteThreshold >= contentLength;
     }
 
@@ -675,6 +660,7 @@ class NettyResponseChannel implements RestResponseChannel {
   private class ChunkDispenser implements ChunkedInput<HttpContent> {
     // NOTE: Due to a bug in HttpChunkedInput, some code there has been reproduced here instead of using it directly.
     private boolean sentLastChunk = false;
+    private final AtomicLong progress = new AtomicLong(0);
 
     /**
      * Determines if input has ended by examining response state and number of chunks pending for write.
@@ -698,7 +684,18 @@ class NettyResponseChannel implements RestResponseChannel {
      * @return a chunk of data if one is available. {@code null} otherwise.
      */
     @Override
-    public HttpContent readChunk(ChannelHandlerContext ctx) {
+    public HttpContent readChunk(ChannelHandlerContext ctx) throws Exception {
+      return readChunk(ctx.alloc());
+    }
+
+    /**
+     * Dispenses the next chunk from {@link #chunksToWrite} if one is available and adds the chunk dispensed to
+     * {@link #chunksAwaitingCallback}.
+     * @param allocator the {@link ByteBufAllocator} to use if required.
+     * @return a chunk of data if one is available. {@code null} otherwise.
+     */
+    @Override
+    public HttpContent readChunk(ByteBufAllocator allocator) throws Exception {
       long chunkDispenseStartTime = System.currentTimeMillis();
       logger.trace("Servicing request for next chunk on channel {}", ctx.channel());
       HttpContent content = null;
@@ -706,6 +703,7 @@ class NettyResponseChannel implements RestResponseChannel {
       if (chunk != null) {
         chunk.onDequeue();
         ByteBuf buf = Unpooled.wrappedBuffer(chunk.buffer);
+        progress.addAndGet(chunk.buffer.remaining());
         chunksAwaitingCallback.add(chunk);
         if (chunk.isLast) {
           content = new DefaultLastHttpContent(buf);
@@ -721,6 +719,16 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       nettyMetrics.chunkDispenseTimeInMs.update(System.currentTimeMillis() - chunkDispenseStartTime);
       return content;
+    }
+
+    @Override
+    public long length() {
+      return HttpUtil.getContentLength(finalResponseMetadata, -1);
+    }
+
+    @Override
+    public long progress() {
+      return progress.get();
     }
 
     /**
@@ -793,7 +801,7 @@ class NettyResponseChannel implements RestResponseChannel {
           // in this case there is nothing more to write.
           if (!writeFuture.isDone()) {
             writeFuture.setSuccess();
-            completeRequest(!HttpHeaders.isKeepAlive(finalResponseMetadata));
+            completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata));
           }
         } else {
           // otherwise there is some content to write.
@@ -826,7 +834,7 @@ class NettyResponseChannel implements RestResponseChannel {
       long writeFinishTime = System.currentTimeMillis();
       long channelWriteTime = writeFinishTime - responseWriteStartTime;
       if (future.isSuccess()) {
-        completeRequest(!HttpHeaders.isKeepAlive(finalResponseMetadata));
+        completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata));
       } else {
         handleChannelWriteFailure(future.cause(), true);
       }
@@ -844,7 +852,7 @@ class NettyResponseChannel implements RestResponseChannel {
    * Cleans up chunks that are remaining. This serves two purposes:
    * 1. Guarding against the case where {@link CallbackInvoker#operationComplete(ChannelProgressiveFuture)} might have
    * finished already.
-   * 2. Cleaning up any zero sized chunks when {@link HttpHeaders.Names#CONTENT_LENGTH} is 0 and a
+   * 2. Cleaning up any zero sized chunks when {@link HttpHeaderNames#CONTENT_LENGTH} is 0 and a
    * {@link FullHttpResponse} has been sent.
    */
   private class CleanupCallback implements GenericFutureListener<ChannelFuture> {

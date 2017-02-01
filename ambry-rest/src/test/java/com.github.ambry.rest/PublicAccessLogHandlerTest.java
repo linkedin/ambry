@@ -17,10 +17,12 @@ import com.codahale.metrics.MetricRegistry;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -36,7 +38,8 @@ import org.junit.Test;
  */
 public class PublicAccessLogHandlerTest {
   private final MockPublicAccessLogger publicAccessLogger;
-  private static final String REQUEST_HEADERS = "Host,Content-Length,x-ambry-content-type";
+  private static final String REQUEST_HEADERS =
+      HttpHeaderNames.HOST + "," + HttpHeaderNames.CONTENT_LENGTH + ",x-ambry-content-type";
   private static final String RESPONSE_HEADERS =
       EchoMethodHandler.RESPONSE_HEADER_KEY_1 + "," + EchoMethodHandler.RESPONSE_HEADER_KEY_2;
   private static final String NOT_LOGGED_HEADER_KEY = "headerKey";
@@ -113,7 +116,7 @@ public class PublicAccessLogHandlerTest {
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(EchoMethodHandler.IS_CHUNKED, "true");
     HttpRequest request = RestTestUtils.createRequest(HttpMethod.POST, "POST", headers);
-    HttpHeaders.setKeepAlive(request, true);
+    HttpUtil.setKeepAlive(request, true);
     sendRequestCheckResponse(channel, request, "POST", headers, false, true);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
     channel.close();
@@ -133,7 +136,7 @@ public class PublicAccessLogHandlerTest {
     List<HttpHeaders> httpHeadersList = getHeadersList();
     for (HttpHeaders headers : httpHeadersList) {
       HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
-      HttpHeaders.setKeepAlive(request, true);
+      HttpUtil.setKeepAlive(request, true);
       sendRequestCheckResponse(channel, request, uri, headers, testErrorCase, false);
       if (!testErrorCase) {
         Assert.assertTrue("Channel should not be closed ", channel.isOpen());
@@ -156,20 +159,20 @@ public class PublicAccessLogHandlerTest {
     EmbeddedChannel channel = createChannel();
     // contains one logged request header
     HttpHeaders headers = new DefaultHttpHeaders();
-    headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
+    headers.add(HttpHeaderNames.CONTENT_LENGTH, new Random().nextLong());
 
     HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
-    HttpHeaders.setKeepAlive(request, true);
+    HttpUtil.setKeepAlive(request, true);
     sendRequestCheckResponse(channel, request, uri, headers, false, false);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
 
     // contains one logged and not logged header
     headers = new DefaultHttpHeaders();
     headers.add(NOT_LOGGED_HEADER_KEY + "1", "headerValue1");
-    headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
+    headers.add(HttpHeaderNames.CONTENT_LENGTH, new Random().nextLong());
 
     request = RestTestUtils.createRequest(httpMethod, uri, headers);
-    HttpHeaders.setKeepAlive(request, true);
+    HttpUtil.setKeepAlive(request, true);
     sendRequestCheckResponse(channel, request, uri, headers, false, false);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
     channel.close();
@@ -185,26 +188,26 @@ public class PublicAccessLogHandlerTest {
     EmbeddedChannel channel = createChannel();
     // contains one logged request header
     HttpHeaders headers1 = new DefaultHttpHeaders();
-    headers1.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
+    headers1.add(HttpHeaderNames.CONTENT_LENGTH, new Random().nextLong());
 
     HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers1);
-    HttpHeaders.setKeepAlive(request, true);
+    HttpUtil.setKeepAlive(request, true);
     channel.writeInbound(request);
 
     // contains one logged and not logged header
     HttpHeaders headers2 = new DefaultHttpHeaders();
     headers2.add(NOT_LOGGED_HEADER_KEY + "1", "headerValue1");
-    headers2.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextLong());
+    headers2.add(HttpHeaderNames.CONTENT_LENGTH, new Random().nextLong());
     // sending another request w/o sending last http content
     request = RestTestUtils.createRequest(httpMethod, uri, headers2);
-    HttpHeaders.setKeepAlive(request, true);
+    HttpUtil.setKeepAlive(request, true);
     sendRequestCheckResponse(channel, request, uri, headers2, false, false);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
 
     // verify that headers from first request is not found in public access log
     String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
     // verify request headers
-    verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers1, request.getMethod(), false);
+    verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers1, request.method(), false);
 
     channel.close();
   }
@@ -228,11 +231,11 @@ public class PublicAccessLogHandlerTest {
     String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
 
     // verify remote host, http method and uri
-    String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpRequest.getMethod() + " " + uri;
+    String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpRequest.method() + " " + uri;
     Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
         lastLogEntry.startsWith(subString));
     // verify request headers
-    verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers, httpRequest.getMethod(), true);
+    verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers, httpRequest.method(), true);
 
     // verify response
     subString = "Response (";
@@ -275,13 +278,13 @@ public class PublicAccessLogHandlerTest {
 
     // contains one logged request header
     HttpHeaders headers = new DefaultHttpHeaders();
-    headers.add(HttpHeaders.Names.CONTENT_TYPE, "content-type1");
+    headers.add(HttpHeaderNames.CONTENT_TYPE, "content-type1");
     headersList.add(headers);
 
     // contains one logged and not logged header
     headers = new DefaultHttpHeaders();
     headers.add(NOT_LOGGED_HEADER_KEY + "1", "headerValue1");
-    headers.add(HttpHeaders.Names.CONTENT_TYPE, "content-type2");
+    headers.add(HttpHeaderNames.CONTENT_TYPE, "content-type2");
     headersList.add(headers);
 
     // contains all not logged headers
@@ -292,7 +295,7 @@ public class PublicAccessLogHandlerTest {
 
     // contains all the logged headers
     headers = new DefaultHttpHeaders();
-    headers.add(HttpHeaders.Names.HOST, "host1");
+    headers.add(HttpHeaderNames.HOST, "host1");
     headers.add(RestUtils.Headers.CONTENT_TYPE, "content-type3");
     headers.add(EchoMethodHandler.RESPONSE_HEADER_KEY_1, "responseHeaderValue1");
     headers.add(EchoMethodHandler.RESPONSE_HEADER_KEY_2, "responseHeaderValue1");
@@ -310,18 +313,18 @@ public class PublicAccessLogHandlerTest {
    */
   private void verifyPublicAccessLogEntryForRequestHeaders(String logEntry, HttpHeaders headers, HttpMethod httpMethod,
       boolean expected) {
-    Iterator<Map.Entry<String, String>> itr = headers.iterator();
+    Iterator<Map.Entry<String, String>> itr = headers.iteratorAsString();
     while (itr.hasNext()) {
       Map.Entry<String, String> entry = itr.next();
       if (!entry.getKey().startsWith(NOT_LOGGED_HEADER_KEY) && !entry.getKey()
           .startsWith(EchoMethodHandler.RESPONSE_HEADER_KEY_PREFIX)) {
-        if (httpMethod == HttpMethod.GET && !entry.getKey().equals(HttpHeaders.Names.CONTENT_TYPE)) {
+        if (httpMethod == HttpMethod.GET && !entry.getKey().equalsIgnoreCase(HttpHeaderNames.CONTENT_TYPE.toString())) {
           String subString = "[" + entry.getKey() + "=" + entry.getValue() + "]";
           boolean actual = logEntry.contains(subString);
           if (expected) {
-            Assert.assertTrue("Public Access log entry does not have expected header", actual);
+            Assert.assertTrue("Public Access log entry does not have expected header " + entry.getKey(), actual);
           } else {
-            Assert.assertFalse("Public Access log entry have unexpected header", actual);
+            Assert.assertFalse("Public Access log entry has unexpected header " + entry.getKey(), actual);
           }
         }
       }

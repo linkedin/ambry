@@ -83,6 +83,10 @@ public class NettyConfig {
   @Default("32 * 1024 * 1024")
   public final int nettyServerRequestBufferWatermark;
 
+  @Config("netty.server.max.bytes.per.read")
+  @Default("1 * 1024 * 1024")
+  public final int nettyServerMaxBytesPerRead;
+
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
@@ -93,6 +97,9 @@ public class NettyConfig {
     nettyServerMaxHeaderSize = verifiableProperties.getInt("netty.server.max.header.size", 8192);
     nettyServerMaxChunkSize = verifiableProperties.getInt("netty.server.max.chunk.size", 8192);
     nettyServerRequestBufferWatermark =
-        verifiableProperties.getInt("netty.server.request.buffer.watermark", 32 * 1024 * 1024);
+        verifiableProperties.getIntInRange("netty.server.request.buffer.watermark", 32 * 1024 * 1024, 1,
+            Integer.MAX_VALUE);
+    nettyServerMaxBytesPerRead =
+        verifiableProperties.getIntInRange("netty.server.max.bytes.per.read", 1024 * 1024, 1, Integer.MAX_VALUE);
   }
 }
