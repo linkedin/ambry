@@ -60,8 +60,6 @@ class NettyRequest implements RestRequest {
   // temporarily suspended. It will be resumed when the amount of data unacknowledged drops below this number. If this
   // is <=0, it is assumed that there is no limit on the size of unacknowledged data.
   static int bufferWatermark = -1;
-  // Number of bytes to read on each read loop
-  static int maxBytesPerRead = 1024 * 1024;
   private static final ClosedChannelException CLOSED_CHANNEL_EXCEPTION = new ClosedChannelException();
 
   protected final HttpRequest request;
@@ -83,8 +81,7 @@ class NettyRequest implements RestRequest {
   private final AtomicLong bytesReceived = new AtomicLong(0);
   private final AtomicLong bytesBuffered = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final RecvByteBufAllocator recvByteBufAllocator =
-      new DefaultMaxBytesRecvByteBufAllocator(maxBytesPerRead, maxBytesPerRead);
+  private final RecvByteBufAllocator recvByteBufAllocator = new DefaultMaxBytesRecvByteBufAllocator();
 
   private MessageDigest digest;
   private byte[] digestBytes;

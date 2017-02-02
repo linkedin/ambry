@@ -62,7 +62,6 @@ public class NettyServer implements NioServer {
     this.nettyMetrics = nettyMetrics;
     this.channelInitializer = channelInitializer;
     NettyRequest.bufferWatermark = nettyConfig.nettyServerRequestBufferWatermark;
-    NettyRequest.maxBytesPerRead = nettyConfig.nettyServerMaxBytesPerRead;
     logger.trace("Instantiated NettyServer");
   }
 

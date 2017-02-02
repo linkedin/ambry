@@ -149,8 +149,6 @@ public class NettyRequestTest {
     validateRequest(nettyRequest, RestMethod.GET, uri, headers, params, cookies, channel);
     closeRequestAndValidate(nettyRequest, channel);
 
-    int maxBytesPerRead = 1024 * 1024;
-    NettyRequest.maxBytesPerRead = maxBytesPerRead;
     RecvByteBufAllocator savedAllocator = channel.config().getRecvByteBufAllocator();
     int[] bufferWatermarks = {-1, 0, 1, DEFAULT_WATERMARK};
     for (int bufferWatermark : bufferWatermarks) {
@@ -161,11 +159,6 @@ public class NettyRequestTest {
       if (bufferWatermark > 0) {
         assertTrue("RecvAllocator should have changed",
             channel.config().getRecvByteBufAllocator() instanceof DefaultMaxBytesRecvByteBufAllocator);
-        DefaultMaxBytesRecvByteBufAllocator allocator =
-            (DefaultMaxBytesRecvByteBufAllocator) channel.config().getRecvByteBufAllocator();
-        assertEquals("Max bytes per read not as expected", maxBytesPerRead, allocator.maxBytesPerRead());
-        assertEquals("Max bytes per individual read not as expected", maxBytesPerRead,
-            allocator.maxBytesPerIndividualRead());
       } else {
         assertEquals("RecvAllocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
       }
