@@ -1515,19 +1515,31 @@ public class IndexTest {
     waitUntilExpectedProgress(expectedProgress, 5000);
     verifyEntriesForHardDeletes(deletedKeys);
 
+    Set<MockId> idsToDelete = new HashSet<>();
+    // delete two entries
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    Set<MockId> newIdsToDelete = new HashSet<>();
+    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : newIdsToDelete) {
+      addDeleteEntry(id);
+    }
+
     index.hardDeleter.pause();
     assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
     waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
 
     // delete two entries
     addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    Set<MockId> idsToDelete = new HashSet<>();
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    newIdsToDelete.clear();
+    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
     addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : idsToDelete) {
+    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : newIdsToDelete) {
       addDeleteEntry(id);
     }
+    idsToDelete.addAll(newIdsToDelete);
     // advance time so that deleted entries becomes eligible to be hard deleted
     advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
     waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
@@ -1535,8 +1547,7 @@ public class IndexTest {
     if (reloadIndex) {
       reloadIndex(true);
       assertEquals("Hard deletes should have been paused ", Thread.State.WAITING, index.hardDeleteThread.getState());
-
-      Set<MockId> newIdsToDelete = new HashSet<>();
+      newIdsToDelete.clear();
       addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
       newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
       addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
