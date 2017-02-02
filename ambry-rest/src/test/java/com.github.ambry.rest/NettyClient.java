@@ -27,10 +27,10 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
@@ -132,7 +132,7 @@ public class NettyClient implements Closeable {
    * Resets the request tracking state of the client.
    */
   private void resetState() {
-    responseFuture = new FutureResult<Queue<HttpObject>>();
+    responseFuture = new FutureResult<>();
     responseParts.clear();
     exception = null;
     callbackInvoked.set(false);
@@ -221,10 +221,10 @@ public class NettyClient implements Closeable {
       // Make sure that we increase refCnt because we are going to process it async. The other end has to release
       // after processing.
       responseParts.offer(ReferenceCountUtil.retain(in));
-      if (in instanceof HttpResponse && in.getDecoderResult().isSuccess()) {
-        isKeepAlive = HttpHeaders.isKeepAlive((HttpResponse) in);
-      } else if (in.getDecoderResult().isFailure()) {
-        Throwable cause = in.getDecoderResult().cause();
+      if (in instanceof HttpResponse && in.decoderResult().isSuccess()) {
+        isKeepAlive = HttpUtil.isKeepAlive((HttpResponse) in);
+      } else if (in.decoderResult().isFailure()) {
+        Throwable cause = in.decoderResult().cause();
         if (cause instanceof Exception) {
           exception = (Exception) cause;
         } else {

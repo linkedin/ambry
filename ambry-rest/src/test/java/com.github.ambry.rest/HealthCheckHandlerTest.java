@@ -17,10 +17,10 @@ import com.codahale.metrics.MetricRegistry;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import java.io.IOException;
 import junit.framework.Assert;
 import org.junit.Test;
@@ -55,7 +55,7 @@ public class HealthCheckHandlerTest {
 
   /**
    * Tests non health check requests handling
-   * @throws java.io.IOException
+   * @throws IOException
    */
   @Test
   public void requestHandleWithNonHealthCheckRequestTest() throws IOException {
@@ -78,11 +78,11 @@ public class HealthCheckHandlerTest {
         restServerState.markServiceUp();
       }
       HttpRequest request = RestTestUtils.createRequest(httpMethod, healthCheckUri, null);
-      HttpHeaders.setKeepAlive(request, keepAlive);
+      HttpUtil.setKeepAlive(request, keepAlive);
       FullHttpResponse response = sendRequestAndGetResponse(channel, request);
       HttpResponseStatus httpResponseStatus =
           (isServiceUp) ? HttpResponseStatus.OK : HttpResponseStatus.SERVICE_UNAVAILABLE;
-      assertEquals("Unexpected response status", httpResponseStatus, response.getStatus());
+      assertEquals("Unexpected response status", httpResponseStatus, response.status());
       String expectedStr = (isServiceUp) ? goodStr : badStr;
       assertEquals("Unexpected content", expectedStr, RestTestUtils.getContentString(response));
       restServerState.markServiceDown();
@@ -106,7 +106,7 @@ public class HealthCheckHandlerTest {
     EmbeddedChannel channel = createChannel();
     HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, null);
     FullHttpResponse response = sendRequestAndGetResponse(channel, request);
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     assertEquals("Unexpected content", httpMethod.toString(), RestTestUtils.getContentString(response));
     channel.close();
   }
@@ -120,8 +120,7 @@ public class HealthCheckHandlerTest {
   private FullHttpResponse sendRequestAndGetResponse(EmbeddedChannel channel, HttpRequest request) {
     channel.writeInbound(request);
     channel.writeInbound(new DefaultLastHttpContent());
-    FullHttpResponse response = (FullHttpResponse) channel.readOutbound();
-    return response;
+    return channel.readOutbound();
   }
 
   // helpers

@@ -23,6 +23,7 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
@@ -351,7 +352,7 @@ public class AsyncRequestResponseHandlerTest {
       MockRestResponseChannel restResponseChannel = null;
       ReadableStreamChannel response = null;
       for (int i = 0; i < EXPECTED_QUEUE_SIZE; i++) {
-        data = RestTestUtils.getRandomBytes(32);
+        data = TestUtils.getRandomBytes(32);
         response = new HaltingRSC(ByteBuffer.wrap(data), releaseRead, executorService);
         restRequest = createRestRequest(RestMethod.GET, "/", null, null);
         restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
@@ -541,7 +542,7 @@ public class AsyncRequestResponseHandlerTest {
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
-    ByteBuffer responseBuffer = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
+    ByteBuffer responseBuffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1024));
     ByteBufferRSC response = new ByteBufferRSC(responseBuffer);
     EventMonitor<ByteBufferRSC.Event> responseCloseMonitor =
         new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
@@ -566,7 +567,7 @@ public class AsyncRequestResponseHandlerTest {
     restRequest = createRestRequest(RestMethod.GET, "/", null, null);
     restRequest.getMetricsTracker().scalingMetricsTracker.markRequestReceived();
     restResponseChannel = new MockRestResponseChannel();
-    responseBuffer = ByteBuffer.wrap(RestTestUtils.getRandomBytes(1024));
+    responseBuffer = ByteBuffer.wrap(TestUtils.getRandomBytes(1024));
     response = new ByteBufferRSC(responseBuffer);
     responseCloseMonitor = new EventMonitor<ByteBufferRSC.Event>(ByteBufferRSC.Event.Close);
     response.addListener(responseCloseMonitor);

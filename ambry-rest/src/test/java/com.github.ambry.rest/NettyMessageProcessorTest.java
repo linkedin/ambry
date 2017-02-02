@@ -20,6 +20,8 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.utils.TestUtils;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.DecoderResult;
@@ -28,11 +30,11 @@ import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
@@ -122,11 +124,11 @@ public class NettyMessageProcessorTest {
   public void rawBytesPostTest() throws InterruptedException {
     Random random = new Random();
     // request also contains content.
-    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(random.nextInt(128) + 128));
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(random.nextInt(128) + 128));
     HttpRequest postRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/", Unpooled.wrappedBuffer(content));
-    HttpHeaders.setHeader(postRequest, RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
-    HttpHeaders.setHeader(postRequest, RestUtils.Headers.BLOB_SIZE, content.remaining());
+    postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
+    postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, content.remaining());
     postRequest = ReferenceCountUtil.retain(postRequest);
     ByteBuffer receivedContent = doPostTest(postRequest, null);
     compareContent(receivedContent, Collections.singletonList(content));
@@ -137,12 +139,12 @@ public class NettyMessageProcessorTest {
     List<ByteBuffer> contents = new ArrayList<ByteBuffer>(NUM_CONTENTS);
     int blobSize = 0;
     for (int i = 0; i < NUM_CONTENTS; i++) {
-      ByteBuffer buffer = ByteBuffer.wrap(RestTestUtils.getRandomBytes(random.nextInt(128) + 128));
+      ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes(random.nextInt(128) + 128));
       blobSize += buffer.remaining();
       contents.add(i, buffer);
     }
-    HttpHeaders.setHeader(postRequest, RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
-    HttpHeaders.setHeader(postRequest, RestUtils.Headers.BLOB_SIZE, blobSize);
+    postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
+    postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, blobSize);
     receivedContent = doPostTest(postRequest, contents);
     compareContent(receivedContent, contents);
   }
@@ -154,16 +156,16 @@ public class NettyMessageProcessorTest {
   @Test
   public void multipartPostTest() throws Exception {
     Random random = new Random();
-    ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(random.nextInt(128) + 128));
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(random.nextInt(128) + 128));
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
-    HttpHeaders.setHeader(httpRequest, RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
-    HttpHeaders.setHeader(httpRequest, RestUtils.Headers.BLOB_SIZE, content.remaining());
+    httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
+    httpRequest.headers().set(RestUtils.Headers.BLOB_SIZE, content.remaining());
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, content);
     HttpRequest postRequest = encoder.finalizeRequest();
     List<ByteBuffer> contents = new ArrayList<ByteBuffer>();
     while (!encoder.isEndOfInput()) {
       // Sending null for ctx because the encoder is OK with that.
-      contents.add(encoder.readChunk(null).content().nioBuffer());
+      contents.add(encoder.readChunk(PooledByteBufAllocator.DEFAULT).content().nioBuffer());
     }
     ByteBuffer receivedContent = doPostTest(postRequest, contents);
     compareContent(receivedContent, Collections.singletonList(content));
@@ -179,7 +181,7 @@ public class NettyMessageProcessorTest {
     EmbeddedChannel channel = createChannel();
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
     assertFalse("Channel is not closed", channel.isOpen());
 
     // content without request on a channel that was kept alive
@@ -188,7 +190,7 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, MockBlobStorageService.ECHO_REST_METHOD, null));
     channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     // drain the content
     while (channel.readOutbound() != null) {
       ;
@@ -197,7 +199,7 @@ public class NettyMessageProcessorTest {
     // send content without request
     channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
     assertFalse("Channel is not closed", channel.isOpen());
 
     // content when no content is expected.
@@ -205,14 +207,14 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
     channel.writeInbound(new DefaultLastHttpContent(Unpooled.wrappedBuffer(content.getBytes())));
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
     assertFalse("Channel is not closed", channel.isOpen());
 
     // wrong HTTPObject.
     channel = createChannel();
     channel.writeInbound(new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK));
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
     assertFalse("Channel is not closed", channel.isOpen());
 
     // request while another request is in progress.
@@ -222,7 +224,7 @@ public class NettyMessageProcessorTest {
     // channel should be closed by now
     assertFalse("Channel is not closed", channel.isOpen());
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
 
     // decoding failure
     channel = createChannel();
@@ -232,7 +234,7 @@ public class NettyMessageProcessorTest {
     // channel should be closed by now
     assertFalse("Channel is not closed", channel.isOpen());
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
 
     // unsupported method
     channel = createChannel();
@@ -240,7 +242,7 @@ public class NettyMessageProcessorTest {
     // channel should be closed by now
     assertFalse("Channel is not closed", channel.isOpen());
     response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.BAD_REQUEST, response.status());
   }
 
   /**
@@ -292,11 +294,11 @@ public class NettyMessageProcessorTest {
     long requestId = REQUEST_ID_GENERATOR.getAndIncrement();
     String uri = MockBlobStorageService.ECHO_REST_METHOD + requestId;
     HttpRequest httpRequest = RestTestUtils.createRequest(httpMethod, uri, null);
-    HttpHeaders.setKeepAlive(httpRequest, isKeepAlive);
+    HttpUtil.setKeepAlive(httpRequest, isKeepAlive);
     channel.writeInbound(httpRequest);
     channel.writeInbound(new DefaultLastHttpContent());
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     // MockBlobStorageService echoes the RestMethod + request id.
     String expectedResponse = restMethod.toString() + requestId;
     assertEquals("Unexpected content", expectedResponse,
@@ -317,8 +319,8 @@ public class NettyMessageProcessorTest {
 
     // POST
     notificationSystem.reset();
-    HttpHeaders.setHeader(postRequest, RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
-    HttpHeaders.setKeepAlive(postRequest, false);
+    postRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+    HttpUtil.setKeepAlive(postRequest, false);
     channel.writeInbound(postRequest);
     if (contentToSend != null) {
       for (ByteBuffer content : contentToSend) {
@@ -416,7 +418,7 @@ public class NettyMessageProcessorTest {
     channel.writeInbound(new DefaultLastHttpContent());
     // first outbound has to be response.
     HttpResponse response = (HttpResponse) channel.readOutbound();
-    assertEquals("Unexpected response status", expectedStatus, response.getStatus());
+    assertEquals("Unexpected response status", expectedStatus, response.status());
   }
 
   /**

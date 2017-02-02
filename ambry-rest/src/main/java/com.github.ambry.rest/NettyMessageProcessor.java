@@ -270,10 +270,10 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       long processingStartTime = System.currentTimeMillis();
       resetState();
       nettyMetrics.requestArrivalRate.mark();
-      if (!httpRequest.getDecoderResult().isSuccess()) {
+      if (!httpRequest.decoderResult().isSuccess()) {
         success = false;
         logger.warn("Decoder failed because of malformed request on channel {}", ctx.channel(),
-            httpRequest.getDecoderResult().cause());
+            httpRequest.decoderResult().cause());
         nettyMetrics.malformedRequestError.inc();
         onRequestAborted(new RestServiceException("Decoder failed because of malformed request",
             RestServiceErrorCode.MalformedRequest));
@@ -281,7 +281,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         try {
           // We need to maintain state about the request itself for the subsequent parts (if any) that come in. We will
           // attach content to the request as the content arrives.
-          if (HttpMethod.POST.equals(httpRequest.getMethod()) && HttpPostRequestDecoder.isMultipart(httpRequest)) {
+          if (HttpMethod.POST.equals(httpRequest.method()) && HttpPostRequestDecoder.isMultipart(httpRequest)) {
             nettyMetrics.multipartPostRequestRate.mark();
             request = new NettyMultipartRequest(httpRequest, ctx.channel(), nettyMetrics);
           } else {
@@ -313,7 +313,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       // because it is in a bad state.
       success = false;
       logger.error("New request received when previous request is yet to be fully received on channel {}. Request under"
-          + " processing: {}. Unexpected request: {}", ctx.channel(), request.getUri(), httpRequest.getUri());
+          + " processing: {}. Unexpected request: {}", ctx.channel(), request.getUri(), httpRequest.uri());
       nettyMetrics.duplicateRequestError.inc();
       onRequestAborted(new RestServiceException("Received request in the middle of another request",
           RestServiceErrorCode.BadRequest));

@@ -23,11 +23,11 @@ import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import java.util.ArrayList;
@@ -59,16 +59,16 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
     if (obj instanceof HttpRequest) {
       HttpRequest request = (HttpRequest) obj;
       logger.trace("Handling incoming request " + request);
-      requestUri = request.getUri();
-      byte[] methodBytes = request.getMethod().toString().getBytes();
+      requestUri = request.uri();
+      byte[] methodBytes = request.method().toString().getBytes();
       if (request.headers().get(IS_CHUNKED) == null || !request.headers().get(IS_CHUNKED).equals("true")) {
         response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK,
             Unpooled.wrappedBuffer(methodBytes));
         updateHeaders(response, request, methodBytes.length);
       } else {
         httpResponse = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-        HttpHeaders.setTransferEncodingChunked(httpResponse);
-        httpContentList = new ArrayList<HttpContent>();
+        HttpUtil.setTransferEncodingChunked(httpResponse, true);
+        httpContentList = new ArrayList<>();
         ByteBuf content = Unpooled.wrappedBuffer(methodBytes);
         HttpContent httpContent = new DefaultHttpContent(content);
         httpContentList.add(httpContent);
@@ -95,12 +95,12 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
   }
 
   private void updateHeaders(HttpResponse response, HttpRequest request, int contentLength) {
-    HttpHeaders.setContentLength(response, contentLength);
-    if (HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_1) != null) {
-      HttpHeaders.setHeader(response, RESPONSE_HEADER_KEY_1, HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_1));
+    HttpUtil.setContentLength(response, contentLength);
+    if (request.headers().get(RESPONSE_HEADER_KEY_1) != null) {
+      response.headers().set(RESPONSE_HEADER_KEY_1, request.headers().get(RESPONSE_HEADER_KEY_1));
     }
-    if (HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_2) != null) {
-      HttpHeaders.setHeader(response, RESPONSE_HEADER_KEY_2, HttpHeaders.getHeader(request, RESPONSE_HEADER_KEY_2));
+    if (request.headers().get(RESPONSE_HEADER_KEY_2) != null) {
+      response.headers().set(RESPONSE_HEADER_KEY_2, request.headers().get(RESPONSE_HEADER_KEY_2));
     }
   }
 }

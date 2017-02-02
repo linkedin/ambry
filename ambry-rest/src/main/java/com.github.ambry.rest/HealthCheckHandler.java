@@ -21,9 +21,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.ReferenceCountUtil;
@@ -60,7 +60,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
     logger.trace("Reading on channel {}", ctx.channel());
     boolean forwardObj = false;
     if (obj instanceof HttpRequest) {
-      if (request == null && ((HttpRequest) obj).getUri().equals(healthCheckUri)) {
+      if (request == null && ((HttpRequest) obj).uri().equals(healthCheckUri)) {
         nettyMetrics.healthCheckRequestRate.mark();
         startTimeInMs = System.currentTimeMillis();
         logger.trace("Handling health check request while in state " + restServerState.isServiceUp());
@@ -68,13 +68,13 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
         if (restServerState.isServiceUp()) {
           response =
               new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, Unpooled.wrappedBuffer(GOOD));
-          HttpHeaders.setKeepAlive(response, HttpHeaders.isKeepAlive(request));
-          HttpHeaders.setContentLength(response, GOOD.length);
+          HttpUtil.setKeepAlive(response, HttpUtil.isKeepAlive(request));
+          HttpUtil.setContentLength(response, GOOD.length);
         } else {
           response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.SERVICE_UNAVAILABLE,
               Unpooled.wrappedBuffer(BAD));
-          HttpHeaders.setKeepAlive(response, false);
-          HttpHeaders.setContentLength(response, BAD.length);
+          HttpUtil.setKeepAlive(response, false);
+          HttpUtil.setContentLength(response, BAD.length);
         }
         nettyMetrics.healthCheckRequestProcessingTimeInMs.update(System.currentTimeMillis() - startTimeInMs);
       } else {
@@ -87,7 +87,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
       if (response != null) {
         // response was created when we received the request with health check uri
         ChannelFuture future = ctx.writeAndFlush(response);
-        if (!HttpHeaders.isKeepAlive(response)) {
+        if (!HttpUtil.isKeepAlive(response)) {
           future.addListener(ChannelFutureListener.CLOSE);
         }
         request = null;

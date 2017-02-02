@@ -93,6 +93,7 @@ public class NettyConfig {
     nettyServerMaxHeaderSize = verifiableProperties.getInt("netty.server.max.header.size", 8192);
     nettyServerMaxChunkSize = verifiableProperties.getInt("netty.server.max.chunk.size", 8192);
     nettyServerRequestBufferWatermark =
-        verifiableProperties.getInt("netty.server.request.buffer.watermark", 32 * 1024 * 1024);
+        verifiableProperties.getIntInRange("netty.server.request.buffer.watermark", 32 * 1024 * 1024, 1,
+            Integer.MAX_VALUE);
   }
 }
