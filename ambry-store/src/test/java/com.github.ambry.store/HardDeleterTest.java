@@ -189,7 +189,6 @@ public class HardDeleterTest {
     // perform hard deletes upto some point.
     // perform more deletes.
     // do recovery.
-
     try {
       MockId blobId01 = new MockId("id01");
       MockId blobId02 = new MockId("id02");

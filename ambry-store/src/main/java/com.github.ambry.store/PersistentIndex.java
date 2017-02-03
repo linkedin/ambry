@@ -51,11 +51,12 @@ class PersistentIndex {
   /**
    * Represents the different types of index entries.
    */
-  private enum IndexEntryType {
+  enum IndexEntryType {
     ANY, PUT, DELETE,
   }
 
-  static final short VERSION = 0;
+  static final short VERSION_0 = 0;
+  static final short VERSION_1 = 1;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
   static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
@@ -175,7 +176,7 @@ class PersistentIndex {
         // The recent index segment would go through recovery after they have been
         // read into memory
         boolean map = i < indexFiles.size() - 1;
-        IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal);
+        IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
         validIndexSegments.put(info.getStartOffset(), info);
@@ -292,7 +293,9 @@ class PersistentIndex {
               StoreErrorCodes.Initialization_Error);
         } else {
           // create a new entry in the index
-          IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
+          // TODO
+          IndexValue newValue =
+              new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs(), time.seconds());
           addToIndex(new IndexEntry(info.getStoreKey(), newValue, null), new FileSpan(runningOffset, infoEndOffset));
           logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
@@ -350,7 +353,7 @@ class PersistentIndex {
 
     TreeMap<Offset, IndexSegment> segmentsToAdd = new TreeMap<>();
     for (File indexSegmentFile : segmentFilesToAdd) {
-      IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal);
+      IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal, time);
       if (indexSegment.getEndOffset().compareTo(journalFirstOffset) > 0) {
         throw new IllegalArgumentException("One of the index segments has an end offset " + indexSegment.getEndOffset()
             + " that is higher than the first offset in the journal " + journalFirstOffset);
@@ -386,8 +389,9 @@ class PersistentIndex {
   void addToIndex(IndexEntry entry, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
+      // TODO
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
-          entry.getValue().getBytes().capacity(), config, metrics);
+          entry.getValue().getBytes().capacity(), config, metrics, time, VERSION_1);
       info.addEntry(entry, fileSpan.getEndOffset());
       // always add to both valid and in-flux index segment map to account for the fact that changeIndexSegments()
       // might be in the process of updating the reference to validIndexSegments
@@ -556,7 +560,10 @@ class PersistentIndex {
       throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
 
-    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs());
+    // TODO if want to use Version_0 for testing purposes
+    IndexValue newValue =
+        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), time.seconds(),
+            value.getServiceId(), value.getContainerId());
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset());

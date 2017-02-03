@@ -363,8 +363,10 @@ public class BlobStoreTest {
   @Test
   public void basicTest() throws InterruptedException, IOException, StoreException {
     // PUT a key that is slated to expire when time advances by 2ms
-    MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds() + 1).get(0);
-    time.sleep(2);
+    // advance time so that time moves to a whole second
+    time.sleep(1 * Time.MsPerSec - 1);
+    MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds()).get(0);
+    time.sleep(1 * Time.MsPerSec);
     liveKeys.remove(addedId);
     expiredKeys.add(addedId);
 
@@ -752,7 +754,9 @@ public class BlobStoreTest {
       MockId id = (MockId) messageInfo.getStoreKey();
       MessageInfo expectedInfo = allKeys.get(id).getFirst();
       assertEquals("Unexpected size in MessageInfo", expectedInfo.getSize(), messageInfo.getSize());
-      assertEquals("Unexpected expiresAtMs in MessageInfo", expectedInfo.getExpirationTimeInMs(),
+      assertEquals("Unexpected expiresAtMs in MessageInfo",
+          (expectedInfo.getExpirationTimeInMs() != Utils.Infinite_Time ?
+              Time.MsPerSec * expectedInfo.getExpirationTimeInMs() / Time.MsPerSec : Utils.Infinite_Time),
           messageInfo.getExpirationTimeInMs());
 
       assertEquals("Unexpected key in readSet", id, readSet.getKeyAt(i));

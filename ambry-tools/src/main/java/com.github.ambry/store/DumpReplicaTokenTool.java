@@ -91,6 +91,9 @@ public class DumpReplicaTokenTool {
                   + " totalBytesReadFromLocalStore " + totalBytesReadFromLocalStore + " token " + token);
         }
         logger.info("crc " + stream.readLong());
+        break;
+      default:
+        logger.error("Version " + version + " unsupported ");
     }
   }
 }

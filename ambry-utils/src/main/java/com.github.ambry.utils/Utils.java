@@ -615,6 +615,15 @@ public class Utils {
   }
 
   /**
+   * Returns a random short using the {@code Random} passed as arg
+   * @param random the {@link Random} object that needs to be used to generate the random short
+   * @return a random short
+   */
+  public static short getRandomShort(Random random) {
+    return (short) random.nextInt(Short.MAX_VALUE + 1);
+  }
+
+  /**
    * Adds some number of seconds to an epoch time in ms.
    *
    * @param epochTimeInMs

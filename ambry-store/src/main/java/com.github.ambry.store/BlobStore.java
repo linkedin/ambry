@@ -224,7 +224,7 @@ class BlobStore implements Store {
             for (MessageInfo info : messageInfo) {
               FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
               IndexValue value =
-                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs());
+                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs(), time.milliseconds());
               IndexEntry entry = new IndexEntry(info.getStoreKey(), value, info.getCrc());
               indexEntries.add(entry);
               endOffsetOfLastMessage = fileSpan.getEndOffset();

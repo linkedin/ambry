@@ -13,12 +13,28 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
 
 /**
  * Represents the blob value stored in the index for a key.
+ *
+ * Version_0
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  |
+ * | (8 bytes) | (8 bytes) | (1 byte)|     in Ms       | offset    |
+ * |           |           |         |     ( 8 bytes)  | (8 bytes) |
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ *
+ * Version_1
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  | OperationTime | ServiceId | ContainerId |
+ * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset    |  (4 bytes)    | (2 bytes) | (2 bytes)   |
+ * |           |           |         |     ( 4 bytes)  | (8 bytes) |               |           |             |
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ *
  */
 
 class IndexValue {
@@ -26,48 +42,83 @@ class IndexValue {
     Delete_Index
   }
 
-  private static int Blob_Size_In_Bytes = 8;
-  private static int Offset_Size_In_Bytes = 8;
-  private static int Flag_Size_In_Bytes = 1;
-  private static int Expires_At_Ms_Size_In_Bytes = 8;
-  private static int Original_Message_Offset_Size_In_Bytes = 8;
+  final static int BLOB_SIZE_IN_BYTES = 8;
+  final static int OFFSET_SIZE_IN_BYTES = 8;
+  final static int FLAG_SIZE_IN_BYTES = 1;
+  final static int EXPIRES_AT_MS_SIZE_IN_BYTES_V0 = 8;
+  final static int ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES = 8;
 
-  static int Index_Value_Size_In_Bytes =
-      Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes
-          + Original_Message_Offset_Size_In_Bytes;
+  final static int EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 = 4;
+  final static int OPERATION_TIME_SECS_SIZE_IN_BYTES_V1 = 4;
+  final static int SERVICE_ID_SIZE_IN_BYTES = 2;
+  final static int CONTAINER_ID_SIZE_IN_BYTES = 2;
+
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V0 =
+      BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES;
+
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V1 =
+      BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES_V1 + SERVICE_ID_SIZE_IN_BYTES +
+          CONTAINER_ID_SIZE_IN_BYTES;
 
   private final ByteBuffer value;
   private Offset offset;
+  private short version;
 
-  IndexValue(String logSegmentName, ByteBuffer value) {
-    if (value.capacity() != Index_Value_Size_In_Bytes) {
-      throw new IllegalArgumentException("Invalid buffer size");
+  IndexValue(String logSegmentName, ByteBuffer value, short version) {
+    if (version == 0 && value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V0) {
+      throw new IllegalArgumentException("Invalid buffer size for version 0");
     }
+    if (version == 1 && value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V1) {
+      throw new IllegalArgumentException("Invalid buffer size for version 1");
+    }
+    this.version = version;
     this.value = value;
-    offset = new Offset(logSegmentName, value.getLong(Blob_Size_In_Bytes));
+    offset = new Offset(logSegmentName, value.getLong(BLOB_SIZE_IN_BYTES));
   }
 
-  IndexValue(long size, Offset offset, byte flags, long expiresAtMs) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset());
+  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInSecs) {
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInSecs, (short) 0, (short) 0);
   }
 
-  IndexValue(long size, Offset offset, long expiresAtMs) {
-    this(size, offset, (byte) 0, expiresAtMs);
+  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInSecs, short serviceId,
+      short containerId) {
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInSecs, serviceId, containerId);
   }
 
-  IndexValue(long size, Offset offset) {
-    this(size, offset, (byte) 0, Utils.Infinite_Time);
+  IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInSecs) {
+    this(size, offset, (byte) 0, expiresAtMs, operationTimeInSecs, (short) 0, (short) 0);
   }
 
-  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset) {
+  IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInSecs, short serviceId, short containerId) {
+    this(size, offset, (byte) 0, expiresAtMs, operationTimeInSecs, serviceId, containerId);
+  }
+
+  IndexValue(long size, Offset offset, long operationTimeInMs) {
+    this(size, offset, (byte) 0, Utils.Infinite_Time, operationTimeInMs);
+  }
+
+  IndexValue(long size, Offset offset, long operationTimeInMs, short serviceId, short containerId) {
+    this(size, offset, (byte) 0, Utils.Infinite_Time, operationTimeInMs, serviceId, containerId);
+  }
+
+  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
+      long operationTimeInSecs, short serviceId, short containerId) {
     this.offset = offset;
-    value = ByteBuffer.allocate(Index_Value_Size_In_Bytes);
+    value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V1);
     value.putLong(size);
     value.putLong(offset.getOffset());
     value.put(flags);
-    value.putLong(expiresAtMs);
+    int expiry = Math.toIntExact(expiresAtMs / Time.MsPerSec);
+    value.putInt(expiresAtMs != Utils.Infinite_Time ? expiry : -1);
     value.putLong(originalMessageOffset);
+    int operationTime = Math.toIntExact(operationTimeInSecs);
+    value.putInt(operationTime);
+    value.putShort(serviceId);
+    value.putShort(containerId);
     value.position(0);
+    version = 1;
   }
 
   long getSize() {
@@ -79,7 +130,7 @@ class IndexValue {
   }
 
   byte getFlags() {
-    return value.get(Blob_Size_In_Bytes + Offset_Size_In_Bytes);
+    return value.get(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES);
   }
 
   boolean isFlagSet(Flags flag) {
@@ -87,27 +138,77 @@ class IndexValue {
   }
 
   long getExpiresAtMs() {
-    return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes);
+    if (version == 0) {
+      return value.getLong(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES);
+    } else {
+      int expiry = value.getInt(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES);
+      return expiry != Utils.Infinite_Time ? (expiry * Time.MsPerSec) : Utils.Infinite_Time;
+    }
   }
 
   long getOriginalMessageOffset() {
-    return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes);
+    if (version == 0) {
+      return value.getLong(
+          BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0);
+    } else {
+      return value.getLong(
+          BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1);
+    }
+  }
+
+  int getOperationTimeInSecs() {
+    if (version == 0) {
+      return -1;
+    } else {
+      return value.getInt(
+          BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 +
+              ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES);
+    }
+  }
+
+  short getServiceId() {
+    if (version == 0) {
+      return 0;
+    } else {
+      return value.getShort(
+          BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 +
+              ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES_V1);
+    }
+  }
+
+  short getContainerId() {
+    if (version == 0) {
+      return 0;
+    } else {
+      return value.getShort(
+          BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 +
+              ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES_V1 + SERVICE_ID_SIZE_IN_BYTES);
+    }
   }
 
   void setFlag(Flags flag) {
-    value.put(Blob_Size_In_Bytes + Offset_Size_In_Bytes, (byte) (getFlags() | (1 << flag.ordinal())));
+    value.put(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES, (byte) (getFlags() | (1 << flag.ordinal())));
   }
 
   void setNewOffset(Offset newOffset) {
     long originalMessageOffset = offset.getName().equals(newOffset.getName()) ? offset.getOffset() : -1;
     offset = newOffset;
-    value.putLong(Blob_Size_In_Bytes, offset.getOffset());
-    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes,
-        originalMessageOffset);
+    value.putLong(BLOB_SIZE_IN_BYTES, offset.getOffset());
+    if (version == 0) {
+      value.putLong(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0,
+          originalMessageOffset);
+    } else {
+      value.putLong(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1,
+          originalMessageOffset);
+    }
   }
 
   void clearOriginalMessageOffset() {
-    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes, -1);
+    if(version == 0) {
+      value.putLong(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0 , -1);
+    } else{
+      value.putLong(BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1, -1);
+    }
   }
 
   void setNewSize(long size) {
@@ -121,6 +222,8 @@ class IndexValue {
   @Override
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
-        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset();
+        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
+        version == 1 ? ", OperationTimeAtSecs " + getOperationTimeInSecs() + ", ServiceId " + getServiceId() +
+            ", ContainerId " + getContainerId() : "");
   }
 }

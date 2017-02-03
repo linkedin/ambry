@@ -53,7 +53,6 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         short version = headerVersion.getShort();
         switch (version) {
           case MessageFormatRecord.Message_Header_Version_V1:
-
             ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
             header.putShort(version);
             if (startOffset + (MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() - headerVersion.capacity())

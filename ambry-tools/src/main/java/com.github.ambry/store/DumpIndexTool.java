@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -421,7 +422,7 @@ public class DumpIndexTool {
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
     StoreMetrics metrics = new StoreMetrics(indexFileToDump.getParent(), new MetricRegistry());
     IndexSegment segment = new IndexSegment(indexFileToDump, false, storeKeyFactory, config, metrics,
-        new Journal(indexFileToDump.getParent(), 0, 0));
+        new Journal(indexFileToDump.getParent(), 0, 0), SystemTime.getInstance());
     List<MessageInfo> entries = new ArrayList<>();
     segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
     long numberOfKeysProcessed = 0;

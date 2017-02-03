@@ -248,7 +248,7 @@ public class IndexTest {
   public void addEntryBadInputTest() throws StoreException {
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
-    IndexValue value = new IndexValue(1, state.index.getStartOffset());
+    IndexValue value = new IndexValue(1, state.index.getStartOffset(), Utils.Infinite_Time, state.time.seconds());
     try {
       state.index.addToIndex(new IndexEntry(state.getUniqueId(), value), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
@@ -391,11 +391,14 @@ public class IndexTest {
    */
   @Test
   public void expirationTest() throws InterruptedException, IOException, StoreException {
-    // add a PUT entry that will expire if time advances by a millisecond
+
+    // add a PUT entry that will expire if time advances by 1 second
+    // advance time so that time moves to whole second with no residual milliseconds
+    state.time.sleep(1 * Time.MsPerSec - 1);
     state.addPutEntries(1, 1, state.time.milliseconds());
     MockId id = state.logOrder.lastEntry().getValue().getFirst();
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), null);
-    state.advanceTime(1);
+    state.advanceTime(1 * Time.MsPerSec);
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), StoreErrorCodes.TTL_Expired);
   }
 
@@ -726,7 +729,8 @@ public class IndexTest {
     final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
     state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
-        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
+        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
+            state.time.seconds()), null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -846,7 +850,7 @@ public class IndexTest {
     final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
     state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
-        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
+        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time, state.time.seconds()), null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)

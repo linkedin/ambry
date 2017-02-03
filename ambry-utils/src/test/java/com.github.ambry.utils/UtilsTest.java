@@ -391,6 +391,19 @@ public class UtilsTest {
     }
     return sb.toString();
   }
+
+  /**
+   * Advances the time to the given {@code sleepTimeInMs} ms. In other words, sleeps for {@code sleepTimeInMs} ms
+   * @param time the {@link Time} instance to use
+   * @param sleepTimeInMs the time in ms to sleep for
+   */
+  public static void advanceTime(Time time, long sleepTimeInMs) {
+    try {
+      time.sleep(sleepTimeInMs);
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+  }
 }
 
 class MockClassForTesting {

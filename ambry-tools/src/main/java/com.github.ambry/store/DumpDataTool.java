@@ -20,6 +20,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.EOFException;
 import java.io.File;
@@ -171,7 +172,8 @@ public class DumpDataTool {
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
     StoreMetrics metrics = new StoreMetrics(indexFile.getParent(), new MetricRegistry());
     IndexSegment segment =
-        new IndexSegment(indexFile, false, storeKeyFactory, config, metrics, new Journal(indexFile.getParent(), 0, 0));
+        new IndexSegment(indexFile, false, storeKeyFactory, config, metrics, new Journal(indexFile.getParent(), 0, 0),
+            SystemTime.getInstance());
     Offset startOffset = segment.getStartOffset();
     TreeMap<Long, Long> coveredRanges = new TreeMap<>();
     String logFileName = LogSegmentNameHelper.nameToFilename(segment.getLogSegmentName());

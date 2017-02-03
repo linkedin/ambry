@@ -13,9 +13,16 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -23,7 +30,29 @@ import static org.junit.Assert.*;
 /**
  * Tests for {@link IndexValue}.
  */
+@RunWith(Parameterized.class)
 public class IndexValueTest {
+
+  final short version;
+  static final short DEFAULT_SHORT_VALUE = 0;
+  private final Time time = new MockTime();
+
+  /**
+   * Running for {@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}
+   * @return an array with both the versions ({@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}).
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{PersistentIndex.VERSION_0}, {PersistentIndex.VERSION_1}});
+  }
+
+  /**
+   * Creates a temporary directory and sets up metrics.
+   * @throws IOException
+   */
+  public IndexValueTest(short version) throws IOException {
+    this.version = version;
+  }
 
   /**
    * Tests an {@link IndexValue} that is representative of a PUT index entry value.
@@ -35,11 +64,19 @@ public class IndexValueTest {
     String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
     long size = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long offset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    IndexValue value = new IndexValue(size, new Offset(logSegmentName, offset), expiresAtMs);
-    verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset);
-    value = new IndexValue(size, new Offset(logSegmentName, offset));
-    verifyIndexValue(value, logSegmentName, size, offset, false, Utils.Infinite_Time, offset);
+    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
+    short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    IndexValue value =
+        IndexValueUtils.getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, time.seconds(), serviceId,
+            containerId, version);
+    verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset, time.seconds(), serviceId,
+        containerId);
+    value =
+        IndexValueUtils.getIndexValue(size, new Offset(logSegmentName, offset), time.seconds(), serviceId, containerId,
+            version);
+    verifyIndexValue(value, logSegmentName, size, offset, false, Utils.Infinite_Time, offset, time.seconds(), serviceId,
+        containerId);
   }
 
   /**
@@ -53,30 +90,52 @@ public class IndexValueTest {
     String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
     long oldSize = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long oldOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    IndexValue value = new IndexValue(oldSize, new Offset(logSegmentName, oldOffset), expiresAtMs);
+    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
+    short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    IndexValue value =
+        IndexValueUtils.getIndexValue(oldSize, new Offset(logSegmentName, oldOffset), expiresAtMs, time.seconds(),
+            serviceId, containerId, version);
 
     long newOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long newSize = Utils.getRandomLong(TestUtils.RANDOM, 1000);
 
-    IndexValue newValue = new IndexValue(logSegmentName, value.getBytes());
+    IndexValue newValue = new IndexValue(logSegmentName, value.getBytes(), version);
     // delete in the same log segment
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(new Offset(logSegmentName, newOffset));
     newValue.setNewSize(newSize);
-    verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset);
+    if (version == 0) {
+      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset, Utils.Infinite_Time,
+          DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+    } else {
+      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset, time.seconds(),
+          serviceId, containerId);
+    }
 
     // original message offset cleared
     newValue.clearOriginalMessageOffset();
-    verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1);
+    if (version == 0) {
+      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
+          DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+    } else {
+      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1, time.seconds(), serviceId,
+          containerId);
+    }
 
-    newValue = new IndexValue(logSegmentName, value.getBytes());
+    newValue = new IndexValue(logSegmentName, value.getBytes(), version);
     String newLogSegmentName = LogSegmentNameHelper.getNextPositionName(logSegmentName);
     // delete not in the same log segment
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(new Offset(newLogSegmentName, newOffset));
     newValue.setNewSize(newSize);
-    verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1);
+    if (version == 0) {
+      verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
+          DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+    } else {
+      verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1, time.seconds(),
+          serviceId, containerId);
+    }
   }
 
   /**
@@ -90,12 +149,16 @@ public class IndexValueTest {
    * @param isDeleted the expected record type referred to by {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
    * @param originalMessageOffset the original message offset expected in {@code value}.
+   * @param operationTimeInSecs the operation time in secs
+   * @param serviceId the serviceId of the Index value
+   * @param containerId the containerId of the Index value
    */
   private void verifyIndexValue(IndexValue value, String logSegmentName, long size, long offset, boolean isDeleted,
-      long expiresAtMs, long originalMessageOffset) {
-    verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset);
-    verifyGetters(new IndexValue(logSegmentName, value.getBytes()), logSegmentName, size, offset, isDeleted,
-        expiresAtMs, originalMessageOffset);
+      long expiresAtMs, long originalMessageOffset, long operationTimeInSecs, short serviceId, short containerId) {
+    verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset,
+        operationTimeInSecs, serviceId, containerId);
+    verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, isDeleted,
+        expiresAtMs, originalMessageOffset, operationTimeInSecs, serviceId, containerId);
   }
 
   /**
@@ -108,14 +171,28 @@ public class IndexValueTest {
    * @param isDeleted the expected record type referred to by {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
    * @param originalMessageOffset the original message offset expected in {@code value}.
+   * @param operationTimeInSecs the operation time in secs
+   * @param serviceId the serviceId of the Index value
+   * @param containerId the containerId of the Index value
    */
   private void verifyGetters(IndexValue value, String logSegmentName, long size, long offset, boolean isDeleted,
-      long expiresAtMs, long originalMessageOffset) {
+      long expiresAtMs, long originalMessageOffset, long operationTimeInSecs, short serviceId, short containerId) {
     assertEquals("Size is not as expected", size, value.getSize());
     assertEquals("Offset is not as expected", new Offset(logSegmentName, offset), value.getOffset());
     assertEquals("Delete status not as expected", isDeleted, value.isFlagSet(IndexValue.Flags.Delete_Index));
-    assertEquals("ExpiresAtMs not as expected", expiresAtMs, value.getExpiresAtMs());
+    if (version == 0) {
+      assertEquals("ExpiresAtMs not as expected", expiresAtMs, value.getExpiresAtMs());
+    } else {
+      assertEquals("ExpiresAtMs not as expected",
+          expiresAtMs != Utils.Infinite_Time ? (expiresAtMs / Time.MsPerSec) * Time.MsPerSec : Utils.Infinite_Time,
+          value.getExpiresAtMs());
+    }
     assertEquals("Original message offset not as expected", originalMessageOffset, value.getOriginalMessageOffset());
+    if (version == 1) {
+      assertEquals("Operation time mismatch", Math.toIntExact(operationTimeInSecs), value.getOperationTimeInSecs());
+      assertEquals("ServiceId mismatch ", serviceId, value.getServiceId());
+      assertEquals("ContainerId mismatch ", containerId, value.getContainerId());
+    }
   }
 }
 
