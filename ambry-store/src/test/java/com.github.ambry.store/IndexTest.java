@@ -1544,7 +1544,7 @@ public class IndexTest {
 
     if (reloadIndex) {
       reloadIndex(true);
-      assertEquals("Hard deletes should have been paused ", Thread.State.WAITING, index.hardDeleteThread.getState());
+      waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
       idsToDelete.clear();
       addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
       idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
