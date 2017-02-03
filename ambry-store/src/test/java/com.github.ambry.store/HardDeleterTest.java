@@ -163,7 +163,7 @@ public class HardDeleterTest {
         UUID.randomUUID());
     helper.setIndex(index, log);
     // Setting this below will not enable the hard delete thread. This being a unit test, the methods
-    // are going to be called directly. We simply want to set the running flag to avoid those methods
+    // are going to be called directly. We simply want to set the enabled flag to avoid those methods
     // from bailing out prematurely.
     index.setHardDeleteRunningStatus(true);
   }

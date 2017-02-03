@@ -50,7 +50,7 @@ public class HardDeleter implements Runnable {
   //how long to sleep if token does not advance.
   static final long HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP = 10 * Time.MsPerSec;
 
-  final AtomicBoolean running = new AtomicBoolean(true);
+  final AtomicBoolean enabled = new AtomicBoolean(true);
 
   private final StoreMetrics metrics;
   private final String dataDir;
@@ -93,8 +93,8 @@ public class HardDeleter implements Runnable {
   private Throttler throttler;
   private boolean isCaughtUp = false;
   private final AtomicBoolean paused = new AtomicBoolean(false);
-  private final ReentrantLock reentrantLock = new ReentrantLock();
-  private final Condition pauseCondition = reentrantLock.newCondition();
+  private final ReentrantLock hardDeleteLock = new ReentrantLock();
+  private final Condition pauseCondition = hardDeleteLock.newCondition();
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
       MessageStoreHardDelete hardDelete, StoreKeyFactory factory, Time time) {
@@ -114,24 +114,17 @@ public class HardDeleter implements Runnable {
   @Override
   public void run() {
     try {
-      while (running.get()) {
-        reentrantLock.lock();
+      while (enabled.get()) {
+        hardDeleteLock.lock();
         try {
           // if paused
-          while (running.get() && isPaused()) {
-            try {
-              pauseCondition.await();
-            } catch (InterruptedException e) {
-              logger.warn("InterruptedException thrown while hard delete thread is paused ", e);
-            }
+          while (enabled.get() && isPaused()) {
+            pauseCondition.await();
           }
           // if not paused
-          if (running.get()) {
+          if (enabled.get()) {
             if (!hardDelete()) {
               isCaughtUp = true;
-              if (!running.get()) {
-                break;
-              }
               time.await(pauseCondition, HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP);
             } else if (isCaughtUp) {
               isCaughtUp = false;
@@ -147,7 +140,7 @@ public class HardDeleter implements Runnable {
         } catch (InterruptedException e) {
           logger.trace("Caught exception during hard deletes", e);
         } finally {
-          reentrantLock.unlock();
+          hardDeleteLock.unlock();
         }
       }
     } finally {
@@ -161,7 +154,7 @@ public class HardDeleter implements Runnable {
    * {@link #resume()} is called.
    */
   void pause() throws InterruptedException, StoreException, IOException {
-    reentrantLock.lock();
+    hardDeleteLock.lock();
     try {
       if (paused.compareAndSet(false, true)) {
         logger.info("HardDelete thread has been paused ");
@@ -170,7 +163,7 @@ public class HardDeleter implements Runnable {
         persistCleanupToken();
       }
     } finally {
-      reentrantLock.unlock();
+      hardDeleteLock.unlock();
     }
   }
 
@@ -178,13 +171,13 @@ public class HardDeleter implements Runnable {
    * Resumes hard deletes, if {@link #pause()} has been called prior to this.
    */
   void resume() {
-    reentrantLock.lock();
+    hardDeleteLock.lock();
     try {
       if (paused.compareAndSet(true, false)) {
         pauseCondition.signal();
       }
     } finally {
-      reentrantLock.unlock();
+      hardDeleteLock.unlock();
     }
   }
 
@@ -216,7 +209,7 @@ public class HardDeleter implements Runnable {
 
       Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
       while (hardDeleteIterator.hasNext()) {
-        if (!running.get()) {
+        if (!enabled.get()) {
           throw new StoreException("Aborting hard deletes as store is shutting down",
               StoreErrorCodes.Store_Shutting_Down);
         }
@@ -357,11 +350,11 @@ public class HardDeleter implements Runnable {
   }
 
   /**
-   * Returns true if the hard delete is currently running.
-   * @return true if running, false otherwise.
+   * Returns true if the hard delete is currently enabled and not paused
+   * @return true if enabled and not paused, false otherwise.
    */
   boolean isRunning() {
-    return shutdownLatch.getCount() != 0;
+    return shutdownLatch.getCount() != 0 && !isPaused();
   }
 
   /**
@@ -373,13 +366,13 @@ public class HardDeleter implements Runnable {
   }
 
   void shutdown() throws InterruptedException, StoreException, IOException {
-    if (running.get()) {
-      running.set(false);
-      reentrantLock.lock();
+    if (enabled.get()) {
+      enabled.set(false);
+      hardDeleteLock.lock();
       try {
         pauseCondition.signal();
       } finally {
-        reentrantLock.unlock();
+        hardDeleteLock.unlock();
       }
       throttler.close();
       shutdownLatch.await();
@@ -389,7 +382,7 @@ public class HardDeleter implements Runnable {
   }
 
   void close() {
-    running.set(false);
+    enabled.set(false);
     shutdownLatch.countDown();
   }
 
@@ -538,7 +531,7 @@ public class HardDeleter implements Runnable {
 
         /* First create the readOptionsList */
       for (MessageInfo info : messageInfoList) {
-        if (!running.get()) {
+        if (!enabled.get()) {
           throw new StoreException("Aborting, store is shutting down", StoreErrorCodes.Store_Shutting_Down);
         }
         try {
@@ -560,7 +553,7 @@ public class HardDeleter implements Runnable {
         /* Next, get the information to persist hard delete recovery info. Get all the information and save it, as only
          * after the whole range is persisted can we start with the actual log write */
       while (hardDeleteIterator.hasNext()) {
-        if (!running.get()) {
+        if (!enabled.get()) {
           throw new StoreException("Aborting hard deletes as store is shutting down",
               StoreErrorCodes.Store_Shutting_Down);
         }
@@ -586,7 +579,7 @@ public class HardDeleter implements Runnable {
 
         /* Finally, write the hard delete stream into the Log */
       for (LogWriteInfo logWriteInfo : logWriteInfoList) {
-        if (!running.get()) {
+        if (!enabled.get()) {
           throw new StoreException("Aborting hard deletes as store is shutting down",
               StoreErrorCodes.Store_Shutting_Down);
         }
@@ -595,7 +588,7 @@ public class HardDeleter implements Runnable {
         throttler.maybeThrottle(logWriteInfo.size);
       }
     } catch (InterruptedException e) {
-      if (running.get()) {
+      if (enabled.get()) {
         // We throw here because we do not want the tokens to be updated.
         throw new StoreException("Got interrupted during hard deletes", StoreErrorCodes.Unknown_Error);
       } else {

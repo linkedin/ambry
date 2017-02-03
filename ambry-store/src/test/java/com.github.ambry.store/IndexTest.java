@@ -462,10 +462,10 @@ public class IndexTest {
    */
   @Test
   public void hardDeleteKickOffTest() throws StoreException {
-    assertFalse("HardDelete should not be running", index.hardDeleter.isRunning());
+    assertFalse("HardDelete should not be enabled", index.hardDeleter.isRunning());
     properties.put("store.enable.hard.delete", "true");
     reloadIndex(false);
-    assertTrue("HardDelete is not running", index.hardDeleter.isRunning());
+    assertTrue("HardDelete is not enabled", index.hardDeleter.isRunning());
   }
 
   /**
@@ -479,7 +479,7 @@ public class IndexTest {
     properties.put("store.deleted.message.retention.days", Integer.toString(1));
     properties.put("store.hard.delete.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
     reloadIndex(false);
-    index.hardDeleter.running.set(true);
+    index.hardDeleter.enabled.set(true);
     assertFalse("Hard delete did work even though no message is past retention time", index.hardDeleter.hardDelete());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
     advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
@@ -1507,7 +1507,7 @@ public class IndexTest {
     // enable daemon thread to run hard deletes
     properties.put("store.enable.hard.delete", "true");
     reloadIndex(false);
-    assertTrue("Hard delete is not running", index.hardDeleter.isRunning());
+    assertTrue("Hard delete is not enabled", index.hardDeleter.isRunning());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
     advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
     long expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
@@ -1540,9 +1540,6 @@ public class IndexTest {
       addDeleteEntry(id);
     }
     idsToDelete.addAll(newIdsToDelete);
-    // advance time so that deleted entries becomes eligible to be hard deleted
-    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
 
     if (reloadIndex) {
       reloadIndex(true);
@@ -1556,10 +1553,10 @@ public class IndexTest {
         addDeleteEntry(id);
       }
       idsToDelete.addAll(newIdsToDelete);
-      // advance time so that deleted entries becomes eligible to be hard deleted
-      advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
     }
 
+    // advance time so that deleted entries becomes eligible to be hard deleted
+    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
     // resume and verify new entries have been hard deleted
     index.hardDeleter.resume();
     assertFalse("Hard deletes should have been resumed ", index.hardDeleter.isPaused());
