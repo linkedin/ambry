@@ -80,6 +80,7 @@ class PersistentIndex {
   final ConcurrentSkipListMap<Offset, IndexSegment> indexes = new ConcurrentSkipListMap<>();
   final Journal journal;
   final HardDeleter hardDeleter;
+  final Thread hardDeleteThread;
 
   private final Log log;
   private final Offset logAbsoluteZeroOffset;
@@ -204,9 +205,10 @@ class PersistentIndex {
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
       if (config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
-        Thread hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
+        hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
         hardDeleteThread.start();
       } else {
+        hardDeleteThread = null;
         hardDeleter.close();
       }
       metrics.initializeHardDeleteMetric(hardDeleter, log);
@@ -1046,6 +1048,14 @@ class PersistentIndex {
     }
   }
 
+  /**
+   * Persists index files to disk.
+   * @throws StoreException
+   */
+  void persistIndex() throws StoreException {
+    persistor.write();
+  }
+
   private class IndexPersistor implements Runnable {
 
     /**
@@ -1054,7 +1064,7 @@ class PersistentIndex {
      * The last index segment is flushed whenever write is invoked.
      * @throws StoreException
      */
-    public void write() throws StoreException {
+    public synchronized void write() throws StoreException {
       final Timer.Context context = metrics.indexFlushTime.time();
       try {
         if (indexes.size() > 0) {

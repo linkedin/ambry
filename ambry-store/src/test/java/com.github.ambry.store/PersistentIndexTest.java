@@ -1967,7 +1967,7 @@ class MockIndex extends PersistentIndex {
   }
 
   public void setHardDeleteRunningStatus(boolean status) {
-    super.hardDeleter.running.set(status);
+    super.hardDeleter.enabled.set(status);
   }
 
   public boolean hardDelete() throws StoreException {

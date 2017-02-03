@@ -13,6 +13,9 @@
  */
 package com.github.ambry.utils;
 
+import java.util.concurrent.locks.Condition;
+
+
 /**
  * A mock time class
  */
@@ -51,6 +54,11 @@ public class MockTime extends Time {
 
   @Override
   public void wait(Object o, long ms) throws InterruptedException {
+    sleep(ms);
+  }
+
+  @Override
+  public void await(Condition c, long ms) throws InterruptedException {
     sleep(ms);
   }
 }

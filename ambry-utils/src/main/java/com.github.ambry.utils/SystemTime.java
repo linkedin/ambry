@@ -13,6 +13,10 @@
  */
 package com.github.ambry.utils;
 
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+
+
 /**
  * The normal system implementation of time functions
  */
@@ -50,5 +54,10 @@ public class SystemTime extends Time {
   @Override
   public void wait(Object o, long ms) throws InterruptedException {
     o.wait(ms);
+  }
+
+  @Override
+  public void await(Condition c, long ms) throws InterruptedException {
+    c.await(ms, TimeUnit.MILLISECONDS);
   }
 }
