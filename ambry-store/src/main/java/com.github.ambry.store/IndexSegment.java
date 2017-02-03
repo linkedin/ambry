@@ -270,19 +270,15 @@ class IndexSegment {
         }
         toReturn = value;
       } else {
-
-        if (bloomFilter != null && !bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
-          // true negative
-          if (bloomFilter != null) {
-            metrics.bloomAccessedCount.inc();
-          }
-        } else {
+        if (bloomFilter != null) {
+          metrics.bloomAccessedCount.inc();
+        }
+        if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
           if (bloomFilter == null) {
             logger.trace("IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {}",
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
           } else {
-            metrics.bloomAccessedCount.inc();
-            metrics.bloomPositiveCount.inc(1);
+            metrics.bloomPositiveCount.inc();
             logger.trace("IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
                 indexFile.getAbsolutePath(), startOffset, keyToFind);
           }
