@@ -66,6 +66,10 @@ public class IndexValueTest {
     newValue.setNewSize(newSize);
     verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset);
 
+    // original message offset cleared
+    newValue.clearOriginalMessageOffset();
+    verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1);
+
     newValue = new IndexValue(logSegmentName, value.getBytes());
     String newLogSegmentName = LogSegmentNameHelper.getNextPositionName(logSegmentName);
     // delete not in the same log segment

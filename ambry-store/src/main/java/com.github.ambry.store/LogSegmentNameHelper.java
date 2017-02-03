@@ -106,12 +106,12 @@ class LogSegmentNameHelper {
 
   /**
    * @param name the name of the log segment.
-   * @return what should be the name of the log segment that is exactly one position higher than {@code name}.
+   * @return what should be the name of the log segment that is exactly one position higher than {@code name}. The
+   * generation of the returned name will start from the lowest generation number.
    */
   static String getNextPositionName(String name) {
     long pos = getPosition(name);
-    long gen = getGeneration(name);
-    return getName(pos + 1, gen);
+    return getName(pos + 1, 0);
   }
 
   /**
@@ -125,17 +125,11 @@ class LogSegmentNameHelper {
   }
 
   /**
-   * @param numSegments the total number of segments in the log.
+   * @param isLogSegmented {@code true} if the log is segmented, {@code false} otherwise.
    * @return what should be the name of the first segment.
    */
-  static String generateFirstSegmentName(long numSegments) {
-    if (numSegments <= 0) {
-      throw new IllegalArgumentException("Number of segments <=0");
-    }
-    if (numSegments == 1) {
-      return "";
-    }
-    return getName(0, 0);
+  static String generateFirstSegmentName(boolean isLogSegmented) {
+    return isLogSegmented ? getName(0, 0) : "";
   }
 
   /**

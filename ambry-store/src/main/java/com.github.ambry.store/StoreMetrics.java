@@ -100,31 +100,31 @@ public class StoreMetrics {
         registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentsAccessedPerBlobCount"));
   }
 
-  void initializeLogGauges(final Log log, final long capacityInBytes) {
+  void initializeIndexGauges(final PersistentIndex index, final long capacityInBytes) {
     Gauge<Long> currentCapacityUsed = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return log.getUsedCapacity();
+        return index.getUsedCapacity();
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "CurrentCapacityUsed"), currentCapacityUsed);
     Gauge<Double> percentageUsedCapacity = new Gauge<Double>() {
       @Override
       public Double getValue() {
-        return ((double) log.getUsedCapacity() / capacityInBytes) * 100;
+        return ((double) index.getUsedCapacity() / capacityInBytes) * 100;
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "PercentageUsedCapacity"), percentageUsedCapacity);
     Gauge<Long> currentSegmentCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return log.getSegmentCount();
+        return index.getLogSegmentCount();
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "CurrentSegmentCount"), currentSegmentCount);
   }
 
-  void initializeHardDeleteMetric(final HardDeleter hardDeleter, final Log log) {
+  void initializeHardDeleteMetric(final HardDeleter hardDeleter, final PersistentIndex index) {
     Gauge<Long> currentHardDeleteProgress = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -137,7 +137,7 @@ public class StoreMetrics {
     Gauge<Double> percentageHardDeleteCompleted = new Gauge<Double>() {
       @Override
       public Double getValue() {
-        return ((double) hardDeleter.getProgress() / log.getUsedCapacity()) * 100;
+        return ((double) hardDeleter.getProgress() / index.getUsedCapacity()) * 100;
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "PercentageHardDeleteCompleted"),

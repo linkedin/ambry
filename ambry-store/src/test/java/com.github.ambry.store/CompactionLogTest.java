@@ -79,22 +79,26 @@ public class CompactionLogTest {
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     CompactionLog log = new CompactionLog(tempDirStr, storeName, time, detailsList);
     assertTrue("Compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
+    int currentIdx = 0;
     for (CompactionDetails details : detailsList) {
+      assertEquals("CurrentIdx not as expected", currentIdx, log.getCurrentIdx());
       verifyEquality(details, log.getCompactionDetails());
       assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, log.getCompactionPhase());
       log.markCopyStart();
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, log.getCompactionPhase());
       StoreFindToken safeToken =
-          new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(5), 0),
+          new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(true), 0),
               new UUID(1, 1), new UUID(1, 1));
       log.setSafeToken(safeToken);
       assertEquals("Returned token not the same as the one that was set", safeToken, log.getSafeToken());
-      log.markSwitchStart();
-      assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.SWITCH, log.getCompactionPhase());
+      log.markCommitStart();
+      assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.COMMIT, log.getCompactionPhase());
       log.markCleanupStart();
       assertEquals("Should be in the CLEANUP phase", CompactionLog.Phase.CLEANUP, log.getCompactionPhase());
       log.markCycleComplete();
+      currentIdx++;
     }
+    assertEquals("CurrentIdx not as expected", -1, log.getCurrentIdx());
     assertEquals("Should be in the DONE phase", CompactionLog.Phase.DONE, log.getCompactionPhase());
     log.close();
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
@@ -111,7 +115,10 @@ public class CompactionLogTest {
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     CompactionLog log = new CompactionLog(tempDirStr, storeName, time, detailsList);
     assertTrue("Compaction should should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
+    int currentIdx = 0;
     for (CompactionDetails details : detailsList) {
+      assertEquals("CurrentIdx not as expected", currentIdx, log.getCurrentIdx());
+
       log.close();
       log = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
       verifyEquality(details, log.getCompactionDetails());
@@ -122,25 +129,28 @@ public class CompactionLogTest {
       log = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, log.getCompactionPhase());
       StoreFindToken safeToken =
-          new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(5), 0),
+          new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(true), 0),
               new UUID(1, 1), new UUID(1, 1));
       log.setSafeToken(safeToken);
 
       log.close();
       log = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
       assertEquals("Returned token not the same as the one that was set", safeToken, log.getSafeToken());
-      log.markSwitchStart();
+      log.markCommitStart();
 
       log.close();
       log = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
-      assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.SWITCH, log.getCompactionPhase());
+      assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.COMMIT, log.getCompactionPhase());
       log.markCleanupStart();
 
       log.close();
       log = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
       assertEquals("Should be in the CLEANUP phase", CompactionLog.Phase.CLEANUP, log.getCompactionPhase());
       log.markCycleComplete();
+
+      currentIdx++;
     }
+    assertEquals("CurrentIdx not as expected", -1, log.getCurrentIdx());
     assertEquals("Should be in the DONE phase", CompactionLog.Phase.DONE, log.getCompactionPhase());
     log.close();
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
@@ -156,23 +166,23 @@ public class CompactionLogTest {
     CompactionLog log = new CompactionLog(tempDirStr, storeName, time, detailsList);
 
     assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, log.getCompactionPhase());
-    checkTransitionFailure(log, CompactionLog.Phase.SWITCH, CompactionLog.Phase.CLEANUP, CompactionLog.Phase.DONE);
+    checkTransitionFailure(log, CompactionLog.Phase.COMMIT, CompactionLog.Phase.CLEANUP, CompactionLog.Phase.DONE);
 
     log.markCopyStart();
     assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, log.getCompactionPhase());
     checkTransitionFailure(log, CompactionLog.Phase.COPY, CompactionLog.Phase.CLEANUP, CompactionLog.Phase.DONE);
 
-    log.markSwitchStart();
-    assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.SWITCH, log.getCompactionPhase());
-    checkTransitionFailure(log, CompactionLog.Phase.COPY, CompactionLog.Phase.SWITCH, CompactionLog.Phase.DONE);
+    log.markCommitStart();
+    assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.COMMIT, log.getCompactionPhase());
+    checkTransitionFailure(log, CompactionLog.Phase.COPY, CompactionLog.Phase.COMMIT, CompactionLog.Phase.DONE);
 
     log.markCleanupStart();
     assertEquals("Should be in the CLEANUP phase", CompactionLog.Phase.CLEANUP, log.getCompactionPhase());
-    checkTransitionFailure(log, CompactionLog.Phase.COPY, CompactionLog.Phase.SWITCH, CompactionLog.Phase.CLEANUP);
+    checkTransitionFailure(log, CompactionLog.Phase.COPY, CompactionLog.Phase.COMMIT, CompactionLog.Phase.CLEANUP);
 
     log.markCycleComplete();
     assertEquals("Should be in the DONE phase", CompactionLog.Phase.DONE, log.getCompactionPhase());
-    checkTransitionFailure(log, CompactionLog.Phase.COPY, CompactionLog.Phase.SWITCH, CompactionLog.Phase.CLEANUP,
+    checkTransitionFailure(log, CompactionLog.Phase.COPY, CompactionLog.Phase.COMMIT, CompactionLog.Phase.CLEANUP,
         CompactionLog.Phase.DONE);
     log.close();
   }
@@ -197,7 +207,7 @@ public class CompactionLogTest {
     // make sure file disappears
     log = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
     log.markCopyStart();
-    log.markSwitchStart();
+    log.markCommitStart();
     log.markCleanupStart();
     log.markCycleComplete();
     log.close();
@@ -263,8 +273,8 @@ public class CompactionLogTest {
           case COPY:
             log.markCopyStart();
             break;
-          case SWITCH:
-            log.markSwitchStart();
+          case COMMIT:
+            log.markCommitStart();
             break;
           case CLEANUP:
             log.markCleanupStart();
@@ -283,7 +293,7 @@ public class CompactionLogTest {
 
     if (!log.getCompactionPhase().equals(CompactionLog.Phase.COPY)) {
       StoreFindToken safeToken =
-          new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(5), 0),
+          new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(true), 0),
               new UUID(1, 1), new UUID(1, 1));
       try {
         log.setSafeToken(safeToken);

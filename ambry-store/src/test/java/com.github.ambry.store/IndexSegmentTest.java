@@ -93,7 +93,7 @@ public class IndexSegmentTest {
    */
   @Test
   public void comprehensiveTest() throws IOException, StoreException {
-    String[] logSegmentNames = {LogSegmentNameHelper.generateFirstSegmentName(1), generateRandomLogSegmentName()};
+    String[] logSegmentNames = {LogSegmentNameHelper.generateFirstSegmentName(false), generateRandomLogSegmentName()};
     for (String logSegmentName : logSegmentNames) {
       long writeStartOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       Offset startOffset = new Offset(logSegmentName, writeStartOffset);
@@ -262,7 +262,7 @@ public class IndexSegmentTest {
     }
 
     String expectedFilename =
-        startOffset.getOffset() + BlobStore.SEPARATOR + PersistentIndex.INDEX_SEGMENT_FILE_NAME_SUFFIX;
+        startOffset.getOffset() + BlobStore.SEPARATOR + IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX;
     if (!logSegmentName.isEmpty()) {
       expectedFilename = logSegmentName + BlobStore.SEPARATOR + expectedFilename;
     }

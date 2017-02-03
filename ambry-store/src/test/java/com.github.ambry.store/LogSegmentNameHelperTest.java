@@ -175,7 +175,7 @@ public class LogSegmentNameHelperTest {
       long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       String name = LogSegmentNameHelper.getName(pos, gen);
-      checkPosAndGeneration(LogSegmentNameHelper.getNextPositionName(name), pos + 1, gen);
+      checkPosAndGeneration(LogSegmentNameHelper.getNextPositionName(name), pos + 1, 0);
       checkPosAndGeneration(LogSegmentNameHelper.getNextGenerationName(name), pos, gen + 1);
     }
     try {
@@ -193,27 +193,14 @@ public class LogSegmentNameHelperTest {
   }
 
   /**
-   * Tests correctness of {@link LogSegmentNameHelper#generateFirstSegmentName(long)} for different numbers of log
+   * Tests correctness of {@link LogSegmentNameHelper#generateFirstSegmentName(boolean)} for different numbers of log
    * segments (including invalid ones).
    */
   @Test
   public void generateFirstSegmentNameTest() {
-    assertEquals("Did not get expected name", "", LogSegmentNameHelper.generateFirstSegmentName(1));
+    assertEquals("Did not get expected name", "", LogSegmentNameHelper.generateFirstSegmentName(false));
     String firstSegmentName = LogSegmentNameHelper.getName(0, 0);
-    for (int i = 0; i < 10; i++) {
-      long numSegments = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 2;
-      assertEquals("Did not get expected name", firstSegmentName,
-          LogSegmentNameHelper.generateFirstSegmentName(numSegments));
-    }
-    int[] invalidNumSegments = {0, -1};
-    for (int numSegments : invalidNumSegments) {
-      try {
-        LogSegmentNameHelper.generateFirstSegmentName(numSegments);
-        fail("Should have failed to get the first segment name for [" + numSegments + "] segments");
-      } catch (IllegalArgumentException e) {
-        // expected. Nothing to do.
-      }
-    }
+    assertEquals("Did not get expected name", firstSegmentName, LogSegmentNameHelper.generateFirstSegmentName(true));
   }
 
   /**

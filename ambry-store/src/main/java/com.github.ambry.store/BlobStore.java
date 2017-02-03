@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +51,7 @@ class BlobStore implements Store {
   private final MessageStoreHardDelete hardDelete;
   private final StoreMetrics metrics;
   private final Time time;
+  private final UUID sessionId = UUID.randomUUID();
 
   private Log log;
   private PersistentIndex index;
@@ -105,8 +107,8 @@ class BlobStore implements Store {
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
-            storeDescriptor.getIncarnationId());
-        metrics.initializeLogGauges(log, capacityInBytes);
+            sessionId, storeDescriptor.getIncarnationId());
+        metrics.initializeIndexGauges(index, capacityInBytes);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -300,7 +302,7 @@ class BlobStore implements Store {
 
   @Override
   public long getSizeInBytes() {
-    return log.getUsedCapacity();
+    return index.getUsedCapacity();
   }
 
   @Override

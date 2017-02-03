@@ -55,7 +55,6 @@ public class HardDeleter implements Runnable {
   private final StoreMetrics metrics;
   private final String dataDir;
   private final Log log;
-  private final Offset logAbsoluteZeroOffset;
   private final PersistentIndex index;
   private final MessageStoreHardDelete hardDelete;
   private final StoreKeyFactory factory;
@@ -101,7 +100,6 @@ public class HardDeleter implements Runnable {
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;
-    logAbsoluteZeroOffset = new Offset(log.getFirstSegment().getName(), 0);
     this.index = index;
     this.hardDelete = hardDelete;
     this.factory = factory;
@@ -286,7 +284,7 @@ public class HardDeleter implements Runnable {
    * @return true if the token moved forward, false otherwise.
    */
   boolean hardDelete() throws StoreException {
-    if (index.getCurrentEndOffset().compareTo(log.getStartOffset()) > 0) {
+    if (index.getCurrentEndOffset().compareTo(index.getStartOffset()) > 0) {
       final Timer.Context context = metrics.hardDeleteTime.time();
       try {
         FindInfo info =
@@ -336,7 +334,7 @@ public class HardDeleter implements Runnable {
   long getProgress() {
     StoreFindToken token = (StoreFindToken) startToken;
     return token.getType().equals(StoreFindToken.Type.Uninitialized) ? 0
-        : log.getDifference(token.getOffset(), logAbsoluteZeroOffset);
+        : index.getAbsolutePositionForOffset(token.getOffset());
   }
 
   /**

@@ -22,6 +22,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -30,6 +31,7 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -46,7 +48,6 @@ import org.slf4j.LoggerFactory;
  * is not thread safe and expects the caller to do appropriate synchronization.
  **/
 class PersistentIndex {
-
   /**
    * Represents the different types of index entries.
    */
@@ -55,11 +56,15 @@ class PersistentIndex {
   }
 
   static final short VERSION = 0;
-  static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
-  static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
-  static final Comparator<File> INDEX_FILE_COMPARATOR = new Comparator<File>() {
+  static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
+    @Override
+    public boolean accept(File dir, String name) {
+      return name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+    }
+  };
+  static final Comparator<File> INDEX_SEGMENT_FILE_COMPARATOR = new Comparator<File>() {
     @Override
     public int compare(File o1, File o2) {
       if (o1 == null || o2 == null) {
@@ -67,12 +72,6 @@ class PersistentIndex {
       }
       Offset o1Offset = IndexSegment.getIndexSegmentStartOffset(o1.getName());
       return o1Offset.compareTo(IndexSegment.getIndexSegmentStartOffset(o2.getName()));
-    }
-  };
-  static final FilenameFilter INDEX_FILE_FILTER = new FilenameFilter() {
-    @Override
-    public boolean accept(File dir, String name) {
-      return name.endsWith(INDEX_SEGMENT_FILE_NAME_SUFFIX);
     }
   };
 
@@ -83,7 +82,6 @@ class PersistentIndex {
   final Thread hardDeleteThread;
 
   private final Log log;
-  private final Offset logAbsoluteZeroOffset;
   private final long maxInMemoryIndexSizeInBytes;
   private final int maxInMemoryNumElements;
   private final String dataDir;
@@ -93,10 +91,11 @@ class PersistentIndex {
   private final boolean cleanShutdown;
   private final Offset logEndOffsetOnStartup;
   private final StoreMetrics metrics;
+  private final UUID sessionId;
   private final UUID incarnationId;
   private final Time time;
+  private final File cleanShutdownFile;
 
-  private final UUID sessionId = UUID.randomUUID();
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final IndexPersistor persistor = new IndexPersistor();
 
@@ -111,12 +110,13 @@ class PersistentIndex {
    * @param hardDelete  The hard delete handle used to perform hard deletes
    * @param metrics the metrics object
    * @param time the time instance to use
+   * @param sessionId the ID of the current session.
    * @param incarnationId to uniquely identify the store's incarnation
    * @throws StoreException
    */
   PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
-      Time time, UUID incarnationId) throws StoreException {
+      Time time, UUID sessionId, UUID incarnationId) throws StoreException {
     /*
     If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
     whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
@@ -125,7 +125,8 @@ class PersistentIndex {
     */
     this(datadir, scheduler, log, config, factory, recovery, hardDelete, metrics,
         new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
-            config.storeMaxNumberOfEntriesToReturnFromJournal), time, incarnationId);
+            config.storeMaxNumberOfEntriesToReturnFromJournal), time, sessionId, incarnationId,
+        CLEAN_SHUTDOWN_FILENAME);
   }
 
   /**
@@ -140,48 +141,45 @@ class PersistentIndex {
    * @param metrics the metrics object
    * @param journal the journal to use
    * @param time the time instance to use
+   * @param sessionId the ID of the current session.
    * @param incarnationId to uniquely identify the store's incarnation
+   * @param cleanShutdownFileName the name of the file that will be stored on clean shutdown.
    * @throws StoreException
    */
   PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
-      Journal journal, Time time, UUID incarnationId) throws StoreException {
-    File[] indexFiles = new File(datadir).listFiles(INDEX_FILE_FILTER);
-    if (indexFiles == null) {
-      throw new StoreException("Could not read index files from directory [" + datadir + "]",
-          StoreErrorCodes.Index_Creation_Failure);
-    }
+      Journal journal, Time time, UUID sessionId, UUID incarnationId, String cleanShutdownFileName)
+      throws StoreException {
+    this.dataDir = datadir;
+    this.log = log;
+    this.time = time;
+    this.scheduler = scheduler;
+    this.metrics = metrics;
+    this.factory = factory;
+    this.config = config;
+    this.hardDelete = hardDelete;
+    this.journal = journal;
+    this.sessionId = sessionId;
+    this.incarnationId = incarnationId;
+    this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
+    this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
+
+    List<File> indexFiles = getIndexFiles();
     try {
-      this.dataDir = datadir;
-      this.log = log;
-      this.time = time;
-      this.scheduler = scheduler;
-      this.metrics = metrics;
-      this.factory = factory;
-      this.config = config;
-      this.hardDelete = hardDelete;
-      this.journal = journal;
-      this.incarnationId = incarnationId;
-      this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
-      this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
-
-      logAbsoluteZeroOffset = new Offset(log.getFirstSegment().getName(), 0);
-      hardDeleter = new HardDeleter(config, metrics, datadir, log, this, hardDelete, factory, time);
-
-      Arrays.sort(indexFiles, INDEX_FILE_COMPARATOR);
-      for (int i = 0; i < indexFiles.length; i++) {
+      Collections.sort(indexFiles, INDEX_SEGMENT_FILE_COMPARATOR);
+      for (int i = 0; i < indexFiles.size(); i++) {
         // We map all the indexes except the most recent index segment.
         // The recent index segment would go through recovery after they have been
         // read into memory
-        boolean map = i < indexFiles.length - 1;
-        IndexSegment info = new IndexSegment(indexFiles[i], map, factory, config, metrics, journal);
+        boolean map = i < indexFiles.size() - 1;
+        IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
-            indexFiles[i], info.getStartOffset(), info.getEndOffset());
+            indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
         indexes.put(info.getStartOffset(), info);
       }
       logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getEndOffset());
       // delete the shutdown file
-      File cleanShutdownFile = new File(datadir, CLEAN_SHUTDOWN_FILENAME);
+      cleanShutdownFile = new File(datadir, cleanShutdownFileName);
       cleanShutdown = cleanShutdownFile.exists();
       if (cleanShutdown) {
         cleanShutdownFile.delete();
@@ -191,33 +189,60 @@ class PersistentIndex {
       log.setActiveSegment(getCurrentEndOffset().getName());
       logEndOffsetOnStartup = log.getEndOffset();
 
-      // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.
-      // NOTE: It is safe to do the hard delete recovery after the regular recovery because we ensure that hard deletes
-      // never work on the part of the log that is not yet flushed (by ensuring that the message retention
-      // period is longer than the log flush time).
-      logger.info("Index : " + datadir + " Starting hard delete recovery");
-      hardDeleter.performRecovery();
-      logger.info("Index : " + datadir + " Finished performing hard delete recovery");
+      if (hardDelete != null) {
+        // After recovering the last messages, and setting the log end offset, let the hard delete thread do its recovery.
+        // NOTE: It is safe to do the hard delete recovery after the regular recovery because we ensure that hard deletes
+        // never work on the part of the log that is not yet flushed (by ensuring that the message retention
+        // period is longer than the log flush time).
+        logger.info("Index : " + datadir + " Starting hard delete recovery");
+        hardDeleter = new HardDeleter(config, metrics, datadir, log, this, hardDelete, factory, time);
+        hardDeleter.performRecovery();
+        logger.info("Index : " + datadir + " Finished performing hard delete recovery");
+        metrics.initializeHardDeleteMetric(hardDeleter, this);
+      } else {
+        hardDeleter = null;
+      }
 
       // start scheduler thread to persist index in the background
       this.scheduler.scheduleAtFixedRate(persistor,
           config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
           config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
-      if (config.storeEnableHardDelete) {
+      if (hardDelete != null && config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
         hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
         hardDeleteThread.start();
+      } else if (hardDelete != null) {
+        hardDeleter.close();
+        hardDeleteThread = null;
       } else {
         hardDeleteThread = null;
-        hardDeleter.close();
       }
-      metrics.initializeHardDeleteMetric(hardDeleter, log);
     } catch (StoreException e) {
       throw e;
     } catch (Exception e) {
       throw new StoreException("Unknown error while creating index " + datadir, e,
           StoreErrorCodes.Index_Creation_Failure);
     }
+  }
+
+  /**
+   * Loads all index segment files that refer to segments in the log.
+   * @return all index segment files that refer to segments in the log.
+   * @throws StoreException if index segment files could not be listed from the directory.
+   */
+  private List<File> getIndexFiles() throws StoreException {
+    List<File> indexFiles = new ArrayList<>();
+    LogSegment logSegment = log.getFirstSegment();
+    while (logSegment != null) {
+      File[] files = getIndexSegmentFilesForLogSegment(dataDir, logSegment.getName());
+      if (files == null) {
+        throw new StoreException("Could not read index files from directory [" + dataDir + "]",
+            StoreErrorCodes.Index_Creation_Failure);
+      }
+      indexFiles.addAll(Arrays.asList(files));
+      logSegment = log.getNextSegment(logSegment);
+    }
+    return indexFiles;
   }
 
   /**
@@ -228,7 +253,8 @@ class PersistentIndex {
    */
   private void recover(MessageStoreRecovery recovery) throws StoreException, IOException {
     final Timer.Context context = metrics.recoveryTime.time();
-    Offset recoveryStartOffset = log.getStartOffset();
+    LogSegment firstSegment = log.getFirstSegment();
+    Offset recoveryStartOffset = new Offset(firstSegment.getName(), firstSegment.getStartOffset());
     if (indexes.size() > 0) {
       IndexSegment indexSegment = indexes.lastEntry().getValue();
       recoveryStartOffset =
@@ -502,9 +528,7 @@ class PersistentIndex {
   private BlobReadOptions getDeletedBlobReadOptions(IndexValue value, StoreKey key) throws StoreException {
     BlobReadOptions readOptions;
     try {
-      IndexValue putValue =
-          findKey(key, new FileSpan(indexes.firstEntry().getValue().getStartOffset(), value.getOffset()),
-              IndexEntryType.PUT);
+      IndexValue putValue = findKey(key, new FileSpan(getStartOffset(), value.getOffset()), IndexEntryType.PUT);
       if (value.getOriginalMessageOffset() != -1) {
         // PUT record in the same log segment.
         String logSegmentName = value.getOffset().getName();
@@ -594,7 +618,7 @@ class PersistentIndex {
         startTimeInMs = time.milliseconds();
         Offset offsetToStart = storeToken.getOffset();
         if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
-          offsetToStart = log.getStartOffset();
+          offsetToStart = getStartOffset();
         }
         logger.trace("Index : " + dataDir + " getting entries since " + offsetToStart);
         // check journal
@@ -733,18 +757,61 @@ class PersistentIndex {
       Offset logEndOffsetBeforeFind) {
     long bytesRead = 0;
     if (newToken.getType().equals(StoreFindToken.Type.IndexBased)) {
-      bytesRead = log.getDifference(newToken.getOffset(), logAbsoluteZeroOffset);
+      bytesRead = getAbsolutePositionForOffset(newToken.getOffset());
     } else if (newToken.getType().equals(StoreFindToken.Type.JournalBased)) {
       if (messageEntries.size() > 0) {
-        MessageInfo lastMsgInfo = messageEntries.get(messageEntries.size() - 1);
-        Offset offsetInToken = newToken.getOffset();
-        Offset endOffset = new Offset(offsetInToken.getName(), offsetInToken.getOffset() + lastMsgInfo.getSize());
-        bytesRead = log.getDifference(endOffset, logAbsoluteZeroOffset);
+        bytesRead = getAbsolutePositionForOffset(newToken.getOffset()) + messageEntries.get(messageEntries.size() - 1)
+            .getSize();
       } else {
-        bytesRead = log.getDifference(logEndOffsetBeforeFind, logAbsoluteZeroOffset);
+        bytesRead = getAbsolutePositionForOffset(logEndOffsetBeforeFind);
       }
     }
     return bytesRead;
+  }
+
+  /**
+   * @return the currently capacity used of the log abstraction. Includes "wasted" space at the end of
+   * {@link LogSegment} instances that are not fully filled.
+   */
+  long getUsedCapacity() {
+    return getAbsolutePositionForOffset(getCurrentEndOffset());
+  }
+
+  /**
+   * @return the number of valid log segments starting from the first segment.
+   */
+  long getLogSegmentCount() {
+    return getLogSegmentToIndexSegmentMapping().size();
+  }
+
+  /**
+   * Gets the absolute position represented by {@code offset} in the {@link Log}.
+   * @param offset the {@link Offset} whose absolute position is required.
+   * @return he absolute position represented by {@code offset} in the {@link Log}.
+   */
+  long getAbsolutePositionForOffset(Offset offset) {
+    LogSegment logSegment = log.getSegment(offset.getName());
+    if (logSegment == null || offset.getOffset() > logSegment.getEndOffset()) {
+      throw new IllegalArgumentException("Offset is invalid: " + offset);
+    }
+    int numPrecedingLogSegments = getLogSegmentToIndexSegmentMapping().headMap(offset.getName()).size();
+    return numPrecedingLogSegments * log.getSegmentCapacity() + offset.getOffset();
+  }
+
+  /**
+   * @return mapping from log segment names to {@link IndexSegment} instances that refer to them.
+   */
+  private TreeMap<String, List<IndexSegment>> getLogSegmentToIndexSegmentMapping() {
+    TreeMap<String, List<IndexSegment>> mapping = new TreeMap<>(LogSegmentNameHelper.COMPARATOR);
+    for (Map.Entry<Offset, IndexSegment> indexSegmentEntry : indexes.entrySet()) {
+      IndexSegment indexSegment = indexSegmentEntry.getValue();
+      String logSegmentName = indexSegment.getLogSegmentName();
+      if (!mapping.containsKey(logSegmentName)) {
+        mapping.put(logSegmentName, new ArrayList<IndexSegment>());
+      }
+      mapping.get(logSegmentName).add(indexSegment);
+    }
+    return mapping;
   }
 
   /**
@@ -922,12 +989,13 @@ class PersistentIndex {
    */
   void close() throws StoreException {
     persistor.write();
-    try {
-      hardDeleter.shutdown();
-    } catch (Exception e) {
-      logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
+    if (hardDeleter != null) {
+      try {
+        hardDeleter.shutdown();
+      } catch (Exception e) {
+        logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
+      }
     }
-    File cleanShutdownFile = new File(dataDir, CLEAN_SHUTDOWN_FILENAME);
     try {
       cleanShutdownFile.createNewFile();
     } catch (IOException e) {
@@ -936,11 +1004,25 @@ class PersistentIndex {
   }
 
   /**
+   * @return the start offset of the index.
+   */
+  Offset getStartOffset() {
+    Offset startOffset;
+    if (indexes.size() == 0) {
+      LogSegment firstLogSegment = log.getFirstSegment();
+      startOffset = new Offset(firstLogSegment.getName(), firstLogSegment.getStartOffset());
+    } else {
+      startOffset = indexes.firstKey();
+    }
+    return startOffset;
+  }
+
+  /**
    * Returns the current end offset that the index represents in the log
    * @return The end offset in the log that this index currently represents
    */
   Offset getCurrentEndOffset() {
-    return indexes.size() == 0 ? log.getStartOffset() : indexes.lastEntry().getValue().getEndOffset();
+    return indexes.size() == 0 ? getStartOffset() : indexes.lastEntry().getValue().getEndOffset();
   }
 
   /**
@@ -993,7 +1075,7 @@ class PersistentIndex {
         Offset offsetToStart = storeToken.getOffset();
         boolean inclusive = false;
         if (storeToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
-          offsetToStart = log.getStartOffset();
+          offsetToStart = getStartOffset();
           inclusive = true;
         }
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
@@ -1056,6 +1138,45 @@ class PersistentIndex {
     persistor.write();
   }
 
+  /**
+   * Gets the list of {@link IndexSegment} files that refer to the log segment with name {@code logSegmentName}.
+   * @param dataDir the directory where the index files are.
+   * @param logSegmentName the name of the log segment whose index segment files are required.
+   * @return the list of {@link IndexSegment} files that refer to the log segment with name {@code logSegmentName}.
+   */
+  static File[] getIndexSegmentFilesForLogSegment(String dataDir, final String logSegmentName) {
+    return new File(dataDir).listFiles(new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        return name.startsWith(logSegmentName) && name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX);
+      }
+    });
+  }
+
+  /**
+   * Cleans up all files related to index segments that refer to the log segment with name {@code logSegmentName}.
+   *  @param dataDir the directory where the index files are.
+   * @param logSegmentName the name of the log segment whose index segment related files need to be deleteds.
+   * @throws IOException if {@code dataDir} could not be read or if a file could not be deleted.
+   */
+  static void cleanupIndexSegmentFilesForLogSegment(String dataDir, final String logSegmentName) throws IOException {
+    File[] filesToCleanup = new File(dataDir).listFiles(new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        return name.startsWith(logSegmentName) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
+            || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+      }
+    });
+    if (filesToCleanup == null) {
+      throw new IOException("Failed to list index segment files");
+    }
+    for (File file : filesToCleanup) {
+      if (!file.delete()) {
+        throw new IOException("Could not delete file named " + file);
+      }
+    }
+  }
+
   private class IndexPersistor implements Runnable {
 
     /**
@@ -1078,12 +1199,16 @@ class PersistentIndex {
                 + "currentEndOffSet of index " + indexEndOffsetBeforeFlush, StoreErrorCodes.Illegal_Index_State);
           }
 
-          hardDeleter.preLogFlush();
+          if (hardDeleter != null) {
+            hardDeleter.preLogFlush();
+          }
 
           // flush the log to ensure everything till the fileEndPointerBeforeFlush is flushed
           log.flush();
 
-          hardDeleter.postLogFlush();
+          if (hardDeleter != null) {
+            hardDeleter.postLogFlush();
+          }
 
           IndexSegment prevInfo = indexes.size() > 1 ? indexes.lowerEntry(lastEntry.getKey()).getValue() : null;
           Offset currentLogEndPointer = log.getEndOffset();

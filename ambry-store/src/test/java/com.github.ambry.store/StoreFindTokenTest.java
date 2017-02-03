@@ -46,7 +46,7 @@ public class StoreFindTokenTest {
     }
   }
 
-  private final long numSegments;
+  private final boolean isLogSegmented;
 
   /**
    * Running for both segmented and non-segmented log.
@@ -54,11 +54,11 @@ public class StoreFindTokenTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{1L}, {2L}});
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
-  public StoreFindTokenTest(long numSegments) {
-    this.numSegments = numSegments;
+  public StoreFindTokenTest(boolean isLogSegmented) {
+    this.isLogSegmented = isLogSegmented;
   }
 
   /**
@@ -68,7 +68,7 @@ public class StoreFindTokenTest {
   public void equalityTest() {
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
-    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
+    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     Offset otherOffset = new Offset(logSegmentName, 1);
     MockId key = new MockId(UtilsTest.getRandomString(10));
@@ -131,11 +131,11 @@ public class StoreFindTokenTest {
   public void serDeTest() throws IOException {
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
-    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
+    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(UtilsTest.getRandomString(10));
 
-    if (numSegments == 1) {
+    if (!isLogSegmented) {
       // UnInitialized
       doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
 
@@ -180,7 +180,7 @@ public class StoreFindTokenTest {
   public void constructionErrorCasesTest() {
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
-    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
+    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
     Offset offset = new Offset(logSegmentName, 0);
     MockId key = new MockId(UtilsTest.getRandomString(10));
 

@@ -33,6 +33,8 @@ import java.util.List;
  * Represents a record of the compaction process and helps in recovery in case of crashes.
  */
 class CompactionLog implements Closeable {
+  private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
+  private static final long UNINITIALIZED_TIMESTAMP = -1;
   private static final String COMPACTION_LOG_SUFFIX = "_compaction_log";
   private static final short VERSION_0 = 0;
 
@@ -40,7 +42,7 @@ class CompactionLog implements Closeable {
    * The {@link Phase} of the current compaction cycle.
    */
   enum Phase {
-    PREPARE, COPY, SWITCH, CLEANUP, DONE
+    PREPARE, COPY, COMMIT, CLEANUP, DONE
   }
 
   private final File file;
@@ -126,6 +128,13 @@ class CompactionLog implements Closeable {
   }
 
   /**
+   * @return the index of the {@link CompactionDetails} being provided.
+   */
+  int getCurrentIdx() {
+    return currentIdx < cycleLogs.size() ? currentIdx : -1;
+  }
+
+  /**
    * @return the {@link CompactionDetails} for the compaction cycle in progress.
    */
   CompactionDetails getCompactionDetails() {
@@ -165,14 +174,14 @@ class CompactionLog implements Closeable {
   }
 
   /**
-   * Marks the start of the switch phase.
+   * Marks the start of the commit phase.
    */
-  void markSwitchStart() {
+  void markCommitStart() {
     CycleLog cycleLog = getCurrentCycleLog();
     if (!cycleLog.getPhase().equals(Phase.COPY)) {
       throw new IllegalStateException("Should be in COPY phase to transition to SWITCH phase");
     }
-    cycleLog.switchStartTime = time.milliseconds();
+    cycleLog.commitStartTime = time.milliseconds();
     flush();
   }
 
@@ -181,7 +190,7 @@ class CompactionLog implements Closeable {
    */
   void markCleanupStart() {
     CycleLog cycleLog = getCurrentCycleLog();
-    if (!cycleLog.getPhase().equals(Phase.SWITCH)) {
+    if (!cycleLog.getPhase().equals(Phase.COMMIT)) {
       throw new IllegalStateException("Should be in SWITCH phase to transition to CLEANUP phase");
     }
     cycleLog.cleanupStartTime = time.milliseconds();
@@ -268,19 +277,23 @@ class CompactionLog implements Closeable {
    */
   private static class CycleLog {
     private static final int TIMESTAMP_SIZE = 8;
+    private static final int STORE_TOKEN_PRESENT_FLAG_SIZE = 1;
+
+    private static final byte STORE_TOKEN_PRESENT = (byte) 1;
+    private static final byte STORE_TOKEN_ABSENT = (byte) 0;
 
     // details about the cycle
     final CompactionDetails compactionDetails;
     // start time of the copy phase
-    long copyStartTime = -1;
-    // start time of the switch phase
-    long switchStartTime = -1;
+    long copyStartTime = UNINITIALIZED_TIMESTAMP;
+    // start time of the commit phase
+    long commitStartTime = UNINITIALIZED_TIMESTAMP;
     // start time of the cleanup phase
-    long cleanupStartTime = -1;
+    long cleanupStartTime = UNINITIALIZED_TIMESTAMP;
     // end time of the current cycle
-    long cycleEndTime = -1;
+    long cycleEndTime = UNINITIALIZED_TIMESTAMP;
     // point until which copying is complete
-    StoreFindToken safeToken = new StoreFindToken();
+    StoreFindToken safeToken = null;
 
     /**
      * Create a log for a single cycle of compaction.
@@ -301,10 +314,11 @@ class CompactionLog implements Closeable {
       CompactionDetails compactionDetails = CompactionDetails.fromBytes(stream);
       CycleLog cycleLog = new CycleLog(compactionDetails);
       cycleLog.copyStartTime = stream.readLong();
-      cycleLog.switchStartTime = stream.readLong();
+      cycleLog.commitStartTime = stream.readLong();
       cycleLog.cleanupStartTime = stream.readLong();
       cycleLog.cycleEndTime = stream.readLong();
-      cycleLog.safeToken = StoreFindToken.fromBytes(stream, storeKeyFactory);
+      cycleLog.safeToken =
+          stream.readByte() == STORE_TOKEN_PRESENT ? StoreFindToken.fromBytes(stream, storeKeyFactory) : null;
       return cycleLog;
     }
 
@@ -313,13 +327,13 @@ class CompactionLog implements Closeable {
      */
     Phase getPhase() {
       Phase phase;
-      if (copyStartTime == -1) {
+      if (copyStartTime == UNINITIALIZED_TIMESTAMP) {
         phase = Phase.PREPARE;
-      } else if (switchStartTime == -1) {
+      } else if (commitStartTime == UNINITIALIZED_TIMESTAMP) {
         phase = Phase.COPY;
-      } else if (cleanupStartTime == -1) {
-        phase = Phase.SWITCH;
-      } else if (cycleEndTime == -1) {
+      } else if (cleanupStartTime == UNINITIALIZED_TIMESTAMP) {
+        phase = Phase.COMMIT;
+      } else if (cycleEndTime == UNINITIALIZED_TIMESTAMP) {
         phase = Phase.CLEANUP;
       } else {
         phase = Phase.DONE;
@@ -336,21 +350,23 @@ class CompactionLog implements Closeable {
 
         compactionDetails (see CompactionDetails#toBytes())
         copyStartTime
-        switchStartTime
+        commitStartTime
         cleanupStartTime
         cycleEndTime
         safeToken (see StoreFindToken#toBytes())
        */
       byte[] compactionDetailsBytes = compactionDetails.toBytes();
-      byte[] safeTokenBytes = safeToken.toBytes();
-      int size = compactionDetailsBytes.length + 4 * TIMESTAMP_SIZE + safeTokenBytes.length;
+      byte[] safeTokenBytes = safeToken != null ? safeToken.toBytes() : ZERO_LENGTH_ARRAY;
+      int size =
+          compactionDetailsBytes.length + 4 * TIMESTAMP_SIZE + STORE_TOKEN_PRESENT_FLAG_SIZE + safeTokenBytes.length;
       byte[] buf = new byte[size];
       ByteBuffer bufWrap = ByteBuffer.wrap(buf);
       bufWrap.put(compactionDetailsBytes);
       bufWrap.putLong(copyStartTime);
-      bufWrap.putLong(switchStartTime);
+      bufWrap.putLong(commitStartTime);
       bufWrap.putLong(cleanupStartTime);
       bufWrap.putLong(cycleEndTime);
+      bufWrap.put(safeToken != null ? STORE_TOKEN_PRESENT : STORE_TOKEN_ABSENT);
       bufWrap.put(safeTokenBytes);
       return buf;
     }

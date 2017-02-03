@@ -1951,7 +1951,7 @@ class MockIndex extends PersistentIndex {
       StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId)
       throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
-        new StoreMetrics(datadir, new MetricRegistry()), time, incarnationId);
+        new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1), incarnationId);
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, UUID incarnationId, StoreConfig config,
@@ -1963,7 +1963,8 @@ class MockIndex extends PersistentIndex {
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, Journal journal, UUID incarnationId) throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-        new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance(), incarnationId);
+        new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance(), new UUID(1, 1),
+        incarnationId, PersistentIndex.CLEAN_SHUTDOWN_FILENAME);
   }
 
   public void setHardDeleteRunningStatus(boolean status) {
@@ -1991,7 +1992,7 @@ class MockIndex extends PersistentIndex {
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup) throws StoreException {
     super(datadir, scheduler, log, config, factory, recovery, cleanup, new StoreMetrics(datadir, new MetricRegistry()),
-        SystemTime.getInstance(), null);
+        SystemTime.getInstance(), new UUID(1, 1), new UUID(1, 1));
   }
 
   IndexValue getValue(StoreKey key) throws StoreException {

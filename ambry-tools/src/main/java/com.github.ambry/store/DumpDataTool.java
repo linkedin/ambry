@@ -38,8 +38,6 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.store.PersistentIndex.*;
-
 
 /**
  * Tool to assist in dumping data from data files in Ambry
@@ -116,11 +114,11 @@ public class DumpDataTool {
    */
   private void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory) throws Exception {
     logger.info("Comparing Index entries to Log ");
-    File[] indexFiles = new File(replicaRootDirectory).listFiles(INDEX_FILE_FILTER);
+    File[] indexFiles = new File(replicaRootDirectory).listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
     if (indexFiles == null) {
       throw new IllegalStateException("Could not read index files from " + replicaRootDirectory);
     }
-    Arrays.sort(indexFiles, INDEX_FILE_COMPARATOR);
+    Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (int i = 0; i < indexFiles.length; i++) {
       // check end offset if this is the last index segment
       boolean checkEndOffset = i == indexFiles.length - 1;
