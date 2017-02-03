@@ -1515,44 +1515,45 @@ public class IndexTest {
     waitUntilExpectedProgress(expectedProgress, 5000);
     verifyEntriesForHardDeletes(deletedKeys);
 
-    Set<MockId> idsToDelete = new HashSet<>();
+    Set<MockId> idsDeleted = new HashSet<>();
     // delete two entries
     addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    Set<MockId> newIdsToDelete = new HashSet<>();
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    Set<MockId> idsToDelete = new HashSet<>();
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
     addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : newIdsToDelete) {
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : idsToDelete) {
       addDeleteEntry(id);
     }
-
+    idsDeleted.addAll(idsToDelete);
+    // pause hard delete
     index.hardDeleter.pause();
     assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
     waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
 
     // delete two entries
     addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    newIdsToDelete.clear();
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    idsToDelete.clear();
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
     addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    for (MockId id : newIdsToDelete) {
+    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    for (MockId id : idsToDelete) {
       addDeleteEntry(id);
     }
-    idsToDelete.addAll(newIdsToDelete);
+    idsDeleted.addAll(idsToDelete);
 
     if (reloadIndex) {
       reloadIndex(true);
       assertEquals("Hard deletes should have been paused ", Thread.State.WAITING, index.hardDeleteThread.getState());
-      newIdsToDelete.clear();
+      idsToDelete.clear();
       addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+      idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
       addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      newIdsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-      for (MockId id : newIdsToDelete) {
+      idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+      for (MockId id : idsToDelete) {
         addDeleteEntry(id);
       }
-      idsToDelete.addAll(newIdsToDelete);
+      idsDeleted.addAll(idsToDelete);
     }
 
     // advance time so that deleted entries becomes eligible to be hard deleted
@@ -1563,7 +1564,7 @@ public class IndexTest {
     expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
     // after resuming. hard deletes should progress. Give it some time to hard delete next range
     waitUntilExpectedProgress(expectedProgress, 5000);
-    verifyEntriesForHardDeletes(idsToDelete);
+    verifyEntriesForHardDeletes(idsDeleted);
   }
 
   // recoverySuccessTest() helpers

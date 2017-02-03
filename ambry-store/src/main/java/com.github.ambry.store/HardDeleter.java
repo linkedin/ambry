@@ -117,11 +117,9 @@ public class HardDeleter implements Runnable {
       while (enabled.get()) {
         hardDeleteLock.lock();
         try {
-          // if paused
           while (enabled.get() && isPaused()) {
             pauseCondition.await();
           }
-          // if not paused
           if (enabled.get()) {
             if (!hardDelete()) {
               isCaughtUp = true;

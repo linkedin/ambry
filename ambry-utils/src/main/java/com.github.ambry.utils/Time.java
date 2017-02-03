@@ -45,11 +45,17 @@ public abstract class Time {
 
   public abstract void sleep(long ms) throws InterruptedException;
 
+  /**
+   * Waits on the {@code o} for {@code ms}
+   * @param o the {@link Object} over which wait has been called
+   * @param ms time in millisecs for which the wait should be called
+   * @throws InterruptedException
+   */
   public abstract void wait(Object o, long ms) throws InterruptedException;
 
   /**
    * Awaits on the {@code c} for {@code ms}
-   * @param c the {@link Condition} over which await has to be called
+   * @param c the {@link Condition} over which await has been called
    * @param ms time in millisecs for which the await should be called
    * @throws InterruptedException
    */
