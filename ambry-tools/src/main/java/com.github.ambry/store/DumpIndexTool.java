@@ -94,7 +94,7 @@ public class DumpIndexTool {
    * Executes the operation with the help of properties passed
    * @throws IOException
    */
-  private void doOperation() throws Exception {
+  public void doOperation() throws Exception {
     ArrayList<String> blobs = null;
     String[] blobArray;
     if (!blobIdList.equals("")) {

@@ -411,7 +411,9 @@ class PersistentIndex {
                 true).descendingMap();
         metrics.segmentSizeForExists.update(segmentsMapToSearch.size());
       }
+      int segmentsSearched = 0;
       for (Map.Entry<Offset, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
+        segmentsSearched++;
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
         IndexValue value = entry.getValue().find(key);
         if (value != null) {
@@ -429,6 +431,7 @@ class PersistentIndex {
           }
         }
       }
+      metrics.segmentsAccessedPerBlobCount.update(segmentsSearched);
     } finally {
       context.stop();
     }

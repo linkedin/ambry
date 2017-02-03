@@ -88,7 +88,7 @@ public class DumpLogTool {
    * Executes the operation with the help of properties passed
    * @throws IOException
    */
-  private void doOperation() throws IOException {
+  public void doOperation() throws IOException {
     ArrayList<String> blobs = null;
     String[] blobArray;
     if (!blobIdList.equals("")) {

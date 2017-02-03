@@ -260,18 +260,28 @@ class IndexSegment {
    * @throws StoreException
    */
   IndexValue find(StoreKey keyToFind) throws StoreException {
+    IndexValue toReturn = null;
     try {
       rwLock.readLock().lock();
-      if (!(mapped.get())) {
-        return index.get(keyToFind);
+      if (!mapped.get()) {
+        IndexValue value = index.get(keyToFind);
+        if (value != null) {
+          metrics.blobFoundInActiveSegmentCount.inc();
+        }
+        toReturn = value;
       } else {
-        // check bloom filter first
+        if (bloomFilter != null) {
+          metrics.bloomAccessedCount.inc();
+        }
         if (bloomFilter == null || bloomFilter.isPresent(ByteBuffer.wrap(keyToFind.toBytes()))) {
-          metrics.bloomPositiveCount.inc(1);
-          logger.trace(bloomFilter == null
-                  ? "IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {} "
-                  : "IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
-              indexFile.getAbsolutePath(), startOffset, keyToFind);
+          if (bloomFilter == null) {
+            logger.trace("IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {}",
+                indexFile.getAbsolutePath(), startOffset, keyToFind);
+          } else {
+            metrics.bloomPositiveCount.inc();
+            logger.trace("IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
+                indexFile.getAbsolutePath(), startOffset, keyToFind);
+          }
           // binary search on the mapped file
           ByteBuffer duplicate = mmap.duplicate();
           int low = 0;
@@ -286,16 +296,18 @@ class IndexSegment {
             if (result == 0) {
               byte[] buf = new byte[valueSize];
               duplicate.get(buf);
-              return new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf));
+              toReturn = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf));
+              break;
             } else if (result < 0) {
               low = mid + 1;
             } else {
               high = mid - 1;
             }
           }
-          metrics.bloomFalsePositiveCount.inc(1);
+          if (bloomFilter != null && toReturn == null) {
+            metrics.bloomFalsePositiveCount.inc();
+          }
         }
-        return null;
       }
     } catch (IOException e) {
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while searching", e,
@@ -303,6 +315,7 @@ class IndexSegment {
     } finally {
       rwLock.readLock().unlock();
     }
+    return toReturn;
   }
 
   private int numberOfEntries(ByteBuffer mmap) {

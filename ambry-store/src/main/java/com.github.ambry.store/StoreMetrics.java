@@ -42,6 +42,8 @@ public class StoreMetrics {
   public final Timer hardDeleteTime;
   public final Counter putEntryDeletedInfoMismatchCount;
   public final Counter nonzeroMessageRecovery;
+  public final Counter blobFoundInActiveSegmentCount;
+  public final Counter bloomAccessedCount;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
   public final Counter keySizeMismatchCount;
@@ -50,6 +52,7 @@ public class StoreMetrics {
   public final Counter hardDeleteIncompleteRecoveryCount;
   public final Counter hardDeleteExceptionsCount;
   public final Histogram segmentSizeForExists;
+  public final Histogram segmentsAccessedPerBlobCount;
 
   private final MetricRegistry registry;
   private final String name;
@@ -78,6 +81,9 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "PutEntryDeletedInfoMismatchCount"));
     nonzeroMessageRecovery =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "NonZeroMessageRecovery"));
+    blobFoundInActiveSegmentCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BlobFoundInActiveSegmentCount"));
+    bloomAccessedCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomAccessedCount"));
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPositiveCount"));
     bloomFalsePositiveCount =
         registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomFalsePositiveCount"));
@@ -90,6 +96,8 @@ public class StoreMetrics {
     hardDeleteExceptionsCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteExceptionsCount"));
     segmentSizeForExists = registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentSizeForExists"));
+    segmentsAccessedPerBlobCount =
+        registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentsAccessedPerBlobCount"));
   }
 
   void initializeLogGauges(final Log log, final long capacityInBytes) {
