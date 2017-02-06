@@ -92,7 +92,7 @@ public class PutOperationTest {
   public void testSendIncomplete() throws Exception {
     int numChunks = NonBlockingRouter.MAX_IN_MEM_CHUNKS + 1;
     BlobProperties blobProperties =
-        new BlobProperties(chunkSize * numChunks, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     byte[] userMetadata = new byte[10];
     byte[] content = new byte[chunkSize * numChunks];
     random.nextBytes(content);

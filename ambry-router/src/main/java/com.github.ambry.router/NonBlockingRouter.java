@@ -169,7 +169,8 @@ class NonBlockingRouter implements Router {
   /**
    * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of
    * the new blob on a successful response.
-   * @param blobProperties The properties of the blob.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param userMetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
    * @return A future that would contain the BlobId eventually.
@@ -181,7 +182,8 @@ class NonBlockingRouter implements Router {
 
   /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
-   * @param blobProperties The properties of the blob.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param userMetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .

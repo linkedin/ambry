@@ -387,15 +387,7 @@ public class PutManagerTest {
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
             putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
-    int pushedSoFar = 0;
-    while (pushedSoFar < blobSize && !future.isDone()) {
-      int toPush = random.nextInt(blobSize - pushedSoFar + 1);
-      ByteBuffer buf = ByteBuffer.allocate(toPush);
-      src.get(buf.array());
-      putChannel.write(buf);
-      Thread.yield();
-      pushedSoFar += toPush;
-    }
+    pushwithDelay(src, putChannel, blobSize, future);
     future.await();
     requestAndResult.result = future;
     assertSuccess();
@@ -417,19 +409,11 @@ public class PutManagerTest {
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
             putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
-    int pushedSoFar = 0;
 
     //Make the channel act bad.
     putChannel.beBad();
 
-    while (pushedSoFar < blobSize && !future.isDone()) {
-      int toPush = random.nextInt(blobSize - pushedSoFar + 1);
-      ByteBuffer buf = ByteBuffer.allocate(toPush);
-      src.get(buf.array());
-      putChannel.write(buf);
-      Thread.yield();
-      pushedSoFar += toPush;
-    }
+    pushwithDelay(src, putChannel, blobSize, future);
     future.await();
     requestAndResult.result = future;
     Exception expectedException = new Exception("Channel encountered an error");
@@ -438,46 +422,22 @@ public class PutManagerTest {
   }
 
   /**
-   * A bad arguments test, where the channel size is different from the size in BlobProperties.
+   * A bad arguments test, where the channel size is different from the size in BlobProperties. This should succeed
+   * as the size in the passed in BlobProperties is ignored by the router.
    */
   @Test
-  public void testChannelSizeNotSizeInPropertiesPutFailure() throws Exception {
-    requestAndResultsList.clear();
-    int blobSize = chunkSize;
-    RequestAndResult requestAndResult = new RequestAndResult(blobSize);
-    // Change the actual content size.
-    requestAndResult.putContent = new byte[blobSize + 1];
-    requestAndResultsList.add(requestAndResult);
-    Exception expectedException = new RouterException("", RouterErrorCode.BadInputChannel);
-    submitPutsAndAssertFailure(expectedException, true, false);
-  }
-
-  /**
-   * A bad arguments test, where the blob size is very large.
-   */
-  @Test
-  public void testBlobTooLargePutFailure() throws Exception {
-    // A blob size of 4G.
-    // A chunkSize of 1 byte.
-    // The max blob size that can be supported is a function of the chunk size. With the given parameters,
-    // the operation will require more than Integer.MAX_VALUE number of data chunks which is too large.
-    long blobSize = 4 * 1024 * 1024 * 1024L;
-    chunkSize = 1;
-
-    router = getNonBlockingRouter();
-    RequestAndResult requestAndResult = new RequestAndResult(0);
-    requestAndResultsList.add(requestAndResult);
-    requestAndResult.putBlobProperties =
-        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
-    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
-    FutureResult<String> future =
-        (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, null);
-    future.await();
-    requestAndResult.result = future;
-    Exception expectedException = new RouterException("", RouterErrorCode.BlobTooLarge);
-    assertFailure(expectedException);
-    assertCloseCleanup();
+  public void testChannelSizeNotSizeInPropertiesPutSuccess() throws Exception {
+    int actualBlobSizes[] = {0, chunkSize - 1, chunkSize, chunkSize + 1, chunkSize * 2, chunkSize * 2 + 1};
+    for (int actualBlobSize : actualBlobSizes) {
+      requestAndResultsList.clear();
+      int sizeInBlobProperties = actualBlobSize == 0 ? 1 : random.nextInt(actualBlobSize);
+      RequestAndResult requestAndResult = new RequestAndResult(sizeInBlobProperties);
+      // Change the actual content size.
+      requestAndResult.putContent = new byte[actualBlobSize];
+      random.nextBytes(requestAndResult.putContent);
+      requestAndResultsList.add(requestAndResult);
+      submitPutsAndAssertSuccess(true);
+    }
   }
 
   /**
@@ -524,6 +484,27 @@ public class PutManagerTest {
     requestAndResult.result = future;
     assertSuccess();
     assertCloseCleanup();
+  }
+
+  /**
+   * Push from the src to the putChannel in random sized writes, with possible delays.
+   * @param src the input {@link ByteBuffer}
+   * @param putChannel the destination {@link MockReadableStreamChannel}
+   * @param blobSize the total length of bytes to push.
+   * @param future the future associated with the overall operation.
+   * @throws Exception if the write to the channel throws an exception.
+   */
+  private void pushwithDelay(ByteBuffer src, MockReadableStreamChannel putChannel, int blobSize, Future future)
+      throws Exception {
+    int pushedSoFar = 0;
+    while (pushedSoFar < blobSize && !future.isDone()) {
+      int toPush = random.nextInt(blobSize - pushedSoFar + 1);
+      ByteBuffer buf = ByteBuffer.allocate(toPush);
+      src.get(buf.array());
+      putChannel.write(buf);
+      Thread.yield();
+      pushedSoFar += toPush;
+    }
   }
 
   /**
@@ -784,8 +765,7 @@ public class PutManagerTest {
     FutureResult<String> result;
 
     RequestAndResult(int blobSize) {
-      putBlobProperties =
-          new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+      putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
       putUserMetadata = new byte[10];
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];
@@ -796,7 +776,8 @@ public class PutManagerTest {
 }
 
 /**
- * A {@link ReadableStreamChannel} implementation whose {@link #readInto(AsyncWritableChannel, * Callback)} method reads into the {@link AsyncWritableChannel} passed into it as and when data is written to it and
+ * A {@link ReadableStreamChannel} implementation whose {@link #readInto(AsyncWritableChannel, Callback)} method
+ * reads into the {@link AsyncWritableChannel} passed into it as and when data is written to it and
  * not at once. Also if the beBad state is set, the callback is called with an exception.
  */
 class MockReadableStreamChannel implements ReadableStreamChannel {

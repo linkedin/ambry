@@ -330,8 +330,8 @@ class PutManager {
         while (isOpen.get()) {
           chunkFillerThreadMaySleep = true;
           for (PutOperation op : putOperations) {
+            op.fillChunks();
             if (!op.isChunkFillComplete()) {
-              op.fillChunks();
               chunkFillerThreadMaySleep = false;
             }
           }

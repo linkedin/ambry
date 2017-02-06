@@ -142,8 +142,7 @@ public class NonBlockingRouterTest {
   }
 
   private void setOperationParams() {
-    putBlobProperties =
-        new BlobProperties(PUT_CONTENT_SIZE, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[PUT_CONTENT_SIZE];
@@ -438,7 +437,7 @@ public class NonBlockingRouterTest {
       if (i == 2) {
         // Create a clean cluster and put another blob that immediate expires.
         setOperationParams();
-        putBlobProperties = new BlobProperties(PUT_CONTENT_SIZE, "serviceId", "memberId", "contentType", false, 0);
+        putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0);
         blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
         Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
         allBlobsInServer.removeAll(blobsToBeDeleted);
@@ -686,6 +685,9 @@ public class NonBlockingRouterTest {
       }
       opHelper.handleResponse(responseInfo);
     }
+    // Poll once again so that the operation gets a chance to complete.
+    allRequests.clear();
+    opHelper.pollOpManager(allRequests);
     futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     if (indexToFail == -1) {
       Assert.assertEquals("Successful notification should have arrived for replicas that were up",
@@ -768,6 +770,8 @@ public class NonBlockingRouterTest {
     for (ResponseInfo responseInfo : responseInfoList) {
       opHelper.handleResponse(responseInfo);
     }
+    allRequests.clear();
+    opHelper.pollOpManager(allRequests);
     try {
       futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {

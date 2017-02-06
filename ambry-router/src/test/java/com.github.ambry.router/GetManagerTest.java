@@ -52,6 +52,7 @@ public class GetManagerTest {
   private int requestParallelism;
   private int successTarget;
   // Request params;
+  private long blobSize;
   private BlobProperties putBlobProperties;
   private byte[] putUserMetadata;
   private byte[] putContent;
@@ -309,6 +310,8 @@ public class GetManagerTest {
   private void compareBlobInfo(BlobInfo blobInfo) {
     Assert.assertTrue("Blob properties should match",
         RouterTestHelpers.haveEquivalentFields(putBlobProperties, blobInfo.getBlobProperties()));
+    Assert.assertEquals("Blob size in received blobProperties should be the same as actual", blobSize,
+        blobInfo.getBlobProperties().getBlobSize());
     Assert.assertArrayEquals("User metadata should match", putUserMetadata, blobInfo.getUserMetadata());
   }
 
@@ -369,8 +372,8 @@ public class GetManagerTest {
    * @param options the options for the get request
    */
   private void setOperationParams(int blobSize, GetBlobOptions options) {
-    putBlobProperties =
-        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    this.blobSize = blobSize;
+    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[blobSize];

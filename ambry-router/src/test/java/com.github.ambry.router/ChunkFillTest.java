@@ -115,7 +115,7 @@ public class ChunkFillTest {
         putUserMetadata, putChannel, futureResult, null,
         new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<StoreKey>()), null, new MockTime());
     op.startReadingFromChannel();
-    numChunks = op.getNumDataChunks();
+    numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
     int expectedNumChunks = (int) (blobSize / chunkSize + 1);
     Assert.assertEquals("numChunks should be as expected", expectedNumChunks, numChunks);
@@ -143,6 +143,7 @@ public class ChunkFillTest {
     }, false).start();
 
     // Do the chunk filling.
+    boolean fillingComplete = false;
     do {
       op.fillChunks();
       // All existing chunks must have been filled if no work was done in the last call,
@@ -152,13 +153,24 @@ public class ChunkFillTest {
         if (putChunk.isFree()) {
           continue;
         }
-        Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
-        Assert.assertEquals("Chunk size should be maxChunkSize unless this is the last chunk",
-            chunkIndex < numChunks - 1 ? chunkSize : lastChunkSize, putChunk.buf.remaining());
-        chunkIndex++;
-        putChunk.clear();
+        if (chunkIndex == numChunks - 1) {
+          // last chunk may not be Ready as it is dependent on the completion callback to be called.
+          Assert.assertTrue("Chunk should be Building or Ready.", putChunk.getState() == PutOperation.ChunkState.Ready
+              || putChunk.getState() == PutOperation.ChunkState.Building);
+          if (putChunk.getState() == PutOperation.ChunkState.Ready) {
+            Assert.assertEquals("Chunk size should be the last chunk size", lastChunkSize, putChunk.buf.remaining());
+            Assert.assertTrue("Chunk Filling should be complete at this time", op.isChunkFillComplete());
+            fillingComplete = true;
+          }
+        } else {
+          // if not last chunk, then the chunk should be full and Ready.
+          Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
+          Assert.assertEquals("Chunk size should be maxChunkSize", chunkSize, putChunk.buf.remaining());
+          chunkIndex++;
+          putChunk.clear();
+        }
       }
-    } while (!op.isChunkFillComplete());
+    } while (!fillingComplete);
   }
 
   /**
@@ -200,7 +212,7 @@ public class ChunkFillTest {
         putUserMetadata, putChannel, futureResult, null,
         new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<StoreKey>()), null, time);
     op.startReadingFromChannel();
-    numChunks = op.getNumDataChunks();
+    numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuffer[numChunks];
     final AtomicReference<Exception> operationException = new AtomicReference<Exception>(null);
 

@@ -33,7 +33,6 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.router.RouterTestHelpers.*;
-import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
@@ -53,7 +52,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -174,7 +172,7 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   private void doPut() throws Exception {
-    blobProperties = new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    blobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     putContent = new byte[blobSize];
@@ -786,6 +784,8 @@ public class GetBlobOperationTest {
                 BlobInfo blobInfo = result.getBlobResult.getBlobInfo();
                 Assert.assertTrue("Blob properties must be the same",
                     RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
+                Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
+                    blobSize, blobInfo.getBlobProperties().getBlobSize());
                 Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
                 break;
               case Data:
