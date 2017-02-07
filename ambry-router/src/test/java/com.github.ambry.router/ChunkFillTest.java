@@ -159,7 +159,7 @@ public class ChunkFillTest {
               || putChunk.getState() == PutOperation.ChunkState.Building);
           if (putChunk.getState() == PutOperation.ChunkState.Ready) {
             Assert.assertEquals("Chunk size should be the last chunk size", lastChunkSize, putChunk.buf.remaining());
-            Assert.assertTrue("Chunk Filling should be complete at this time", op.isChunkFillComplete());
+            Assert.assertTrue("Chunk Filling should be complete at this time", op.isChunkFillingDone());
             fillingComplete = true;
           }
         } else {
@@ -230,7 +230,7 @@ public class ChunkFillTest {
         compositeBuffers[putChunk.getChunkIndex()] = ByteBuffer.allocate(buf.remaining()).put(buf);
         putChunk.clear();
       }
-    } while (!op.isChunkFillComplete());
+    } while (!op.isChunkFillingDone());
 
     Assert.assertEquals("total size written out should match the blob size", blobSize, totalSizeWritten);
 

@@ -100,8 +100,8 @@ class PutOperation {
   private int chunkCounter;
   // the current ByteBuffer/position in the chunkFillerChannel.
   private ByteBuffer channelReadBuffer;
-  // denotes whether chunk filling is complete.
-  private AtomicBoolean chunkFillingCompleted = new AtomicBoolean(false);
+  // indicates whether chunk filling is complete and successful.
+  private AtomicBoolean chunkFillingCompletedSuccessfully = new AtomicBoolean(false);
   // the metadata chunk for this operation. There will always be a metadata chunk that tracks the data chunks.
   // However, if the operation completes and results in only one data chunk, then the metadata chunk will not be sent
   // out.
@@ -182,7 +182,7 @@ class PutOperation {
           setOperationExceptionAndComplete(exception);
         } else {
           blobSize = result;
-          chunkFillingCompleted.set(true);
+          chunkFillingCompletedSuccessfully.set(true);
         }
         chunkFillerChannel.close();
       }
@@ -273,11 +273,11 @@ class PutOperation {
   }
 
   /**
-   * Returns whether chunk filling is complete.
+   * Returns whether chunk filling is complete (successfully or otherwise).
    * @return true if chunk filling is complete, false otherwise.
    */
-  boolean isChunkFillComplete() {
-    return chunkFillingCompleted.get() || operationCompleted.get();
+  boolean isChunkFillingDone() {
+    return chunkFillingCompletedSuccessfully.get() || operationCompleted.get();
   }
 
   /**
@@ -289,43 +289,41 @@ class PutOperation {
   void fillChunks() {
     try {
       PutChunk chunkToFill;
-      if (!isChunkFillComplete()) {
-        do {
-          // Attempt to fill a chunk
-          if (channelReadBuffer == null) {
-            channelReadBuffer = chunkFillerChannel.getNextChunk(0);
-          }
-          if (channelReadBuffer != null) {
-            maybeStopTrackingWaitForChannelDataTime();
-            chunkToFill = getChunkToFill();
-            if (chunkToFill == null) {
-              // channel has data, but no chunks are free to be filled yet.
-              maybeStartTrackingWaitForChunkTime();
-              break;
-            } else {
-              // channel has data, and there is a chunk that can be filled.
-              maybeStopTrackingWaitForChunkTime();
-              bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
-              if (chunkToFill.isReady()) {
-                routerCallback.onPollReady();
-                updateChunkFillerWaitTimeMetrics();
-              }
-              if (!channelReadBuffer.hasRemaining()) {
-                chunkFillerChannel.resolveOldestChunk(null);
-                channelReadBuffer = null;
-              }
-            }
-          } else {
-            // channel does not have more data yet.
-            if (getFreeChunk() != null) {
-              // this means there is a chunk available to be filled, but no data in the channel.
-              maybeStartTrackingWaitForChannelDataTime();
-            }
+      while (!isChunkFillingDone()) {
+        // Attempt to fill a chunk
+        if (channelReadBuffer == null) {
+          channelReadBuffer = chunkFillerChannel.getNextChunk(0);
+        }
+        if (channelReadBuffer != null) {
+          maybeStopTrackingWaitForChannelDataTime();
+          chunkToFill = getChunkToFill();
+          if (chunkToFill == null) {
+            // channel has data, but no chunks are free to be filled yet.
+            maybeStartTrackingWaitForChunkTime();
             break;
+          } else {
+            // channel has data, and there is a chunk that can be filled.
+            maybeStopTrackingWaitForChunkTime();
+            bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+            if (chunkToFill.isReady()) {
+              routerCallback.onPollReady();
+              updateChunkFillerWaitTimeMetrics();
+            }
+            if (!channelReadBuffer.hasRemaining()) {
+              chunkFillerChannel.resolveOldestChunk(null);
+              channelReadBuffer = null;
+            }
           }
-        } while (!isChunkFillComplete());
+        } else {
+          // channel does not have more data yet.
+          if (getFreeChunk() != null) {
+            // this means there is a chunk available to be filled, but no data in the channel.
+            maybeStartTrackingWaitForChannelDataTime();
+          }
+          break;
+        }
       }
-      if (isChunkFillComplete()) {
+      if (chunkFillingCompletedSuccessfully.get()) {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
           lastChunk.onFillComplete(true);
@@ -468,7 +466,7 @@ class PutOperation {
    * completed (which is when the final size is determined).
    */
   long getBlobSize() {
-    if (!chunkFillingCompleted.get()) {
+    if (!chunkFillingCompletedSuccessfully.get()) {
       throw new IllegalStateException("Request for blob size before chunk fill completion");
     }
     return blobSize;
@@ -536,10 +534,10 @@ class PutOperation {
 
   /**
    * if this is a composite object, fill the list with successfully put chunk ids.
-   * @return the list of successfully put chunk ids, if any; else null.
+   * @return the list of successfully put chunk ids if this is a composite object.
    */
-  List<StoreKey> getSuccessfullyPutChunkIds() {
-    return metadataPutChunk.getChunkIds();
+  List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
+    return metadataPutChunk.getSuccessfullyPutChunkIdsIfComposite();
   }
 
   /**
@@ -1092,7 +1090,7 @@ class PutOperation {
 
     @Override
     void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
-      if (isBuilding() && chunkFillingCompleted.get() && indexToChunkIds.size() == getNumDataChunks()) {
+      if (isBuilding() && chunkFillingCompletedSuccessfully.get() && indexToChunkIds.size() == getNumDataChunks()) {
         finalizeMetadataChunk();
       }
       if (isReady()) {
@@ -1100,6 +1098,10 @@ class PutOperation {
       }
     }
 
+    /**
+     * To be called when chunk filling completes successfully. Finalizing involves preparing the metadata chunk
+     * for sending if this blob is composite, or marking the operation complete if this is a simple blob.
+     */
     private void finalizeMetadataChunk() {
       finalBlobProperties =
           new BlobProperties(getBlobSize(), passedInBlobProperties.getServiceId(), passedInBlobProperties.getOwnerId(),
@@ -1119,10 +1121,10 @@ class PutOperation {
     }
 
     /**
-     * Add all the successfully put chunk ids of the overall blob to the passed in list.
-     * @return list of chunk ids associated with this composite blob.
+     * Add all the successfully put chunk ids of the overall blob to the passed in list, if the blob is composite.
+     * @return list of chunk ids associated with this blob if it is composite; empty list otherwise.
      */
-    List<StoreKey> getChunkIds() {
+    List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
       List<StoreKey> chunkIdList = new ArrayList<>();
       if (indexToChunkIds.size() > 1) {
         for (StoreKey storeKey : indexToChunkIds.values()) {

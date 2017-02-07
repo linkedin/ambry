@@ -422,15 +422,15 @@ public class PutManagerTest {
   }
 
   /**
-   * A bad arguments test, where the channel size is different from the size in BlobProperties. This should succeed
-   * as the size in the passed in BlobProperties is ignored by the router.
+   * Test that the size in BlobProperties is ignored for puts, by attempting puts with varying values for size in
+   * BlobProperties.
    */
   @Test
   public void testChannelSizeNotSizeInPropertiesPutSuccess() throws Exception {
     int actualBlobSizes[] = {0, chunkSize - 1, chunkSize, chunkSize + 1, chunkSize * 2, chunkSize * 2 + 1};
     for (int actualBlobSize : actualBlobSizes) {
       requestAndResultsList.clear();
-      int sizeInBlobProperties = actualBlobSize == 0 ? 1 : random.nextInt(actualBlobSize);
+      int sizeInBlobProperties = random.nextInt(actualBlobSize * 2 + 1);
       RequestAndResult requestAndResult = new RequestAndResult(sizeInBlobProperties);
       // Change the actual content size.
       requestAndResult.putContent = new byte[actualBlobSize];
