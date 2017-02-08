@@ -429,14 +429,18 @@ public class PutManagerTest {
   public void testChannelSizeNotSizeInPropertiesPutSuccess() throws Exception {
     int actualBlobSizes[] = {0, chunkSize - 1, chunkSize, chunkSize + 1, chunkSize * 2, chunkSize * 2 + 1};
     for (int actualBlobSize : actualBlobSizes) {
-      requestAndResultsList.clear();
-      int sizeInBlobProperties = random.nextInt(actualBlobSize * 2 + 1);
-      RequestAndResult requestAndResult = new RequestAndResult(sizeInBlobProperties);
-      // Change the actual content size.
-      requestAndResult.putContent = new byte[actualBlobSize];
-      random.nextBytes(requestAndResult.putContent);
-      requestAndResultsList.add(requestAndResult);
-      submitPutsAndAssertSuccess(true);
+      int sizesInProperties[] = {actualBlobSize - 1, actualBlobSize + 1};
+      for (int sizeInProperties : sizesInProperties) {
+        requestAndResultsList.clear();
+        RequestAndResult requestAndResult = new RequestAndResult(0);
+        // Change the actual content size.
+        requestAndResult.putContent = new byte[actualBlobSize];
+        requestAndResult.putBlobProperties =
+            new BlobProperties(sizeInProperties, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        random.nextBytes(requestAndResult.putContent);
+        requestAndResultsList.add(requestAndResult);
+        submitPutsAndAssertSuccess(true);
+      }
     }
   }
 
