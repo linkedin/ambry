@@ -857,7 +857,6 @@ public class IndexTest {
   }
 
   /**
-<<<<<<< 83ab61e8555ca6ba5170782bb078e1b6b5bbab7b
    * Tests the Index persistor for all cases
    * @throws InterruptedException
    * @throws IOException
@@ -900,10 +899,7 @@ public class IndexTest {
   }
 
   /**
-   * Tests {@link PersistentIndex#getAbsolutePositionForOffset(Offset)}.
-=======
    * Tests {@link PersistentIndex#getAbsolutePositionInLogForOffset(Offset)}.
->>>>>>> Addressing priyesh's comments
    */
   @Test
   public void getAbsolutePositionForOffsetTest() {
