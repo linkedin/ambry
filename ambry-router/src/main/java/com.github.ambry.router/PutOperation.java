@@ -41,7 +41,6 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,13 +100,13 @@ class PutOperation {
   // the current ByteBuffer/position in the chunkFillerChannel.
   private ByteBuffer channelReadBuffer;
   // indicates whether chunk filling is complete and successful.
-  private AtomicBoolean chunkFillingCompletedSuccessfully = new AtomicBoolean(false);
+  private volatile boolean chunkFillingCompletedSuccessfully = false;
   // the metadata chunk for this operation. There will always be a metadata chunk that tracks the data chunks.
   // However, if the operation completes and results in only one data chunk, then the metadata chunk will not be sent
   // out.
   private final MetadataPutChunk metadataPutChunk;
   // denotes whether the operation is complete.
-  private AtomicBoolean operationCompleted = new AtomicBoolean(false);
+  private volatile boolean operationCompleted = false;
   // the blob id of the overall blob. This will be set if and when the operation is successful.
   private BlobId blobId;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
@@ -182,7 +181,7 @@ class PutOperation {
           setOperationExceptionAndComplete(exception);
         } else {
           blobSize = result;
-          chunkFillingCompletedSuccessfully.set(true);
+          chunkFillingCompletedSuccessfully = true;
         }
         chunkFillerChannel.close();
       }
@@ -194,7 +193,7 @@ class PutOperation {
    * @return whether the operation has completed.
    */
   boolean isOperationComplete() {
-    return operationCompleted.get();
+    return operationCompleted;
   }
 
   /**
@@ -204,7 +203,7 @@ class PutOperation {
    *                                    created as part of this poll operation.
    */
   void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
-    if (operationCompleted.get()) {
+    if (operationCompleted) {
       return;
     }
     metadataPutChunk.poll(requestRegistrationCallback);
@@ -217,7 +216,7 @@ class PutOperation {
           if (chunk.isComplete()) {
             onChunkOperationComplete(chunk);
             // After each chunk is processed, check whether the operation itself has completed
-            if (operationCompleted.get()) {
+            if (operationCompleted) {
               return;
             }
           }
@@ -253,7 +252,7 @@ class PutOperation {
         logger.error("Operation on chunk failed, but no exception was set");
       }
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
-      operationCompleted.set(true);
+      operationCompleted = true;
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
       logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
@@ -266,7 +265,7 @@ class PutOperation {
       } else {
         logger.trace("Successfully put chunk: " + chunk.getChunkBlobId());
       }
-      operationCompleted.set(true);
+      operationCompleted = true;
     }
     routerMetrics.putChunkOperationLatencyMs.update(time.milliseconds() - chunk.chunkReadyAtMs);
     chunk.clear();
@@ -277,7 +276,7 @@ class PutOperation {
    * @return true if chunk filling is complete, false otherwise.
    */
   boolean isChunkFillingDone() {
-    return chunkFillingCompletedSuccessfully.get() || operationCompleted.get();
+    return chunkFillingCompletedSuccessfully || operationCompleted;
   }
 
   /**
@@ -323,7 +322,7 @@ class PutOperation {
           break;
         }
       }
-      if (chunkFillingCompletedSuccessfully.get()) {
+      if (chunkFillingCompletedSuccessfully) {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
           lastChunk.onFillComplete(true);
@@ -466,7 +465,7 @@ class PutOperation {
    * completed (which is when the final size is determined).
    */
   long getBlobSize() {
-    if (!chunkFillingCompletedSuccessfully.get()) {
+    if (!chunkFillingCompletedSuccessfully) {
       throw new IllegalStateException("Request for blob size before chunk fill completion");
     }
     return blobSize;
@@ -546,7 +545,7 @@ class PutOperation {
    */
   void setOperationExceptionAndComplete(Exception exception) {
     operationException.set(exception);
-    operationCompleted.set(true);
+    operationCompleted = true;
   }
 
   /**
@@ -759,6 +758,7 @@ class PutOperation {
 
     /**
      * Do the actions required when the chunk has been completely built.
+     * @param updateMetric whether chunk fill completion metrics should be updated.
      */
     void onFillComplete(boolean updateMetric) {
       buf.flip();
@@ -1090,7 +1090,7 @@ class PutOperation {
 
     @Override
     void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
-      if (isBuilding() && chunkFillingCompletedSuccessfully.get() && indexToChunkIds.size() == getNumDataChunks()) {
+      if (isBuilding() && chunkFillingCompletedSuccessfully && indexToChunkIds.size() == getNumDataChunks()) {
         finalizeMetadataChunk();
       }
       if (isReady()) {
@@ -1116,7 +1116,7 @@ class PutOperation {
       } else {
         blobId = (BlobId) indexToChunkIds.get(0);
         state = ChunkState.Complete;
-        operationCompleted.set(true);
+        operationCompleted = true;
       }
     }
 
