@@ -334,7 +334,7 @@ public class HardDeleter implements Runnable {
   long getProgress() {
     StoreFindToken token = (StoreFindToken) startToken;
     return token.getType().equals(StoreFindToken.Type.Uninitialized) ? 0
-        : index.getAbsolutePositionForOffset(token.getOffset());
+        : index.getAbsolutePositionInLogForOffset(token.getOffset());
   }
 
   /**

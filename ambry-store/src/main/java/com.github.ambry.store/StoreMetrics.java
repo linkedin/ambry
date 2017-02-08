@@ -104,14 +104,14 @@ public class StoreMetrics {
     Gauge<Long> currentCapacityUsed = new Gauge<Long>() {
       @Override
       public Long getValue() {
-        return index.getUsedCapacity();
+        return index.getLogUsedCapacity();
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "CurrentCapacityUsed"), currentCapacityUsed);
     Gauge<Double> percentageUsedCapacity = new Gauge<Double>() {
       @Override
       public Double getValue() {
-        return ((double) index.getUsedCapacity() / capacityInBytes) * 100;
+        return ((double) index.getLogUsedCapacity() / capacityInBytes) * 100;
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "PercentageUsedCapacity"), percentageUsedCapacity);
@@ -137,7 +137,7 @@ public class StoreMetrics {
     Gauge<Double> percentageHardDeleteCompleted = new Gauge<Double>() {
       @Override
       public Double getValue() {
-        return ((double) hardDeleter.getProgress() / index.getUsedCapacity()) * 100;
+        return ((double) hardDeleter.getProgress() / index.getLogUsedCapacity()) * 100;
       }
     };
     registry.register(MetricRegistry.name(Log.class, name + "PercentageHardDeleteCompleted"),

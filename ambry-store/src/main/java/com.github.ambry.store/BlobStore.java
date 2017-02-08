@@ -302,7 +302,7 @@ class BlobStore implements Store {
 
   @Override
   public long getSizeInBytes() {
-    return index.getUsedCapacity();
+    return index.getLogUsedCapacity();
   }
 
   @Override

@@ -164,9 +164,8 @@ class PersistentIndex {
     this.maxInMemoryIndexSizeInBytes = config.storeIndexMaxMemorySizeBytes;
     this.maxInMemoryNumElements = config.storeIndexMaxNumberOfInmemElements;
 
-    List<File> indexFiles = getIndexFiles();
+    List<File> indexFiles = getAllIndexSegmentFiles();
     try {
-      Collections.sort(indexFiles, INDEX_SEGMENT_FILE_COMPARATOR);
       for (int i = 0; i < indexFiles.size(); i++) {
         // We map all the indexes except the most recent index segment.
         // The recent index segment would go through recovery after they have been
@@ -226,11 +225,12 @@ class PersistentIndex {
   }
 
   /**
-   * Loads all index segment files that refer to segments in the log.
+   * Loads all index segment files that refer to segments in the log. The list of files returned are sorted by the
+   * their start offsets using {@link #INDEX_SEGMENT_FILE_COMPARATOR}.
    * @return all index segment files that refer to segments in the log.
    * @throws StoreException if index segment files could not be listed from the directory.
    */
-  private List<File> getIndexFiles() throws StoreException {
+  private List<File> getAllIndexSegmentFiles() throws StoreException {
     List<File> indexFiles = new ArrayList<>();
     LogSegment logSegment = log.getFirstSegment();
     while (logSegment != null) {
@@ -242,6 +242,7 @@ class PersistentIndex {
       indexFiles.addAll(Arrays.asList(files));
       logSegment = log.getNextSegment(logSegment);
     }
+    Collections.sort(indexFiles, INDEX_SEGMENT_FILE_COMPARATOR);
     return indexFiles;
   }
 
@@ -757,13 +758,14 @@ class PersistentIndex {
       Offset logEndOffsetBeforeFind) {
     long bytesRead = 0;
     if (newToken.getType().equals(StoreFindToken.Type.IndexBased)) {
-      bytesRead = getAbsolutePositionForOffset(newToken.getOffset());
+      bytesRead = getAbsolutePositionInLogForOffset(newToken.getOffset());
     } else if (newToken.getType().equals(StoreFindToken.Type.JournalBased)) {
       if (messageEntries.size() > 0) {
-        bytesRead = getAbsolutePositionForOffset(newToken.getOffset()) + messageEntries.get(messageEntries.size() - 1)
-            .getSize();
+        bytesRead =
+            getAbsolutePositionInLogForOffset(newToken.getOffset()) + messageEntries.get(messageEntries.size() - 1)
+                .getSize();
       } else {
-        bytesRead = getAbsolutePositionForOffset(logEndOffsetBeforeFind);
+        bytesRead = getAbsolutePositionInLogForOffset(logEndOffsetBeforeFind);
       }
     }
     return bytesRead;
@@ -773,8 +775,8 @@ class PersistentIndex {
    * @return the currently capacity used of the log abstraction. Includes "wasted" space at the end of
    * {@link LogSegment} instances that are not fully filled.
    */
-  long getUsedCapacity() {
-    return getAbsolutePositionForOffset(getCurrentEndOffset());
+  long getLogUsedCapacity() {
+    return getAbsolutePositionInLogForOffset(getCurrentEndOffset());
   }
 
   /**
@@ -789,7 +791,7 @@ class PersistentIndex {
    * @param offset the {@link Offset} whose absolute position is required.
    * @return he absolute position represented by {@code offset} in the {@link Log}.
    */
-  long getAbsolutePositionForOffset(Offset offset) {
+  long getAbsolutePositionInLogForOffset(Offset offset) {
     LogSegment logSegment = log.getSegment(offset.getName());
     if (logSegment == null || offset.getOffset() > logSegment.getEndOffset()) {
       throw new IllegalArgumentException("Offset is invalid: " + offset);
