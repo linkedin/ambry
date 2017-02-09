@@ -353,7 +353,8 @@ class CompactionLog implements Closeable {
         commitStartTime
         cleanupStartTime
         cycleEndTime
-        safeToken (see StoreFindToken#toBytes())
+        storeTokenPresent flag
+        safeToken if not null (see StoreFindToken#toBytes())
        */
       byte[] compactionDetailsBytes = compactionDetails.toBytes();
       byte[] safeTokenBytes = safeToken != null ? safeToken.toBytes() : ZERO_LENGTH_ARRAY;

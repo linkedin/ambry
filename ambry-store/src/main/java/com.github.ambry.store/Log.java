@@ -319,13 +319,9 @@ class Log implements Write {
       segmentsToLoad = Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes));
     }
 
-    long totalSegments = -1;
+    LogSegment firstSegment = segmentsToLoad.get(0);
+    long totalSegments = firstSegment.getName().isEmpty() ? 1 : capacityInBytes / firstSegment.getCapacityInBytes();
     for (LogSegment segment : segmentsToLoad) {
-      if (segment.getName().isEmpty()) {
-        totalSegments = 1;
-      } else {
-        totalSegments = totalSegments == -1 ? capacityInBytes / segment.getCapacityInBytes() : totalSegments;
-      }
       segmentsByName.put(segment.getName(), segment);
     }
     remainingUnallocatedSegments.set(totalSegments - segmentsByName.size());
