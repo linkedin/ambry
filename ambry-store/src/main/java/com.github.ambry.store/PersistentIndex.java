@@ -54,7 +54,8 @@ class PersistentIndex {
     ANY, PUT, DELETE,
   }
 
-  static final short VERSION = 0;
+  static final short VERSION_0 = 0;
+  static final short VERSION_1 = 1;
   static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
   static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
@@ -174,7 +175,7 @@ class PersistentIndex {
         // The recent index segment would go through recovery after they have been
         // read into memory
         boolean map = i < indexFiles.length - 1;
-        IndexSegment info = new IndexSegment(indexFiles[i], map, factory, config, metrics, journal);
+        IndexSegment info = new IndexSegment(indexFiles[i], map, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles[i], info.getStartOffset(), info.getEndOffset());
         indexes.put(info.getStartOffset(), info);
@@ -304,7 +305,7 @@ class PersistentIndex {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
-          entry.getValue().getBytes().capacity(), config, metrics);
+          entry.getValue().getBytes().capacity(), config, metrics, time);
       info.addEntry(entry, fileSpan.getEndOffset());
       indexes.put(info.getStartOffset(), info);
     } else {
@@ -745,6 +746,14 @@ class PersistentIndex {
       }
     }
     return bytesRead;
+  }
+
+  /**
+   * @param indexValue the {@link IndexValue} to be checked if deleted
+   * @return {@code true} if the value represents deleted entry, {@code false} otherwise
+   */
+  static boolean isDeleted(IndexValue indexValue) {
+    return indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
   }
 
   /**

@@ -16,12 +16,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
-import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.File;
@@ -34,18 +29,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
@@ -60,75 +50,6 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class BlobStoreTest {
-  private static final StoreKeyFactory STORE_KEY_FACTORY;
-
-  static {
-    try {
-      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
-  private static final long LOG_CAPACITY = 10000;
-  private static final long SEGMENT_CAPACITY = 2000;
-  private static final int MAX_IN_MEM_ELEMENTS = 5;
-  // deliberately do not divide the capacities perfectly.
-  private static final long PUT_RECORD_SIZE = 53;
-  private static final long DELETE_RECORD_SIZE = 29;
-
-  /**
-   * A mock implementation of {@link MessageWriteSet} to help write to the {@link BlobStore}
-   */
-  private static class MockMessageWriteSet implements MessageWriteSet {
-    final List<ByteBuffer> buffers;
-    final List<MessageInfo> infos;
-
-    MockMessageWriteSet(List<MessageInfo> infos, List<ByteBuffer> buffers) {
-      this.infos = infos;
-      this.buffers = buffers;
-    }
-
-    @Override
-    public long writeTo(Write writeChannel) throws IOException {
-      long sizeWritten = 0;
-      for (ByteBuffer buffer : buffers) {
-        sizeWritten += buffer.remaining();
-        writeChannel.appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), buffer.remaining());
-      }
-      return sizeWritten;
-    }
-
-    @Override
-    public List<MessageInfo> getMessageSetInfo() {
-      return infos;
-    }
-  }
-
-  /**
-   * A mock implementation of {@link MessageStoreHardDelete} that can be set to return {@link MessageInfo} for a
-   * particular {@link MockId}.
-   */
-  private static class MockMessageStoreHardDelete implements MessageStoreHardDelete {
-    private MessageInfo messageInfo = null;
-
-    @Override
-    public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-        List<byte[]> recoveryInfoList) throws IOException {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) throws IOException {
-      return messageInfo;
-    }
-
-    void setMessageInfo(MessageInfo messageInfo) {
-      this.messageInfo = messageInfo;
-    }
-  }
-
   /**
    * An abstraction to unify and contains the results from the {@link Putter}, {@link Getter} and {@link Deleter}
    */
@@ -154,7 +75,8 @@ public class BlobStoreTest {
 
     @Override
     public CallableResult call() throws Exception {
-      return new CallableResult(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0), null);
+      return new CallableResult(
+          blobStoreTestUtils.put(1, blobStoreTestUtils.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0), null);
     }
   }
 
@@ -176,7 +98,7 @@ public class BlobStoreTest {
 
     @Override
     public CallableResult call() throws Exception {
-      return new CallableResult(null, store.get(Collections.singletonList(id), storeGetOptions));
+      return new CallableResult(null, blobStoreTestUtils.store.get(Collections.singletonList(id), storeGetOptions));
     }
   }
 
@@ -196,46 +118,12 @@ public class BlobStoreTest {
 
     @Override
     public CallableResult call() throws Exception {
-      delete(id);
+      blobStoreTestUtils.delete(id);
       return EMPTY_RESULT;
     }
   }
 
-  // used by getUniqueId() to make sure keys are never regenerated in a single test run.
-  private final Set<MockId> generatedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
-  // A map of all the keys. The key is the MockId and the value is a Pair that contains the metadata and data of the
-  // message.
-  private final Map<MockId, Pair<MessageInfo, ByteBuffer>> allKeys = new ConcurrentHashMap<>();
-  // A list of keys grouped by the log segment that they belong to
-  private final List<Set<MockId>> idsByLogSegment = new ArrayList<>();
-  // Set of all deleted keys
-  private final Set<MockId> deletedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
-  // Set of all expired keys
-  private final Set<MockId> expiredKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
-  // Set of all keys that are not deleted/expired
-  private final Set<MockId> liveKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
-
-  // Indicates whether the log is segmented
-  private final boolean isLogSegmented;
-  // Variables that represent the folder where the data resides
-  private final File tempDir;
-  private final String tempDirStr;
-  // the time instance that will be used in the index
-  private final Time time = new MockTime();
-
-  private final String storeId = UtilsTest.getRandomString(10);
-  private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
-  private final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-  private final Properties properties = new Properties();
-
-  // The BlobStore instance
-  private BlobStore store;
-  // The MessageStoreRecovery that is used with the BlobStore
-  private MessageStoreRecovery recovery = new DummyMessageStoreRecovery();
-  // The MessageStoreHardDelete that is used with the BlobStore
-  private MessageStoreHardDelete hardDelete = new MockMessageStoreHardDelete();
-  // The MetricRegistry that is used with the index
-  private MetricRegistry metricRegistry;
+  private final BlobStoreTestUtils blobStoreTestUtils;
 
   /**
    * Running for both segmented and non-segmented log.
@@ -253,10 +141,7 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   public BlobStoreTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
-    this.isLogSegmented = isLogSegmented;
-    tempDir = StoreTestUtils.createTempDirectory("storeDir-" + UtilsTest.getRandomString(10));
-    tempDirStr = tempDir.getAbsolutePath();
-    setupTestState();
+    blobStoreTestUtils = new BlobStoreTestUtils(isLogSegmented);
   }
 
   /**
@@ -267,12 +152,7 @@ public class BlobStoreTest {
    */
   @After
   public void cleanup() throws InterruptedException, IOException, StoreException {
-    if (store.isStarted()) {
-      store.shutdown();
-    }
-    scheduler.shutdown();
-    assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+    blobStoreTestUtils.cleanup();
   }
 
   /**
@@ -290,27 +170,30 @@ public class BlobStoreTest {
    */
   @Test
   public void storeStartupTests() throws IOException, StoreException {
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(blobStoreTestUtils.properties));
 
     // attempt to start when store is already started fails
-    verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
+    verifyStartupFailure(blobStoreTestUtils.store, StoreErrorCodes.Store_Already_Started);
 
-    String nonExistentDir = new File(tempDir, UtilsTest.getRandomString(10)).getAbsolutePath();
+    String nonExistentDir = new File(blobStoreTestUtils.tempDir, UtilsTest.getRandomString(10)).getAbsolutePath();
 
     // fail if attempt to create directory fails
     String badPath = new File(nonExistentDir, UtilsTest.getRandomString(10)).getAbsolutePath();
     MetricRegistry registry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(registry);
-    BlobStore blobStore =
-        new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, badPath, LOG_CAPACITY, STORE_KEY_FACTORY,
-            recovery, hardDelete, time);
+    BlobStore blobStore = new BlobStore(blobStoreTestUtils.storeId, config, blobStoreTestUtils.scheduler,
+        blobStoreTestUtils.diskIOScheduler, metrics, badPath, blobStoreTestUtils.LOG_CAPACITY,
+        blobStoreTestUtils.STORE_KEY_FACTORY, blobStoreTestUtils.recovery, blobStoreTestUtils.hardDelete,
+        blobStoreTestUtils.time);
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
 
     // create directory if it does not exist
     registry = new MetricRegistry();
     metrics = new StorageManagerMetrics(registry);
-    blobStore = new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, nonExistentDir, LOG_CAPACITY,
-        STORE_KEY_FACTORY, recovery, hardDelete, time);
+    blobStore = new BlobStore(blobStoreTestUtils.storeId, config, blobStoreTestUtils.scheduler,
+        blobStoreTestUtils.diskIOScheduler, metrics, nonExistentDir, blobStoreTestUtils.LOG_CAPACITY,
+        blobStoreTestUtils.STORE_KEY_FACTORY, blobStoreTestUtils.recovery, blobStoreTestUtils.hardDelete,
+        blobStoreTestUtils.time);
     verifyStartupSuccess(blobStore);
     File createdDir = new File(nonExistentDir);
     assertTrue("Directory should now exist", createdDir.exists() && createdDir.isDirectory());
@@ -318,14 +201,17 @@ public class BlobStoreTest {
     // should not be able to start two stores at the same path
     registry = new MetricRegistry();
     metrics = new StorageManagerMetrics(registry);
-    blobStore = new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, nonExistentDir, LOG_CAPACITY,
-        STORE_KEY_FACTORY, recovery, hardDelete, time);
+    blobStore = new BlobStore(blobStoreTestUtils.storeId, config, blobStoreTestUtils.scheduler,
+        blobStoreTestUtils.diskIOScheduler, metrics, nonExistentDir, blobStoreTestUtils.LOG_CAPACITY,
+        blobStoreTestUtils.STORE_KEY_FACTORY, blobStoreTestUtils.recovery, blobStoreTestUtils.hardDelete,
+        blobStoreTestUtils.time);
     blobStore.start();
     registry = new MetricRegistry();
     metrics = new StorageManagerMetrics(registry);
-    BlobStore secondStore =
-        new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, nonExistentDir, LOG_CAPACITY,
-            STORE_KEY_FACTORY, recovery, hardDelete, time);
+    BlobStore secondStore = new BlobStore(blobStoreTestUtils.storeId, config, blobStoreTestUtils.scheduler,
+        blobStoreTestUtils.diskIOScheduler, metrics, nonExistentDir, blobStoreTestUtils.LOG_CAPACITY,
+        blobStoreTestUtils.STORE_KEY_FACTORY, blobStoreTestUtils.recovery, blobStoreTestUtils.hardDelete,
+        blobStoreTestUtils.time);
     verifyStartupFailure(secondStore, StoreErrorCodes.Initialization_Error);
     blobStore.shutdown();
 
@@ -337,14 +223,15 @@ public class BlobStoreTest {
     assertTrue("Directory could not be deleted", StoreTestUtils.cleanDirectory(createdDir, true));
 
     // fail if provided path is not a directory
-    File file = new File(tempDir, UtilsTest.getRandomString(10));
+    File file = new File(blobStoreTestUtils.tempDir, UtilsTest.getRandomString(10));
     assertTrue("Test file could not be created", file.createNewFile());
     file.deleteOnExit();
     registry = new MetricRegistry();
     metrics = new StorageManagerMetrics(registry);
-    blobStore =
-        new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, file.getAbsolutePath(), LOG_CAPACITY,
-            STORE_KEY_FACTORY, recovery, hardDelete, time);
+    blobStore = new BlobStore(blobStoreTestUtils.storeId, config, blobStoreTestUtils.scheduler,
+        blobStoreTestUtils.diskIOScheduler, metrics, file.getAbsolutePath(), blobStoreTestUtils.LOG_CAPACITY,
+        blobStoreTestUtils.STORE_KEY_FACTORY, blobStoreTestUtils.recovery, blobStoreTestUtils.hardDelete,
+        blobStoreTestUtils.time);
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
   }
 
@@ -360,50 +247,56 @@ public class BlobStoreTest {
   @Test
   public void basicTest() throws InterruptedException, IOException, StoreException {
     // PUT a key that is slated to expire when time advances by 2ms
-    MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds() + 1).get(0);
-    time.sleep(2);
-    liveKeys.remove(addedId);
-    expiredKeys.add(addedId);
+    MockId addedId =
+        blobStoreTestUtils.put(1, blobStoreTestUtils.PUT_RECORD_SIZE, blobStoreTestUtils.time.milliseconds() + 1)
+            .get(0);
+    blobStoreTestUtils.time.sleep(2);
+    blobStoreTestUtils.liveKeys.remove(addedId);
+    blobStoreTestUtils.expiredKeys.add(addedId);
 
     // GET of all the keys implicitly tests the PUT and DELETE.
     // live keys
-    StoreInfo storeInfo = store.get(new ArrayList<>(liveKeys), EnumSet.noneOf(StoreGetOptions.class));
-    checkStoreInfo(storeInfo, liveKeys);
+    StoreInfo storeInfo = blobStoreTestUtils.store.get(new ArrayList<>(blobStoreTestUtils.liveKeys),
+        EnumSet.noneOf(StoreGetOptions.class));
+    checkStoreInfo(storeInfo, blobStoreTestUtils.liveKeys);
 
-    MockMessageStoreHardDelete hd = (MockMessageStoreHardDelete) hardDelete;
-    for (MockId id : deletedKeys) {
-      hd.setMessageInfo(allKeys.get(id).getFirst());
+    BlobStoreTestUtils.MockMessageStoreHardDelete hd =
+        (BlobStoreTestUtils.MockMessageStoreHardDelete) blobStoreTestUtils.hardDelete;
+    for (MockId id : blobStoreTestUtils.deletedKeys) {
+      hd.setMessageInfo(blobStoreTestUtils.allKeys.get(id).msgInfo);
 
       // cannot get without StoreGetOptions
       verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
 
       // with StoreGetOptions.Store_Include_Deleted
-      storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+      storeInfo = blobStoreTestUtils.store.get(Collections.singletonList(id),
+          EnumSet.of(StoreGetOptions.Store_Include_Deleted));
       checkStoreInfo(storeInfo, Collections.singleton(id));
 
       // with all StoreGetOptions
-      storeInfo = store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
+      storeInfo = blobStoreTestUtils.store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
       checkStoreInfo(storeInfo, Collections.singleton(id));
     }
 
-    for (MockId id : expiredKeys) {
+    for (MockId id : blobStoreTestUtils.expiredKeys) {
       // cannot get without StoreGetOptions
       verifyGetFailure(id, StoreErrorCodes.TTL_Expired);
 
       // with StoreGetOptions.Store_Include_Expired
-      storeInfo = store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Expired));
+      storeInfo = blobStoreTestUtils.store.get(Collections.singletonList(id),
+          EnumSet.of(StoreGetOptions.Store_Include_Expired));
       checkStoreInfo(storeInfo, Collections.singleton(id));
 
       // with all StoreGetOptions
-      storeInfo = store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
+      storeInfo = blobStoreTestUtils.store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
       checkStoreInfo(storeInfo, Collections.singleton(id));
     }
 
     // should be able to delete expired blobs
-    delete(addedId);
+    blobStoreTestUtils.delete(addedId);
 
     // non existent ID has to fail
-    verifyGetFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    verifyGetFailure(blobStoreTestUtils.getUniqueId(), StoreErrorCodes.ID_Not_Found);
   }
 
   /**
@@ -412,7 +305,7 @@ public class BlobStoreTest {
    */
   @Test
   public void concurrentPutTest() throws Exception {
-    long blobCount = 4000 / PUT_RECORD_SIZE + 1;
+    long blobCount = 4000 / blobStoreTestUtils.PUT_RECORD_SIZE + 1;
     List<Putter> putters = new ArrayList<>((int) blobCount);
     for (int i = 0; i < blobCount; i++) {
       putters.add(new Putter());
@@ -428,10 +321,10 @@ public class BlobStoreTest {
    */
   @Test
   public void concurrentGetTest() throws Exception {
-    long extraBlobCount = 4000 / PUT_RECORD_SIZE + 1;
-    put((int) extraBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    List<Getter> getters = new ArrayList<>(allKeys.size());
-    for (MockId id : allKeys.keySet()) {
+    long extraBlobCount = 4000 / blobStoreTestUtils.PUT_RECORD_SIZE + 1;
+    blobStoreTestUtils.put((int) extraBlobCount, blobStoreTestUtils.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    List<Getter> getters = new ArrayList<>(blobStoreTestUtils.allKeys.size());
+    for (MockId id : blobStoreTestUtils.allKeys.keySet()) {
       getters.add(new Getter(id, EnumSet.noneOf(StoreGetOptions.class)));
     }
     ExecutorService executorService = Executors.newFixedThreadPool(getters.size());
@@ -445,10 +338,10 @@ public class BlobStoreTest {
    */
   @Test
   public void concurrentDeleteTest() throws Exception {
-    long extraBlobCount = 2000 / PUT_RECORD_SIZE + 1;
-    put((int) extraBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    List<Deleter> deleters = new ArrayList<>(liveKeys.size());
-    for (MockId id : liveKeys) {
+    long extraBlobCount = 2000 / blobStoreTestUtils.PUT_RECORD_SIZE + 1;
+    blobStoreTestUtils.put((int) extraBlobCount, blobStoreTestUtils.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    List<Deleter> deleters = new ArrayList<>(blobStoreTestUtils.liveKeys.size());
+    for (MockId id : blobStoreTestUtils.liveKeys) {
       deleters.add(new Deleter(id));
     }
     ExecutorService executorService = Executors.newFixedThreadPool(deleters.size());
@@ -462,19 +355,20 @@ public class BlobStoreTest {
    */
   @Test
   public void concurrentAllTest() throws Exception {
-    long putBlobCount = 1500 / PUT_RECORD_SIZE + 1;
+    long putBlobCount = 1500 / blobStoreTestUtils.PUT_RECORD_SIZE + 1;
     List<Putter> putters = new ArrayList<>((int) putBlobCount);
     for (int i = 0; i < putBlobCount; i++) {
       putters.add(new Putter());
     }
 
-    List<Getter> getters = new ArrayList<>(liveKeys.size());
-    for (MockId id : liveKeys) {
+    List<Getter> getters = new ArrayList<>(blobStoreTestUtils.liveKeys.size());
+    for (MockId id : blobStoreTestUtils.liveKeys) {
       getters.add(new Getter(id, EnumSet.allOf(StoreGetOptions.class)));
     }
 
-    long deleteBlobCount = 1500 / PUT_RECORD_SIZE;
-    List<MockId> idsToDelete = put((int) deleteBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    long deleteBlobCount = 1500 / blobStoreTestUtils.PUT_RECORD_SIZE;
+    List<MockId> idsToDelete =
+        blobStoreTestUtils.put((int) deleteBlobCount, blobStoreTestUtils.PUT_RECORD_SIZE, Utils.Infinite_Time);
     List<Deleter> deleters = new ArrayList<>((int) deleteBlobCount);
     for (MockId id : idsToDelete) {
       deleters.add(new Deleter(id));
@@ -498,11 +392,13 @@ public class BlobStoreTest {
   public void putErrorCasesTest() {
     // ID that exists
     // live
-    verifyPutFailure(liveKeys.iterator().next(), StoreErrorCodes.Already_Exist);
+    blobStoreTestUtils.verifyPutFailure(blobStoreTestUtils.liveKeys.iterator().next(), StoreErrorCodes.Already_Exist);
     // expired
-    verifyPutFailure(expiredKeys.iterator().next(), StoreErrorCodes.Already_Exist);
+    blobStoreTestUtils.verifyPutFailure(blobStoreTestUtils.expiredKeys.iterator().next(),
+        StoreErrorCodes.Already_Exist);
     // deleted
-    verifyPutFailure(deletedKeys.iterator().next(), StoreErrorCodes.Already_Exist);
+    blobStoreTestUtils.verifyPutFailure(blobStoreTestUtils.deletedKeys.iterator().next(),
+        StoreErrorCodes.Already_Exist);
   }
 
   /**
@@ -511,9 +407,10 @@ public class BlobStoreTest {
   @Test
   public void deleteErrorCasesTest() {
     // ID that is already deleted
-    verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
+    blobStoreTestUtils.verifyDeleteFailure(blobStoreTestUtils.deletedKeys.iterator().next(),
+        StoreErrorCodes.ID_Deleted);
     // ID that does not exist
-    verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    blobStoreTestUtils.verifyDeleteFailure(blobStoreTestUtils.getUniqueId(), StoreErrorCodes.ID_Not_Found);
   }
 
   /**
@@ -527,12 +424,13 @@ public class BlobStoreTest {
    */
   @Test
   public void findEntriesSinceTest() throws StoreException {
-    FindInfo findInfo = store.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE);
+    FindInfo findInfo = blobStoreTestUtils.store.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE);
     Set<StoreKey> keysPresent = new HashSet<>();
     for (MessageInfo info : findInfo.getMessageEntries()) {
       keysPresent.add(info.getStoreKey());
     }
-    assertEquals("All keys were not present in the return from findEntriesSince()", allKeys.keySet(), keysPresent);
+    assertEquals("All keys were not present in the return from findEntriesSince()", blobStoreTestUtils.allKeys.keySet(),
+        keysPresent);
   }
 
   /**
@@ -541,14 +439,14 @@ public class BlobStoreTest {
    */
   @Test
   public void findMissingKeysTest() throws StoreException {
-    List<StoreKey> idsToProvide = new ArrayList<StoreKey>(allKeys.keySet());
+    List<StoreKey> idsToProvide = new ArrayList<StoreKey>(blobStoreTestUtils.allKeys.keySet());
     Set<StoreKey> nonExistentIds = new HashSet<>();
     for (int i = 0; i < 10; i++) {
-      nonExistentIds.add(getUniqueId());
+      nonExistentIds.add(blobStoreTestUtils.getUniqueId());
     }
     idsToProvide.addAll(nonExistentIds);
     Collections.shuffle(idsToProvide);
-    Set<StoreKey> missingKeys = store.findMissingKeys(idsToProvide);
+    Set<StoreKey> missingKeys = blobStoreTestUtils.store.findMissingKeys(idsToProvide);
     assertEquals("Set of missing keys not as expected", nonExistentIds, missingKeys);
   }
 
@@ -558,12 +456,13 @@ public class BlobStoreTest {
    */
   @Test
   public void isKeyDeletedTest() throws StoreException {
-    for (MockId id : allKeys.keySet()) {
-      assertEquals("Returned state is not as expected", deletedKeys.contains(id), store.isKeyDeleted(id));
+    for (MockId id : blobStoreTestUtils.allKeys.keySet()) {
+      assertEquals("Returned state is not as expected", blobStoreTestUtils.deletedKeys.contains(id),
+          blobStoreTestUtils.store.isKeyDeleted(id));
     }
     // non existent id
     try {
-      store.isKeyDeleted(getUniqueId());
+      blobStoreTestUtils.store.isKeyDeleted(blobStoreTestUtils.getUniqueId());
       fail("Getting the deleted state of a non existent key should have failed");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
@@ -576,77 +475,16 @@ public class BlobStoreTest {
    */
   @Test
   public void shutdownTest() throws StoreException {
-    store.shutdown();
+    blobStoreTestUtils.store.shutdown();
     // no operations should be possible if store is not up or has been shutdown
-    verifyOperationFailuresOnInactiveStore(store);
+    verifyOperationFailuresOnInactiveStore(blobStoreTestUtils.store);
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store =
-        new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, tempDirStr, LOG_CAPACITY, STORE_KEY_FACTORY,
-            recovery, hardDelete, time);
-    verifyOperationFailuresOnInactiveStore(store);
-  }
-
-  // helpers
-  // general
-
-  /**
-   * @return a {@link MockId} that is unique and has not been generated before in this run.
-   */
-  private MockId getUniqueId() {
-    MockId id;
-    do {
-      id = new MockId(UtilsTest.getRandomString(10));
-    } while (generatedKeys.contains(id));
-    generatedKeys.add(id);
-    return id;
-  }
-
-  /**
-   * Puts some blobs into the {@link BlobStore}.
-   * @param count the number of blobs to PUT.
-   * @param size the size of each blob.
-   * @param expiresAtMs the expiry time (in ms) of each blob.
-   * @return the {@link MockId}s of the blobs created.
-   * @throws StoreException
-   */
-  private List<MockId> put(int count, long size, long expiresAtMs) throws StoreException {
-    if (count <= 0) {
-      throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
-    }
-    List<MockId> ids = new ArrayList<>(count);
-    List<MessageInfo> infos = new ArrayList<>(count);
-    List<ByteBuffer> buffers = new ArrayList<>(count);
-    for (int i = 0; i < count; i++) {
-      MockId id = getUniqueId();
-      MessageInfo info = new MessageInfo(id, size, expiresAtMs);
-      ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
-      ids.add(id);
-      infos.add(info);
-      buffers.add(buffer);
-      allKeys.put(id, new Pair<>(info, buffer));
-      if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < time.milliseconds()) {
-        expiredKeys.add(id);
-      } else {
-        liveKeys.add(id);
-      }
-    }
-    store.put(new MockMessageWriteSet(infos, buffers));
-    return ids;
-  }
-
-  /**
-   * Deletes a blob
-   * @param idToDelete the {@link MockId} of the blob to DELETE.
-   * @return the {@link MessageInfo} associated with the DELETE.
-   * @throws StoreException
-   */
-  private MessageInfo delete(MockId idToDelete) throws StoreException {
-    MessageInfo info = new MessageInfo(idToDelete, DELETE_RECORD_SIZE);
-    ByteBuffer buffer = ByteBuffer.allocate((int) DELETE_RECORD_SIZE);
-    store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
-    deletedKeys.add(idToDelete);
-    return info;
+    StoreConfig config = new StoreConfig(new VerifiableProperties(blobStoreTestUtils.properties));
+    blobStoreTestUtils.store = new BlobStore(blobStoreTestUtils.storeId, config, blobStoreTestUtils.scheduler,
+        blobStoreTestUtils.diskIOScheduler, metrics, blobStoreTestUtils.tempDirStr, blobStoreTestUtils.LOG_CAPACITY,
+        blobStoreTestUtils.STORE_KEY_FACTORY, blobStoreTestUtils.recovery, blobStoreTestUtils.hardDelete,
+        blobStoreTestUtils.time);
+    verifyOperationFailuresOnInactiveStore(blobStoreTestUtils.store);
   }
 
   /**
@@ -664,7 +502,7 @@ public class BlobStoreTest {
     for (int i = 0; i < messageInfos.size(); i++) {
       MessageInfo messageInfo = messageInfos.get(i);
       MockId id = (MockId) messageInfo.getStoreKey();
-      MessageInfo expectedInfo = allKeys.get(id).getFirst();
+      MessageInfo expectedInfo = blobStoreTestUtils.allKeys.get(id).msgInfo;
       assertEquals("Unexpected size in MessageInfo", expectedInfo.getSize(), messageInfo.getSize());
       assertEquals("Unexpected expiresAtMs in MessageInfo", expectedInfo.getExpirationTimeInMs(),
           messageInfo.getExpirationTimeInMs());
@@ -675,7 +513,7 @@ public class BlobStoreTest {
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
       WritableByteChannel channel = Channels.newChannel(stream);
       readSet.writeTo(i, channel, 0, expectedInfo.getSize());
-      ByteBuffer expectedData = allKeys.get(id).getSecond();
+      ByteBuffer expectedData = blobStoreTestUtils.allKeys.get(id).byteBuffer;
       assertArrayEquals("Data obtained from reset does not match original", expectedData.array(), readBuf.array());
       examinedKeys.add(id);
     }
@@ -689,204 +527,11 @@ public class BlobStoreTest {
    */
   private void verifyGetFailure(MockId id, StoreErrorCodes expectedErrorCode) {
     try {
-      store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
+      blobStoreTestUtils.store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
       fail("Should not be able to GET " + id);
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
     }
-  }
-
-  // test setup helpers
-
-  /**
-   * Sets up some state in order to make sure all cases are represented and the tests don't need to do any setup
-   * individually. For understanding the created store, please read the source code which is annotated with comments.
-   * @throws InterruptedException
-   * @throws StoreException
-   */
-  private void setupTestState() throws InterruptedException, StoreException {
-    long segmentCapacity = isLogSegmented ? SEGMENT_CAPACITY : LOG_CAPACITY;
-    metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
-    properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
-    properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store =
-        new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, tempDirStr, LOG_CAPACITY, STORE_KEY_FACTORY,
-            recovery, hardDelete, time);
-    store.start();
-    // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
-    // being picked for delete.
-    time.sleep(1);
-    long expectedStoreSize;
-    if (!isLogSegmented) {
-      // log is filled about ~50%.
-      expectedStoreSize = segmentCapacity / 2;
-      addCuratedData(expectedStoreSize, 0);
-    } else {
-      expectedStoreSize = segmentCapacity;
-      // first log segment is filled to capacity.
-      addCuratedData(segmentCapacity, 0);
-      assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
-
-      // second log segment is filled but has some space at the end (free space has to be less than the lesser of the
-      // standard delete and put record sizes so that the next write causes a roll over of log segments).
-      long sizeToWrite = segmentCapacity - (DELETE_RECORD_SIZE - 1);
-      expectedStoreSize += sizeToWrite;
-      addCuratedData(sizeToWrite, 1);
-      assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
-
-      // third log segment is partially filled and is left as the "active" segment
-      sizeToWrite = segmentCapacity / 3;
-      // First Index Segment
-      // 1 PUT entry
-      MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
-      idsByLogSegment.add(new HashSet<MockId>());
-      idsByLogSegment.get(2).add(addedId);
-      // 1 DELETE for a key in the first log segment
-      MockId idToDelete = getIdToDelete(idsByLogSegment.get(0));
-      delete(idToDelete);
-      idsByLogSegment.get(2).add(idToDelete);
-      // 1 DELETE for a key in the second log segment
-      idToDelete = getIdToDelete(idsByLogSegment.get(1));
-      delete(idToDelete);
-      idsByLogSegment.get(2).add(idToDelete);
-      // 1 DELETE for the PUT in the same log segment
-      deletedKeys.add(addedId);
-      liveKeys.remove(addedId);
-      delete(addedId);
-      // 1 PUT entry that spans the rest of the data in the segment (upto a third of the segment size)
-      long size = sizeToWrite - (LogSegment.HEADER_SIZE + PUT_RECORD_SIZE + 3 * DELETE_RECORD_SIZE);
-      addedId = put(1, size, Utils.Infinite_Time).get(0);
-      idsByLogSegment.get(2).add(addedId);
-      // the store counts the wasted space at the end of the second segment as "used capacity".
-      expectedStoreSize = 2 * segmentCapacity + sizeToWrite;
-      assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
-      // fourth and fifth log segment are free.
-    }
-    // make sure all indexes are written to disk and mapped as required (forcing IndexPersistor to run).
-    reloadStore();
-    assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
-  }
-
-  /**
-   * Adds some curated data into the store in order to ensure a good mix for testing. For understanding the created
-   * store, please read the source code which is annotated with comments.
-   * @param sizeToWrite the size to add for.
-   * @param logSegmentIndex the index of the log segment being written to (0 being the first one).
-   * @throws StoreException
-   */
-  private void addCuratedData(long sizeToWrite, int logSegmentIndex) throws StoreException {
-    Set<MockId> idsInLogSegment = new HashSet<>();
-    idsByLogSegment.add(idsInLogSegment);
-    List<Set<MockId>> idsGroupedByIndexSegment = new ArrayList<>();
-    int deletedKeyCount = 0;
-
-    Set<MockId> idsInIndexSegment = new HashSet<>();
-    // First Index Segment
-    // 1 PUT
-    idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time));
-    // 2 more PUT
-    idsInIndexSegment.addAll(put(2, PUT_RECORD_SIZE, Utils.Infinite_Time));
-    // 2 PUT EXPIRED
-    idsInIndexSegment.addAll(put(2, PUT_RECORD_SIZE, 0));
-    idsGroupedByIndexSegment.add(idsInIndexSegment);
-    idsInLogSegment.addAll(idsInIndexSegment);
-
-    idsInIndexSegment = new HashSet<>();
-    // Second Index Segment
-    // 4 PUT
-    idsInIndexSegment.addAll(put(4, PUT_RECORD_SIZE, Utils.Infinite_Time));
-    // 1 DELETE for a PUT in the same index segment
-    delete(getIdToDelete(idsInIndexSegment));
-    deletedKeyCount++;
-    // 1 DELETE for a PUT in the first index segment
-    delete(getIdToDelete(idsGroupedByIndexSegment.get(0)));
-    deletedKeyCount++;
-    idsGroupedByIndexSegment.add(idsInIndexSegment);
-    idsInLogSegment.addAll(idsInIndexSegment);
-
-    // Third and Fourth Index Segment
-    for (int seg = 0; seg < 2; seg++) {
-      idsInIndexSegment = new HashSet<>();
-      // 3 PUT
-      idsInIndexSegment.addAll(put(3, PUT_RECORD_SIZE, Utils.Infinite_Time));
-      // 1 PUT for an expired blob
-      MockId expiredId = put(1, PUT_RECORD_SIZE, 0).get(0);
-      idsInIndexSegment.add(expiredId);
-      // 1 DELETE for the expired PUT
-      delete(expiredId);
-      deletedKeys.add(expiredId);
-      expiredKeys.remove(expiredId);
-      deletedKeyCount++;
-      // 1 PUT
-      idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time));
-      idsGroupedByIndexSegment.add(idsInIndexSegment);
-      idsInLogSegment.addAll(idsInIndexSegment);
-    }
-
-    idsInIndexSegment = new HashSet<>();
-    // Fifth Index Segment
-    // 1 PUT entry
-    idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time));
-    // 1 DELETE for a PUT in each of the third and fourth segments
-    delete(getIdToDelete(idsGroupedByIndexSegment.get(2)));
-    deletedKeyCount++;
-    delete(getIdToDelete(idsGroupedByIndexSegment.get(3)));
-    deletedKeyCount++;
-    // 1 DELETE for the PUT in the same segment
-    delete(getIdToDelete(idsInIndexSegment));
-    deletedKeyCount++;
-    // 1 PUT entry that spans the rest of the data in the segment
-    idsInLogSegment.addAll(idsInIndexSegment);
-
-    long sizeWritten = isLogSegmented ? LogSegment.HEADER_SIZE : 0;
-    sizeWritten += idsInLogSegment.size() * PUT_RECORD_SIZE + deletedKeyCount * DELETE_RECORD_SIZE;
-    MockId id = put(1, sizeToWrite - sizeWritten, Utils.Infinite_Time).get(0);
-    idsInIndexSegment.add(id);
-    idsGroupedByIndexSegment.add(idsInIndexSegment);
-    idsInLogSegment.add(id);
-  }
-
-  /**
-   * Gets an id to delete from {@code ids} by picking the first live key encountered.
-   * @param ids the {@link MockId}s to choose from
-   * @return an id to delete from {@code ids}
-   */
-  private MockId getIdToDelete(Set<MockId> ids) {
-    MockId deleteCandidate = null;
-    for (MockId id : ids) {
-      if (liveKeys.contains(id)) {
-        deleteCandidate = id;
-        break;
-      }
-    }
-    if (deleteCandidate == null) {
-      throw new IllegalStateException("Could not find a key to delete in set: " + ids);
-    }
-    deletedKeys.add(deleteCandidate);
-    liveKeys.remove(deleteCandidate);
-    return deleteCandidate;
-  }
-
-  /**
-   * Shuts down and restarts the store. All further tests will implcitly test persistence.
-   * @throws StoreException
-   */
-  private void reloadStore() throws StoreException {
-    if (store.isStarted()) {
-      store.shutdown();
-    }
-    assertFalse("Store should be shutdown", store.isStarted());
-    metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store =
-        new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, tempDirStr, LOG_CAPACITY, STORE_KEY_FACTORY,
-            recovery, hardDelete, time);
-    assertFalse("Store should not be started", store.isStarted());
-    store.start();
-    assertTrue("Store should be started", store.isStarted());
   }
 
   // storeStartupTests() helpers
@@ -929,7 +574,8 @@ public class BlobStoreTest {
     for (int i = 0; i < putters.size(); i++) {
       Future<CallableResult> future = futures.get(i);
       MockId id = future.get(1, TimeUnit.SECONDS).id;
-      StoreInfo storeInfo = store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
+      StoreInfo storeInfo =
+          blobStoreTestUtils.store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
       checkStoreInfo(storeInfo, Collections.singleton(id));
     }
   }
@@ -945,7 +591,7 @@ public class BlobStoreTest {
     for (int i = 0; i < getters.size(); i++) {
       MockId id = getters.get(i).id;
       Future<CallableResult> future = futures.get(i);
-      if (liveKeys.contains(id)) {
+      if (blobStoreTestUtils.liveKeys.contains(id)) {
         StoreInfo storeInfo = future.get(1, TimeUnit.SECONDS).storeInfo;
         checkStoreInfo(storeInfo, Collections.singleton(getters.get(i).id));
       } else {
@@ -955,9 +601,9 @@ public class BlobStoreTest {
         } catch (ExecutionException e) {
           StoreException storeException = (StoreException) e.getCause();
           StoreErrorCodes expectedCode = StoreErrorCodes.ID_Not_Found;
-          if (deletedKeys.contains(id)) {
+          if (blobStoreTestUtils.deletedKeys.contains(id)) {
             expectedCode = StoreErrorCodes.ID_Deleted;
-          } else if (expiredKeys.contains(id)) {
+          } else if (blobStoreTestUtils.expiredKeys.contains(id)) {
             expectedCode = StoreErrorCodes.TTL_Expired;
           }
           assertEquals("Unexpected StoreErrorCode", expectedCode, storeException.getErrorCode());
@@ -982,44 +628,6 @@ public class BlobStoreTest {
     }
   }
 
-  // putErrorCasesTest() helpers
-
-  /**
-   * Verifies that PUT fails.
-   * @param idToPut the {@link MockId} to PUT.
-   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
-   */
-  private void verifyPutFailure(MockId idToPut, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info = new MessageInfo(idToPut, PUT_RECORD_SIZE);
-    MessageWriteSet writeSet =
-        new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
-    try {
-      store.put(writeSet);
-      fail("Store PUT should have failed");
-    } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
-    }
-  }
-
-  // deleteErrorCasesTest() helpers
-
-  /**
-   * Verifies that DELETE fails.
-   * @param idToDelete the {@link MockId} to DELETE.
-   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
-   */
-  private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info = new MessageInfo(idToDelete, DELETE_RECORD_SIZE);
-    MessageWriteSet writeSet =
-        new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
-    try {
-      store.delete(writeSet);
-      fail("Store DELETE should have failed");
-    } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
-    }
-  }
-
   // shutdownTest() helpers
 
   /**
@@ -1035,14 +643,14 @@ public class BlobStoreTest {
     }
 
     try {
-      blobStore.put(new MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
+      blobStore.put(new BlobStoreTestUtils.MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
     }
 
     try {
-      blobStore.delete(new MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
+      blobStore.delete(new BlobStoreTestUtils.MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
@@ -1063,7 +671,7 @@ public class BlobStoreTest {
     }
 
     try {
-      blobStore.isKeyDeleted(getUniqueId());
+      blobStore.isKeyDeleted(blobStoreTestUtils.getUniqueId());
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());

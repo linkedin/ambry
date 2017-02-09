@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -49,6 +50,7 @@ public class IndexSegmentTest {
   private static final StoreConfig STORE_CONFIG = new StoreConfig(new VerifiableProperties(new Properties()));
   private static final long DELETE_FILE_SPAN_SIZE = 10;
   private static final StoreKeyFactory STORE_KEY_FACTORY;
+  private static final MockTime time = new MockTime();
 
   static {
     try {
@@ -166,7 +168,7 @@ public class IndexSegmentTest {
         indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, safeEndPoint));
         Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
         IndexSegment fromDisk =
-            new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal);
+            new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
         for (MockId id : shouldBeFound) {
           assertNotNull("Value for key should have been found", fromDisk.find(id));
         }
@@ -196,7 +198,7 @@ public class IndexSegmentTest {
    */
   private IndexSegment generateIndexSegment(Offset startOffset) {
     return new IndexSegment(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY, KEY_SIZE, VALUE_SIZE,
-        STORE_CONFIG, metrics);
+        STORE_CONFIG, metrics, time);
   }
 
   /**
@@ -208,7 +210,7 @@ public class IndexSegmentTest {
    * @throws StoreException
    */
   private IndexSegment createIndexSegmentFromFile(File file, boolean isMapped, Journal journal) throws StoreException {
-    return new IndexSegment(file, isMapped, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal);
+    return new IndexSegment(file, isMapped, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
   }
 
   /**
