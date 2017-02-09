@@ -716,7 +716,8 @@ public final class ServerTestUtil {
     List<Future<String>> putFutures = new ArrayList<>(numberOfRequestsToSend);
     for (int i = 0; i < numberOfRequestsToSend; i++) {
       int size = new Random().nextInt(5000);
-      final BlobProperties properties = new BlobProperties(size, "service1", "owner id check", "image/jpeg", false);
+      final BlobProperties properties = new BlobProperties(size, "service1", "owner id check", "image/jpeg", false,
+          Utils.Infinite_Time);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
       new Random().nextBytes(metadata);

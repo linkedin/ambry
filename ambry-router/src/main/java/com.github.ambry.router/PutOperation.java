@@ -34,12 +34,12 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -72,7 +72,7 @@ class PutOperation {
   private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
-  private final BlobProperties blobProperties;
+  private final BlobProperties passedInBlobProperties;
   private final byte[] userMetadata;
   private final ReadableStreamChannel channel;
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
@@ -80,17 +80,17 @@ class PutOperation {
   private final Callback<String> callback;
   private final RouterCallback routerCallback;
   private final Time time;
+  private BlobProperties finalBlobProperties;
 
   // Parameters associated with the state.
 
   // the list of PutChunks that will be used to hold chunks that are sent out. A PutChunk will only hold one chunk at
   // any time, but will be reused as and when the operation on the chunk is complete.
-  protected final PutChunk[] putChunks;
-  // total number of data chunks this operation will result in.
-  private final int numDataChunks;
-  // the total size of the object (the overall blob). This is the same as the size in blobProperties,
-  // and the size to be read from the channel.
-  private final long blobSize;
+  final ConcurrentLinkedQueue<PutChunk> putChunks;
+  // the total size of the object (the overall blob). This will be initialized to -1 indicating that the value is
+  // not yet determined. Once the chunk filling is complete, this will have the actual size of the data read
+  // from the channel.
+  private long blobSize = -1;
   // total bytes of this object that has been filled so far by the ChunkFillerThread.
   private long bytesFilledSoFar;
   // the reference to the chunk in putChunks that was most recently filled or became eligible for getting filled.
@@ -99,13 +99,14 @@ class PutOperation {
   private int chunkCounter;
   // the current ByteBuffer/position in the chunkFillerChannel.
   private ByteBuffer channelReadBuffer;
-  // denotes whether chunk filling is complete.
-  private boolean chunkFillingCompleted = false;
-  // the metadata chunk for this operation. If this operation results in only one chunk,
-  // then there will be no metadata chunk and this will be null.
+  // indicates whether chunk filling is complete and successful.
+  private volatile boolean chunkFillingCompletedSuccessfully = false;
+  // the metadata chunk for this operation. There will always be a metadata chunk that tracks the data chunks.
+  // However, if the operation completes and results in only one data chunk, then the metadata chunk will not be sent
+  // out.
   private final MetadataPutChunk metadataPutChunk;
   // denotes whether the operation is complete.
-  private boolean operationCompleted = false;
+  private volatile boolean operationCompleted = false;
   // the blob id of the overall blob. This will be set if and when the operation is successful.
   private BlobId blobId;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
@@ -151,24 +152,11 @@ class PutOperation {
       RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
       Time time) throws RouterException {
     submissionTimeMs = time.milliseconds();
-    blobSize = blobProperties.getBlobSize();
-    if (channel.getSize() != blobSize) {
-      throw new RouterException("Channel size: " + channel.getSize() + " different from size in BlobProperties: "
-          + blobProperties.getBlobSize(), RouterErrorCode.BadInputChannel);
-    }
-    // Set numDataChunks
-    // the max blob size that can be supported is technically limited by the max chunk size configured.
-    long numDataChunksL = blobSize == 0 ? 1 : (blobSize - 1) / routerConfig.routerMaxPutChunkSizeBytes + 1;
-    if (numDataChunksL > Integer.MAX_VALUE) {
-      throw new RouterException("Cannot support a blob size of " + blobSize + " with a chunk size of "
-          + routerConfig.routerMaxPutChunkSizeBytes, RouterErrorCode.BlobTooLarge);
-    }
-    numDataChunks = (int) numDataChunksL;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
-    this.blobProperties = blobProperties;
+    this.passedInBlobProperties = blobProperties;
     this.userMetadata = userMetadata;
     this.channel = channel;
     this.futureResult = futureResult;
@@ -177,13 +165,8 @@ class PutOperation {
     this.time = time;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
-
-    // Initialize chunks
-    putChunks = new PutChunk[Math.min(numDataChunks, NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
-    for (int i = 0; i < putChunks.length; i++) {
-      putChunks[i] = new PutChunk();
-    }
-    metadataPutChunk = numDataChunks > 1 ? new MetadataPutChunk() : null;
+    putChunks = new ConcurrentLinkedQueue<>();
+    metadataPutChunk = new MetadataPutChunk();
     chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
   }
 
@@ -196,11 +179,11 @@ class PutOperation {
       public void onCompletion(Long result, Exception exception) {
         if (exception != null) {
           setOperationExceptionAndComplete(exception);
-        } else if (result != blobSize) {
-          setOperationExceptionAndComplete(new RouterException(
-              "Incorrect number of bytes: " + result + " read in from the channel, expected: " + blobSize,
-              RouterErrorCode.BadInputChannel));
+        } else {
+          blobSize = result;
+          chunkFillingCompletedSuccessfully = true;
         }
+        chunkFillerChannel.close();
       }
     });
   }
@@ -223,15 +206,10 @@ class PutOperation {
     if (operationCompleted) {
       return;
     }
-    if (metadataPutChunk != null && metadataPutChunk.isReady()) {
-      metadataPutChunk.poll(requestRegistrationCallback);
-      if (metadataPutChunk.isComplete()) {
-        onChunkOperationComplete(metadataPutChunk);
-        if (operationCompleted) {
-          return;
-        }
-      }
-    } else {
+    metadataPutChunk.poll(requestRegistrationCallback);
+    if (metadataPutChunk.isComplete()) {
+      onChunkOperationComplete(metadataPutChunk);
+    } else if (!metadataPutChunk.isReady()) {
       for (PutChunk chunk : putChunks) {
         if (chunk.isReady()) {
           chunk.poll(requestRegistrationCallback);
@@ -267,7 +245,7 @@ class PutOperation {
    * the blobId of the chunk is set; and in the latter case, it is null.
    * @param chunk the {@link PutChunk} that has completed its operation.
    */
-  void onChunkOperationComplete(PutChunk chunk) {
+  private void onChunkOperationComplete(PutChunk chunk) {
     if (chunk.getChunkBlobId() == null) {
       // the overall operation has failed if any of the chunk fails.
       if (chunk.getChunkException() == null) {
@@ -275,9 +253,12 @@ class PutOperation {
       }
       logger.error("Failed putting chunk at index: " + chunk.getChunkIndex() + ", failing the entire operation");
       operationCompleted = true;
-    } else if (numDataChunks == 1 || chunk == metadataPutChunk) {
+    } else if (chunk != metadataPutChunk) {
+      // a data chunk has succeeded.
+      logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
+      metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
+    } else {
       blobId = chunk.getChunkBlobId();
-      // the overall operation has succeeded.
       if (chunk.failedAttempts > 0) {
         logger.trace("Slipped put succeeded for chunk: " + chunk.getChunkBlobId());
         routerMetrics.slippedPutSuccessCount.inc();
@@ -285,21 +266,17 @@ class PutOperation {
         logger.trace("Successfully put chunk: " + chunk.getChunkBlobId());
       }
       operationCompleted = true;
-    } else {
-      // a data chunk has succeeded. More to come.
-      logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
-      metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
     }
     routerMetrics.putChunkOperationLatencyMs.update(time.milliseconds() - chunk.chunkReadyAtMs);
     chunk.clear();
   }
 
   /**
-   * Returns whether chunk filling is complete.
+   * Returns whether chunk filling is complete (successfully or otherwise).
    * @return true if chunk filling is complete, false otherwise.
    */
-  boolean isChunkFillComplete() {
-    return chunkFillingCompleted || operationCompleted;
+  boolean isChunkFillingDone() {
+    return chunkFillingCompletedSuccessfully || operationCompleted;
   }
 
   /**
@@ -311,50 +288,53 @@ class PutOperation {
   void fillChunks() {
     try {
       PutChunk chunkToFill;
-      if (!chunkFillingCompleted && !operationCompleted) {
-        do {
-          // Attempt to fill a chunk
-          if (channelReadBuffer == null) {
-            channelReadBuffer = chunkFillerChannel.getNextChunk(0);
-          }
-          if (channelReadBuffer != null) {
-            maybeStopTrackingWaitForChannelDataTime();
-            chunkToFill = getChunkToFill();
-            if (chunkToFill == null) {
-              // channel has data, but no chunks are free to be filled yet.
-              maybeStartTrackingWaitForChunkTime();
-              break;
-            } else {
-              // channel has data, and there is a chunk that can be filled.
-              maybeStopTrackingWaitForChunkTime();
-              bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
-              if (chunkToFill.isReady()) {
-                routerCallback.onPollReady();
-                updateChunkFillerWaitTimeMetrics();
-              }
-              if (!channelReadBuffer.hasRemaining()) {
-                chunkFillerChannel.resolveOldestChunk(null);
-                channelReadBuffer = null;
-              }
-            }
-          } else {
-            // channel does not have more data yet.
-            if (getFreeChunk() != null) {
-              // this means there is a chunk available to be filled, but no data in the channel.
-              maybeStartTrackingWaitForChannelDataTime();
-            }
+      while (!isChunkFillingDone()) {
+        // Attempt to fill a chunk
+        if (channelReadBuffer == null) {
+          channelReadBuffer = chunkFillerChannel.getNextChunk(0);
+        }
+        if (channelReadBuffer != null) {
+          maybeStopTrackingWaitForChannelDataTime();
+          chunkToFill = getChunkToFill();
+          if (chunkToFill == null) {
+            // channel has data, but no chunks are free to be filled yet.
+            maybeStartTrackingWaitForChunkTime();
             break;
+          } else {
+            // channel has data, and there is a chunk that can be filled.
+            maybeStopTrackingWaitForChunkTime();
+            bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+            if (chunkToFill.isReady()) {
+              routerCallback.onPollReady();
+              updateChunkFillerWaitTimeMetrics();
+            }
+            if (!channelReadBuffer.hasRemaining()) {
+              chunkFillerChannel.resolveOldestChunk(null);
+              channelReadBuffer = null;
+            }
           }
-        } while (bytesFilledSoFar < blobSize);
-        if (bytesFilledSoFar == blobSize) {
-          chunkFillingCompleted = true;
+        } else {
+          // channel does not have more data yet.
+          if (getFreeChunk() != null) {
+            // this means there is a chunk available to be filled, but no data in the channel.
+            maybeStartTrackingWaitForChannelDataTime();
+          }
+          break;
+        }
+      }
+      if (chunkFillingCompletedSuccessfully) {
+        PutChunk lastChunk = getBuildingChunk();
+        if (lastChunk != null) {
+          lastChunk.onFillComplete(true);
         }
       }
     } catch (Exception e) {
+      RouterException routerException = e instanceof RouterException ? (RouterException) e
+          : new RouterException("PutOperation fillChunks encountered unexpected error", e,
+              RouterErrorCode.UnexpectedInternalError);
       routerMetrics.chunkFillerUnexpectedErrorCount.inc();
       routerCallback.onPollReady();
-      setOperationExceptionAndComplete(new RouterException("PutOperation fillChunks encountered unexpected error", e,
-          RouterErrorCode.UnexpectedInternalError));
+      setOperationExceptionAndComplete(routerException);
     }
   }
 
@@ -423,12 +403,15 @@ class PutOperation {
    * either, then null is returned.
    * @return the chunk to fill, or null if there are no chunks eligible for filling.
    */
-  private PutChunk getChunkToFill() {
+  private PutChunk getChunkToFill() throws RouterException {
     if (chunkToFill == null || !chunkToFill.isBuilding()) {
       chunkToFill = getFreeChunk();
       if (chunkToFill != null) {
+        if (chunkCounter == Integer.MAX_VALUE) {
+          throw new RouterException("Blob is too large", RouterErrorCode.BlobTooLarge);
+        }
         chunkCounter++;
-        chunkToFill.prepareForBuilding(chunkCounter, getSizeOfChunkAt(chunkCounter));
+        chunkToFill.prepareForBuilding(chunkCounter, routerConfig.routerMaxPutChunkSizeBytes);
       }
     }
     return chunkToFill;
@@ -438,30 +421,54 @@ class PutOperation {
    * @return A free chunk, if one is available; null otherwise.
    */
   private PutChunk getFreeChunk() {
+    PutChunk chunkToReturn = null;
     for (PutChunk chunk : putChunks) {
       if (chunk.isFree()) {
-        return chunk;
+        chunkToReturn = chunk;
+        break;
       }
     }
-    return null;
+    if (chunkToReturn == null && putChunks.size() < NonBlockingRouter.MAX_IN_MEM_CHUNKS) {
+      chunkToReturn = new PutChunk();
+      putChunks.add(chunkToReturn);
+    }
+    return chunkToReturn;
   }
 
   /**
-   * Get the chunk size of the chunk at the given position.
-   * @param pos the position of the chunk in the overall blob.
-   * @return the size of the chunk.
+   * Get the PutChunk that is in Building state. Note that there can be at most one such PutChunk at any time.
+   * @return the PutChunk that is in Building state; null if no PutChunk is in Building state.
    */
-  private int getSizeOfChunkAt(int pos) {
-    return pos == numDataChunks - 1 ? (int) ((blobSize - 1) % routerConfig.routerMaxPutChunkSizeBytes + 1)
-        : routerConfig.routerMaxPutChunkSizeBytes;
+  private PutChunk getBuildingChunk() {
+    PutChunk chunkToReturn = null;
+    for (PutChunk chunk : putChunks) {
+      if (chunk.isBuilding()) {
+        chunkToReturn = chunk;
+        break;
+      }
+    }
+    return chunkToReturn;
   }
 
   /**
-   * Return the number of data chunks that this operation will result in.
-   * @return the number of data chunks that this operation will result in.
+   * Return the number of data chunks that this operation resulted in. This method should only be called once the
+   * chunk filling has completed (which is when the final size is determined).
+   * @return the number of data chunks that this operation resulted in.
+   * @throws IllegalStateException if the chunk filling has not yet completed.
    */
   int getNumDataChunks() {
-    return numDataChunks;
+    return RouterUtils.getNumChunksForBlobAndChunkSize(getBlobSize(), routerConfig.routerMaxPutChunkSizeBytes);
+  }
+
+  /**
+   * @return the size of the blob in this operation. This method should only be called once the chunk filling has
+   * completed (which is when the final size is determined).
+   */
+  long getBlobSize() {
+    if (!chunkFillingCompletedSuccessfully) {
+      throw new IllegalStateException("Request for blob size before chunk fill completion");
+    }
+    return blobSize;
   }
 
   /**
@@ -478,7 +485,10 @@ class PutOperation {
    * @return the {@link BlobProperties} associated with this operation.
    */
   BlobProperties getBlobProperties() {
-    return blobProperties;
+    if (finalBlobProperties == null) {
+      throw new IllegalStateException("blob properties has not yet been finalized");
+    }
+    return finalBlobProperties;
   }
 
   /**
@@ -523,10 +533,10 @@ class PutOperation {
 
   /**
    * if this is a composite object, fill the list with successfully put chunk ids.
-   * @return the list of successfully put chunk ids, if any; else null.
+   * @return the list of successfully put chunk ids if this is a composite object.
    */
-  List<StoreKey> getSuccessfullyPutChunkIds() {
-    return numDataChunks > 1 ? metadataPutChunk.getChunkIds() : null;
+  List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
+    return metadataPutChunk.getSuccessfullyPutChunkIdsIfComposite();
   }
 
   /**
@@ -549,6 +559,8 @@ class PutOperation {
     private int chunkIndex;
     // the blobId of the current chunk.
     protected BlobId chunkBlobId;
+    // the BlobProperties to associate with this chunk.
+    private BlobProperties chunkBlobProperties;
     // the most recent time at which this chunk became Free.
     private long chunkFreeAtMs;
     // the most recent time time at which this chunk became ready.
@@ -728,6 +740,10 @@ class PutOperation {
         }
         partitionId = getPartitionForPut(attemptedPartitionIds);
         chunkBlobId = new BlobId(partitionId);
+        chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
+            passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
+            passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
+            passedInBlobProperties.getCreationTimeInMs());
         operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false,
             routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();
@@ -742,11 +758,15 @@ class PutOperation {
 
     /**
      * Do the actions required when the chunk has been completely built.
+     * @param updateMetric whether chunk fill completion metrics should be updated.
      */
-    void onFillComplete() {
+    void onFillComplete(boolean updateMetric) {
       buf.flip();
       prepareForSending();
       chunkReadyAtMs = time.milliseconds();
+      if (updateMetric) {
+        routerMetrics.chunkFillTimeMs.update(chunkReadyAtMs - chunkFreeAtMs);
+      }
     }
 
     /**
@@ -766,8 +786,7 @@ class PutOperation {
         buf.put(channelReadBuffer);
       }
       if (!buf.hasRemaining()) {
-        onFillComplete();
-        routerMetrics.chunkFillTimeMs.update(chunkReadyAtMs - chunkFreeAtMs);
+        onFillComplete(true);
       }
       return toWrite;
     }
@@ -874,7 +893,7 @@ class PutOperation {
      */
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, blobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
+          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
           BlobType.DataBlob);
     }
 
@@ -1048,19 +1067,14 @@ class PutOperation {
    * MetadataPutChunk responsible for maintaining the state of the metadata chunk and completing the chunk operation
    * on it.
    */
-  class MetadataPutChunk extends PutChunk {
-    StoreKey[] chunkIds;
-    int chunksDone;
-    // since chunk operations could complete out of order, this index simply tracks the farthest chunk that was
-    // successfully put (which helps in the getChunkIds() method).
-    int maxFilledChunkIndex = -1;
+  private class MetadataPutChunk extends PutChunk {
+    TreeMap<Integer, StoreKey> indexToChunkIds;
 
     /**
      * Initialize the MetadataPutChunk.
      */
     MetadataPutChunk() {
-      chunkIds = new BlobId[numDataChunks];
-      chunksDone = 0;
+      indexToChunkIds = new TreeMap<>();
       // metadata blob is in building state.
       state = ChunkState.Building;
     }
@@ -1071,27 +1085,50 @@ class PutOperation {
      * @param chunkIndex the position of the associated data chunk in the overall blob.
      */
     void addChunkId(BlobId chunkBlobId, int chunkIndex) {
-      chunkIds[chunkIndex] = chunkBlobId;
-      chunksDone++;
-      if (chunkIndex > maxFilledChunkIndex) {
-        maxFilledChunkIndex = chunkIndex;
+      indexToChunkIds.put(chunkIndex, chunkBlobId);
+    }
+
+    @Override
+    void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
+      if (isBuilding() && chunkFillingCompletedSuccessfully && indexToChunkIds.size() == getNumDataChunks()) {
+        finalizeMetadataChunk();
       }
-      if (chunksDone == numDataChunks) {
-        buf = MetadataContentSerDe.serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, blobSize,
-            Arrays.asList(chunkIds));
-        onFillComplete();
+      if (isReady()) {
+        super.poll(requestRegistrationCallback);
       }
     }
 
     /**
-     * Add all the successfully put chunk ids of the overall blob to the passed in list.
-     * @return list of chunk ids associated with this composite blob.
+     * To be called when chunk filling completes successfully. Finalizing involves preparing the metadata chunk
+     * for sending if this blob is composite, or marking the operation complete if this is a simple blob.
      */
-    List<StoreKey> getChunkIds() {
+    private void finalizeMetadataChunk() {
+      finalBlobProperties =
+          new BlobProperties(getBlobSize(), passedInBlobProperties.getServiceId(), passedInBlobProperties.getOwnerId(),
+              passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
+              passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs());
+      if (getNumDataChunks() > 1) {
+        // values returned are in the right order as TreeMap returns them in key-order.
+        List<StoreKey> orderedChunkIdList = new ArrayList<>(indexToChunkIds.values());
+        buf = MetadataContentSerDe.serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, getBlobSize(),
+            orderedChunkIdList);
+        onFillComplete(false);
+      } else {
+        blobId = (BlobId) indexToChunkIds.get(0);
+        state = ChunkState.Complete;
+        operationCompleted = true;
+      }
+    }
+
+    /**
+     * Add all the successfully put chunk ids of the overall blob to the passed in list, if the blob is composite.
+     * @return list of chunk ids associated with this blob if it is composite; empty list otherwise.
+     */
+    List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
       List<StoreKey> chunkIdList = new ArrayList<>();
-      for (int i = 0; i <= maxFilledChunkIndex; i++) {
-        if (chunkIds[i] != null) {
-          chunkIdList.add(chunkIds[i]);
+      if (indexToChunkIds.size() > 1) {
+        for (StoreKey storeKey : indexToChunkIds.values()) {
+          chunkIdList.add(storeKey);
         }
       }
       return chunkIdList;
@@ -1106,7 +1143,7 @@ class PutOperation {
     @Override
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, blobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
+          chunkBlobId, finalBlobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
           BlobType.MetadataBlob);
     }
   }

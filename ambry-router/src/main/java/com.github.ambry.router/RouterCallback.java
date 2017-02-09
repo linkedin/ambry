@@ -55,9 +55,7 @@ class RouterCallback {
    * @param idsToDelete the list of ids that need to be deleted.
    */
   void scheduleDeletes(List<StoreKey> idsToDelete) {
-    if (idsToDelete != null) {
-      this.idsToDelete.addAll(idsToDelete);
-    }
+    this.idsToDelete.addAll(idsToDelete);
   }
 }
 

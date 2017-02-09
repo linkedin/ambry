@@ -84,4 +84,14 @@ class RouterUtils {
     }
     return isSystemHealthError;
   }
+
+  /**
+   * Return the number of data chunks for the given blob and chunk sizes.
+   * @param blobSize the size of the overall blob.
+   * @param chunkSize the size of each data chunk (except, possibly the last one).
+   * @return the number of data chunks for the given blob and chunk sizes.
+   */
+  static int getNumChunksForBlobAndChunkSize(long blobSize, int chunkSize) {
+    return (int) (blobSize == 0 ? 1 : (blobSize - 1) / chunkSize + 1);
+  }
 }

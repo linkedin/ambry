@@ -245,7 +245,7 @@ class PutManager {
     if (e != null) {
       blobId = null;
       routerMetrics.onPutBlobError(e);
-      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIds());
+      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite());
     } else {
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
@@ -330,8 +330,8 @@ class PutManager {
         while (isOpen.get()) {
           chunkFillerThreadMaySleep = true;
           for (PutOperation op : putOperations) {
-            if (!op.isChunkFillComplete()) {
-              op.fillChunks();
+            op.fillChunks();
+            if (!op.isChunkFillingDone()) {
               chunkFillerThreadMaySleep = false;
             }
           }

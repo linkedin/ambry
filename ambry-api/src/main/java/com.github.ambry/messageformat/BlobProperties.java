@@ -36,18 +36,7 @@ public class BlobProperties {
    * @param serviceId The service id that is creating this blob
    */
   public BlobProperties(long blobSize, String serviceId) {
-    this(blobSize, serviceId, null, null, false, Utils.Infinite_Time);
-  }
-
-  /**
-   * @param blobSize The size of the blob in bytes
-   * @param serviceId The service id that is creating this blob
-   * @param ownerId The owner of the blob (For example , memberId or groupId)
-   * @param contentType The content type of the blob (eg: mime). Can be Null
-   * @param isPrivate Is the blob secure
-   */
-  public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate) {
-    this(blobSize, serviceId, ownerId, contentType, isPrivate, Utils.Infinite_Time);
+    this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds());
   }
 
   /**
@@ -60,13 +49,28 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds) {
+    this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
+        SystemTime.getInstance().milliseconds());
+  }
+
+  /**
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
+   * @param ownerId The owner of the blob (For example , memberId or groupId)
+   * @param contentType The content type of the blob (eg: mime). Can be Null
+   * @param isPrivate Is the blob secure
+   * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
+   * @param creationTimeInMs The time at which the blob is created.
+   */
+  public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
+      long timeToLiveInSeconds, long creationTimeInMs) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
     this.contentType = contentType;
     this.isPrivate = isPrivate;
     this.timeToLiveInSeconds = timeToLiveInSeconds;
-    this.creationTimeInMs = SystemTime.getInstance().milliseconds();
+    this.creationTimeInMs = creationTimeInMs;
   }
 
   public long getTimeToLiveInSeconds() {

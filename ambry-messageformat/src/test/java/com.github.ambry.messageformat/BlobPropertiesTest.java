@@ -13,6 +13,7 @@
  */
 package com.github.ambry.messageformat;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import org.junit.Test;
 
@@ -44,17 +45,6 @@ public class BlobPropertiesTest {
     assertTrue(blobProperties.getCreationTimeInMs() > 0);
     assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
 
-    blobProperties = new BlobProperties(blobSize, serviceId, ownerId, contentType, true);
-    System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    assertEquals(blobProperties.getBlobSize(), blobSize);
-    assertEquals(blobProperties.getServiceId(), serviceId);
-    assertEquals(blobProperties.getOwnerId(), ownerId);
-    assertEquals(blobProperties.getContentType(), contentType);
-    assertTrue(blobProperties.isPrivate());
-    assertTrue(blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
-    assertTrue(blobProperties.getCreationTimeInMs() > 0);
-    assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
-
     blobProperties = new BlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     assertEquals(blobProperties.getBlobSize(), blobSize);
@@ -65,5 +55,17 @@ public class BlobPropertiesTest {
     assertTrue(blobProperties.getTimeToLiveInSeconds() == timeToLiveInSeconds);
     assertTrue(blobProperties.getCreationTimeInMs() > 0);
     assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
+
+    long creationTimeMs = SystemTime.getInstance().milliseconds();
+    blobProperties =
+        new BlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, creationTimeMs);
+    System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
+    assertEquals(blobProperties.getBlobSize(), blobSize);
+    assertEquals(blobProperties.getServiceId(), serviceId);
+    assertEquals(blobProperties.getOwnerId(), ownerId);
+    assertEquals(blobProperties.getContentType(), contentType);
+    assertTrue(blobProperties.isPrivate());
+    assertEquals(blobProperties.getTimeToLiveInSeconds(), timeToLiveInSeconds);
+    assertEquals(blobProperties.getCreationTimeInMs(), creationTimeMs);
   }
 }

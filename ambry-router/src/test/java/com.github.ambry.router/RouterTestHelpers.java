@@ -34,8 +34,8 @@ class RouterTestHelpers {
    * @return true if the fields are equivalent in the two {@link BlobProperties}
    */
   static boolean haveEquivalentFields(BlobProperties a, BlobProperties b) {
-    return a.getBlobSize() == b.getBlobSize() && a.getServiceId().equals(b.getServiceId()) && a.getOwnerId()
-        .equals(b.getOwnerId()) && a.getContentType().equals(b.getContentType()) && a.isPrivate() == b.isPrivate()
+    return a.getServiceId().equals(b.getServiceId()) && a.getOwnerId().equals(b.getOwnerId()) && a.getContentType()
+        .equals(b.getContentType()) && a.isPrivate() == b.isPrivate()
         && a.getTimeToLiveInSeconds() == b.getTimeToLiveInSeconds()
         && a.getCreationTimeInMs() == b.getCreationTimeInMs();
   }
