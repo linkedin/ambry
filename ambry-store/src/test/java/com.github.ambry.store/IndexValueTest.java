@@ -96,10 +96,8 @@ public class IndexValueTest {
     IndexValue value =
         IndexValueUtils.getIndexValue(oldSize, new Offset(logSegmentName, oldOffset), expiresAtMs, time.seconds(),
             serviceId, containerId, version);
-
     long newOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long newSize = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-
     IndexValue newValue = new IndexValue(logSegmentName, value.getBytes(), version);
     // delete in the same log segment
     newValue.setFlag(IndexValue.Flags.Delete_Index);

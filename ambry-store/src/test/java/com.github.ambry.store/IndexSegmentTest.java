@@ -156,7 +156,11 @@ public class IndexSegmentTest {
       lastModifiedTime = indexSegment.getLastModifiedTime();
       resetKey = indexSegment.getResetKey();
       // write to file
-      indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+      if (version == PersistentIndex.VERSION_0) {
+        IndexSegmentUtils.writeIndexSegmentToFile(indexSegment, indexSegment.getEndOffset());
+      } else {
+        indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+      }
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, endOffset, time.seconds(),
           version == PersistentIndex.VERSION_0 ? null : resetKey, extraOffsetsToCheck);
     }
@@ -194,7 +198,11 @@ public class IndexSegmentTest {
     indexSegment.addEntry(new IndexEntry(id1, value3), new Offset(logSegmentName, 3000));
 
     // provide end offset such that nothing is written
-    indexSegment.writeIndexSegmentToFile(new Offset(prevLogSegmentName, 0));
+    if (version == PersistentIndex.VERSION_0) {
+      IndexSegmentUtils.writeIndexSegmentToFile(indexSegment, new Offset(prevLogSegmentName, 0));
+    } else {
+      indexSegment.writeIndexSegmentToFile(new Offset(prevLogSegmentName, 0));
+    }
     assertFalse("Index file should not have been created", indexSegment.getFile().exists());
     List<MockId> shouldBeFound = new ArrayList<>();
     List<MockId> shouldNotBeFound = new ArrayList<>(Arrays.asList(id3, id2, id1));
@@ -202,7 +210,11 @@ public class IndexSegmentTest {
       shouldBeFound.add(shouldNotBeFound.remove(0));
       // repeat twice
       for (int i = 0; i < 2; i++) {
-        indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, safeEndPoint));
+        if (version == PersistentIndex.VERSION_0) {
+          IndexSegmentUtils.writeIndexSegmentToFile(indexSegment, new Offset(logSegmentName, safeEndPoint));
+        } else {
+          indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, safeEndPoint));
+        }
         Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
         IndexSegment fromDisk =
             new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
@@ -234,8 +246,9 @@ public class IndexSegmentTest {
    * @return an {@link IndexSegment} for entries from {@code startOffset}.
    */
   private IndexSegment generateIndexSegment(Offset startOffset) {
-    return new IndexSegment(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY, KEY_SIZE,
-        (version == 0 ? VALUE_SIZE_V0 : VALUE_SIZE_V1), STORE_CONFIG, metrics, time, version);
+    IndexSegment indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY, KEY_SIZE,
+        (version == 0 ? VALUE_SIZE_V0 : VALUE_SIZE_V1), STORE_CONFIG, metrics, time);
+    return indexSegment;
   }
 
   /**

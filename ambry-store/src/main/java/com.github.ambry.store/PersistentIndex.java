@@ -293,9 +293,8 @@ class PersistentIndex {
               StoreErrorCodes.Initialization_Error);
         } else {
           // create a new entry in the index
-          // TODO
           IndexValue newValue =
-              new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs(), time.seconds());
+              new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs(), Utils.Infinite_Time);
           addToIndex(new IndexEntry(info.getStoreKey(), newValue, null), new FileSpan(runningOffset, infoEndOffset));
           logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
@@ -389,9 +388,8 @@ class PersistentIndex {
   void addToIndex(IndexEntry entry, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
-      // TODO
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
-          entry.getValue().getBytes().capacity(), config, metrics, time, VERSION_1);
+          entry.getValue().getBytes().capacity(), config, metrics, time);
       info.addEntry(entry, fileSpan.getEndOffset());
       // always add to both valid and in-flux index segment map to account for the fact that changeIndexSegments()
       // might be in the process of updating the reference to validIndexSegments
@@ -559,11 +557,8 @@ class PersistentIndex {
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
-
-    // TODO if want to use Version_0 for testing purposes
-    IndexValue newValue =
-        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), time.seconds(),
-            value.getServiceId(), value.getContainerId());
+    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
+        Utils.Infinite_Time, value.getServiceId(), value.getContainerId());
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset());

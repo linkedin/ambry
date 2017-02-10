@@ -13,6 +13,9 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -916,6 +919,48 @@ public class IndexTest {
   }
 
   /**
+   * Tests the index segment roll over when there is a change in IndexValue size. With introduction of
+   * {@link PersistentIndex#VERSION_1} there is a change in IndexValue
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void testIndexSegmentRollOverNewIndexSegmentVersion() throws StoreException, IOException {
+    state.closeAndClearIndex();
+    state.reloadIndex(false, false);
+    Offset endOffset = state.index.getCurrentEndOffset();
+    state.index.close();
+    // create an index entry in Version_0
+    state.appendToLog(100);
+    IndexEntry entry = new IndexEntry(state.getUniqueId(),
+        IndexValueUtils.getIndexValue(100, endOffset, state.time.seconds(), PersistentIndex.VERSION_0));
+    // create Index Segment in PersistentIndex.Version_0
+    MetricRegistry metricRegistry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(state.tempDirStr, metricRegistry);
+    StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
+    IndexSegment info =
+        new IndexSegment(state.tempDirStr, entry.getValue().getOffset(), state.STORE_KEY_FACTORY, entry.getKey().sizeInBytes(),
+            entry.getValue().getBytes().capacity(), config, metrics, state.time);
+
+    endOffset = new Offset(entry.getValue().getOffset().getName(),
+        entry.getValue().getOffset().getOffset() + entry.getValue().getSize());
+    info.addEntry(entry, endOffset);
+    IndexSegmentUtils.writeIndexSegmentToFile(info, endOffset);
+    // reload the index as usual (in Version_1) so that the index segment created above is picked up.
+    metricRegistry = new MetricRegistry();
+    metrics = new StoreMetrics(tempDirStr, metricRegistry);
+    config = new StoreConfig(new VerifiableProperties(state.properties));
+    state.index =
+        new PersistentIndex(state.tempDirStr, state.scheduler, state.log, config, state.STORE_KEY_FACTORY, state.recovery,
+            state.hardDelete, metrics, state.time, state.incarnationId);
+    int indexCount = state.index.indexes.size();
+    // add an entry and verify if roll over happened
+    state.addPutEntries(1, 100, Utils.Infinite_Time);
+    assertEquals("Index roll over should have happened ", indexCount + 1, state.index.indexes.size());
+    state.closeAndClearIndex();
+  }
+
+  /**
    * Tests the Index persistor for all cases
    * @throws InterruptedException
    * @throws IOException
@@ -1066,7 +1111,7 @@ public class IndexTest {
       if (nextSegment == null) {
         // latest index segment does not have a bloom file
         expectedNumFilesToDelete--;
-      }
+   }
       assertEquals("Number of files to check does not match expectation", expectedNumFilesToDelete,
           filesToCheck.length);
       PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
@@ -1124,7 +1169,7 @@ public class IndexTest {
     assertEquals("SessionId does not match", reference.getSessionId(), toCheck.getSessionId());
   }
 
-  // findKey test helpers
+ // findKey test helpers
 
   /**
    * Verifies that {@code valueFromFind} matches the expected value from {@link CuratedLogIndexState#referenceIndex}.

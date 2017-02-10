@@ -17,6 +17,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -224,7 +225,7 @@ class BlobStore implements Store {
             for (MessageInfo info : messageInfo) {
               FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
               IndexValue value =
-                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs(), time.milliseconds());
+                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs(), Utils.Infinite_Time);
               IndexEntry entry = new IndexEntry(info.getStoreKey(), value, info.getCrc());
               indexEntries.add(entry);
               endOffsetOfLastMessage = fileSpan.getEndOffset();

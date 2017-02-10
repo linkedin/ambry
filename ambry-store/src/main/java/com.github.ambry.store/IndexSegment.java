@@ -92,11 +92,11 @@ class IndexSegment {
   private int keySize;
   private int valueSize;
   private short version;
-  Offset prevSafeEndPoint = null;
   // reset key refers to the first StoreKey that is added to the index segment
   private Pair<StoreKey, Short> resetKey = null;
   private Time time;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
+  Offset prevSafeEndPoint = null;
 
   /**
    * Creates a new segment
@@ -107,10 +107,9 @@ class IndexSegment {
    * @param valueSize The value size that this segment supports
    * @param config The store config used to initialize the index segment
    * @param time the {@link Time} instance to use for last modified time
-   * @param version the version of {@link PersistentIndex} that is used to construct this IndexSegment
    */
   IndexSegment(String dataDir, Offset startOffset, StoreKeyFactory factory, int keySize, int valueSize,
-      StoreConfig config, StoreMetrics metrics, Time time, short version) {
+      StoreConfig config, StoreMetrics metrics, Time time) {
     this.rwLock = new ReentrantReadWriteLock();
     this.startOffset = startOffset;
     this.endOffset = new AtomicReference<>(startOffset);
@@ -120,7 +119,7 @@ class IndexSegment {
     this.factory = factory;
     this.keySize = keySize;
     this.valueSize = valueSize;
-    this.version = version;
+    this.version = PersistentIndex.VERSION_1;
     bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
         config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);
