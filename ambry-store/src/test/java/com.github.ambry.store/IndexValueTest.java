@@ -18,6 +18,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.Test;
@@ -147,6 +148,30 @@ public class IndexValueTest {
    * @param isDeleted the expected record type referred to by {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
    * @param originalMessageOffset the original message offset expected in {@code value}.
+<<<<<<< HEAD
+=======
+   */
+  private void verifyIndexValue(IndexValue value, String logSegmentName, long size, long offset, boolean isDeleted,
+      long expiresAtMs, long originalMessageOffset) {
+    verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset,
+        Utils.Infinite_Time, DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+    verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, isDeleted,
+        expiresAtMs, originalMessageOffset, Utils.Infinite_Time, DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+    verifyInvalidValueSize(value, logSegmentName);
+  }
+
+  /**
+   * Verifies the given {@code value} for the returns of the getters. Also verifies that an {@link IndexValue} created
+   * with {@link IndexValue#getBytes()} from {@code value} exports the same data.
+   * @param value the {@link IndexValue} that needs to be checked.
+   * @param logSegmentName the name of the log segment containing the record for which {@code value} is the
+   * {@link IndexValue}.
+   * @param size the size expected in {@code value}.
+   * @param offset the offset expected in {@code value}.
+   * @param isDeleted the expected record type referred to by {@code value}.
+   * @param expiresAtMs the expected expiration time in {@code value}.
+   * @param originalMessageOffset the original message offset expected in {@code value}.
+>>>>>>> Adding IndexValueBuilder
    * @param operationTimeInSecs the operation time in secs
    * @param serviceId the serviceId of the Index value
    * @param containerId the containerId of the Index value
@@ -157,6 +182,7 @@ public class IndexValueTest {
         operationTimeInSecs, serviceId, containerId);
     verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, isDeleted,
         expiresAtMs, originalMessageOffset, operationTimeInSecs, serviceId, containerId);
+    verifyInvalidValueSize(value, logSegmentName);
   }
 
   /**
@@ -190,6 +216,27 @@ public class IndexValueTest {
       assertEquals("Operation time mismatch", Math.toIntExact(operationTimeInSecs), value.getOperationTimeInSecs());
       assertEquals("ServiceId mismatch ", serviceId, value.getServiceId());
       assertEquals("ContainerId mismatch ", containerId, value.getContainerId());
+    } else {
+      assertEquals("Operation time mismatch", Utils.Infinite_Time, value.getOperationTimeInSecs());
+      assertEquals("ServiceId mismatch ", DEFAULT_SHORT_VALUE, value.getServiceId());
+      assertEquals("ContainerId mismatch ", DEFAULT_SHORT_VALUE, value.getContainerId());
+    }
+  }
+
+  /**
+   * Verifies that construction of {@link IndexValue} fails with an invalid {@link ByteBuffer} value
+   * @param value the source {@link IndexValue} to contruct the bad one
+   * @param logSegmentName the log segment name to be used to construct the {@link IndexValue}
+   */
+  private void verifyInvalidValueSize(IndexValue value, String logSegmentName) {
+    try {
+      int capacity = TestUtils.RANDOM.nextInt(value.getBytes().capacity());
+      ByteBuffer invalidValue = ByteBuffer.allocate(capacity);
+      invalidValue.put(value.getBytes().array(), 0, capacity);
+      new IndexValue(logSegmentName, invalidValue, version);
+      fail(
+          "Contruction of IndexValue expected to fail with invalid byte buffer capacity of " + invalidValue.capacity());
+    } catch (IllegalArgumentException e) {
     }
   }
 }

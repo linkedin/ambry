@@ -55,8 +55,7 @@ public class IndexSegmentTest {
       IndexValueUtils.getIndexValue(0, new Offset("", 0), Utils.Infinite_Time, PersistentIndex.VERSION_0)
           .getBytes()
           .capacity();
-  private static final int VALUE_SIZE_V1 =
-      new IndexValue(0, new Offset("", 0), Utils.Infinite_Time).getBytes().capacity();
+  private static final int VALUE_SIZE_V1 = new IndexValueBuilder(0, new Offset("", 0)).build().getBytes().capacity();
   private static final StoreConfig STORE_CONFIG = new StoreConfig(new VerifiableProperties(new Properties()));
   private static final Time time = new MockTime();
   private static final long DELETE_FILE_SPAN_SIZE = 10;

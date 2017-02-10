@@ -57,7 +57,11 @@ class IndexValueUtils {
     if (version == PersistentIndex.VERSION_0) {
       return getIndexValue(size, offset, expirationTimeInMs);
     } else {
-      return new IndexValue(size, offset, expirationTimeInMs, operationTimeInSecs, serviceId, containerId);
+      return new IndexValueBuilder(size, offset).expirationTimeAtMs(expirationTimeInMs)
+          .operationTimeInSecs(operationTimeInSecs)
+          .serviceId(serviceId)
+          .containerId(containerId)
+          .build();
     }
   }
 
@@ -73,7 +77,7 @@ class IndexValueUtils {
     if (version == PersistentIndex.VERSION_0) {
       return getIndexValue(size, offset);
     } else {
-      return new IndexValue(size, offset, operationTimeInSecs);
+      return new IndexValueBuilder(size, offset).operationTimeInSecs(operationTimeInSecs).build();
     }
   }
 
@@ -87,8 +91,12 @@ class IndexValueUtils {
     if (version == PersistentIndex.VERSION_0) {
       return getIndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs());
     } else {
-      return new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          value.getOperationTimeInSecs(), value.getServiceId(), value.getContainerId());
+      return new IndexValueBuilder(value.getSize(), value.getOffset()).flags(value.getFlags())
+          .expirationTimeAtMs(value.getExpiresAtMs())
+          .operationTimeInSecs(value.getOperationTimeInSecs())
+          .serviceId(value.getServiceId())
+          .containerId(value.getContainerId())
+          .build();
     }
   }
 

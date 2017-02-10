@@ -251,7 +251,7 @@ public class IndexTest {
   public void addEntryBadInputTest() throws StoreException {
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
-    IndexValue value = new IndexValue(1, state.index.getStartOffset(), Utils.Infinite_Time, state.time.seconds());
+    IndexValue value = new IndexValueBuilder(1, state.index.getStartOffset()).build();
     try {
       state.index.addToIndex(new IndexEntry(state.getUniqueId(), value), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
@@ -732,8 +732,8 @@ public class IndexTest {
     final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
     state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
-        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
-            state.time.seconds()), null));
+        new IndexValueBuilder(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()).build(),
+        null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -852,8 +852,9 @@ public class IndexTest {
     UUID oldIncarnationId = state.incarnationId;
     final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
-    state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
-        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time, state.time.seconds()), null));
+    <<<<<<<HEAD state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
+        new IndexValueBuilder(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()).build(),
+        null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -938,9 +939,8 @@ public class IndexTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(state.tempDirStr, metricRegistry);
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
-    IndexSegment info =
-        new IndexSegment(state.tempDirStr, entry.getValue().getOffset(), state.STORE_KEY_FACTORY, entry.getKey().sizeInBytes(),
-            entry.getValue().getBytes().capacity(), config, metrics, state.time);
+    IndexSegment info = new IndexSegment(state.tempDirStr, entry.getValue().getOffset(), state.STORE_KEY_FACTORY,
+        entry.getKey().sizeInBytes(), entry.getValue().getBytes().capacity(), config, metrics, state.time);
 
     endOffset = new Offset(entry.getValue().getOffset().getName(),
         entry.getValue().getOffset().getOffset() + entry.getValue().getSize());
@@ -950,9 +950,8 @@ public class IndexTest {
     metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(tempDirStr, metricRegistry);
     config = new StoreConfig(new VerifiableProperties(state.properties));
-    state.index =
-        new PersistentIndex(state.tempDirStr, state.scheduler, state.log, config, state.STORE_KEY_FACTORY, state.recovery,
-            state.hardDelete, metrics, state.time, state.incarnationId);
+    state.index = new PersistentIndex(state.tempDirStr, state.scheduler, state.log, config, state.STORE_KEY_FACTORY,
+        state.recovery, state.hardDelete, metrics, state.time, state.incarnationId);
     int indexCount = state.index.indexes.size();
     // add an entry and verify if roll over happened
     state.addPutEntries(1, 100, Utils.Infinite_Time);
@@ -1111,7 +1110,7 @@ public class IndexTest {
       if (nextSegment == null) {
         // latest index segment does not have a bloom file
         expectedNumFilesToDelete--;
-   }
+      }
       assertEquals("Number of files to check does not match expectation", expectedNumFilesToDelete,
           filesToCheck.length);
       PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
@@ -1169,7 +1168,7 @@ public class IndexTest {
     assertEquals("SessionId does not match", reference.getSessionId(), toCheck.getSessionId());
   }
 
- // findKey test helpers
+  // findKey test helpers
 
   /**
    * Verifies that {@code valueFromFind} matches the expected value from {@link CuratedLogIndexState#referenceIndex}.

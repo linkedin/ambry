@@ -19,7 +19,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -101,28 +100,26 @@ public class PersistentIndexTest {
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexValue value = new IndexValue(1000, toOffset(0), (byte) 0, time.seconds(), serviceId, containerId);
+      IndexValue value = new IndexValueBuilder(1000, toOffset(0)).build();
       IndexSegment info =
           new IndexSegment(tempDirStr, toOffset(0), factory, blobId1.sizeInBytes(), value.getBytes().capacity(), config,
               new StoreMetrics(tempDirStr, new MetricRegistry()), time);
       info.addEntry(new IndexEntry(blobId1, value), toOffset(1000));
-      value = new IndexValue(1000, toOffset(1000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(1000)).build();
       info.addEntry(new IndexEntry(blobId2, value), toOffset(2000));
-      value = new IndexValue(1000, toOffset(2000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(2000)).build();
       info.addEntry(new IndexEntry(blobId3, value), toOffset(3000));
-      value = new IndexValue(1000, toOffset(3000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(3000)).build();
       info.addEntry(new IndexEntry(blobId4, value), toOffset(4000));
-      value = new IndexValue(1000, toOffset(4000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(4000)).build();
       info.addEntry(new IndexEntry(blobId5, value), toOffset(5000));
-      value = new IndexValue(1000, toOffset(5000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(5000)).build();
       info.addEntry(new IndexEntry(blobId6, value), toOffset(6000));
-      value = new IndexValue(1000, toOffset(6000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(6000)).build();
       info.addEntry(new IndexEntry(blobId7, value), toOffset(7000));
-      value = new IndexValue(1000, toOffset(7000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(7000)).build();
       info.addEntry(new IndexEntry(blobId8, value), toOffset(8000));
-      value = new IndexValue(1000, toOffset(8000), (byte) 0, time.seconds(), serviceId, containerId);
+      value = new IndexValueBuilder(1000, toOffset(8000)).build();
       info.addEntry(new IndexEntry(blobId9, value), toOffset(9000));
 
       Assert.assertEquals(info.find(blobId1).getSize(), 1000);
@@ -239,14 +236,18 @@ public class PersistentIndexTest {
       MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(100, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(200, toOffset(100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(300, toOffset(300), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).flags(flags)
+          .expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(200, toOffset(100)).flags(flags)
+          .expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(300, toOffset(300)).flags(flags)
+          .expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
       index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
       index.addToIndex(entry2, new FileSpan(toOffset(100), toOffset(300)));
       index.addToIndex(entry3, new FileSpan(toOffset(300), toOffset(600)));
@@ -289,14 +290,18 @@ public class PersistentIndexTest {
       final MockId blobId7 = new MockId("id7");
 
       byte flags = 3;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(3000, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(1000, toOffset(3000), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(1000, toOffset(4000), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(3000, toOffset(0)).flags(flags)
+          .expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(1000, toOffset(3000)).flags(flags)
+          .expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(1000, toOffset(4000)).flags(flags)
+          .expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
       index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(3000)));
       index.addToIndex(entry2, new FileSpan(toOffset(3000), toOffset(4000)));
       index.addToIndex(entry3, new FileSpan(toOffset(4000), toOffset(5000)));
@@ -319,10 +324,12 @@ public class PersistentIndexTest {
       props.put("store.data.flush.delay.seconds", "999999");
       config = new StoreConfig(new VerifiableProperties(props));
       indexNew = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
-      indexNew.addToIndex(new IndexEntry(blobId4, new IndexValue(1000, toOffset(5000), 12657, time.seconds())),
-          new FileSpan(toOffset(5000), toOffset(6000)));
-      indexNew.addToIndex(new IndexEntry(blobId5, new IndexValue(1000, toOffset(6000), 12657, time.seconds())),
-          new FileSpan(toOffset(6000), toOffset(7000)));
+      indexNew.addToIndex(new IndexEntry(blobId4, new IndexValueBuilder(1000, toOffset(5000)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build()), new FileSpan(toOffset(5000), toOffset(6000)));
+      indexNew.addToIndex(new IndexEntry(blobId5, new IndexValueBuilder(1000, toOffset(6000)).expirationTimeAtMs(12657)
+          .operationTimeInSecs(time.seconds())
+          .build()), new FileSpan(toOffset(6000), toOffset(7000)));
       try {
         indexNew.close();
         Assert.assertFalse("Should have thrown StoreException since index has new entries compared to log", true);
@@ -493,14 +500,18 @@ public class PersistentIndexTest {
       MockId blobId3 = new MockId("id3");
 
       byte flags = 3;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(100, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(200, toOffset(100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(300, toOffset(300), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).flags(flags)
+          .expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(200, toOffset(100)).flags(flags)
+          .expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(300, toOffset(300)).flags(flags)
+          .expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
       ArrayList<IndexEntry> list = new ArrayList<>();
       list.add(entry1);
       list.add(entry2);
@@ -547,14 +558,10 @@ public class PersistentIndexTest {
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
 
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 =
-          new IndexEntry(blobId1, new IndexValue(100, toOffset(0), time.seconds(), serviceId, containerId));
-      IndexEntry entry2 =
-          new IndexEntry(blobId2, new IndexValue(200, toOffset(100), time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(300, toOffset(300), time.milliseconds(), time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(200, toOffset(100)).build());
+      IndexEntry entry3 =
+          new IndexEntry(blobId3, new IndexValueBuilder(300, toOffset(300)).expirationTimeAtMs(0).build());
       ArrayList<IndexEntry> list = new ArrayList<>();
       list.add(entry1);
       list.add(entry2);
@@ -626,14 +633,9 @@ public class PersistentIndexTest {
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
 
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 =
-          new IndexEntry(blobId1, new IndexValue(100, toOffset(0), time.seconds(), serviceId, containerId));
-      IndexEntry entry2 =
-          new IndexEntry(blobId2, new IndexValue(200, toOffset(100), time.seconds(), serviceId, containerId));
-      IndexEntry entry3 =
-          new IndexEntry(blobId3, new IndexValue(300, toOffset(300), time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(200, toOffset(100)).build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(300, toOffset(300)).build());
       ArrayList<IndexEntry> list = new ArrayList<>();
       list.add(entry1);
       list.add(entry2);
@@ -699,59 +701,33 @@ public class PersistentIndexTest {
       MockId blobId23 = new MockId("id23");
       MockId blobId24 = new MockId("id24");
 
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 =
-          new IndexEntry(blobId1, new IndexValue(100, toOffset(0), time.seconds(), serviceId, containerId));
-      IndexEntry entry2 =
-          new IndexEntry(blobId2, new IndexValue(200, toOffset(100), time.seconds(), serviceId, containerId));
-      IndexEntry entry3 =
-          new IndexEntry(blobId3, new IndexValue(300, toOffset(300), time.seconds(), serviceId, containerId));
-      IndexEntry entry4 =
-          new IndexEntry(blobId4, new IndexValue(300, toOffset(600), time.seconds(), serviceId, containerId));
-      IndexEntry entry5 =
-          new IndexEntry(blobId5, new IndexValue(300, toOffset(900), time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(200, toOffset(100)).build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(300, toOffset(300)).build());
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValueBuilder(300, toOffset(600)).build());
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValueBuilder(300, toOffset(900)).build());
 
-      IndexEntry entry6 =
-          new IndexEntry(blobId6, new IndexValue(300, toOffset(1200), time.seconds(), serviceId, containerId));
-      IndexEntry entry7 =
-          new IndexEntry(blobId7, new IndexValue(300, toOffset(1500), time.seconds(), serviceId, containerId));
-      IndexEntry entry8 =
-          new IndexEntry(blobId8, new IndexValue(300, toOffset(1800), time.seconds(), serviceId, containerId));
-      IndexEntry entry9 =
-          new IndexEntry(blobId9, new IndexValue(300, toOffset(2100), time.seconds(), serviceId, containerId));
-      IndexEntry entry10 =
-          new IndexEntry(blobId10, new IndexValue(300, toOffset(2400), time.seconds(), serviceId, containerId));
-      IndexEntry entry11 =
-          new IndexEntry(blobId11, new IndexValue(300, toOffset(2700), time.seconds(), serviceId, containerId));
-      IndexEntry entry12 =
-          new IndexEntry(blobId12, new IndexValue(300, toOffset(3000), time.seconds(), serviceId, containerId));
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValueBuilder(300, toOffset(1200)).build());
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValueBuilder(300, toOffset(1500)).build());
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValueBuilder(300, toOffset(1800)).build());
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValueBuilder(300, toOffset(2100)).build());
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValueBuilder(300, toOffset(2400)).build());
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValueBuilder(300, toOffset(2700)).build());
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValueBuilder(300, toOffset(3000)).build());
 
-      IndexEntry entry13 =
-          new IndexEntry(blobId13, new IndexValue(300, toOffset(3300), time.seconds(), serviceId, containerId));
-      IndexEntry entry14 =
-          new IndexEntry(blobId14, new IndexValue(300, toOffset(3600), time.seconds(), serviceId, containerId));
-      IndexEntry entry15 =
-          new IndexEntry(blobId15, new IndexValue(300, toOffset(3900), time.seconds(), serviceId, containerId));
-      IndexEntry entry16 =
-          new IndexEntry(blobId16, new IndexValue(300, toOffset(4200), time.seconds(), serviceId, containerId));
-      IndexEntry entry17 =
-          new IndexEntry(blobId17, new IndexValue(300, toOffset(4500), time.seconds(), serviceId, containerId));
-      IndexEntry entry18 =
-          new IndexEntry(blobId18, new IndexValue(300, toOffset(4800), time.seconds(), serviceId, containerId));
-      IndexEntry entry19 =
-          new IndexEntry(blobId19, new IndexValue(300, toOffset(5100), time.seconds(), serviceId, containerId));
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValueBuilder(300, toOffset(3300)).build());
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValueBuilder(300, toOffset(3600)).build());
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValueBuilder(300, toOffset(3900)).build());
+      IndexEntry entry16 = new IndexEntry(blobId16, new IndexValueBuilder(300, toOffset(4200)).build());
+      IndexEntry entry17 = new IndexEntry(blobId17, new IndexValueBuilder(300, toOffset(4500)).build());
+      IndexEntry entry18 = new IndexEntry(blobId18, new IndexValueBuilder(300, toOffset(4800)).build());
+      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValueBuilder(300, toOffset(5100)).build());
 
-      IndexEntry entry20 =
-          new IndexEntry(blobId20, new IndexValue(300, toOffset(5400), time.seconds(), serviceId, containerId));
-      IndexEntry entry21 =
-          new IndexEntry(blobId21, new IndexValue(300, toOffset(5700), time.seconds(), serviceId, containerId));
-      IndexEntry entry22 =
-          new IndexEntry(blobId22, new IndexValue(300, toOffset(6000), time.seconds(), serviceId, containerId));
-      IndexEntry entry23 =
-          new IndexEntry(blobId23, new IndexValue(300, toOffset(6300), time.seconds(), serviceId, containerId));
-      IndexEntry entry24 =
-          new IndexEntry(blobId24, new IndexValue(300, toOffset(6600), time.seconds(), serviceId, containerId));
+      IndexEntry entry20 = new IndexEntry(blobId20, new IndexValueBuilder(300, toOffset(5400)).build());
+      IndexEntry entry21 = new IndexEntry(blobId21, new IndexValueBuilder(300, toOffset(5700)).build());
+      IndexEntry entry22 = new IndexEntry(blobId22, new IndexValueBuilder(300, toOffset(6000)).build());
+      IndexEntry entry23 = new IndexEntry(blobId23, new IndexValueBuilder(300, toOffset(6300)).build());
+      IndexEntry entry24 = new IndexEntry(blobId24, new IndexValueBuilder(300, toOffset(6600)).build());
 
       ArrayList<IndexEntry> list = new ArrayList<>();
       list.add(entry1);
@@ -837,36 +813,24 @@ public class PersistentIndexTest {
       MockId blobId3 = new MockId("id03");
       MockId blobId4 = new MockId("id04");
       MockId blobId5 = new MockId("id05");
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 =
-          new IndexEntry(blobId1, new IndexValue(100, toOffset(0), time.seconds(), serviceId, containerId));
-      IndexEntry entry2 =
-          new IndexEntry(blobId2, new IndexValue(200, toOffset(100), time.seconds(), serviceId, containerId));
-      IndexEntry entry3 =
-          new IndexEntry(blobId3, new IndexValue(300, toOffset(300), time.seconds(), serviceId, containerId));
-      IndexEntry entry4 =
-          new IndexEntry(blobId4, new IndexValue(300, toOffset(600), time.seconds(), serviceId, containerId));
-      IndexEntry entry5 =
-          new IndexEntry(blobId5, new IndexValue(300, toOffset(900), time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(200, toOffset(100)).build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(300, toOffset(300)).build());
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValueBuilder(300, toOffset(600)).build());
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValueBuilder(300, toOffset(900)).build());
 
       MockId blobId6 = new MockId("id06");
       MockId blobId7 = new MockId("id07");
       MockId blobId8 = new MockId("id08");
       MockId blobId9 = new MockId("id09");
       MockId blobId10 = new MockId("id10");
-      IndexEntry entry6 =
-          new IndexEntry(blobId6, new IndexValue(100, toOffset(1200), time.seconds(), serviceId, containerId));
-      IndexEntry entry7 =
-          new IndexEntry(blobId7, new IndexValue(200, toOffset(1300), time.seconds(), serviceId, containerId));
-      IndexEntry entry8 =
-          new IndexEntry(blobId8, new IndexValue(300, toOffset(1500), time.seconds(), serviceId, containerId));
-      IndexEntry entry9 =
-          new IndexEntry(blobId9, new IndexValue(300, toOffset(1800), time.seconds(), serviceId, containerId));
-      IndexEntry entry10 =
-          new IndexEntry(blobId10, new IndexValue(300, toOffset(2100), time.seconds(), serviceId, containerId));
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValueBuilder(100, toOffset(1200)).build());
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValueBuilder(200, toOffset(1300)).build());
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValueBuilder(300, toOffset(1500)).build());
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValueBuilder(300, toOffset(1800)).build());
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValueBuilder(300, toOffset(2100)).build());
       IndexEntry entry2d = new IndexEntry(blobId2,
-          new IndexValue(100, toOffset(2400), (byte) 1, -1, time.seconds(), serviceId, containerId));
+          new IndexValueBuilder(100, toOffset(2400)).flags((byte) 1).operationTimeInSecs(time.seconds()).build());
 
       ArrayList<IndexEntry> list = new ArrayList<>();
       list.add(entry1);
@@ -1012,39 +976,54 @@ public class PersistentIndexTest {
       MockId blobId14 = new MockId("id14");
       MockId blobId15 = new MockId("id15");
 
-      byte flags = 0;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(100, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(100, toOffset(100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(100, toOffset(200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry4 = new IndexEntry(blobId4,
-          new IndexValue(100, toOffset(300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry5 = new IndexEntry(blobId5,
-          new IndexValue(100, toOffset(400), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry6 = new IndexEntry(blobId6,
-          new IndexValue(100, toOffset(500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry7 = new IndexEntry(blobId7,
-          new IndexValue(100, toOffset(600), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry8 = new IndexEntry(blobId8,
-          new IndexValue(100, toOffset(700), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry9 = new IndexEntry(blobId9,
-          new IndexValue(100, toOffset(800), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry10 = new IndexEntry(blobId10,
-          new IndexValue(100, toOffset(900), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry11 = new IndexEntry(blobId11,
-          new IndexValue(100, toOffset(1000), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry12 = new IndexEntry(blobId12,
-          new IndexValue(100, toOffset(1100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry13 = new IndexEntry(blobId13,
-          new IndexValue(100, toOffset(1200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry14 = new IndexEntry(blobId14,
-          new IndexValue(100, toOffset(1300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry15 = new IndexEntry(blobId15,
-          new IndexValue(100, toOffset(1400), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(100, toOffset(100)).expirationTimeAtMs(123567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(100, toOffset(200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValueBuilder(100, toOffset(300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValueBuilder(100, toOffset(400)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValueBuilder(100, toOffset(500)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValueBuilder(100, toOffset(600)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValueBuilder(100, toOffset(700)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValueBuilder(100, toOffset(800)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValueBuilder(100, toOffset(900)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValueBuilder(100, toOffset(1000)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValueBuilder(100, toOffset(1100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValueBuilder(100, toOffset(1200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValueBuilder(100, toOffset(1300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValueBuilder(100, toOffset(1400)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
 
       index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
       index.addToIndex(entry2, new FileSpan(toOffset(100), toOffset(200)));
@@ -1180,25 +1159,30 @@ public class PersistentIndexTest {
       MockId blobId7 = new MockId("id7");
       MockId blobId8 = new MockId("id8");
 
-      byte flags = 0;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(100, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(100, toOffset(100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(100, toOffset(200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry4 = new IndexEntry(blobId4,
-          new IndexValue(100, toOffset(300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry5 = new IndexEntry(blobId5,
-          new IndexValue(100, toOffset(400), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry6 = new IndexEntry(blobId6,
-          new IndexValue(100, toOffset(500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry7 = new IndexEntry(blobId7,
-          new IndexValue(100, toOffset(600), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry8 = new IndexEntry(blobId8,
-          new IndexValue(100, toOffset(700), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(100, toOffset(100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(100, toOffset(200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValueBuilder(100, toOffset(300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValueBuilder(100, toOffset(400)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValueBuilder(100, toOffset(500)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValueBuilder(100, toOffset(600)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValueBuilder(100, toOffset(700)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
 
       index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
       index.addToIndex(entry2, new FileSpan(toOffset(100), toOffset(200)));
@@ -1368,72 +1352,95 @@ public class PersistentIndexTest {
       MockId blobId24 = new MockId("id24");
       MockId blobId25 = new MockId("id25");
 
-      byte flags = 0;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(100, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(100, toOffset(100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(100, toOffset(200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry5 = new IndexEntry(blobId5,
-          new IndexValue(100, toOffset(300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry4 = new IndexEntry(blobId4,
-          new IndexValue(100, toOffset(400), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry6 = new IndexEntry(blobId6,
-          new IndexValue(100, toOffset(500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry8 = new IndexEntry(blobId8,
-          new IndexValue(100, toOffset(600), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry9 = new IndexEntry(blobId9,
-          new IndexValue(100, toOffset(700), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry7 = new IndexEntry(blobId7,
-          new IndexValue(100, toOffset(800), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry10 = new IndexEntry(blobId10,
-          new IndexValue(100, toOffset(900), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry12 = new IndexEntry(blobId12,
-          new IndexValue(100, toOffset(1000), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry11 = new IndexEntry(blobId11,
-          new IndexValue(100, toOffset(1100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry14 = new IndexEntry(blobId14,
-          new IndexValue(100, toOffset(1200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry13 = new IndexEntry(blobId13,
-          new IndexValue(100, toOffset(1300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry15 = new IndexEntry(blobId15,
-          new IndexValue(100, toOffset(1400), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry16 = new IndexEntry(blobId16,
-          new IndexValue(100, toOffset(1500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry18 = new IndexEntry(blobId18,
-          new IndexValue(100, toOffset(1600), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry17 = new IndexEntry(blobId17,
-          new IndexValue(100, toOffset(1700), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry19 = new IndexEntry(blobId19,
-          new IndexValue(100, toOffset(1800), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry20 = new IndexEntry(blobId20,
-          new IndexValue(100, toOffset(1900), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry21 = new IndexEntry(blobId21,
-          new IndexValue(100, toOffset(2000), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry22 = new IndexEntry(blobId22,
-          new IndexValue(100, toOffset(2100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry24 = new IndexEntry(blobId24,
-          new IndexValue(100, toOffset(2200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry23 = new IndexEntry(blobId23,
-          new IndexValue(100, toOffset(2300), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(100, toOffset(100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(100, toOffset(200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValueBuilder(100, toOffset(300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValueBuilder(100, toOffset(400)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValueBuilder(100, toOffset(500)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValueBuilder(100, toOffset(600)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValueBuilder(100, toOffset(700)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValueBuilder(100, toOffset(800)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValueBuilder(100, toOffset(900)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValueBuilder(100, toOffset(1000)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValueBuilder(100, toOffset(1100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValueBuilder(100, toOffset(1200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValueBuilder(100, toOffset(1300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValueBuilder(100, toOffset(1400)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry16 = new IndexEntry(blobId16, new IndexValueBuilder(100, toOffset(1500)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry18 = new IndexEntry(blobId18, new IndexValueBuilder(100, toOffset(1600)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry17 = new IndexEntry(blobId17, new IndexValueBuilder(100, toOffset(1700)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValueBuilder(100, toOffset(1800)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry20 = new IndexEntry(blobId20, new IndexValueBuilder(100, toOffset(1900)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry21 = new IndexEntry(blobId21, new IndexValueBuilder(100, toOffset(2000)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry22 = new IndexEntry(blobId22, new IndexValueBuilder(100, toOffset(2100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry24 = new IndexEntry(blobId24, new IndexValueBuilder(100, toOffset(2200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry23 = new IndexEntry(blobId23, new IndexValueBuilder(100, toOffset(2300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
 
       // Add some delete entries
-      flags = 1;
-      IndexEntry entry21d = new IndexEntry(blobId21,
-          new IndexValue(100, toOffset(2400), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry22d = new IndexEntry(blobId22,
-          new IndexValue(100, toOffset(2500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry24d = new IndexEntry(blobId24,
-          new IndexValue(100, toOffset(2600), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry23d = new IndexEntry(blobId23,
-          new IndexValue(100, toOffset(2700), flags, 12567, time.seconds(), serviceId, containerId));
+      byte flags = 1;
+      IndexEntry entry21d = new IndexEntry(blobId21, new IndexValueBuilder(100, toOffset(2400)).flags(flags).
+          expirationTimeAtMs(12567).operationTimeInSecs(time.seconds()).build());
+      IndexEntry entry22d = new IndexEntry(blobId22, new IndexValueBuilder(100, toOffset(2500)).flags(flags).
+          expirationTimeAtMs(12567).operationTimeInSecs(time.seconds()).build());
+      IndexEntry entry24d = new IndexEntry(blobId24, new IndexValueBuilder(100, toOffset(2600)).flags(flags).
+          expirationTimeAtMs(12567).operationTimeInSecs(time.seconds()).build());
+      IndexEntry entry23d = new IndexEntry(blobId23, new IndexValueBuilder(100, toOffset(2700)).flags(flags).
+          expirationTimeAtMs(12567).operationTimeInSecs(time.seconds()).build());
 
       flags = 0;
-      IndexEntry entry25 = new IndexEntry(blobId25,
-          new IndexValue(100, toOffset(2800), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry25 = new IndexEntry(blobId25, new IndexValueBuilder(100, toOffset(2800)).flags(flags)
+          .expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
 
       long entrySize = entry1.getValue().getSize();
 
@@ -1747,19 +1754,21 @@ public class PersistentIndexTest {
       MockId blobId4 = new MockId("id04");
       MockId blobId5 = new MockId("id05");
 
-      byte flags = 0;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(100, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(100, toOffset(100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(100, toOffset(200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry5 = new IndexEntry(blobId5,
-          new IndexValue(100, toOffset(300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry4 = new IndexEntry(blobId4,
-          new IndexValue(100, toOffset(400), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(100, toOffset(100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(100, toOffset(200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValueBuilder(100, toOffset(300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValueBuilder(100, toOffset(400)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
 
       log.appendFrom(ByteBuffer.allocate(500));
       index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));
@@ -1867,47 +1876,63 @@ public class PersistentIndexTest {
       MockId blobId18 = new MockId("id18");
       MockId blobId19 = new MockId("id19");
 
-      byte flags = 0;
-      short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      IndexEntry entry1 = new IndexEntry(blobId1,
-          new IndexValue(100, toOffset(0), flags, 12345, time.seconds(), serviceId, containerId));
-      IndexEntry entry2 = new IndexEntry(blobId2,
-          new IndexValue(100, toOffset(100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry3 = new IndexEntry(blobId3,
-          new IndexValue(100, toOffset(200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry4 = new IndexEntry(blobId4,
-          new IndexValue(100, toOffset(300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry5 = new IndexEntry(blobId5,
-          new IndexValue(100, toOffset(500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry6 = new IndexEntry(blobId6,
-          new IndexValue(100, toOffset(600), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry7 = new IndexEntry(blobId7,
-          new IndexValue(100, toOffset(700), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry8 = new IndexEntry(blobId8,
-          new IndexValue(100, toOffset(800), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry9 = new IndexEntry(blobId9,
-          new IndexValue(100, toOffset(900), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry10 = new IndexEntry(blobId10,
-          new IndexValue(100, toOffset(1100), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry11 = new IndexEntry(blobId11,
-          new IndexValue(100, toOffset(1200), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry12 = new IndexEntry(blobId12,
-          new IndexValue(100, toOffset(1500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry13 = new IndexEntry(blobId13,
-          new IndexValue(100, toOffset(1600), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry14 = new IndexEntry(blobId14,
-          new IndexValue(100, toOffset(1700), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry15 = new IndexEntry(blobId15,
-          new IndexValue(100, toOffset(1900), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry16 = new IndexEntry(blobId16,
-          new IndexValue(100, toOffset(2300), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry17 = new IndexEntry(blobId17,
-          new IndexValue(100, toOffset(2400), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry18 = new IndexEntry(blobId18,
-          new IndexValue(100, toOffset(2500), flags, 12567, time.seconds(), serviceId, containerId));
-      IndexEntry entry19 = new IndexEntry(blobId19,
-          new IndexValue(100, toOffset(2800), flags, 12567, time.seconds(), serviceId, containerId));
+      IndexEntry entry1 = new IndexEntry(blobId1, new IndexValueBuilder(100, toOffset(0)).expirationTimeAtMs(12345)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry2 = new IndexEntry(blobId2, new IndexValueBuilder(100, toOffset(100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry3 = new IndexEntry(blobId3, new IndexValueBuilder(100, toOffset(200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry4 = new IndexEntry(blobId4, new IndexValueBuilder(100, toOffset(300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry5 = new IndexEntry(blobId5, new IndexValueBuilder(100, toOffset(500)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry6 = new IndexEntry(blobId6, new IndexValueBuilder(100, toOffset(600)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry7 = new IndexEntry(blobId7, new IndexValueBuilder(100, toOffset(700)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry8 = new IndexEntry(blobId8, new IndexValueBuilder(100, toOffset(800)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry9 = new IndexEntry(blobId9, new IndexValueBuilder(100, toOffset(900)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry10 = new IndexEntry(blobId10, new IndexValueBuilder(100, toOffset(1100)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry11 = new IndexEntry(blobId11, new IndexValueBuilder(100, toOffset(1200)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry12 = new IndexEntry(blobId12, new IndexValueBuilder(100, toOffset(1500)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry13 = new IndexEntry(blobId13, new IndexValueBuilder(100, toOffset(1600)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry14 = new IndexEntry(blobId14, new IndexValueBuilder(100, toOffset(1700)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry15 = new IndexEntry(blobId15, new IndexValueBuilder(100, toOffset(1900)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry16 = new IndexEntry(blobId16, new IndexValueBuilder(100, toOffset(2300)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry17 = new IndexEntry(blobId17, new IndexValueBuilder(100, toOffset(2400)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry18 = new IndexEntry(blobId18, new IndexValueBuilder(100, toOffset(2500)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
+      IndexEntry entry19 = new IndexEntry(blobId19, new IndexValueBuilder(100, toOffset(2800)).expirationTimeAtMs(12567)
+          .operationTimeInSecs(time.seconds())
+          .build());
 
       //segment 1
       index.addToIndex(entry1, new FileSpan(toOffset(0), toOffset(100)));

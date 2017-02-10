@@ -102,18 +102,6 @@ class IndexValue {
    * @param flags the {@link Flags} that needs to be set for the Index Value
    * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param operationTimeInSecs operation time of the entry in secs
-   */
-  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInSecs) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInSecs, (short) 0, (short) 0);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param flags the {@link Flags} that needs to be set for the Index Value
-   * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param operationTimeInSecs operation time of the entry in secs
    * @param serviceId the serviceId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
    */
@@ -126,53 +114,7 @@ class IndexValue {
    * Constructs IndexValue based on the args passed
    * @param size the size of the blob that this index value refers to
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param operationTimeInSecs operation time of the entry in secs
-   */
-  IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInSecs) {
-    this(size, offset, (byte) 0, expiresAtMs, operationTimeInSecs, (short) 0, (short) 0);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param operationTimeInSecs operation time of the entry in secs
-   * @param serviceId the serviceId that this blob belongs to
-   * @param containerId the containerId that this blob belongs to
-   */
-  IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInSecs, short serviceId, short containerId) {
-    this(size, offset, (byte) 0, expiresAtMs, operationTimeInSecs, serviceId, containerId);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param operationTimeInSecs operation time of the entry in secs
-   */
-  IndexValue(long size, Offset offset, long operationTimeInSecs) {
-    this(size, offset, (byte) 0, Utils.Infinite_Time, operationTimeInSecs);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param operationTimeInSecs operation time of the entry in secs
-   * @param serviceId the serviceId that this blob belongs to
-   * @param containerId the containerId that this blob belongs to
-   */
-  IndexValue(long size, Offset offset, long operationTimeInSecs, short serviceId, short containerId) {
-    this(size, offset, (byte) 0, Utils.Infinite_Time, operationTimeInSecs, serviceId, containerId);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param flags the {@link Flags} that needs to be set for the Index Value
+   * @param flags the flags that needs to be set for the Index Value
    * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
    *                              in the same log segment. Set to -1 otherwise.
@@ -336,5 +278,86 @@ class IndexValue {
         + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
         version == PersistentIndex.VERSION_1 ? ", OperationTimeAtSecs " + getOperationTimeInSecs() + ", ServiceId "
             + getServiceId() + ", ContainerId " + getContainerId() : "");
+  }
+}
+
+/**
+ * Builder class to assist in contructing the {@link IndexValue}
+ */
+class IndexValueBuilder {
+  private long size;
+  private Offset offset;
+  private byte flags = (byte) 0;
+  private long expiresAtMs = Utils.Infinite_Time;
+  private long operationTimeInSecs = Utils.Infinite_Time;
+  private short serviceId = (short) 0;
+  private short containerId = (short) 0;
+
+  /**
+   * Initializes the {@link IndexValueBuilder} with size and {@link Offset}
+   * @param size the size of the blob that the {@link IndexValue} will refer to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   */
+  IndexValueBuilder(long size, Offset offset) {
+    this.size = size;
+    this.offset = offset;
+  }
+
+  /**
+   * Sets the flags for the Index Value
+   * @param flags that needs to be set
+   * @return the {@link IndexValueBuilder} for this instance
+   */
+  IndexValueBuilder flags(byte flags) {
+    this.flags = flags;
+    return this;
+  }
+
+  /**
+   * Sets the expiration time for the Index Value
+   * @param expiresAtMs the expiration time in ms at which the blob expires
+   * @return the {@link IndexValueBuilder} for this instance
+   */
+  IndexValueBuilder expirationTimeAtMs(long expiresAtMs) {
+    this.expiresAtMs = expiresAtMs;
+    return this;
+  }
+
+  /**
+   * Sets the operation time for the Index Value
+   * @param operationTimeInSecs operation time of the entry in secs
+   * @return the {@link IndexValueBuilder} for this instance
+   */
+  IndexValueBuilder operationTimeInSecs(long operationTimeInSecs) {
+    this.operationTimeInSecs = operationTimeInSecs;
+    return this;
+  }
+
+  /**
+   * Sets the serviceId for the Index Value
+   * @param serviceId the serviceId that this blob belongs to
+   * @return the {@link IndexValueBuilder} for this instance
+   */
+  IndexValueBuilder serviceId(short serviceId) {
+    this.serviceId = serviceId;
+    return this;
+  }
+
+  /**
+   * Sets the containerId for the Index Value
+   * @param containerId the containerId that this blob belongs to
+   * @return the {@link IndexValueBuilder} for this instance
+   */
+  IndexValueBuilder containerId(short containerId) {
+    this.containerId = containerId;
+    return this;
+  }
+
+  /**
+   * Builds the {@link IndexValue} based on the argiments set using the {@link IndexValueBuilder}
+   * @return the {@link IndexValue} thus constructed
+   */
+  public IndexValue build() {
+    return new IndexValue(size, offset, flags, expiresAtMs, operationTimeInSecs, serviceId, containerId);
   }
 }
