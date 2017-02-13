@@ -129,7 +129,7 @@ public class IndexTest {
   // The index of the log
   private PersistentIndex index;
   // The session ID associated with the index
-  private UUID sessionId;
+  private UUID sessionId = UUID.randomUUID();
   // the incarnationId associated with the store
   private UUID incarnationId = UUID.randomUUID();
 
@@ -271,8 +271,8 @@ public class IndexTest {
       FileSpan fileSpan = new FileSpan(fileSpanForMessage.getStartOffset(), index.getCurrentEndOffset());
       verifyValue(id, index.findKey(id, fileSpan));
 
-      // FileSpan from start offset of log to end offset of message
-      fileSpan = new FileSpan(log.getStartOffset(), fileSpanForMessage.getEndOffset());
+      // FileSpan from start offset of index to end offset of message
+      fileSpan = new FileSpan(index.getStartOffset(), fileSpanForMessage.getEndOffset());
       verifyValue(id, index.findKey(id, fileSpan));
 
       // FileSpan that includes the message
@@ -289,7 +289,7 @@ public class IndexTest {
 
       if (lowerSegmentStartOffset != null) {
         // FileSpan lower than the entry (does not include entry)
-        fileSpan = new FileSpan(log.getStartOffset(), lowerSegmentStartOffset);
+        fileSpan = new FileSpan(index.getStartOffset(), lowerSegmentStartOffset);
         assertNull("There should have been no value returned", index.findKey(id, fileSpan));
       }
     }
@@ -378,8 +378,8 @@ public class IndexTest {
   @Test
   public void addEntryBadInputTest() throws StoreException {
     // FileSpan end offset < currentIndexEndOffset
-    FileSpan fileSpan = log.getFileSpanForMessage(log.getStartOffset(), 1);
-    IndexValue value = new IndexValue(1, log.getStartOffset());
+    FileSpan fileSpan = log.getFileSpanForMessage(index.getStartOffset(), 1);
+    IndexValue value = new IndexValue(1, index.getStartOffset());
     try {
       index.addToIndex(new IndexEntry(getUniqueId(), value), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
@@ -415,7 +415,7 @@ public class IndexTest {
   @Test
   public void markAsDeletedBadInputTest() throws IOException, StoreException {
     // FileSpan end offset < currentIndexEndOffset
-    FileSpan fileSpan = log.getFileSpanForMessage(log.getStartOffset(), 1);
+    FileSpan fileSpan = log.getFileSpanForMessage(index.getStartOffset(), 1);
     try {
       index.markAsDeleted(liveKeys.iterator().next(), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
@@ -484,8 +484,7 @@ public class IndexTest {
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
     advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
     assertTrue("Hard delete did not do any work", index.hardDeleter.hardDelete());
-
-    long expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    long expectedProgress = index.getAbsolutePositionInLogForOffset(logOrder.lastKey());
     assertEquals("Hard delete did not make expected progress", expectedProgress, index.hardDeleter.getProgress());
     verifyEntriesForHardDeletes(deletedKeys);
   }
@@ -661,7 +660,7 @@ public class IndexTest {
 
     // token with log end offset should not return anything
     StoreFindToken token = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, false);
-    token.setBytesRead(log.getUsedCapacity());
+    token.setBytesRead(index.getLogUsedCapacity());
     doFindEntriesSinceTest(token, Long.MAX_VALUE, Collections.EMPTY_SET, token);
 
     findEntriesSinceToIndexBasedTest();
@@ -715,8 +714,7 @@ public class IndexTest {
     // and proceed with session id validation and so on.
     UUID[] incarnationIds = new UUID[]{incarnationId, null};
     for (UUID incarnationIdToTest : incarnationIds) {
-      long bytesRead =
-          log.getDifference(firstRecordFileSpan.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+      long bytesRead = index.getAbsolutePositionInLogForOffset(firstRecordFileSpan.getEndOffset());
       // create a token that will be past the index end offset on startup after recovery.
       startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, incarnationIdToTest, false);
       // token should get reset internally, no keys should be returned and the returned token should be correct (offset
@@ -755,7 +753,7 @@ public class IndexTest {
         new Offset(log.getEndOffset().getName(), (log.getEndOffset().getOffset() + (2 * PUT_RECORD_SIZE))),
         oldSessionId, incarnationId, false);
     // end token should point to log end offset on startup
-    long bytesRead = log.getDifference(log.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    long bytesRead = index.getAbsolutePositionInLogForOffset(log.getEndOffset());
     StoreFindToken expectedEndToken = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, true);
     expectedEndToken.setBytesRead(bytesRead);
     // Fetch the FindToken returned from findEntriesSince
@@ -769,7 +767,7 @@ public class IndexTest {
     expectedEntries.add(logOrder.lastEntry().getValue().getFirst());
     addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
     expectedEntries.add(logOrder.lastEntry().getValue().getFirst());
-    bytesRead = log.getDifference(index.getCurrentEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    bytesRead = index.getAbsolutePositionInLogForOffset(index.getCurrentEndOffset());
     expectedEndToken = new StoreFindToken(index.journal.getLastOffset(), sessionId, incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest((StoreFindToken) findInfo.getFindToken(), Long.MAX_VALUE, expectedEntries, expectedEndToken);
@@ -806,8 +804,7 @@ public class IndexTest {
     incarnationId = UUID.randomUUID();
     reloadIndex(true);
 
-    long bytesRead =
-        log.getDifference(firstRecordFileSpan.getEndOffset(), new Offset(log.getFirstSegment().getName(), 0));
+    long bytesRead = index.getAbsolutePositionInLogForOffset(firstRecordFileSpan.getEndOffset());
     // create a token that will be past the index end offset on startup after recovery with old incarnationId
     StoreFindToken startToken =
         new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, oldIncarnationId, false);
@@ -878,9 +875,7 @@ public class IndexTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     index =
         new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
-            UUID.randomUUID());
-    sessionId =
-        ((StoreFindToken) index.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE).getFindToken()).getSessionId();
+            UUID.randomUUID(), UUID.randomUUID());
     assertEquals("Index End offset mismatch ",
         new Offset(indexEndOffset.getName(), indexEndOffset.getOffset() + PUT_RECORD_SIZE),
         index.getCurrentEndOffset());
@@ -901,6 +896,130 @@ public class IndexTest {
     }
     // append to log so that log and index are in sync with each other
     appendToLog(PUT_RECORD_SIZE);
+  }
+
+  /**
+   * Tests {@link PersistentIndex#getAbsolutePositionInLogForOffset(Offset)}.
+   */
+  @Test
+  public void getAbsolutePositionForOffsetTest() {
+    List<LogSegment> logSegments = new ArrayList<>();
+    LogSegment segment = log.getFirstSegment();
+    while (segment != null) {
+      logSegments.add(segment);
+      segment = log.getNextSegment(segment);
+    }
+
+    long numLogSegmentsPreceding = 0;
+    for (LogSegment logSegment : logSegments) {
+      verifyAbsolutePosition(new Offset(logSegment.getName(), 0L), numLogSegmentsPreceding);
+      verifyAbsolutePosition(new Offset(logSegment.getName(), logSegment.getStartOffset()), numLogSegmentsPreceding);
+      long randomPosRange = logSegment.getEndOffset() - logSegment.getStartOffset() - 1;
+      long randomPos = Utils.getRandomLong(TestUtils.RANDOM, randomPosRange) + logSegment.getStartOffset() + 1;
+      verifyAbsolutePosition(new Offset(logSegment.getName(), randomPos), numLogSegmentsPreceding);
+      verifyAbsolutePosition(new Offset(logSegment.getName(), logSegment.getEndOffset()), numLogSegmentsPreceding);
+      numLogSegmentsPreceding++;
+    }
+  }
+
+  /**
+   * Tests {@link PersistentIndex#getAbsolutePositionInLogForOffset(Offset)} with bad arguments.
+   */
+  @Test
+  public void getAbsolutePositionForOffsetBadArgsTest() {
+    Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(index.getLogSegmentCount() + 1, 0), 0);
+    Offset badOffsetOffset =
+        new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getCapacityInBytes() + 1);
+    List<Offset> offsetsToCheck = new ArrayList<>();
+    offsetsToCheck.add(badSegmentOffset);
+    offsetsToCheck.add(badOffsetOffset);
+
+    for (Offset offset : offsetsToCheck) {
+      try {
+        index.getAbsolutePositionInLogForOffset(offset);
+        fail("Should have failed to get absolute position for invalid offset input: " + offset);
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
+    }
+  }
+
+  /**
+   * Test that verifies that everything is ok even if {@link MessageStoreHardDelete} instance provided is null.
+   */
+  @Test
+  public void hardDeleteNullTest() throws IOException, StoreException {
+    hardDelete = null;
+    reloadIndex(false);
+    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    MockId idToCheck = logOrder.lastEntry().getValue().getFirst();
+    reloadIndex(false);
+    verifyValue(idToCheck, index.findKey(idToCheck));
+  }
+
+  /**
+   * Tests correctness of {@link PersistentIndex#getIndexSegmentFilesForLogSegment(String, String)} and makes sure
+   * it picks up all the files.
+   */
+  @Test
+  public void getIndexSegmentFilesForLogSegmentTest() {
+    LogSegment logSegment = log.getFirstSegment();
+    while (logSegment != null) {
+      LogSegment nextSegment = log.getNextSegment(logSegment);
+      File[] indexSegmentFiles = PersistentIndex.getIndexSegmentFilesForLogSegment(tempDirStr, logSegment.getName());
+      Arrays.sort(indexSegmentFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
+      Offset from = new Offset(logSegment.getName(), logSegment.getStartOffset());
+      Offset to = new Offset(logSegment.getName(), logSegment.getEndOffset());
+      Set<Offset> offsets = referenceIndex.subMap(from, true, to, true).keySet();
+      assertEquals("Number of index segment files inconsistent", offsets.size(), indexSegmentFiles.length);
+      int i = 0;
+      for (Offset offset : offsets) {
+        assertEquals("Index segment file inconsistent with offset expected", offset,
+            IndexSegment.getIndexSegmentStartOffset(indexSegmentFiles[i].getName()));
+        i++;
+      }
+      logSegment = nextSegment;
+    }
+  }
+
+  /**
+   * Tests {@link PersistentIndex#cleanupIndexSegmentFilesForLogSegment(String, String)} and makes sure it deletes all
+   * the relevant files and no more.
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void cleanupIndexSegmentFilesForLogSegment() throws IOException, StoreException {
+    index.close();
+    LogSegment logSegment = log.getFirstSegment();
+    while (logSegment != null) {
+      LogSegment nextSegment = log.getNextSegment(logSegment);
+      final String logSegmentName = logSegment.getName();
+      int totalFilesInDir = tempDir.listFiles().length;
+      File[] filesToCheck = tempDir.listFiles(new FilenameFilter() {
+        @Override
+        public boolean accept(File dir, String name) {
+          return name.startsWith(logSegmentName) && (name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX)
+              || name.endsWith(IndexSegment.BLOOM_FILE_NAME_SUFFIX));
+        }
+      });
+      Offset from = new Offset(logSegment.getName(), logSegment.getStartOffset());
+      Offset to = new Offset(logSegment.getName(), logSegment.getEndOffset());
+      int expectedNumFilesToDelete = referenceIndex.subMap(from, true, to, true).size() * 2;
+      if (nextSegment == null) {
+        // latest index segment does not have a bloom file
+        expectedNumFilesToDelete--;
+      }
+      assertEquals("Number of files to check does not match expectation", expectedNumFilesToDelete,
+          filesToCheck.length);
+      PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDirStr, logSegmentName);
+      for (File fileToCheck : filesToCheck) {
+        assertFalse(fileToCheck + " should have been deleted", fileToCheck.exists());
+      }
+      assertEquals("More than the expected number of files were deleted", totalFilesInDir - filesToCheck.length,
+          tempDir.listFiles().length);
+      logSegment = nextSegment;
+    }
   }
 
   // helpers
@@ -1093,23 +1212,6 @@ public class IndexTest {
   }
 
   /**
-   * Verifies that the number of log segments is as expected.
-   * @param expectedCount the number of log segments expected.
-   */
-  private void verifyLogSegmentCount(int expectedCount) {
-    // this function works under the assumption that log segments are not allocated until they are required
-    // this is a fair assumption because the PersistentIndex works under the same assumption and would break if it were
-    // not true.
-    LogSegment segment = log.getFirstSegment();
-    int logSegmentCount = 0;
-    while (segment != null) {
-      logSegmentCount++;
-      segment = log.getNextSegment(segment);
-    }
-    assertEquals("Unexpected number of log segments", expectedCount, logSegmentCount);
-  }
-
-  /**
    * Sleeps in intervals of 10ms until expected progress is made or {@code maxTimeToCheck} is reached
    * @param expectedProgress expected progress value
    * @param maxTimeToCheck max time to check if expected progress is reached
@@ -1182,11 +1284,10 @@ public class IndexTest {
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    sessionId = UUID.randomUUID();
     index =
         new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
-            incarnationId);
-    sessionId =
-        ((StoreFindToken) index.findEntriesSince(new StoreFindToken(), Long.MAX_VALUE).getFindToken()).getSessionId();
+            sessionId, incarnationId);
   }
 
   /**
@@ -1199,8 +1300,8 @@ public class IndexTest {
     File[] indexSegmentFiles = tempDir.listFiles(new FilenameFilter() {
       @Override
       public boolean accept(File dir, String name) {
-        return name.endsWith(PersistentIndex.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
-            PersistentIndex.BLOOM_FILE_NAME_SUFFIX);
+        return name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
+            IndexSegment.BLOOM_FILE_NAME_SUFFIX);
       }
     });
     assertNotNull("Could not load index segment files", indexSegmentFiles);
@@ -1292,23 +1393,31 @@ public class IndexTest {
     log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, metrics);
     index =
         new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
-            incarnationId);
-    assertEquals("End Offset of index not as expected", log.getStartOffset(), index.getCurrentEndOffset());
+            sessionId, incarnationId);
+    Offset expectedStartOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getStartOffset());
+    assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
+    assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
 
     // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
     time.sleep(1);
-    verifyLogSegmentCount(1);
+    assertEquals("Incorrect log segment count", 0, index.getLogSegmentCount());
+    long expectedUsedCapacity;
     if (!isLogSegmented) {
       // log is filled about ~50%.
       addCuratedIndexEntriesToLogSegment(segmentCapacity / 2, 1);
+      expectedUsedCapacity = segmentCapacity / 2;
+      assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
     } else {
       // first log segment is filled to capacity.
       addCuratedIndexEntriesToLogSegment(segmentCapacity, 1);
+      assertEquals("Used capacity reported not as expected", segmentCapacity, index.getLogUsedCapacity());
 
       // second log segment is filled but has some space at the end (free space has to be less than the lesser of the
       // standard delete and put record sizes so that the next write causes a roll over of log segments).
       addCuratedIndexEntriesToLogSegment(segmentCapacity - (DELETE_RECORD_SIZE - 1), 2);
+      assertEquals("Used capacity reported not as expected", 2 * segmentCapacity - (DELETE_RECORD_SIZE - 1),
+          index.getLogUsedCapacity());
 
       // third log segment is partially filled and is left as the "active" segment
       // First Index Segment
@@ -1318,7 +1427,7 @@ public class IndexTest {
       LogSegment segment = log.getFirstSegment();
       MockId idToDelete = getIdToDeleteFromLogSegment(segment);
       addDeleteEntry(idToDelete);
-      verifyLogSegmentCount(3);
+      assertEquals("Incorrect log segment count", 3, index.getLogSegmentCount());
       // DELETE for a key in the second segment
       segment = log.getNextSegment(segment);
       idToDelete = getIdToDeleteFromLogSegment(segment);
@@ -1330,12 +1439,18 @@ public class IndexTest {
       long size = segmentCapacity / 3 - index.getCurrentEndOffset().getOffset();
       addPutEntries(1, size, Utils.Infinite_Time);
 
+      expectedUsedCapacity = 2 * segmentCapacity + segmentCapacity / 3;
+      assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
+
       // fourth and fifth log segment are free.
     }
     // make sure all indexes are written to disk and mapped as required (forcing IndexPersistor to run).
     log.flush();
     reloadIndex(false);
     verifyState();
+    assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
+    assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
+    assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
   }
 
   /**
@@ -1352,7 +1467,7 @@ public class IndexTest {
     // First Index Segment
     // 1 PUT
     Offset firstJournalEntryAddedNow = addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time).getStartOffset();
-    verifyLogSegmentCount(expectedLogSegmentCount);
+    assertEquals("Incorrect log segment count", expectedLogSegmentCount, index.getLogSegmentCount());
     // 2 more PUT
     addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
     // 2 PUT EXPIRED
@@ -1409,7 +1524,7 @@ public class IndexTest {
     // 1 PUT entry that spans the rest of the data in the segment
     long size = sizeToMakeIndexEntriesFor - index.getCurrentEndOffset().getOffset();
     addPutEntries(1, size, Utils.Infinite_Time);
-    verifyLogSegmentCount(expectedLogSegmentCount);
+    assertEquals("Incorrect log segment count", expectedLogSegmentCount, index.getLogSegmentCount());
   }
 
   /**
@@ -1418,7 +1533,7 @@ public class IndexTest {
    * @throws StoreException
    */
   private void verifyState() throws IOException, StoreException {
-    verifyLogSegmentCount(isLogSegmented ? 3 : 1);
+    assertEquals("Incorrect log segment count", isLogSegmented ? 3 : 1, index.getLogSegmentCount());
     NavigableMap<Offset, IndexSegment> realIndex = index.indexes;
     assertEquals("Number of index segments does not match expected", referenceIndex.size(), realIndex.size());
     Map.Entry<Offset, IndexSegment> realIndexEntry = realIndex.firstEntry();
@@ -1510,7 +1625,7 @@ public class IndexTest {
     assertTrue("Hard delete is not enabled", index.hardDeleter.isRunning());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
     advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    long expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    long expectedProgress = index.getAbsolutePositionInLogForOffset(logOrder.lastKey());
     // give it some time so that hard delete completes one cycle
     waitUntilExpectedProgress(expectedProgress, 5000);
     verifyEntriesForHardDeletes(deletedKeys);
@@ -1561,7 +1676,7 @@ public class IndexTest {
     // resume and verify new entries have been hard deleted
     index.hardDeleter.resume();
     assertFalse("Hard deletes should have been resumed ", index.hardDeleter.isPaused());
-    expectedProgress = log.getDifference(logOrder.lastKey(), new Offset(log.getFirstSegment().getName(), 0));
+    expectedProgress = index.getAbsolutePositionInLogForOffset(logOrder.lastKey());
     // after resuming. hard deletes should progress. Give it some time to hard delete next range
     waitUntilExpectedProgress(expectedProgress, 5000);
     verifyEntriesForHardDeletes(idsDeleted);
@@ -1726,7 +1841,7 @@ public class IndexTest {
       }
     };
     reloadIndex(false);
-    verifyLogSegmentCount(1);
+    assertEquals("Incorrect log segment count", 1, index.getLogSegmentCount());
     assertEquals("Index should contain exactly one index segment", 1, index.indexes.size());
     LogSegment segment = log.getFirstSegment();
     assertEquals("End offset not as expected",
@@ -1794,7 +1909,7 @@ public class IndexTest {
     StoreFindToken startToken = new StoreFindToken(firstId, firstIndexSegmentStartOffset, sessionId, incarnationId);
     StoreFindToken expectedEndToken =
         new StoreFindToken(secondIndexSegmentEntry.getKey(), secondIndexSegmentStartOffset, sessionId, incarnationId);
-    expectedEndToken.setBytesRead(log.getDifference(secondIndexSegmentStartOffset, logAbsoluteZero));
+    expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(secondIndexSegmentStartOffset));
     doFindEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
 
     // ------------------
@@ -1822,7 +1937,7 @@ public class IndexTest {
    */
   private void findEntriesSinceToJournalBasedTest() throws StoreException {
     StoreFindToken absoluteEndToken = new StoreFindToken(logOrder.lastKey(), sessionId, incarnationId, false);
-    absoluteEndToken.setBytesRead(log.getUsedCapacity());
+    absoluteEndToken.setBytesRead(index.getLogUsedCapacity());
 
     // ------------------
     // 1. Uninitialized -> Journal
@@ -1887,7 +2002,7 @@ public class IndexTest {
       for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
         StoreFindToken expectedEndToken = new StoreFindToken(id, indexSegmentStartOffset, sessionId, incarnationId);
-        expectedEndToken.setBytesRead(log.getDifference(indexSegmentStartOffset, logAbsoluteZero));
+        expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(indexSegmentStartOffset));
         doFindEntriesSinceTest(startToken, indexSegmentEntry.getValue().getSize(), Collections.singleton(id),
             expectedEndToken);
         startToken = expectedEndToken;
@@ -1903,7 +2018,7 @@ public class IndexTest {
       long size = putDelete.getSecond() != null ? putDelete.getSecond().getSize() : putDelete.getFirst().getSize();
       StoreFindToken expectedEndToken = new StoreFindToken(startOffset, sessionId, incarnationId, false);
       Offset endOffset = log.getFileSpanForMessage(startOffset, size).getEndOffset();
-      expectedEndToken.setBytesRead(log.getDifference(endOffset, logAbsoluteZero));
+      expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(endOffset));
       doFindEntriesSinceTest(startToken, size, Collections.singleton(id), expectedEndToken);
       startToken = expectedEndToken;
       logEntry = logOrder.higherEntry(logEntry.getKey());
@@ -1937,7 +2052,7 @@ public class IndexTest {
 
     Offset endOffset = log.getFileSpanForMessage(nextIndexSegmentStartOffset, size).getEndOffset();
     StoreFindToken expectedEndToken = new StoreFindToken(nextIndexSegmentStartOffset, sessionId, incarnationId, false);
-    expectedEndToken.setBytesRead(log.getDifference(endOffset, new Offset(log.getFirstSegment().getName(), 0)));
+    expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(endOffset));
     doFindEntriesSinceTest(startToken, maxSize, expectedKeys, expectedEndToken);
   }
 
@@ -2239,5 +2354,17 @@ public class IndexTest {
       }
     }
     return deletedId;
+  }
+
+  // getAbsolutePositionForOffsetTest() helpers
+
+  /**
+   * Verifies that the absolute position returned for {@code offset} is correct.
+   * @param offset the {@link Offset} whose absolute position needs to be verified.
+   * @param numLogSegmentsPreceding number of log segments that precede the log segment that contains {@code offset}.
+   */
+  private void verifyAbsolutePosition(Offset offset, long numLogSegmentsPreceding) {
+    long expectedPosition = numLogSegmentsPreceding * log.getSegmentCapacity() + offset.getOffset();
+    assertEquals("Position not as expected", expectedPosition, index.getAbsolutePositionInLogForOffset(offset));
   }
 }

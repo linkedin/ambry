@@ -232,8 +232,8 @@ public class DumpIndexTool {
     logger.info("Root directory for replica : " + replicaRootDirectory);
     IndexStats indexStats = new IndexStats();
     Map<String, BlobStatus> blobIdToStatusMap = new HashMap<>();
-    File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_FILE_FILTER);
-    Arrays.sort(replicas, PersistentIndex.INDEX_FILE_COMPARATOR);
+    File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
+    Arrays.sort(replicas, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (File indexFile : replicas) {
       logger.info("Dumping index " + indexFile + " for replica " + replicaDirectory.getName());
       totalKeysProcessed +=
@@ -342,8 +342,8 @@ public class DumpIndexTool {
     File replicaDirectory = new File(replicaRootDirectory);
     Map<String, IndexValue> blobIdToMessageMap = new HashMap<>();
     ActiveBlobStats activeBlobStats = new ActiveBlobStats();
-    File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_FILE_FILTER);
-    Arrays.sort(replicas, PersistentIndex.INDEX_FILE_COMPARATOR);
+    File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
+    Arrays.sort(replicas, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (File indexFile : replicas) {
       logger.info("Dumping index " + indexFile.getName() + " for " + replicaDirectory.getName());
       totalKeysProcessed += dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToMessageMap, activeBlobStats);
@@ -381,8 +381,8 @@ public class DumpIndexTool {
     File replicaDirectory = new File(replicaRootDirectory);
     Map<String, IndexValue> blobIdToBlobMessageMap = new HashMap<>();
     ActiveBlobStats activeBlobStats = new ActiveBlobStats();
-    File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_FILE_FILTER);
-    Arrays.sort(replicas, PersistentIndex.INDEX_FILE_COMPARATOR);
+    File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
+    Arrays.sort(replicas, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (File indexFile : replicas) {
       logger.trace("Dumping index {} for {} ", indexFile.getName(), replicaDirectory.getName());
       totalKeysProcessed += dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToBlobMessageMap, activeBlobStats);

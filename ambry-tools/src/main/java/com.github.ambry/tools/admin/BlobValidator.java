@@ -701,8 +701,8 @@ public class BlobValidator {
 
         return false;
       }
-      if (blobProperties.getContentType() != null && that.blobProperties.getContentType() != null &&
-          (!blobProperties.getContentType().equals(that.blobProperties.getContentType()))) {
+      if (blobProperties.getContentType() != null && that.blobProperties.getContentType() != null
+          && (!blobProperties.getContentType().equals(that.blobProperties.getContentType()))) {
         logger.error(
             "Content type Mismatch " + blobProperties.getContentType() + ", " + that.blobProperties.getContentType());
         return false;
@@ -712,8 +712,8 @@ public class BlobValidator {
         return false;
       }
 
-      if (blobProperties.getOwnerId() != null && that.blobProperties.getOwnerId() != null &&
-          (!blobProperties.getOwnerId().equals(that.blobProperties.getOwnerId()))) {
+      if (blobProperties.getOwnerId() != null && that.blobProperties.getOwnerId() != null
+          && (!blobProperties.getOwnerId().equals(that.blobProperties.getOwnerId()))) {
         logger.error("OwnerId Mismatch " + blobProperties.getOwnerId() + ", " + that.blobProperties.getOwnerId());
         return false;
       } else if (blobProperties.getOwnerId() == null || that.blobProperties.getOwnerId() == null) {
@@ -721,8 +721,8 @@ public class BlobValidator {
         return false;
       }
 
-      if (blobProperties.getServiceId() != null && that.blobProperties.getServiceId() != null &&
-          (!blobProperties.getServiceId().equals(that.blobProperties.getServiceId()))) {
+      if (blobProperties.getServiceId() != null && that.blobProperties.getServiceId() != null
+          && (!blobProperties.getServiceId().equals(that.blobProperties.getServiceId()))) {
         logger.error("ServiceId Mismatch " + blobProperties.getServiceId() + ", " + that.blobProperties.getServiceId());
         return false;
       } else if (blobProperties.getServiceId() == null || that.blobProperties.getServiceId() == null) {

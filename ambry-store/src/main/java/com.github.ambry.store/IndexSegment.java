@@ -54,6 +54,9 @@ import org.slf4j.LoggerFactory;
  * lookup is performed to find key.
  */
 class IndexSegment {
+  static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
+  static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
+
   private final static int Key_Size_Invalid_Value = -1;
   private final static int Value_Size_Invalid_Value = -1;
 
@@ -114,8 +117,8 @@ class IndexSegment {
     this.metrics = metrics;
     this.lastModifiedTimeSec = new AtomicLong(0);
     indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix();
-    indexFile = new File(dataDir, indexSegmentFilenamePrefix + PersistentIndex.INDEX_SEGMENT_FILE_NAME_SUFFIX);
-    bloomFile = new File(dataDir, indexSegmentFilenamePrefix + PersistentIndex.BLOOM_FILE_NAME_SUFFIX);
+    indexFile = new File(dataDir, indexSegmentFilenamePrefix + INDEX_SEGMENT_FILE_NAME_SUFFIX);
+    bloomFile = new File(dataDir, indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
   }
 
   /**
@@ -146,8 +149,7 @@ class IndexSegment {
         map(false);
         // Load the bloom filter for this index
         // We need to load the bloom filter only for mapped indexes
-        bloomFile =
-            new File(indexFile.getParent(), indexSegmentFilenamePrefix + PersistentIndex.BLOOM_FILE_NAME_SUFFIX);
+        bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
         CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
         DataInputStream stream = new DataInputStream(crcBloom);
         bloomFilter = FilterFactory.deserialize(stream);
@@ -165,8 +167,7 @@ class IndexSegment {
         index = new ConcurrentSkipListMap<StoreKey, IndexValue>();
         bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
             config.storeIndexBloomMaxFalsePositiveProbability);
-        bloomFile =
-            new File(indexFile.getParent(), indexSegmentFilenamePrefix + PersistentIndex.BLOOM_FILE_NAME_SUFFIX);
+        bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
         try {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {

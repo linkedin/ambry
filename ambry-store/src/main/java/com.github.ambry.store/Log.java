@@ -13,15 +13,20 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,13 +39,15 @@ import org.slf4j.LoggerFactory;
 class Log implements Write {
   private final String dataDir;
   private final long capacityInBytes;
+  private final boolean isLogSegmented;
   private final StoreMetrics metrics;
+  private final Iterator<Pair<String, String>> segmentNameAndFileNameIterator;
   private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
       new ConcurrentSkipListMap<>(LogSegmentNameHelper.COMPARATOR);
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
 
-  private long remainingUnallocatedSegments;
-  private LogSegment activeSegment;
+  private LogSegment activeSegment = null;
 
   /**
    * Create a Log instance
@@ -56,20 +63,45 @@ class Log implements Write {
   Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics) throws IOException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
+    this.isLogSegmented = totalCapacityInBytes > segmentCapacityInBytes;
     this.metrics = metrics;
+    this.segmentNameAndFileNameIterator = Collections.EMPTY_LIST.iterator();
 
     File dir = new File(dataDir);
     File[] segmentFiles = dir.listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
     if (segmentFiles == null) {
       throw new IOException("Could not read from directory: " + dataDir);
-    } else if (segmentFiles.length == 0) {
-      // first startup
-      checkArgsAndAllocateFirstSegment(totalCapacityInBytes, segmentCapacityInBytes);
     } else {
-      // subsequent startup
-      loadSegments(segmentFiles, totalCapacityInBytes);
+      initialize(getSegmentsToLoad(segmentFiles), segmentCapacityInBytes);
     }
-    activeSegment = segmentsByName.lastEntry().getValue();
+  }
+
+  /**
+   * Create a Log instance
+   * @param dataDir the directory where the segments of the log need to be loaded from.
+   * @param totalCapacityInBytes the total capacity of this log.
+   * @param segmentCapacityInBytes the capacity of a single segment in the log.
+   * @param metrics the {@link StoreMetrics} instance to use.
+   * @param isLogSegmented {@code true} if this log is segmented or needs to be segmented.
+   * @param segmentsToLoad the list of pre-created {@link LogSegment} instances to load.
+   * @param segmentNameAndFileNameIterator an {@link Iterator} that provides the name and filename for newly allocated
+   *                                       log segments. Once the iterator ends, the active segment name is used to
+   *                                       generate the names of the subsequent segments.
+   * @throws IOException if there is any I/O error loading the segment files.
+   * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
+   * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
+   * multiple of {@code segmentCapacityInBytes}.
+   */
+  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics,
+      boolean isLogSegmented, List<LogSegment> segmentsToLoad,
+      Iterator<Pair<String, String>> segmentNameAndFileNameIterator) throws IOException {
+    this.dataDir = dataDir;
+    this.capacityInBytes = totalCapacityInBytes;
+    this.isLogSegmented = isLogSegmented;
+    this.metrics = metrics;
+    this.segmentNameAndFileNameIterator = segmentNameAndFileNameIterator;
+
+    initialize(segmentsToLoad, segmentCapacityInBytes);
   }
 
   /**
@@ -125,10 +157,26 @@ class Log implements Write {
       Map.Entry<String, LogSegment> entry = iterator.next();
       logger.info("Freeing extra segment with name [{}] ", entry.getValue().getName());
       free(entry.getValue());
+      remainingUnallocatedSegments.getAndIncrement();
       iterator.remove();
     }
     logger.info("Setting active segment to [{}]", name);
     activeSegment = segmentsByName.get(name);
+  }
+
+  /**
+   * @return the capacity of a single segment.
+   */
+  long getSegmentCapacity() {
+    // all segments same size
+    return getFirstSegment().getCapacityInBytes();
+  }
+
+  /**
+   * @return the total capacity, in bytes, of this log.
+   */
+  long getCapacityInBytes() {
+    return capacityInBytes;
   }
 
   /**
@@ -153,6 +201,20 @@ class Log implements Write {
   }
 
   /**
+   * Returns the {@link LogSegment} that is logically before the given {@code segment}.
+   * @param segment the {@link LogSegment} whose "previous" segment is required.
+   * @return the {@link LogSegment} that is logically before the given {@code segment}.
+   */
+  LogSegment getPrevSegment(LogSegment segment) {
+    String name = segment.getName();
+    if (!segmentsByName.containsKey(name)) {
+      throw new IllegalArgumentException("Invalid log segment name: " + name);
+    }
+    Map.Entry<String, LogSegment> prevEntry = segmentsByName.lowerEntry(name);
+    return prevEntry == null ? null : prevEntry.getValue();
+  }
+
+  /**
    * @param name the name of the segment required.
    * @return a {@link LogSegment} with {@code name} if it exists.
    */
@@ -161,68 +223,11 @@ class Log implements Write {
   }
 
   /**
-   * @return the start offset of the log abstraction.
-   */
-  Offset getStartOffset() {
-    LogSegment segment = getFirstSegment();
-    return new Offset(segment.getName(), segment.getStartOffset());
-  }
-
-  /**
    * @return the end offset of the log abstraction.
    */
   Offset getEndOffset() {
     LogSegment segment = activeSegment;
     return new Offset(segment.getName(), segment.getEndOffset());
-  }
-
-  /**
-   * @return the currently capacity used of the log abstraction. Includes "wasted" space at the end of
-   * {@link LogSegment} instances that are not fully filled.
-   */
-  long getUsedCapacity() {
-    return getDifference(getEndOffset(), new Offset(getFirstSegment().getName(), 0));
-  }
-
-  /**
-   * @return the number of valid segments starting from the first segment.
-   */
-  long getSegmentCount() {
-    return segmentsByName.size();
-  }
-
-  /**
-   * Gets the absolute difference in bytes between {@code o1} and {@code o2}. The difference returned also includes the
-   * sizes of log segment headers if the offsets are across segments.
-   * @param o1 the first {@link Offset}.
-   * @param o2 the second {@link Offset}.
-   * @return the difference between {@code o1} and {@code o2}. If {@code o1} > {@code o2}, the difference returned is
-   * positive, else, unless equal, it is negative
-   */
-  long getDifference(Offset o1, Offset o2) {
-    LogSegment firstSegment = segmentsByName.get(o1.getName());
-    LogSegment secondSegment = segmentsByName.get(o2.getName());
-    if (firstSegment == null || secondSegment == null) {
-      throw new IllegalArgumentException(
-          "One of the log segments provided [" + o1.getName() + ", " + o2.getName() + "] does not belong to this log");
-    }
-    if (o1.getOffset() > firstSegment.getCapacityInBytes() || o2.getOffset() > secondSegment.getCapacityInBytes()) {
-      throw new IllegalArgumentException("One of the offsets provided [" + o1.getOffset() + ", " + o2.getOffset()
-          + "] is out of range of the segment it refers to [" + firstSegment.getCapacityInBytes() + ", " + secondSegment
-          .getCapacityInBytes() + "]");
-    }
-    if (o1.getName().equals(o2.getName())) {
-      return o1.getOffset() - o2.getOffset();
-    }
-    Offset higher = o1.compareTo(o2) > 0 ? o1 : o2;
-    Offset lower = higher == o1 ? o2 : o1;
-    int interveningSegmentsCount = segmentsByName.subMap(lower.getName(), false, higher.getName(), false).size();
-    // segment capacity is the same for every segment.
-    long segmentCapacity = firstSegment.getCapacityInBytes();
-    // adding the left over capacity in lower segment + capacities of all segments inbetween + offset in higher segment
-    long difference =
-        segmentCapacity - lower.getOffset() + segmentCapacity * interveningSegmentsCount + higher.getOffset();
-    return o1.compareTo(o2) * difference;
   }
 
   /**
@@ -250,58 +255,77 @@ class Log implements Write {
   /**
    * Checks the provided arguments for consistency and allocates the first segment file and creates the
    * {@link LogSegment} instance for it.
-   * @param totalCapacity the intended total capacity of the log.
    * @param segmentCapacity the intended capacity of each segment of the log.
+   * @return the {@link LogSegment} instance that is created.
    * @throws IOException if there is an I/O error creating the segment files or creating {@link LogSegment} instances.
    */
-  private void checkArgsAndAllocateFirstSegment(long totalCapacity, long segmentCapacity) throws IOException {
-    if (totalCapacity <= 0 || segmentCapacity <= 0) {
+  private LogSegment checkArgsAndGetFirstSegment(long segmentCapacity) throws IOException {
+    if (capacityInBytes <= 0 || segmentCapacity <= 0) {
       throw new IllegalArgumentException(
-          "One of totalCapacityInBytes [" + totalCapacity + "] or " + "segmentCapacityInBytes [" + segmentCapacity + "]"
-              + " is <=0");
+          "One of totalCapacityInBytes [" + capacityInBytes + "] or " + "segmentCapacityInBytes [" + segmentCapacity
+              + "] is <=0");
     }
-    segmentCapacity = Math.min(totalCapacity, segmentCapacity);
+    segmentCapacity = Math.min(capacityInBytes, segmentCapacity);
     // all segments should be the same size.
-    long numSegments = totalCapacity / segmentCapacity;
-    if (totalCapacity % segmentCapacity != 0) {
+    long numSegments = capacityInBytes / segmentCapacity;
+    if (capacityInBytes % segmentCapacity != 0) {
       throw new IllegalArgumentException(
-          "Capacity of log [" + totalCapacity + "] should be a multiple of segment capacity [" + segmentCapacity + "]");
+          "Capacity of log [" + capacityInBytes + "] should be a multiple of segment capacity [" + segmentCapacity
+              + "]");
     }
-    remainingUnallocatedSegments = numSegments;
-    String firstSegmentName = LogSegmentNameHelper.generateFirstSegmentName(numSegments);
-    logger.info("Allocating first segment with name [{}] and capacity {} bytes. Total number of segments is {}",
-        firstSegmentName, segmentCapacity, numSegments);
-    File segmentFile = allocate(LogSegmentNameHelper.nameToFilename(firstSegmentName), segmentCapacity);
+    Pair<String, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
+    logger.info("Allocating first segment with name [{}], back by file {} and capacity {} bytes. Total number of "
+            + "segments is {}", segmentNameAndFilename.getFirst(), segmentNameAndFilename.getSecond(), segmentCapacity,
+        numSegments);
+    File segmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity);
     // to be backwards compatible, headers are not written for a log segment if it is the only log segment.
-    LogSegment segment = new LogSegment(firstSegmentName, segmentFile, segmentCapacity, metrics, numSegments > 1);
-    segmentsByName.put(segment.getName(), segment);
+    return new LogSegment(segmentNameAndFilename.getFirst(), segmentFile, segmentCapacity, metrics, isLogSegmented);
   }
 
   /**
-   * Loads segment files and creates {@link LogSegment} instances.
+   * Creates {@link LogSegment} instances from {@code segmentFiles}.
    * @param segmentFiles the files that form the segments of the log.
-   * @param totalCapacity the total capacity of the log. This is used only if this is a single segment log.
+   * @return {@code List} of {@link LogSegment} instances corresponding to {@code segmentFiles}.
    * @throws IOException if there is an I/O error loading the segment files or creating {@link LogSegment} instances.
    */
-  private void loadSegments(File[] segmentFiles, long totalCapacity) throws IOException {
-    long totalSegments = -1;
+  private List<LogSegment> getSegmentsToLoad(File[] segmentFiles) throws IOException {
+    List<LogSegment> segments = new ArrayList<>(segmentFiles.length);
     for (File segmentFile : segmentFiles) {
       String name = LogSegmentNameHelper.nameFromFilename(segmentFile.getName());
       logger.info("Loading segment with name [{}]", name);
       LogSegment segment;
       if (name.isEmpty()) {
-        totalSegments = 1;
         // for backwards compatibility, a single segment log is loaded by providing capacity since the old logs have
         // no headers
-        segment = new LogSegment(name, segmentFile, totalCapacity, metrics, false);
+        segment = new LogSegment(name, segmentFile, capacityInBytes, metrics, false);
       } else {
         segment = new LogSegment(name, segmentFile, metrics);
-        totalSegments = totalSegments == -1 ? totalCapacity / segment.getCapacityInBytes() : totalSegments;
       }
       logger.info("Segment [{}] has capacity of {} bytes", name, segment.getCapacityInBytes());
+      segments.add(segment);
+    }
+    return segments;
+  }
+
+  /**
+   * Initializes the log.
+   * @param segmentsToLoad the {@link LogSegment} instances to include as a part of the log.
+   * @param segmentCapacityInBytes the capacity of a single {@link LogSegment}.
+   * @throws IOException if there is any I/O error during initialization.
+   */
+  private void initialize(List<LogSegment> segmentsToLoad, long segmentCapacityInBytes) throws IOException {
+    if (segmentsToLoad.size() == 0) {
+      // bootstrapping log.
+      segmentsToLoad = Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes));
+    }
+
+    LogSegment firstSegment = segmentsToLoad.get(0);
+    long totalSegments = firstSegment.getName().isEmpty() ? 1 : capacityInBytes / firstSegment.getCapacityInBytes();
+    for (LogSegment segment : segmentsToLoad) {
       segmentsByName.put(segment.getName(), segment);
     }
-    remainingUnallocatedSegments = totalSegments - segmentsByName.size();
+    remainingUnallocatedSegments.set(totalSegments - segmentsByName.size());
+    activeSegment = segmentsByName.lastEntry().getValue();
   }
 
   /**
@@ -316,7 +340,6 @@ class Log implements Write {
     // TODO (DiskManager changes): a pool of segments.
     File segmentFile = new File(dataDir, filename);
     Utils.preAllocateFileIfNeeded(segmentFile, size);
-    remainingUnallocatedSegments--;
     return segmentFile;
   }
 
@@ -332,7 +355,6 @@ class Log implements Write {
     if (!segmentFile.delete()) {
       throw new IllegalStateException("Could not delete segment file: " + segmentFile.getAbsolutePath());
     }
-    remainingUnallocatedSegments++;
   }
 
   /**
@@ -364,11 +386,6 @@ class Log implements Write {
    * @throws IOException if any I/O error occurred as a part of ensuring capacity.
    */
   private void ensureCapacity(long writeSize) throws IOException {
-    if (remainingUnallocatedSegments == 0) {
-      metrics.overflowWriteError.inc();
-      throw new IllegalStateException(
-          "There is no more capacity left in [" + dataDir + "]. Max capacity is [" + capacityInBytes + "]");
-    }
     // all segments are (should be) the same size.
     long segmentCapacity = activeSegment.getCapacityInBytes();
     if (writeSize > segmentCapacity - LogSegment.HEADER_SIZE) {
@@ -376,11 +393,77 @@ class Log implements Write {
       throw new IllegalArgumentException("Write of size [" + writeSize + "] cannot be serviced because it is greater "
           + "than a single segment's capacity [" + (segmentCapacity - LogSegment.HEADER_SIZE) + "]");
     }
-    String newSegmentName = LogSegmentNameHelper.getNextPositionName(activeSegment.getName());
-    logger.info("Allocating new segment with name: " + newSegmentName);
-    File newSegmentFile = allocate(LogSegmentNameHelper.nameToFilename(newSegmentName), segmentCapacity);
-    LogSegment newSegment = new LogSegment(newSegmentName, newSegmentFile, segmentCapacity, metrics, true);
-    segmentsByName.put(newSegmentName, newSegment);
+    if (remainingUnallocatedSegments.decrementAndGet() < 0) {
+      remainingUnallocatedSegments.incrementAndGet();
+      metrics.overflowWriteError.inc();
+      throw new IllegalStateException(
+          "There is no more capacity left in [" + dataDir + "]. Max capacity is [" + capacityInBytes + "]");
+    }
+    Pair<String, String> segmentNameAndFilename = getNextSegmentNameAndFilename();
+    logger.info("Allocating new segment with name: " + segmentNameAndFilename.getFirst());
+    File newSegmentFile = allocate(segmentNameAndFilename.getSecond(), segmentCapacity);
+    LogSegment newSegment =
+        new LogSegment(segmentNameAndFilename.getFirst(), newSegmentFile, segmentCapacity, metrics, true);
+    segmentsByName.put(segmentNameAndFilename.getFirst(), newSegment);
+  }
+
+  /**
+   * @return the name and filename of the segment that is to be created.
+   */
+  private Pair<String, String> getNextSegmentNameAndFilename() {
+    Pair<String, String> nameAndFilename;
+    if (segmentNameAndFileNameIterator != null && segmentNameAndFileNameIterator.hasNext()) {
+      nameAndFilename = segmentNameAndFileNameIterator.next();
+    } else if (activeSegment == null) {
+      // this code path gets exercised only on first startup
+      String name = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
+      nameAndFilename = new Pair<>(name, LogSegmentNameHelper.nameToFilename(name));
+    } else {
+      String name = LogSegmentNameHelper.getNextPositionName(activeSegment.getName());
+      nameAndFilename = new Pair<>(name, LogSegmentNameHelper.nameToFilename(name));
+    }
+    return nameAndFilename;
+  }
+
+  /**
+   * Adds a {@link LogSegment} instance to the log.
+   * @param segment the {@link LogSegment} instance to add.
+   * @param increaseUsedSegmentCount {@code true} if the number of segments used has to be incremented, {@code false}
+   *                                             otherwise.
+   * @throws IllegalArgumentException if the {@code segment} being added is past the active segment or if the segment
+   *                                  added cannot be counted as "used".
+   */
+  void addSegment(LogSegment segment, boolean increaseUsedSegmentCount) {
+    if (increaseUsedSegmentCount && remainingUnallocatedSegments.decrementAndGet() < 0) {
+      remainingUnallocatedSegments.incrementAndGet();
+      throw new IllegalArgumentException("Cannot add any more log segments that contribute to used segment count");
+    }
+    if (LogSegmentNameHelper.COMPARATOR.compare(segment.getName(), activeSegment.getName()) >= 0) {
+      throw new IllegalArgumentException(
+          "Cannot add segments past the current active segment. Active segment is [" + activeSegment.getName()
+              + "]. Tried to add [" + segment.getName() + "]");
+    }
+    segmentsByName.put(segment.getName(), segment);
+  }
+
+  /**
+   * Drops an existing {@link LogSegment} instance from the log.
+   * @param segmentName the {@link LogSegment} instance to drop.
+   * @param decreaseUsedSegmentCount {@code true} if the number of segments used has to be decremented, {@code false}
+   *                                             otherwise.
+   * @throws IllegalArgumentException if {@code segmentName} is not a part of the log.
+   * @throws IOException if there is any I/O error cleaning up the log segment.
+   */
+  void dropSegment(String segmentName, boolean decreaseUsedSegmentCount) throws IOException {
+    LogSegment segment = segmentsByName.get(segmentName);
+    if (segment == null || segment == activeSegment) {
+      throw new IllegalArgumentException("Segment does not exist or is the active segment: " + segmentName);
+    }
+    segmentsByName.remove(segmentName);
+    free(segment);
+    if (decreaseUsedSegmentCount) {
+      remainingUnallocatedSegments.incrementAndGet();
+    }
   }
 
   /**

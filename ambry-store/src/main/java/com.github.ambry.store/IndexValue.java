@@ -106,6 +106,10 @@ class IndexValue {
         originalMessageOffset);
   }
 
+  void clearOriginalMessageOffset() {
+    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes, -1);
+  }
+
   void setNewSize(long size) {
     value.putLong(0, size);
   }

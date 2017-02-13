@@ -26,6 +26,7 @@ import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import org.junit.After;
 import org.junit.Test;
@@ -126,7 +127,7 @@ public class LogTest {
     }
 
     // file which is not a directory
-    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)));
+    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(false)));
     try {
       new Log(file.getAbsolutePath(), 1, 1, metrics);
       fail("Construction should have failed");
@@ -185,32 +186,18 @@ public class LogTest {
   }
 
   /**
-   * Tests cases where bad arguments are provided to {@link Log#getDifference(Offset, Offset)}.
+   * Tests cases where bad arguments are provided to {@link Log#getNextSegment(LogSegment)}.
    * @throws IOException
    */
   @Test
-  public void getDifferenceBadArgsTest() throws IOException {
+  public void getNextSegmentBadArgsTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
-    long numSegments = LOG_CAPACITY / SEGMENT_CAPACITY;
-    Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(numSegments + 1, 0), 0);
-    Offset badOffsetOffset =
-        new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getCapacityInBytes() + 1);
-    List<Pair<Offset, Offset>> pairsToCheck = new ArrayList<>();
-    pairsToCheck.add(new Pair<>(log.getStartOffset(), badSegmentOffset));
-    pairsToCheck.add(new Pair<>(badSegmentOffset, log.getEndOffset()));
-    pairsToCheck.add(new Pair<>(log.getStartOffset(), badOffsetOffset));
-    pairsToCheck.add(new Pair<>(badOffsetOffset, log.getEndOffset()));
-
+    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(1, 1), SEGMENT_CAPACITY, true);
     try {
-      for (Pair<Offset, Offset> pairToCheck : pairsToCheck) {
-        try {
-          log.getDifference(pairToCheck.getFirst(), pairToCheck.getSecond());
-          fail("Should have failed to get difference with invalid offset input. Input was [" + pairToCheck.getFirst()
-              + ", " + pairToCheck.getSecond() + "]");
-        } catch (IllegalArgumentException e) {
-          // expected. Nothing to do.
-        }
-      }
+      log.getNextSegment(segment);
+      fail("Getting next segment should have failed because provided segment does not exist in the log");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
     } finally {
       log.close();
       cleanDirectory(tempDir);
@@ -218,17 +205,16 @@ public class LogTest {
   }
 
   /**
-   * Tests cases where bad arguments are provided to {@link Log#getNextSegment(LogSegment)}.
+   * Tests cases where bad arguments are provided to {@link Log#getPrevSegment(LogSegment)}.
    * @throws IOException
    */
   @Test
-  public void getNextSegmentBadArgsTest() throws IOException {
+  public void getPrevSegmentBadArgsTest() throws IOException {
     Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics);
-    File file = create(LogSegmentNameHelper.nameToFilename(LogSegmentNameHelper.generateFirstSegmentName(1)));
-    LogSegment segment = new LogSegment(LogSegmentNameHelper.getName(1, 1), file, 1, metrics, false);
+    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(1, 1), SEGMENT_CAPACITY, true);
     try {
-      log.getNextSegment(segment);
-      fail("Getting next segment should have failed because provided segment does not exist in the log");
+      log.getPrevSegment(segment);
+      fail("Getting prev segment should have failed because provided segment does not exist in the log");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     } finally {
@@ -255,7 +241,7 @@ public class LogTest {
         // expected. Nothing to do.
       }
       // write a single byte into the log
-      endOffsetOfPrevMessage = log.getStartOffset();
+      endOffsetOfPrevMessage = log.getEndOffset();
       CHANNEL_APPENDER.append(log, ByteBuffer.allocate(1));
       try {
         // provide the wrong size
@@ -268,6 +254,139 @@ public class LogTest {
       log.close();
       cleanDirectory(tempDir);
     }
+  }
+
+  /**
+   * Tests all cases of {@link Log#addSegment(LogSegment, boolean)} and {@link Log#dropSegment(String, boolean)}.
+   * @throws IOException
+   */
+  @Test
+  public void addAndDropSegmentTest() throws IOException {
+    // start with a segment that has a high position to allow for addition of segments
+    long activeSegmentPos = 2 * LOG_CAPACITY / SEGMENT_CAPACITY;
+    LogSegment loadedSegment = getLogSegment(LogSegmentNameHelper.getName(activeSegmentPos, 0), SEGMENT_CAPACITY, true);
+    List<LogSegment> segmentsToLoad = Collections.singletonList(loadedSegment);
+    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics, true, segmentsToLoad,
+        Collections.EMPTY_LIST.iterator());
+
+    // add a segment
+    String segmentName = LogSegmentNameHelper.getName(0, 0);
+    LogSegment uncountedSegment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+    log.addSegment(uncountedSegment, false);
+    assertEquals("Log segment instance not as expected", uncountedSegment, log.getSegment(segmentName));
+
+    // cannot add past the active segment
+    segmentName = LogSegmentNameHelper.getName(activeSegmentPos + 1, 0);
+    LogSegment segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+    try {
+      log.addSegment(segment, false);
+      fail("Should not be able to add past the active segment");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // since the previous one did not ask for count of segments to be increased, we should be able to add max - 1
+    // more segments. This increments used segment count to the max.
+    int max = (int) (LOG_CAPACITY / SEGMENT_CAPACITY);
+    for (int i = 1; i < max; i++) {
+      segmentName = LogSegmentNameHelper.getName(i, 0);
+      segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+      log.addSegment(segment, true);
+    }
+
+    // fill up the active segment
+    ByteBuffer buffer =
+        ByteBuffer.allocate((int) (loadedSegment.getCapacityInBytes() - loadedSegment.getStartOffset()));
+    CHANNEL_APPENDER.append(log, buffer);
+    // write fails because no more log segments can be allocated
+    buffer = ByteBuffer.allocate(1);
+    try {
+      CHANNEL_APPENDER.append(log, buffer);
+      fail("Write should have failed because no more log segments should be allocated");
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    }
+
+    // cannot add segments that are considered "used"
+    segmentName = LogSegmentNameHelper.getName(activeSegmentPos - 1, 0);
+    segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
+    try {
+      log.addSegment(segment, true);
+      fail("Cannot add segment that has to be counted towards used segments");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // drop the uncounted segment
+    assertEquals("Segment not as expected", uncountedSegment, log.getSegment(uncountedSegment.getName()));
+    File segmentFile = uncountedSegment.getView().getFirst();
+    log.dropSegment(uncountedSegment.getName(), false);
+    assertNull("Segment should not be present", log.getSegment(uncountedSegment.getName()));
+    assertFalse("Segment file should not be present", segmentFile.exists());
+
+    // cannot drop a segment that does not exist
+    // cannot drop the active segment
+    String[] segmentsToDrop = {uncountedSegment.getName(), loadedSegment.getName()};
+    for (String segmentToDrop : segmentsToDrop) {
+      try {
+        log.dropSegment(segmentToDrop, false);
+        fail("Should have failed to drop segment");
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
+    }
+
+    // drop a segment and decrement total segment count
+    log.dropSegment(log.getFirstSegment().getName(), true);
+
+    // should be able to write now
+    buffer = ByteBuffer.allocate(1);
+    CHANNEL_APPENDER.append(log, buffer);
+  }
+
+  /**
+   * Checks that the constructor that receives segments and segment names iterator,
+   * {@link Log#Log(String, long, long, StoreMetrics, boolean, List, Iterator)}, loads the segments correctly and uses
+   * the iterator to name new segments and uses the default algorithm once the names run out.
+   * @throws IOException
+   */
+  @Test
+  public void logSegmentCustomNamesTest() throws IOException {
+    int numSegments = (int) (LOG_CAPACITY / SEGMENT_CAPACITY);
+    LogSegment segment = getLogSegment(LogSegmentNameHelper.getName(0, 0), SEGMENT_CAPACITY, true);
+    long startPos = 2 * numSegments;
+    List<Pair<String, String>> expectedSegmentAndFileNames = new ArrayList<>(numSegments);
+    expectedSegmentAndFileNames.add(new Pair<>(segment.getName(), segment.getView().getFirst().getName()));
+    List<Pair<String, String>> segmentNameAndFileNamesDesired = new ArrayList<>();
+    String lastName = null;
+    for (int i = 0; i < 2; i++) {
+      lastName = LogSegmentNameHelper.getName(startPos + i, 0);
+      String fileName = LogSegmentNameHelper.nameToFilename(lastName) + "_modified";
+      segmentNameAndFileNamesDesired.add(new Pair<>(lastName, fileName));
+      expectedSegmentAndFileNames.add(new Pair<>(lastName, fileName));
+    }
+    for (int i = expectedSegmentAndFileNames.size(); i < numSegments; i++) {
+      lastName = LogSegmentNameHelper.getNextPositionName(lastName);
+      String fileName = LogSegmentNameHelper.nameToFilename(lastName);
+      expectedSegmentAndFileNames.add(new Pair<>(lastName, fileName));
+    }
+
+    Log log = new Log(tempDir.getAbsolutePath(), LOG_CAPACITY, SEGMENT_CAPACITY, metrics, true,
+        Collections.singletonList(segment), segmentNameAndFileNamesDesired.iterator());
+    // write enough so that all segments are allocated
+    ByteBuffer buffer = ByteBuffer.allocate((int) (segment.getCapacityInBytes() - segment.getStartOffset()));
+    for (int i = 0; i < numSegments; i++) {
+      buffer.rewind();
+      CHANNEL_APPENDER.append(log, buffer);
+    }
+
+    segment = log.getFirstSegment();
+    for (Pair<String, String> nameAndFilename : expectedSegmentAndFileNames) {
+      assertEquals("Segment name does not match", nameAndFilename.getFirst(), segment.getName());
+      assertEquals("Segment file does not match", nameAndFilename.getSecond(), segment.getView().getFirst().getName());
+      segment = log.getNextSegment(segment);
+    }
+    assertNull("There should be no more segments", segment);
   }
 
   // helpers
@@ -285,6 +404,19 @@ public class LogTest {
         assertTrue("The file [" + file.getAbsolutePath() + "] could not be deleted", file.delete());
       }
     }
+  }
+
+  /**
+   * Returns a {@link LogSegment} instance with name {@code name} and capacity {@code capacityInBytes}.
+   * @param name the name of the {@link LogSegment} instance.
+   * @param capacityInBytes the capacity of the {@link LogSegment} instance.
+   * @param writeHeader {@code true} if headers should be written.
+   * @return a {@link LogSegment} instance with name {@code name} and capacity {@code capacityInBytes}.
+   * @throws IOException
+   */
+  private LogSegment getLogSegment(String name, long capacityInBytes, boolean writeHeader) throws IOException {
+    File file = create(LogSegmentNameHelper.nameToFilename(name));
+    return new LogSegment(name, file, capacityInBytes, metrics, writeHeader);
   }
 
   // comprehensiveTest() helpers
@@ -315,7 +447,7 @@ public class LogTest {
           if (i == 0) {
             // first startup case - segment file is not pre-created but will be created by the Log.
             expectedSegmentNames = new ArrayList<>();
-            expectedSegmentNames.add(LogSegmentNameHelper.generateFirstSegmentName(numSegments));
+            expectedSegmentNames.add(LogSegmentNameHelper.generateFirstSegmentName(numSegments > 1));
           } else if (i == j) {
             // invalid index for anything other than i == 0.
             break;
@@ -344,7 +476,7 @@ public class LogTest {
     }
     List<String> segmentNames = new ArrayList<>(numToCreate);
     if (numFinalSegments == 1) {
-      String name = LogSegmentNameHelper.generateFirstSegmentName(numFinalSegments);
+      String name = LogSegmentNameHelper.generateFirstSegmentName(false);
       File file = create(LogSegmentNameHelper.nameToFilename(name));
       new LogSegment(name, file, segmentCapacity, metrics, false).close();
       segmentNames.add(name);
@@ -398,6 +530,8 @@ public class LogTest {
       List<String> expectedSegmentNames, int segmentIdxToMarkActive, Appender appender) throws IOException {
     long numSegments = (logCapacity - 1) / segmentCapacity + 1;
     Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segmentCapacity, metrics);
+    assertEquals("Total capacity not as expected", logCapacity, log.getCapacityInBytes());
+    assertEquals("Segment capacity not as expected", Math.min(logCapacity, segmentCapacity), log.getSegmentCapacity());
     try {
       // only preloaded segments should be in expectedSegmentNames.
       checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, expectedSegmentNames);
@@ -412,7 +546,6 @@ public class LogTest {
       // log full - so all segments should be there
       assertEquals("Unexpected number of segments", numSegments, allSegmentNames.size());
       checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, allSegmentNames);
-      doDifferenceTest(log, allSegmentNames);
       flushCloseAndValidate(log);
       checkLogReload(logCapacity, Math.min(logCapacity, segmentCapacity), allSegmentNames);
     } finally {
@@ -432,6 +565,7 @@ public class LogTest {
   private void checkLog(Log log, long expectedSegmentCapacity, long numFinalSegments, List<String> expectedSegmentNames)
       throws IOException {
     LogSegment nextSegment = log.getFirstSegment();
+    assertNull("Prev segment should be null", log.getPrevSegment(nextSegment));
     for (String segmentName : expectedSegmentNames) {
       assertEquals("Next segment is not as expected", segmentName, nextSegment.getName());
       LogSegment segment = log.getSegment(segmentName);
@@ -439,12 +573,11 @@ public class LogTest {
       assertEquals("Segment capacity not as expected", expectedSegmentCapacity, segment.getCapacityInBytes());
       assertEquals("Segment returned by getSegment() is incorrect", segment, log.getSegment(segment.getName()));
       nextSegment = log.getNextSegment(segment);
+      if (nextSegment != null) {
+        assertEquals("Prev segment not as expected", segment, log.getPrevSegment(nextSegment));
+      }
     }
     assertNull("Next segment should be null", nextSegment);
-    assertEquals("Log segments reported is wrong", expectedSegmentNames.size(), log.getSegmentCount());
-    long startOffsetInSegment = numFinalSegments > 1 ? LogSegment.HEADER_SIZE : 0;
-    Offset expectedStartOffset = new Offset(expectedSegmentNames.get(0), startOffsetInSegment);
-    assertEquals("Start offset is wrong", expectedStartOffset, log.getStartOffset());
   }
 
   /**
@@ -503,13 +636,12 @@ public class LogTest {
           expectedActiveSegment.getEndOffset());
       assertEquals("End offset not as expected", new Offset(expectedActiveSegment.getName(), currentSegmentWriteSize),
           log.getEndOffset());
-      assertEquals("Used capacity not as expected", expectedUsedCapacity, log.getUsedCapacity());
     }
     // try one more write that should fail
     try {
       appender.append(log, ByteBuffer.wrap(buf));
       fail("Should have failed because max capacity has been reached");
-    } catch (IllegalStateException e) {
+    } catch (IllegalArgumentException | IllegalStateException e) {
       // expected. Nothing to do.
     }
   }
@@ -528,82 +660,13 @@ public class LogTest {
     if (count == segmentNames.size()) {
       return segmentNames;
     } else if (segmentNames.size() == 0) {
-      segmentNames.add(LogSegmentNameHelper.generateFirstSegmentName(count));
+      segmentNames.add(LogSegmentNameHelper.generateFirstSegmentName(count > 1));
     }
     for (int i = segmentNames.size(); i < count; i++) {
       String nextSegmentName = LogSegmentNameHelper.getNextPositionName(segmentNames.get(i - 1));
       segmentNames.add(nextSegmentName);
     }
     return segmentNames;
-  }
-
-  /**
-   * Tests {@link Log#getDifference(Offset, Offset)} for all cases.
-   * 1. Same segment and offset
-   * 2. Same segment, different offsets
-   * 3. Boundary offsets (combination of -start of lower, end of lower- and -start of higher, end of higher-
-   * 4. Random offsets that are not boundary offsets.
-   * @param log the {@link Log} instance to use.
-   * @param segmentNames the names of all the segments in the {@code log}.
-   */
-  private void doDifferenceTest(Log log, List<String> segmentNames) {
-    int lowerIdx = 0;
-    int higherIdx = 0;
-    if (segmentNames.size() > 1) {
-      // pick any segment except the last one
-      lowerIdx = TestUtils.RANDOM.nextInt(segmentNames.size() - 1);
-      // pick a segment higher than lowerIdx
-      higherIdx = lowerIdx + 1 + TestUtils.RANDOM.nextInt(segmentNames.size() - lowerIdx - 1);
-    }
-    String lowerSegmentName = segmentNames.get(lowerIdx);
-    String higherSegmentName = segmentNames.get(higherIdx);
-    LogSegment lowerSegment = log.getSegment(lowerSegmentName);
-    LogSegment higherSegment = log.getSegment(higherSegmentName);
-
-    // get boundary offsets
-    Offset lowerLowBound = new Offset(lowerSegmentName, 0);
-    Offset lowerHighBound = new Offset(lowerSegmentName, lowerSegment.getEndOffset());
-    Offset higherLowBound = new Offset(higherSegmentName, 0);
-    Offset higherHighBound = new Offset(higherSegmentName, higherSegment.getEndOffset());
-
-    // get random offsets that are not 0 or the end offset
-    Offset lower =
-        new Offset(lowerSegmentName, Utils.getRandomLong(TestUtils.RANDOM, lowerSegment.getEndOffset() - 1) + 1);
-    Offset higher =
-        new Offset(higherSegmentName, Utils.getRandomLong(TestUtils.RANDOM, higherSegment.getEndOffset() - 1) + 1);
-
-    checkDifference(log, lower, higher, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
-    checkDifference(log, lowerLowBound, higherLowBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
-    checkDifference(log, lowerLowBound, higherHighBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
-    checkDifference(log, lowerHighBound, higherLowBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
-    checkDifference(log, lowerHighBound, higherHighBound, higherIdx - lowerIdx, lowerSegment.getCapacityInBytes());
-    checkDifference(log, lower, lower, 0, lowerSegment.getCapacityInBytes());
-    checkDifference(log, lowerLowBound, lower, 0, lowerSegment.getCapacityInBytes());
-  }
-
-  /**
-   * Checks the output of {@link Log#getDifference(Offset, Offset)} for {@code higher} and {@code lower} against the
-   * expected value.
-   * @param log the {@link Log} instance to use.
-   * @param lower the {@link Offset} that is the "lower" offset.
-   * @param higher the {@link Offset} that is the "higher" offset.
-   * @param numSegmentHops the number of segment hops it takes to get from {@code lower} to {@code higher}.
-   * @param segmentCapacity the capacity of each segment.
-   */
-  private void checkDifference(Log log, Offset lower, Offset higher, int numSegmentHops, long segmentCapacity) {
-    long expectedDifference;
-    if (numSegmentHops == 0) {
-      expectedDifference = higher.getOffset() - lower.getOffset();
-    } else {
-      // capacities of full segments b/w higher and lower
-      expectedDifference = (numSegmentHops - 1) * segmentCapacity;
-      // diff b/w lower segment cap and the offset in the lower segment.
-      expectedDifference += segmentCapacity - lower.getOffset();
-      // the offset in the higher segment
-      expectedDifference += higher.getOffset();
-    }
-    assertEquals("Difference returned is not as expected", expectedDifference, log.getDifference(higher, lower));
-    assertEquals("Difference returned is not as expected", -expectedDifference, log.getDifference(lower, higher));
   }
 
   /**

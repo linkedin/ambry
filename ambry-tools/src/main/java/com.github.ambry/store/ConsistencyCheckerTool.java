@@ -93,9 +93,9 @@ public class ConsistencyCheckerTool {
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
       try {
-        File[] indexFiles = replica.listFiles(PersistentIndex.INDEX_FILE_FILTER);
+        File[] indexFiles = replica.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
         long keysProcessedforReplica = 0;
-        Arrays.sort(indexFiles, PersistentIndex.INDEX_FILE_COMPARATOR);
+        Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
         for (File indexFile : indexFiles) {
           keysProcessedforReplica +=
               dumpIndexTool.dumpIndex(indexFile, replica.getName(), replicasList, new ArrayList<String>(),

@@ -21,6 +21,7 @@ import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.utils.SystemTime;
 import java.io.FileWriter;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -39,7 +40,7 @@ class BlobIndexMetrics extends PersistentIndex {
       AtomicLong totalWrites, AtomicLong totalTimeTaken, AtomicLong totalReads, StoreConfig config, FileWriter writer,
       StoreKeyFactory factory) throws StoreException {
     super(datadir, scheduler, log, config, factory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
-        new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance(), null);
+        new StoreMetrics(datadir, new MetricRegistry()), SystemTime.getInstance(), UUID.randomUUID(), null);
     this.enableVerboseLogging = enableVerboseLogging;
     this.lastOffsetUsed = new AtomicLong(0);
     this.totalWrites = totalWrites;
