@@ -13,11 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.StoreConfig;
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -27,28 +22,18 @@ import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
-import java.util.NoSuchElementException;
-import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Test;
@@ -63,132 +48,10 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class IndexTest {
-  private static final StoreKeyFactory STORE_KEY_FACTORY;
-  private static final byte[] RECOVERY_INFO = new byte[100];
 
-  static {
-    try {
-      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      Arrays.fill(RECOVERY_INFO, (byte) 0);
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
-  private static final long LOG_CAPACITY = 10000;
-  private static final long SEGMENT_CAPACITY = 2000;
-  private static final int MAX_IN_MEM_ELEMENTS = 5;
-  // deliberately do not divide the capacities perfectly.
-  private static final long PUT_RECORD_SIZE = 53;
-  private static final long DELETE_RECORD_SIZE = 29;
-  private static final long HARD_DELETE_START_OFFSET = 11;
-  private static final long HARD_DELETE_LAST_PART_SIZE = 13;
-
-  // used by getUniqueId() to make sure keys are never regenerated in a single test run.
-  private final Set<MockId> generatedKeys = new HashSet<>();
-  // The reference index to compare against. Key is index segment start Offset, Value is the reference index segment.
-  // This reflects exactly how PersistentIndex is supposed to look.
-  private final TreeMap<Offset, TreeMap<MockId, IndexValue>> referenceIndex = new TreeMap<>();
-  // A map of all the keys. The key is the MockId and the value is a pair of index segment start Offsets.
-  // first Offset represents the index segment start offset of the PUT entry.
-  // second Offset represents the index segment start offset of the DELETE entry (null if the key has not been deleted).
-  private final Map<MockId, Pair<Offset, Offset>> indexSegmentStartOffsets = new HashMap<>();
-  // A map of all the keys. The key is the MockId and the value is a pair of IndexValues.
-  // The first IndexValue represents the value of the PUT entry.
-  // The second IndexValue represents the value of the DELETE entry (null if the key has not been deleted).
-  private final Map<MockId, Pair<IndexValue, IndexValue>> allKeys = new HashMap<>();
-  // Set of all deleted keys
-  private final Set<MockId> deletedKeys = new HashSet<>();
-  // Set of all expired keys
-  private final Set<MockId> expiredKeys = new HashSet<>();
-  // Set of all keys that are not deleted/expired
-  private final Set<MockId> liveKeys = new HashSet<>();
-  // The keys in offset order as they appear in the log.
-  private final TreeMap<Offset, Pair<MockId, IndexValue>> logOrder = new TreeMap<>();
-
-  // Indicates whether the log is segmented
   private final boolean isLogSegmented;
-  // Variables that represent the folder where the data resides
   private final File tempDir;
-  private final String tempDirStr;
-  // the time instance that will be used in the index
-  private final Time time = new MockTime();
-
-  private final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-  private final Properties properties = new Properties();
-
-  // The Log which has the data
-  private Log log;
-  // The MessageStoreRecovery that is used with the index
-  private MessageStoreRecovery recovery = new DummyMessageStoreRecovery();
-  // The MessageStoreHardDelete that is used with the index
-  private MessageStoreHardDelete hardDelete = new MockMessageStoreHardDelete();
-  // The MetricRegistry that is used with the index
-  private MetricRegistry metricRegistry;
-  // The index of the log
-  private PersistentIndex index;
-  // The session ID associated with the index
-  private UUID sessionId = UUID.randomUUID();
-  // the incarnationId associated with the store
-  private UUID incarnationId = UUID.randomUUID();
-
-  /**
-   * Mock implementation of {@link MessageStoreHardDelete} that returns {@link MessageInfo} appropriately and
-   * zeroes out a well defined section of any offered blobs.
-   */
-  private class MockMessageStoreHardDelete implements MessageStoreHardDelete {
-
-    @Override
-    public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-        List<byte[]> recoveryInfoList) {
-      /*
-       * Returns hard delete messages that zero out well known parts of the offered blobs.
-       */
-      class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
-        private final MessageReadSet readSet;
-        private int count = 0;
-
-        private MockMessageStoreHardDeleteIterator(MessageReadSet readSet) {
-          this.readSet = readSet;
-        }
-
-        @Override
-        public boolean hasNext() {
-          return count < readSet.count();
-        }
-
-        @Override
-        public HardDeleteInfo next() {
-          if (!hasNext()) {
-            throw new NoSuchElementException();
-          }
-          count++;
-          long size = readSet.sizeInBytes(count - 1) - HARD_DELETE_START_OFFSET - HARD_DELETE_LAST_PART_SIZE;
-          ByteBuffer buf = ByteBuffer.allocate((int) size);
-          Arrays.fill(buf.array(), (byte) 0);
-          ByteBufferInputStream stream = new ByteBufferInputStream(buf);
-          ReadableByteChannel channel = Channels.newChannel(stream);
-          return new HardDeleteInfo(channel, buf.capacity(), HARD_DELETE_START_OFFSET, RECOVERY_INFO);
-        }
-
-        @Override
-        public void remove() {
-          throw new UnsupportedOperationException();
-        }
-      }
-
-      return new MockMessageStoreHardDeleteIterator(readSet);
-    }
-
-    @Override
-    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
-      String segmentName = ((LogSegment) read).getName();
-      Pair<MockId, IndexValue> idAndValue = logOrder.get(new Offset(segmentName, offset));
-      IndexValue value = idAndValue.getSecond();
-      return new MessageInfo(idAndValue.getFirst(), value.getSize(), value.getExpiresAtMs());
-    }
-  }
+  private final CuratedLogIndexState state;
 
   /**
    * Running for both segmented and non-segmented log.
@@ -206,21 +69,18 @@ public class IndexTest {
   public IndexTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("indexDir-" + UtilsTest.getRandomString(10));
-    tempDirStr = tempDir.getAbsolutePath();
-    setupTestState();
+    state = new CuratedLogIndexState(isLogSegmented, tempDir);
   }
 
   /**
    * Releases all resources and deletes the temporary directory.
    * @throws InterruptedException
    * @throws IOException
+   * @throws StoreException
    */
   @After
   public void cleanup() throws InterruptedException, IOException, StoreException {
-    index.close();
-    log.close();
-    scheduler.shutdown();
-    assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
+    state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
@@ -235,13 +95,13 @@ public class IndexTest {
    */
   @Test
   public void findKeyTest() throws StoreException {
-    for (MockId id : allKeys.keySet()) {
-      IndexValue value = index.findKey(id);
+    for (MockId id : state.allKeys.keySet()) {
+      IndexValue value = state.index.findKey(id);
       verifyValue(id, value);
     }
     // search for a non existent key
-    MockId nonExistentId = getUniqueId();
-    verifyValue(nonExistentId, index.findKey(nonExistentId));
+    MockId nonExistentId = state.getUniqueId();
+    verifyValue(nonExistentId, state.index.findKey(nonExistentId));
   }
 
   /**
@@ -256,41 +116,42 @@ public class IndexTest {
   @Test
   public void findKeyWithFileSpanTest() throws StoreException {
     // using only liveKeys to simplify the test - behavior does not differ based on the type of entry.
-    for (MockId id : liveKeys) {
-      IndexValue expectedValue = getExpectedValue(id, true);
-      FileSpan fileSpanForMessage = log.getFileSpanForMessage(expectedValue.getOffset(), expectedValue.getSize());
+    for (MockId id : state.liveKeys) {
+      IndexValue expectedValue = state.getExpectedValue(id, true);
+      FileSpan fileSpanForMessage = state.log.getFileSpanForMessage(expectedValue.getOffset(), expectedValue.getSize());
 
       // FileSpan that is exactly that of the message
-      verifyValue(id, index.findKey(id, fileSpanForMessage));
+      verifyValue(id, state.index.findKey(id, fileSpanForMessage));
 
-      Offset indexSegmentStartOffset = indexSegmentStartOffsets.get(id).getFirst();
-      Offset lowerSegmentStartOffset = referenceIndex.lowerKey(indexSegmentStartOffset);
-      Offset higherSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
+      Offset indexSegmentStartOffset = state.indexSegmentStartOffsets.get(id).getFirst();
+      Offset lowerSegmentStartOffset = state.referenceIndex.lowerKey(indexSegmentStartOffset);
+      Offset higherSegmentStartOffset = state.referenceIndex.higherKey(indexSegmentStartOffset);
 
       // FileSpan from start offset of message to index end offset
-      FileSpan fileSpan = new FileSpan(fileSpanForMessage.getStartOffset(), index.getCurrentEndOffset());
-      verifyValue(id, index.findKey(id, fileSpan));
+      FileSpan fileSpan = new FileSpan(fileSpanForMessage.getStartOffset(), state.index.getCurrentEndOffset());
+      verifyValue(id, state.index.findKey(id, fileSpan));
 
       // FileSpan from start offset of index to end offset of message
-      fileSpan = new FileSpan(index.getStartOffset(), fileSpanForMessage.getEndOffset());
-      verifyValue(id, index.findKey(id, fileSpan));
+      fileSpan = new FileSpan(state.index.getStartOffset(), fileSpanForMessage.getEndOffset());
+      verifyValue(id, state.index.findKey(id, fileSpan));
 
       // FileSpan that includes the message
       Offset startOffset = lowerSegmentStartOffset == null ? indexSegmentStartOffset : lowerSegmentStartOffset;
-      Offset endOffset = higherSegmentStartOffset == null ? index.getCurrentEndOffset() : higherSegmentStartOffset;
+      Offset endOffset =
+          higherSegmentStartOffset == null ? state.index.getCurrentEndOffset() : higherSegmentStartOffset;
       fileSpan = new FileSpan(startOffset, endOffset);
-      verifyValue(id, index.findKey(id, fileSpan));
+      verifyValue(id, state.index.findKey(id, fileSpan));
 
       if (higherSegmentStartOffset != null) {
         // FileSpan higher than the entry (does not include entry)
-        fileSpan = new FileSpan(higherSegmentStartOffset, log.getEndOffset());
-        assertNull("There should have been no value returned", index.findKey(id, fileSpan));
+        fileSpan = new FileSpan(higherSegmentStartOffset, state.log.getEndOffset());
+        assertNull("There should have been no value returned", state.index.findKey(id, fileSpan));
       }
 
       if (lowerSegmentStartOffset != null) {
         // FileSpan lower than the entry (does not include entry)
-        fileSpan = new FileSpan(index.getStartOffset(), lowerSegmentStartOffset);
-        assertNull("There should have been no value returned", index.findKey(id, fileSpan));
+        fileSpan = new FileSpan(state.index.getStartOffset(), lowerSegmentStartOffset);
+        assertNull("There should have been no value returned", state.index.findKey(id, fileSpan));
       }
     }
   }
@@ -307,7 +168,7 @@ public class IndexTest {
   @Test
   public void getBlobReadInfoTest() throws StoreException {
     final AtomicReference<MockId> idRequested = new AtomicReference<>();
-    hardDelete = new MessageStoreHardDelete() {
+    state.hardDelete = new MessageStoreHardDelete() {
       @Override
       public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
           List<byte[]> recoveryInfoList) throws IOException {
@@ -320,26 +181,26 @@ public class IndexTest {
         if (id == null) {
           throw new IllegalStateException("No ID was set before making a call to getBlobReadInfo()");
         }
-        IndexValue value = getExpectedValue(id, true);
+        IndexValue value = state.getExpectedValue(id, true);
         return new MessageInfo(id, value.getSize(), value.getExpiresAtMs());
       }
     };
-    reloadIndex(false);
+    state.reloadIndex(true, false);
     List<EnumSet<StoreGetOptions>> allCombos = new ArrayList<>();
     allCombos.add(EnumSet.noneOf(StoreGetOptions.class));
     allCombos.add(EnumSet.of(StoreGetOptions.Store_Include_Expired));
     allCombos.add(EnumSet.of(StoreGetOptions.Store_Include_Deleted));
     allCombos.add(EnumSet.allOf(StoreGetOptions.class));
-    for (MockId id : allKeys.keySet()) {
+    for (MockId id : state.allKeys.keySet()) {
       idRequested.set(id);
       for (EnumSet<StoreGetOptions> getOptions : allCombos) {
-        if (liveKeys.contains(id)) {
+        if (state.liveKeys.contains(id)) {
           verifyBlobReadOptions(id, getOptions, null);
-        } else if (expiredKeys.contains(id)) {
+        } else if (state.expiredKeys.contains(id)) {
           StoreErrorCodes expectedErrorCode =
               getOptions.contains(StoreGetOptions.Store_Include_Expired) ? null : StoreErrorCodes.TTL_Expired;
           verifyBlobReadOptions(id, getOptions, expectedErrorCode);
-        } else if (deletedKeys.contains(id)) {
+        } else if (state.deletedKeys.contains(id)) {
           StoreErrorCodes expectedErrorCode =
               getOptions.contains(StoreGetOptions.Store_Include_Deleted) ? null : StoreErrorCodes.ID_Deleted;
           verifyBlobReadOptions(id, getOptions, expectedErrorCode);
@@ -347,7 +208,7 @@ public class IndexTest {
       }
     }
     // try to get BlobReadOption for a non existent key
-    MockId nonExistentId = getUniqueId();
+    MockId nonExistentId = state.getUniqueId();
     verifyBlobReadOptions(nonExistentId, EnumSet.allOf(StoreGetOptions.class), StoreErrorCodes.ID_Not_Found);
   }
 
@@ -357,14 +218,14 @@ public class IndexTest {
    */
   @Test
   public void findMissingKeysTest() throws StoreException {
-    List<StoreKey> idsToProvide = new ArrayList<StoreKey>(allKeys.keySet());
+    List<StoreKey> idsToProvide = new ArrayList<StoreKey>(state.allKeys.keySet());
     Set<StoreKey> nonExistentIds = new HashSet<>();
     for (int i = 0; i < 10; i++) {
-      nonExistentIds.add(getUniqueId());
+      nonExistentIds.add(state.getUniqueId());
     }
     idsToProvide.addAll(nonExistentIds);
     Collections.shuffle(idsToProvide);
-    Set<StoreKey> missingKeys = index.findMissingKeys(idsToProvide);
+    Set<StoreKey> missingKeys = state.index.findMissingKeys(idsToProvide);
     assertEquals("Set of missing keys not as expected", nonExistentIds, missingKeys);
   }
 
@@ -378,10 +239,10 @@ public class IndexTest {
   @Test
   public void addEntryBadInputTest() throws StoreException {
     // FileSpan end offset < currentIndexEndOffset
-    FileSpan fileSpan = log.getFileSpanForMessage(index.getStartOffset(), 1);
-    IndexValue value = new IndexValue(1, index.getStartOffset());
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
+    IndexValue value = new IndexValue(1, state.index.getStartOffset());
     try {
-      index.addToIndex(new IndexEntry(getUniqueId(), value), fileSpan);
+      state.index.addToIndex(new IndexEntry(state.getUniqueId(), value), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -389,12 +250,12 @@ public class IndexTest {
 
     if (isLogSegmented) {
       // FileSpan spans across segments
-      Offset startOffset = index.getCurrentEndOffset();
+      Offset startOffset = state.index.getCurrentEndOffset();
       String nextLogSegmentName = LogSegmentNameHelper.getNextPositionName(startOffset.getName());
       Offset endOffset = new Offset(nextLogSegmentName, 0);
       fileSpan = new FileSpan(startOffset, endOffset);
       try {
-        index.addToIndex(new IndexEntry(getUniqueId(), value), fileSpan);
+        state.index.addToIndex(new IndexEntry(state.getUniqueId(), value), fileSpan);
         fail("Should have failed because fileSpan provided spanned across segments");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -415,9 +276,9 @@ public class IndexTest {
   @Test
   public void markAsDeletedBadInputTest() throws IOException, StoreException {
     // FileSpan end offset < currentIndexEndOffset
-    FileSpan fileSpan = log.getFileSpanForMessage(index.getStartOffset(), 1);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     try {
-      index.markAsDeleted(liveKeys.iterator().next(), fileSpan);
+      state.index.markAsDeleted(state.liveKeys.iterator().next(), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -425,23 +286,23 @@ public class IndexTest {
 
     if (isLogSegmented) {
       // FileSpan spans across segments
-      Offset startOffset = index.getCurrentEndOffset();
+      Offset startOffset = state.index.getCurrentEndOffset();
       String nextLogSegmentName = LogSegmentNameHelper.getNextPositionName(startOffset.getName());
       Offset endOffset = new Offset(nextLogSegmentName, 0);
       fileSpan = new FileSpan(startOffset, endOffset);
       try {
-        index.markAsDeleted(liveKeys.iterator().next(), fileSpan);
+        state.index.markAsDeleted(state.liveKeys.iterator().next(), fileSpan);
         fail("Should have failed because fileSpan provided spanned across segments");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
       }
     }
 
-    appendToLog(5);
-    fileSpan = log.getFileSpanForMessage(index.getCurrentEndOffset(), 5);
+    state.appendToLog(5);
+    fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), 5);
     // ID does not exist
     try {
-      index.markAsDeleted(getUniqueId(), fileSpan);
+      state.index.markAsDeleted(state.getUniqueId(), fileSpan);
       fail("Should have failed because ID provided for delete does not exist");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
@@ -449,7 +310,7 @@ public class IndexTest {
 
     // ID already deleted
     try {
-      index.markAsDeleted(deletedKeys.iterator().next(), fileSpan);
+      state.index.markAsDeleted(state.deletedKeys.iterator().next(), fileSpan);
       fail("Should have failed because ID provided for delete is already deleted");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
@@ -462,10 +323,10 @@ public class IndexTest {
    */
   @Test
   public void hardDeleteKickOffTest() throws StoreException {
-    assertFalse("HardDelete should not be enabled", index.hardDeleter.isRunning());
-    properties.put("store.enable.hard.delete", "true");
-    reloadIndex(false);
-    assertTrue("HardDelete is not enabled", index.hardDeleter.isRunning());
+    assertFalse("HardDelete should not be enabled", state.index.hardDeleter.isRunning());
+    state.properties.put("store.enable.hard.delete", "true");
+    state.reloadIndex(true, false);
+    assertTrue("HardDelete is not enabled", state.index.hardDeleter.isRunning());
   }
 
   /**
@@ -476,17 +337,18 @@ public class IndexTest {
    */
   @Test
   public void hardDeleteTest() throws InterruptedException, IOException, StoreException {
-    properties.put("store.deleted.message.retention.days", Integer.toString(1));
-    properties.put("store.hard.delete.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
-    reloadIndex(false);
-    index.hardDeleter.enabled.set(true);
-    assertFalse("Hard delete did work even though no message is past retention time", index.hardDeleter.hardDelete());
+    state.properties.put("store.deleted.message.retention.days", Integer.toString(1));
+    state.properties.put("store.hard.delete.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
+    state.reloadIndex(true, false);
+    state.index.hardDeleter.enabled.set(true);
+    assertFalse("Hard delete did work even though no message is past retention time",
+        state.index.hardDeleter.hardDelete());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
-    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    assertTrue("Hard delete did not do any work", index.hardDeleter.hardDelete());
-    long expectedProgress = index.getAbsolutePositionInLogForOffset(logOrder.lastKey());
-    assertEquals("Hard delete did not make expected progress", expectedProgress, index.hardDeleter.getProgress());
-    verifyEntriesForHardDeletes(deletedKeys);
+    state.advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    assertTrue("Hard delete did not do any work", state.index.hardDeleter.hardDelete());
+    long expectedProgress = state.index.getAbsolutePositionInLogForOffset(state.logOrder.lastKey());
+    assertEquals("Hard delete did not make expected progress", expectedProgress, state.index.hardDeleter.getProgress());
+    state.verifyEntriesForHardDeletes(state.deletedKeys);
   }
 
   /**
@@ -522,10 +384,10 @@ public class IndexTest {
   @Test
   public void expirationTest() throws InterruptedException, IOException, StoreException {
     // add a PUT entry that will expire if time advances by a millisecond
-    addPutEntries(1, 1, time.milliseconds());
-    MockId id = logOrder.lastEntry().getValue().getFirst();
+    state.addPutEntries(1, 1, state.time.milliseconds());
+    MockId id = state.logOrder.lastEntry().getValue().getFirst();
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), null);
-    advanceTime(1);
+    state.advanceTime(1);
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), StoreErrorCodes.TTL_Expired);
   }
 
@@ -542,23 +404,23 @@ public class IndexTest {
   @Test
   public void setEndOffsetsTest() throws IOException, StoreException {
     // check that current end offsets set are correct
-    LogSegment segment = log.getFirstSegment();
+    LogSegment segment = state.log.getFirstSegment();
     while (segment != null) {
       Offset lastRecordStartOffset = getLastRecordOffset(segment);
-      long size = logOrder.get(lastRecordStartOffset).getSecond().getSize();
-      Offset expectedEndOffset = log.getFileSpanForMessage(lastRecordStartOffset, size).getEndOffset();
+      long size = state.logOrder.get(lastRecordStartOffset).getSecond().indexValue.getSize();
+      Offset expectedEndOffset = state.log.getFileSpanForMessage(lastRecordStartOffset, size).getEndOffset();
       assertEquals("End offset of segment not as expected", expectedEndOffset.getOffset(), segment.getEndOffset());
-      segment = log.getNextSegment(segment);
+      segment = state.log.getNextSegment(segment);
     }
 
     // write some data to the log but not the index, check that end offset of the segment has changed
     // reload the index and check the end offset has been reset
-    LogSegment activeSegment = log.getSegment(index.getCurrentEndOffset().getName());
+    LogSegment activeSegment = state.log.getSegment(state.index.getCurrentEndOffset().getName());
     long offsetBeforeAppend = activeSegment.getEndOffset();
-    appendToLog(PUT_RECORD_SIZE);
-    assertEquals("End offset of active segment did not change", offsetBeforeAppend + PUT_RECORD_SIZE,
-        activeSegment.getEndOffset());
-    reloadIndex(false);
+    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+    assertEquals("End offset of active segment did not change",
+        offsetBeforeAppend + CuratedLogIndexState.PUT_RECORD_SIZE, activeSegment.getEndOffset());
+    state.reloadIndex(true, false);
     assertEquals("End offset of active segment should have been reset", offsetBeforeAppend,
         activeSegment.getEndOffset());
 
@@ -570,21 +432,21 @@ public class IndexTest {
       // write some data to the log but not the index such that new segment is created, check that end offset of the
       // segment has changed and a new segment created, reload the index and check the end offset has been reset and
       // the new segment does not exist.
-      activeSegment = log.getSegment(index.getCurrentEndOffset().getName());
+      activeSegment = state.log.getSegment(state.index.getCurrentEndOffset().getName());
       offsetBeforeAppend = activeSegment.getEndOffset();
       // fill up this segment
-      appendToLog(activeSegment.getCapacityInBytes() - activeSegment.getEndOffset());
+      state.appendToLog(activeSegment.getCapacityInBytes() - activeSegment.getEndOffset());
       assertEquals("End offset of active segment did not change", activeSegment.getCapacityInBytes(),
           activeSegment.getEndOffset());
       // write a little more so that a new segment is created
-      appendToLog(PUT_RECORD_SIZE);
-      LogSegment nextActiveSegment = log.getNextSegment(activeSegment);
+      state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+      LogSegment nextActiveSegment = state.log.getNextSegment(activeSegment);
       assertNotNull("New segment has not been created", nextActiveSegment);
-      assertEquals("Unexpected end offset for new segment", PUT_RECORD_SIZE,
+      assertEquals("Unexpected end offset for new segment", CuratedLogIndexState.PUT_RECORD_SIZE,
           nextActiveSegment.getEndOffset() - nextActiveSegment.getStartOffset());
-      reloadIndex(false);
+      state.reloadIndex(true, false);
       // there should no longer be a "next" segment to the old active segment
-      assertNull("There should have been no more segments", log.getNextSegment(activeSegment));
+      assertNull("There should have been no more segments", state.log.getNextSegment(activeSegment));
       assertEquals("End offset of active segment should have been reset", offsetBeforeAppend,
           activeSegment.getEndOffset());
     }
@@ -603,7 +465,7 @@ public class IndexTest {
    */
   @Test
   public void recoverySuccessTest() throws InterruptedException, IOException, StoreException {
-    advanceTime(1);
+    state.advanceTime(1);
     singleSegmentRecoveryTest();
     if (isLogSegmented) {
       multipleSegmentRecoveryTest();
@@ -623,19 +485,19 @@ public class IndexTest {
   @Test
   public void recoveryFailureTest() {
     // recovery info contains a PUT for a key that already exists
-    MessageInfo info = new MessageInfo(liveKeys.iterator().next(), PUT_RECORD_SIZE);
+    MessageInfo info = new MessageInfo(state.liveKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE);
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
     // recovery info contains a PUT for a key that has been deleted
-    info = new MessageInfo(deletedKeys.iterator().next(), PUT_RECORD_SIZE);
+    info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE);
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
     // recovery info contains a DELETE for a key that has been deleted
-    info = new MessageInfo(deletedKeys.iterator().next(), DELETE_RECORD_SIZE, true);
+    info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true);
     doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
     // recovery info that contains a DELETE for a key that has no PUT record
-    info = new MessageInfo(getUniqueId(), DELETE_RECORD_SIZE, true);
+    info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true);
     doRecoveryFailureTest(info, StoreErrorCodes.ID_Not_Found);
     // recovery info that contains a PUT beyond the end offset of the log segment
-    info = new MessageInfo(getUniqueId(), PUT_RECORD_SIZE);
+    info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE);
     doRecoveryFailureTest(info, StoreErrorCodes.Index_Creation_Failure);
   }
 
@@ -655,12 +517,12 @@ public class IndexTest {
   public void findEntriesSinceTest() throws IOException, StoreException {
     // add some more entries so that the journal gets entries across segments and doesn't start at the beginning
     // of an index segment.
-    addPutEntries(7, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    addDeleteEntry(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    state.addPutEntries(7, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
 
     // token with log end offset should not return anything
-    StoreFindToken token = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, false);
-    token.setBytesRead(index.getLogUsedCapacity());
+    StoreFindToken token = new StoreFindToken(state.log.getEndOffset(), state.sessionId, state.incarnationId, false);
+    token.setBytesRead(state.index.getLogUsedCapacity());
     doFindEntriesSinceTest(token, Long.MAX_VALUE, Collections.EMPTY_SET, token);
 
     findEntriesSinceToIndexBasedTest();
@@ -669,8 +531,8 @@ public class IndexTest {
     findEntriesSinceIndexBasedTokenForOffsetInJournalTest();
 
     // error case - can never have provided an index based token that is contains the offset of the last segment
-    token = new StoreFindToken(referenceIndex.lastEntry().getValue().firstKey(), referenceIndex.lastKey(), sessionId,
-        incarnationId);
+    token = new StoreFindToken(state.referenceIndex.lastEntry().getValue().firstKey(), state.referenceIndex.lastKey(),
+        state.sessionId, state.incarnationId);
     doFindEntriesSinceFailureTest(token, StoreErrorCodes.Unknown_Error);
 
     findEntriesSinceInEmptyIndexTest(false);
@@ -684,49 +546,52 @@ public class IndexTest {
    */
   @Test
   public void findEntriesSinceOnRestartTest() throws IOException, StoreException {
-    Offset lastRecordOffset = index.journal.getLastOffset();
-    appendToLog(2 * PUT_RECORD_SIZE);
+    Offset lastRecordOffset = state.index.journal.getLastOffset();
+    state.appendToLog(2 * CuratedLogIndexState.PUT_RECORD_SIZE);
     // this record will be recovered.
-    FileSpan firstRecordFileSpan = log.getFileSpanForMessage(index.getCurrentEndOffset(), PUT_RECORD_SIZE);
+    FileSpan firstRecordFileSpan =
+        state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), CuratedLogIndexState.PUT_RECORD_SIZE);
     // this record will not be recovered.
-    FileSpan secondRecordFileSpan = log.getFileSpanForMessage(firstRecordFileSpan.getEndOffset(), PUT_RECORD_SIZE);
+    FileSpan secondRecordFileSpan =
+        state.log.getFileSpanForMessage(firstRecordFileSpan.getEndOffset(), CuratedLogIndexState.PUT_RECORD_SIZE);
 
     // if there is no bad shutdown but the store token is past the index end offset, it is an error state
     StoreFindToken startToken =
-        new StoreFindToken(secondRecordFileSpan.getStartOffset(), new UUID(1, 1), incarnationId, false);
+        new StoreFindToken(secondRecordFileSpan.getStartOffset(), new UUID(1, 1), state.incarnationId, false);
     doFindEntriesSinceFailureTest(startToken, StoreErrorCodes.Unknown_Error);
 
-    UUID oldSessionId = sessionId;
-    final MockId newId = getUniqueId();
+    UUID oldSessionId = state.sessionId;
+    final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
-    allKeys.put(newId,
-        new Pair<IndexValue, IndexValue>(new IndexValue(PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
-    recovery = new MessageStoreRecovery() {
+    state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
+        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
+    state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
-        return Collections.singletonList(new MessageInfo(newId, PUT_RECORD_SIZE));
+        return Collections.singletonList(new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE));
       }
     };
-    reloadIndex(true);
+    state.reloadIndex(true, true);
 
     // If there is no incarnationId in the incoming token, for backwards compatibility purposes we consider it as valid
     // and proceed with session id validation and so on.
-    UUID[] incarnationIds = new UUID[]{incarnationId, null};
+    UUID[] incarnationIds = new UUID[]{state.incarnationId, null};
     for (UUID incarnationIdToTest : incarnationIds) {
-      long bytesRead = index.getAbsolutePositionInLogForOffset(firstRecordFileSpan.getEndOffset());
+      long bytesRead = state.index.getAbsolutePositionInLogForOffset(firstRecordFileSpan.getEndOffset());
       // create a token that will be past the index end offset on startup after recovery.
       startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, incarnationIdToTest, false);
       // token should get reset internally, no keys should be returned and the returned token should be correct (offset
       // in it will be the current log end offset = firstRecordFileSpan.getEndOffset()).
       StoreFindToken expectedEndToken =
-          new StoreFindToken(firstRecordFileSpan.getEndOffset(), sessionId, incarnationId, true);
+          new StoreFindToken(firstRecordFileSpan.getEndOffset(), state.sessionId, state.incarnationId, true);
       expectedEndToken.setBytesRead(bytesRead);
       doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.EMPTY_SET, expectedEndToken);
 
       // create a token that is not past the index end offset on startup after recovery. Should work as expected
       startToken = new StoreFindToken(lastRecordOffset, oldSessionId, incarnationIdToTest, false);
-      expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
+      expectedEndToken =
+          new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false);
       expectedEndToken.setBytesRead(bytesRead);
       doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.singleton(newId), expectedEndToken);
     }
@@ -745,30 +610,32 @@ public class IndexTest {
    */
   @Test
   public void findEntriesSinceOnCrashRestartTest() throws IOException, StoreException {
-    UUID oldSessionId = sessionId;
-    addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    reloadIndex(true);
+    UUID oldSessionId = state.sessionId;
+    state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    state.reloadIndex(true, true);
     // create a token that will be past the log end offset on start up after restart.
-    StoreFindToken startToken = new StoreFindToken(
-        new Offset(log.getEndOffset().getName(), (log.getEndOffset().getOffset() + (2 * PUT_RECORD_SIZE))),
-        oldSessionId, incarnationId, false);
+    StoreFindToken startToken = new StoreFindToken(new Offset(state.log.getEndOffset().getName(),
+        (state.log.getEndOffset().getOffset() + (2 * CuratedLogIndexState.PUT_RECORD_SIZE))), oldSessionId,
+        state.incarnationId, false);
     // end token should point to log end offset on startup
-    long bytesRead = index.getAbsolutePositionInLogForOffset(log.getEndOffset());
-    StoreFindToken expectedEndToken = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, true);
+    long bytesRead = state.index.getAbsolutePositionInLogForOffset(state.log.getEndOffset());
+    StoreFindToken expectedEndToken =
+        new StoreFindToken(state.log.getEndOffset(), state.sessionId, state.incarnationId, true);
     expectedEndToken.setBytesRead(bytesRead);
     // Fetch the FindToken returned from findEntriesSince
-    FindInfo findInfo = index.findEntriesSince(startToken, Long.MAX_VALUE);
+    FindInfo findInfo = state.index.findEntriesSince(startToken, Long.MAX_VALUE);
     assertEquals("EndToken mismatch ", expectedEndToken, findInfo.getFindToken());
     assertEquals("No entries should have been returned ", 0, findInfo.getMessageEntries().size());
 
     // add 2 entries to index and log
     Set<MockId> expectedEntries = new HashSet<>();
-    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    expectedEntries.add(logOrder.lastEntry().getValue().getFirst());
-    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    expectedEntries.add(logOrder.lastEntry().getValue().getFirst());
-    bytesRead = index.getAbsolutePositionInLogForOffset(index.getCurrentEndOffset());
-    expectedEndToken = new StoreFindToken(index.journal.getLastOffset(), sessionId, incarnationId, false);
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    expectedEntries.add(state.logOrder.lastEntry().getValue().getFirst());
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    expectedEntries.add(state.logOrder.lastEntry().getValue().getFirst());
+    bytesRead = state.index.getAbsolutePositionInLogForOffset(state.index.getCurrentEndOffset());
+    expectedEndToken =
+        new StoreFindToken(state.index.journal.getLastOffset(), state.sessionId, state.incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
     doFindEntriesSinceTest((StoreFindToken) findInfo.getFindToken(), Long.MAX_VALUE, expectedEntries, expectedEndToken);
   }
@@ -780,48 +647,51 @@ public class IndexTest {
    */
   @Test
   public void findEntriesSinceIncarnationIdTest() throws IOException, StoreException {
-    Offset lastRecordOffset = index.journal.getLastOffset();
-    appendToLog(2 * PUT_RECORD_SIZE);
+    Offset lastRecordOffset = state.index.journal.getLastOffset();
+    state.appendToLog(2 * CuratedLogIndexState.PUT_RECORD_SIZE);
     // will be recovered
-    FileSpan firstRecordFileSpan = log.getFileSpanForMessage(index.getCurrentEndOffset(), PUT_RECORD_SIZE);
+    FileSpan firstRecordFileSpan =
+        state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), CuratedLogIndexState.PUT_RECORD_SIZE);
     // will not be recovered
-    FileSpan secondRecordFileSpan = log.getFileSpanForMessage(firstRecordFileSpan.getEndOffset(), PUT_RECORD_SIZE);
+    FileSpan secondRecordFileSpan =
+        state.log.getFileSpanForMessage(firstRecordFileSpan.getEndOffset(), CuratedLogIndexState.PUT_RECORD_SIZE);
 
-    UUID oldSessionId = sessionId;
-    UUID oldIncarnationId = incarnationId;
-    final MockId newId = getUniqueId();
+    UUID oldSessionId = state.sessionId;
+    UUID oldIncarnationId = state.incarnationId;
+    final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
-    allKeys.put(newId,
-        new Pair<IndexValue, IndexValue>(new IndexValue(PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
-    recovery = new MessageStoreRecovery() {
+    state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
+        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
+    state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
-        return Collections.singletonList(new MessageInfo(newId, PUT_RECORD_SIZE));
+        return Collections.singletonList(new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE));
       }
     };
     // change in incarnationId
-    incarnationId = UUID.randomUUID();
-    reloadIndex(true);
+    state.incarnationId = UUID.randomUUID();
+    state.reloadIndex(true, true);
 
-    long bytesRead = index.getAbsolutePositionInLogForOffset(firstRecordFileSpan.getEndOffset());
+    long bytesRead = state.index.getAbsolutePositionInLogForOffset(firstRecordFileSpan.getEndOffset());
     // create a token that will be past the index end offset on startup after recovery with old incarnationId
     StoreFindToken startToken =
         new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, oldIncarnationId, false);
     // token should get reset internally, all keys should be returned and the returned token should be pointing to
     // start offset of firstRecordFileSpan.
     StoreFindToken expectedEndToken =
-        new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
+        new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
-    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
+    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), expectedEndToken);
 
     // create a token that is not past the index end offset on startup after recovery with old incarnationId.
     // token should get reset internally, all keys should be returned and the returned token should be be pointing to
     // start offset of firstRecordFileSpan.
     startToken = new StoreFindToken(lastRecordOffset, oldSessionId, oldIncarnationId, false);
-    expectedEndToken = new StoreFindToken(firstRecordFileSpan.getStartOffset(), sessionId, incarnationId, false);
+    expectedEndToken =
+        new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false);
     expectedEndToken.setBytesRead(bytesRead);
-    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), expectedEndToken);
+    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), expectedEndToken);
   }
 
   /**
@@ -840,12 +710,12 @@ public class IndexTest {
   public void findDeletedEntriesSinceTest() throws InterruptedException, IOException, StoreException {
     // add some more entries so that the journal gets entries across segments and doesn't start at the beginning
     // of an index segment.
-    addPutEntries(7, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    MockId idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey());
-    addDeleteEntry(idToDelete);
+    state.addPutEntries(7, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    MockId idToDelete = state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey());
+    state.addDeleteEntry(idToDelete);
 
     // token with log end offset should not return anything
-    StoreFindToken token = new StoreFindToken(log.getEndOffset(), sessionId, incarnationId, false);
+    StoreFindToken token = new StoreFindToken(state.log.getEndOffset(), state.sessionId, state.incarnationId, false);
     doFindDeletedEntriesSinceTest(token, Long.MAX_VALUE, Collections.EMPTY_SET, token);
 
     findDeletedEntriesSinceToIndexBasedTest();
@@ -866,36 +736,33 @@ public class IndexTest {
   public void indexPersistorTest() throws InterruptedException, IOException, StoreException {
     // add new entries which may not be persisted
     // call persist and reload the index (index.close() is never called)
-    Offset indexEndOffset = index.getCurrentEndOffset();
-    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    Pair<MockId, IndexValue> mockIdIndexValuePair = logOrder.lastEntry().getValue();
-    index.persistIndex();
-    metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    index =
-        new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
-            UUID.randomUUID(), UUID.randomUUID());
+    Offset indexEndOffset = state.index.getCurrentEndOffset();
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    MockId id = state.logOrder.lastEntry().getValue().getFirst();
+    state.index.persistIndex();
+    state.reloadIndex(false, false);
     assertEquals("Index End offset mismatch ",
-        new Offset(indexEndOffset.getName(), indexEndOffset.getOffset() + PUT_RECORD_SIZE),
-        index.getCurrentEndOffset());
-    verifyValue(mockIdIndexValuePair.getFirst(), index.findKey(mockIdIndexValuePair.getFirst()));
+        new Offset(indexEndOffset.getName(), indexEndOffset.getOffset() + CuratedLogIndexState.PUT_RECORD_SIZE),
+        state.index.getCurrentEndOffset());
+    verifyValue(id, state.index.findKey(id));
 
     // add entries to index alone.
     // index.persist() should throw an exception since log end offset is < index end offset
-    FileSpan fileSpan = new FileSpan(index.getCurrentEndOffset(),
-        new Offset(index.getCurrentEndOffset().getName(), index.getCurrentEndOffset().getOffset() + PUT_RECORD_SIZE));
-    IndexValue value = new IndexValue(PUT_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
-    MockId newId = getUniqueId();
-    index.addToIndex(new IndexEntry(newId, value), fileSpan);
+    FileSpan fileSpan = new FileSpan(state.index.getCurrentEndOffset(),
+        new Offset(state.index.getCurrentEndOffset().getName(),
+            state.index.getCurrentEndOffset().getOffset() + CuratedLogIndexState.PUT_RECORD_SIZE));
+    IndexValue value =
+        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
+    MockId newId = state.getUniqueId();
+    state.index.addToIndex(new IndexEntry(newId, value), fileSpan);
     try {
-      index.persistIndex();
+      state.index.persistIndex();
       fail("Should have thrown exception since index has entries which log does not have");
     } catch (StoreException e) {
       assertEquals("StoreException error code mismatch ", StoreErrorCodes.Illegal_Index_State, e.getErrorCode());
     }
     // append to log so that log and index are in sync with each other
-    appendToLog(PUT_RECORD_SIZE);
+    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
   }
 
   /**
@@ -904,10 +771,10 @@ public class IndexTest {
   @Test
   public void getAbsolutePositionForOffsetTest() {
     List<LogSegment> logSegments = new ArrayList<>();
-    LogSegment segment = log.getFirstSegment();
+    LogSegment segment = state.log.getFirstSegment();
     while (segment != null) {
       logSegments.add(segment);
-      segment = log.getNextSegment(segment);
+      segment = state.log.getNextSegment(segment);
     }
 
     long numLogSegmentsPreceding = 0;
@@ -927,16 +794,16 @@ public class IndexTest {
    */
   @Test
   public void getAbsolutePositionForOffsetBadArgsTest() {
-    Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(index.getLogSegmentCount() + 1, 0), 0);
+    Offset badSegmentOffset = new Offset(LogSegmentNameHelper.getName(state.index.getLogSegmentCount() + 1, 0), 0);
     Offset badOffsetOffset =
-        new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getCapacityInBytes() + 1);
+        new Offset(state.log.getFirstSegment().getName(), state.log.getFirstSegment().getCapacityInBytes() + 1);
     List<Offset> offsetsToCheck = new ArrayList<>();
     offsetsToCheck.add(badSegmentOffset);
     offsetsToCheck.add(badOffsetOffset);
 
     for (Offset offset : offsetsToCheck) {
       try {
-        index.getAbsolutePositionInLogForOffset(offset);
+        state.index.getAbsolutePositionInLogForOffset(offset);
         fail("Should have failed to get absolute position for invalid offset input: " + offset);
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -949,12 +816,12 @@ public class IndexTest {
    */
   @Test
   public void hardDeleteNullTest() throws IOException, StoreException {
-    hardDelete = null;
-    reloadIndex(false);
-    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    MockId idToCheck = logOrder.lastEntry().getValue().getFirst();
-    reloadIndex(false);
-    verifyValue(idToCheck, index.findKey(idToCheck));
+    state.hardDelete = null;
+    state.reloadIndex(true, false);
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    MockId idToCheck = state.logOrder.lastEntry().getValue().getFirst();
+    state.reloadIndex(true, false);
+    verifyValue(idToCheck, state.index.findKey(idToCheck));
   }
 
   /**
@@ -963,14 +830,15 @@ public class IndexTest {
    */
   @Test
   public void getIndexSegmentFilesForLogSegmentTest() {
-    LogSegment logSegment = log.getFirstSegment();
+    LogSegment logSegment = state.log.getFirstSegment();
     while (logSegment != null) {
-      LogSegment nextSegment = log.getNextSegment(logSegment);
-      File[] indexSegmentFiles = PersistentIndex.getIndexSegmentFilesForLogSegment(tempDirStr, logSegment.getName());
+      LogSegment nextSegment = state.log.getNextSegment(logSegment);
+      File[] indexSegmentFiles =
+          PersistentIndex.getIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegment.getName());
       Arrays.sort(indexSegmentFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
       Offset from = new Offset(logSegment.getName(), logSegment.getStartOffset());
       Offset to = new Offset(logSegment.getName(), logSegment.getEndOffset());
-      Set<Offset> offsets = referenceIndex.subMap(from, true, to, true).keySet();
+      Set<Offset> offsets = state.referenceIndex.subMap(from, true, to, true).keySet();
       assertEquals("Number of index segment files inconsistent", offsets.size(), indexSegmentFiles.length);
       int i = 0;
       for (Offset offset : offsets) {
@@ -989,11 +857,11 @@ public class IndexTest {
    * @throws StoreException
    */
   @Test
-  public void cleanupIndexSegmentFilesForLogSegment() throws IOException, StoreException {
-    index.close();
-    LogSegment logSegment = log.getFirstSegment();
+  public void cleanupIndexSegmentFilesForLogSegmentTest() throws IOException, StoreException {
+    state.index.close();
+    LogSegment logSegment = state.log.getFirstSegment();
     while (logSegment != null) {
-      LogSegment nextSegment = log.getNextSegment(logSegment);
+      LogSegment nextSegment = state.log.getNextSegment(logSegment);
       final String logSegmentName = logSegment.getName();
       int totalFilesInDir = tempDir.listFiles().length;
       File[] filesToCheck = tempDir.listFiles(new FilenameFilter() {
@@ -1005,14 +873,14 @@ public class IndexTest {
       });
       Offset from = new Offset(logSegment.getName(), logSegment.getStartOffset());
       Offset to = new Offset(logSegment.getName(), logSegment.getEndOffset());
-      int expectedNumFilesToDelete = referenceIndex.subMap(from, true, to, true).size() * 2;
+      int expectedNumFilesToDelete = state.referenceIndex.subMap(from, true, to, true).size() * 2;
       if (nextSegment == null) {
         // latest index segment does not have a bloom file
         expectedNumFilesToDelete--;
       }
       assertEquals("Number of files to check does not match expectation", expectedNumFilesToDelete,
           filesToCheck.length);
-      PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDirStr, logSegmentName);
+      PersistentIndex.cleanupIndexSegmentFilesForLogSegment(tempDir.getAbsolutePath(), logSegmentName);
       for (File fileToCheck : filesToCheck) {
         assertFalse(fileToCheck + " should have been deleted", fileToCheck.exists());
       }
@@ -1027,308 +895,6 @@ public class IndexTest {
   // general
 
   /**
-   * @return a {@link MockId} that is unique and has not been generated before in this run.
-   */
-  private MockId getUniqueId() {
-    MockId id;
-    do {
-      id = new MockId(UtilsTest.getRandomString(10));
-    } while (generatedKeys.contains(id));
-    generatedKeys.add(id);
-    return id;
-  }
-
-  /**
-   * Appends random data of size {@code size} to the {@link #log}.
-   * @param size the size of data that needs to be appeneded.
-   * @throws IOException
-   */
-  private void appendToLog(long size) throws IOException {
-    byte[] bytes = TestUtils.getRandomBytes((int) size);
-    if (size > HARD_DELETE_START_OFFSET) {
-      // ensure atleast one byte is set to 1 for hard delete verification purposes
-      int randomByte = (int) (HARD_DELETE_START_OFFSET + TestUtils.RANDOM.nextInt(
-          (int) (size - HARD_DELETE_START_OFFSET - HARD_DELETE_LAST_PART_SIZE)));
-      bytes[randomByte] = 1;
-    }
-    ByteBuffer buffer = ByteBuffer.wrap(bytes);
-    ReadableByteChannel channel = Channels.newChannel(new ByteBufferInputStream(buffer));
-    log.appendFrom(channel, buffer.capacity());
-  }
-
-  /**
-   * Given an offset, generates the start offset of the index segment that the record at that offset has to go to.
-   * <p/>
-   * Use only for the latest record - does not work for offsets that are below the current index end offset.
-   * @param recordOffset the offset of the record being added to the index.
-   * @return the index segment start offset of the index segment that the record belongs to.
-   */
-  private Offset generateReferenceIndexSegmentStartOffset(Offset recordOffset) {
-    if (referenceIndex.size() == 0) {
-      return recordOffset;
-    }
-
-    Map.Entry<Offset, TreeMap<MockId, IndexValue>> lastEntry = referenceIndex.lastEntry();
-    Offset indexSegmentStartOffset = lastEntry.getKey();
-    if (!indexSegmentStartOffset.getName().equals(recordOffset.getName())
-        || lastEntry.getValue().size() == MAX_IN_MEM_ELEMENTS) {
-      indexSegmentStartOffset = recordOffset;
-    }
-    return indexSegmentStartOffset;
-  }
-
-  /**
-   * Gets an ID to delete from the index segment with start offset {@code indexSegmentStartOffset}. The returned ID will
-   * have been removed from {@link #liveKeys} and added to {@link #deletedKeys}.
-   * @param indexSegmentStartOffset the start offset of the index segment from which an ID is required.
-   * @return an ID to delete from the index segment with start offset {@code indexSegmentStartOffset}.
-   */
-  private MockId getIdToDeleteFromIndexSegment(Offset indexSegmentStartOffset) {
-    MockId deleteCandidate = null;
-    TreeMap<MockId, IndexValue> indexSegment = referenceIndex.get(indexSegmentStartOffset);
-    for (Map.Entry<MockId, IndexValue> entry : indexSegment.entrySet()) {
-      MockId id = entry.getKey();
-      if (liveKeys.contains(id)) {
-        deleteCandidate = id;
-        break;
-      }
-    }
-    if (deleteCandidate != null) {
-      deletedKeys.add(deleteCandidate);
-      liveKeys.remove(deleteCandidate);
-    }
-    return deleteCandidate;
-  }
-
-  /**
-   * Gets an ID to delete from the given log segment. The returned ID will have been removed from {@link #liveKeys} and
-   * added to {@link #deletedKeys}.
-   * @param segment the {@link LogSegment} from which an ID is required.
-   * @return the ID to delete.
-   */
-  private MockId getIdToDeleteFromLogSegment(LogSegment segment) {
-    MockId deleteCandidate;
-    Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
-    do {
-      deleteCandidate = getIdToDeleteFromIndexSegment(indexSegmentStartOffset);
-      indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
-      if (indexSegmentStartOffset == null || !indexSegmentStartOffset.getName().equals(segment.getName())) {
-        break;
-      }
-    } while (deleteCandidate == null);
-    return deleteCandidate;
-  }
-
-  /**
-   * Gets the value that is expected to obtained from the {@link PersistentIndex}.
-   * @param id the {@link MockId} whose value is required.
-   * @param wantPut {@code true} if the {@link IndexValue} of the PUT entry is required.
-   * @return the value that is expected to obtained from the {@link PersistentIndex}
-   */
-  private IndexValue getExpectedValue(MockId id, boolean wantPut) {
-    Pair<IndexValue, IndexValue> indexValues = allKeys.get(id);
-    return wantPut ? indexValues.getFirst() : indexValues.getSecond();
-  }
-
-  /**
-   * Adds {@code count} number of put entries each of size {@code size} and that expire at {@code expiresAtMs} to the
-   * index (both real and reference).
-   * @param count the number of PUT entries to add.
-   * @param size the size of each PUT entry.
-   * @param expiresAtMs the time at which each of the PUT entries expires.
-   * @return the {@link FileSpan} of the added entries.
-   * @throws IOException
-   * @throws StoreException
-   */
-  private FileSpan addPutEntries(int count, long size, long expiresAtMs) throws IOException, StoreException {
-    if (count <= 0) {
-      throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
-    }
-    ArrayList<IndexEntry> indexEntries = new ArrayList<>(count);
-    Offset expectedJournalLastOffset = null;
-    Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
-    for (int i = 0; i < count; i++) {
-      appendToLog(size);
-      FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, size);
-      IndexValue value = new IndexValue(size, fileSpan.getStartOffset(), expiresAtMs);
-      MockId id = getUniqueId();
-      logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, value));
-      indexEntries.add(new IndexEntry(id, value));
-      Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
-      indexSegmentStartOffsets.put(id, new Pair<Offset, Offset>(indexSegmentStartOffset, null));
-      allKeys.put(id, new Pair<IndexValue, IndexValue>(value, null));
-      if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
-        referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
-      }
-      referenceIndex.get(indexSegmentStartOffset).put(id, value);
-      if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < time.milliseconds()) {
-        expiredKeys.add(id);
-      } else {
-        liveKeys.add(id);
-      }
-      expectedJournalLastOffset = fileSpan.getStartOffset();
-      endOffsetOfPrevMsg = fileSpan.getEndOffset();
-    }
-    FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfPrevMsg);
-    index.addToIndex(indexEntries, fileSpan);
-    assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
-    assertEquals("Journal's last offset not as expected", expectedJournalLastOffset, index.journal.getLastOffset());
-    return fileSpan;
-  }
-
-  /**
-   * Adds a delete entry in the index (real and reference) for {@code idToDelete}.
-   * @param idToDelete the id to be deleted.
-   * @return the {@link FileSpan} of the added entries.
-   * @throws IOException
-   * @throws StoreException
-   */
-  private FileSpan addDeleteEntry(MockId idToDelete) throws IOException, StoreException {
-    appendToLog(DELETE_RECORD_SIZE);
-    Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
-    FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, DELETE_RECORD_SIZE);
-    index.markAsDeleted(idToDelete, fileSpan);
-
-    IndexValue value = getExpectedValue(idToDelete, true);
-    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs());
-    newValue.setFlag(IndexValue.Flags.Delete_Index);
-    newValue.setNewOffset(fileSpan.getStartOffset());
-    newValue.setNewSize(DELETE_RECORD_SIZE);
-
-    logOrder.put(fileSpan.getStartOffset(), new Pair<>(idToDelete, newValue));
-    Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
-    Pair<Offset, Offset> keyLocations = indexSegmentStartOffsets.get(idToDelete);
-    indexSegmentStartOffsets.put(idToDelete, new Pair<>(keyLocations.getFirst(), indexSegmentStartOffset));
-    Pair<IndexValue, IndexValue> keyValues = allKeys.get(idToDelete);
-    allKeys.put(idToDelete, new Pair<>(keyValues.getFirst(), newValue));
-    if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
-      referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
-    }
-    referenceIndex.get(indexSegmentStartOffset).put(idToDelete, newValue);
-    endOffsetOfPrevMsg = fileSpan.getEndOffset();
-    assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
-    assertEquals("Journal's last offset not as expected", fileSpan.getStartOffset(), index.journal.getLastOffset());
-    return fileSpan;
-  }
-
-  /**
-   * Sleeps in intervals of 10ms until expected progress is made or {@code maxTimeToCheck} is reached
-   * @param expectedProgress expected progress value
-   * @param maxTimeToCheck max time to check if expected progress is reached
-   * @throws InterruptedException
-   */
-  private void waitUntilExpectedProgress(long expectedProgress, int maxTimeToCheck) throws InterruptedException {
-    int sleptSoFar = 0;
-    while (expectedProgress != index.hardDeleter.getProgress()) {
-      sleptSoFar += 5;
-      Thread.sleep(5);
-      if (sleptSoFar >= maxTimeToCheck) {
-        fail("HardDelete failed to catch up in " + maxTimeToCheck);
-      }
-      index.hardDeleter.preLogFlush();
-      index.hardDeleter.postLogFlush();
-    }
-  }
-
-  /**
-   * Waits until the HardDeleter thread is in the {@code expectedState} for the specified {@code timeToCheckInMs} time.
-   * @param expectedState Expected HardDeleter thread state
-   * @param timeToCheckInMs time for which the state has to be checked for
-   * @param intervalToCheckInMs interval at which the check has to be done
-   */
-  private void waitUntilExpectedState(Thread.State expectedState, long timeToCheckInMs, long intervalToCheckInMs)
-      throws InterruptedException {
-    long timeSoFar = 0;
-    while (expectedState != index.hardDeleteThread.getState()) {
-      Thread.sleep(intervalToCheckInMs);
-      timeSoFar += intervalToCheckInMs;
-      if (timeSoFar >= timeToCheckInMs) {
-        fail("Hard Deleter thread state failed to move to " + Thread.State.WAITING + " in " + timeToCheckInMs);
-      }
-    }
-  }
-
-  /**
-   * Verify that deleted entries are hard deleted
-   * @param deletedIds the set of {@link MockId}s that are deleted
-   * @throws IOException
-   */
-  private void verifyEntriesForHardDeletes(Set<MockId> deletedIds) throws IOException {
-    for (MockId id : deletedIds) {
-      IndexValue putValue = allKeys.get(id).getFirst();
-      Offset offset = putValue.getOffset();
-      LogSegment segment = log.getSegment(offset.getName());
-      long size = putValue.getSize() - HARD_DELETE_START_OFFSET - HARD_DELETE_LAST_PART_SIZE;
-      ByteBuffer readBuf = ByteBuffer.allocate((int) size);
-      segment.readInto(readBuf, offset.getOffset() + HARD_DELETE_START_OFFSET);
-      readBuf.flip();
-      while (readBuf.hasRemaining()) {
-        assertEquals("Hard delete has not zeroed out the data", (byte) 0, readBuf.get());
-      }
-    }
-  }
-
-  /**
-   * Reloads the index. Uses the class variables as parameters. For e.g, if a particular implementation of
-   * {@link MessageStoreRecovery} is desired, it can be set to {@link #recovery} and this function called. The newly
-   * created index will use that implementation of {@link MessageStoreRecovery}.
-   * @param deleteCleanShutdownFile {@code true} if the clean shutdown file should be deleted to mimic unclean shutdown
-   * @throws StoreException
-   */
-  private void reloadIndex(boolean deleteCleanShutdownFile) throws StoreException {
-    index.close();
-    if (deleteCleanShutdownFile) {
-      assertTrue("The clean shutdown file could not be deleted",
-          new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME).delete());
-    }
-    metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    sessionId = UUID.randomUUID();
-    index =
-        new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
-            sessionId, incarnationId);
-  }
-
-  /**
-   * Closes the index and clears all the index files essentially creating a new index.
-   * @throws StoreException
-   */
-  private void closeAndClearIndex() throws StoreException {
-    index.close();
-    // delete all index files
-    File[] indexSegmentFiles = tempDir.listFiles(new FilenameFilter() {
-      @Override
-      public boolean accept(File dir, String name) {
-        return name.endsWith(IndexSegment.INDEX_SEGMENT_FILE_NAME_SUFFIX) || name.endsWith(
-            IndexSegment.BLOOM_FILE_NAME_SUFFIX);
-      }
-    });
-    assertNotNull("Could not load index segment files", indexSegmentFiles);
-    for (File indexSegmentFile : indexSegmentFiles) {
-      assertTrue("Could not deleted index segment file", indexSegmentFile.delete());
-    }
-  }
-
-  /**
-   * Advances time by {@code ms} and adjusts {@link #liveKeys} if any of the keys in it expire.
-   * @param ms the amount in ms to advance.
-   * @throws InterruptedException
-   */
-  private void advanceTime(long ms) throws InterruptedException {
-    time.sleep(ms);
-    Iterator<MockId> liveKeysIterator = liveKeys.iterator();
-    while (liveKeysIterator.hasNext()) {
-      MockId id = liveKeysIterator.next();
-      IndexValue value = allKeys.get(id).getFirst();
-      if (value.getExpiresAtMs() != Utils.Infinite_Time && value.getExpiresAtMs() < time.milliseconds()) {
-        expiredKeys.add(id);
-        liveKeysIterator.remove();
-      }
-    }
-  }
-
-  /**
    * Verifies that the {@link BlobReadOptions} returned from {@link PersistentIndex#getBlobReadInfo(StoreKey, EnumSet)}
    * matches the expected value.
    * @param id the {@link MockId} to use
@@ -1339,11 +905,11 @@ public class IndexTest {
   private void verifyBlobReadOptions(MockId id, EnumSet<StoreGetOptions> storeGetOptions,
       StoreErrorCodes expectedErrorCode) throws StoreException {
     try {
-      BlobReadOptions options = index.getBlobReadInfo(id, storeGetOptions);
+      BlobReadOptions options = state.index.getBlobReadInfo(id, storeGetOptions);
       if (expectedErrorCode != null) {
         fail("Should have failed because a StoreException is expected");
       }
-      IndexValue putEntryValue = getExpectedValue(id, true);
+      IndexValue putEntryValue = state.getExpectedValue(id, true);
       assertEquals("StoreKey not as expected", id, options.getStoreKey());
       assertEquals("Log Segment Name not as expected", putEntryValue.getOffset().getName(),
           options.getLogSegmentName());
@@ -1369,217 +935,17 @@ public class IndexTest {
     assertEquals("SessionId does not match", reference.getSessionId(), toCheck.getSessionId());
   }
 
-  // test setup
-
-  /**
-   * Sets up some state in order to make sure all cases are represented and the tests don't need to do any setup
-   * individually. For understanding the created index, please read the source code which is annotated with comments.
-   * <p/>
-   * Also tests critical functionality of {@link PersistentIndex} and behaviour of the {@link Journal} in the index.
-   * Also verifies that the state in {@link #referenceIndex} matches the state in the real index.
-   * @throws InterruptedException
-   * @throws IOException
-   * @throws StoreException
-   */
-  private void setupTestState() throws InterruptedException, IOException, StoreException {
-    long segmentCapacity = isLogSegmented ? SEGMENT_CAPACITY : LOG_CAPACITY;
-    metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
-    properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
-    properties.put("store.data.flush.delay.seconds", Integer.toString(0));
-    properties.put("store.enable.hard.delete", "false");
-    // the segment capacity property is never used, so it is not set.
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, metrics);
-    index =
-        new PersistentIndex(tempDirStr, scheduler, log, config, STORE_KEY_FACTORY, recovery, hardDelete, metrics, time,
-            sessionId, incarnationId);
-    Offset expectedStartOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getStartOffset());
-    assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
-    assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
-
-    // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
-    // being picked for delete.
-    time.sleep(1);
-    assertEquals("Incorrect log segment count", 0, index.getLogSegmentCount());
-    long expectedUsedCapacity;
-    if (!isLogSegmented) {
-      // log is filled about ~50%.
-      addCuratedIndexEntriesToLogSegment(segmentCapacity / 2, 1);
-      expectedUsedCapacity = segmentCapacity / 2;
-      assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
-    } else {
-      // first log segment is filled to capacity.
-      addCuratedIndexEntriesToLogSegment(segmentCapacity, 1);
-      assertEquals("Used capacity reported not as expected", segmentCapacity, index.getLogUsedCapacity());
-
-      // second log segment is filled but has some space at the end (free space has to be less than the lesser of the
-      // standard delete and put record sizes so that the next write causes a roll over of log segments).
-      addCuratedIndexEntriesToLogSegment(segmentCapacity - (DELETE_RECORD_SIZE - 1), 2);
-      assertEquals("Used capacity reported not as expected", 2 * segmentCapacity - (DELETE_RECORD_SIZE - 1),
-          index.getLogUsedCapacity());
-
-      // third log segment is partially filled and is left as the "active" segment
-      // First Index Segment
-      // 1 PUT entry
-      addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      // DELETE for a key in the first log segment
-      LogSegment segment = log.getFirstSegment();
-      MockId idToDelete = getIdToDeleteFromLogSegment(segment);
-      addDeleteEntry(idToDelete);
-      assertEquals("Incorrect log segment count", 3, index.getLogSegmentCount());
-      // DELETE for a key in the second segment
-      segment = log.getNextSegment(segment);
-      idToDelete = getIdToDeleteFromLogSegment(segment);
-      addDeleteEntry(idToDelete);
-      // 1 DELETE for the PUT in the same segment
-      idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey());
-      addDeleteEntry(idToDelete);
-      // 1 PUT entry that spans the rest of the data in the segment (upto a third of the segment size)
-      long size = segmentCapacity / 3 - index.getCurrentEndOffset().getOffset();
-      addPutEntries(1, size, Utils.Infinite_Time);
-
-      expectedUsedCapacity = 2 * segmentCapacity + segmentCapacity / 3;
-      assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
-
-      // fourth and fifth log segment are free.
-    }
-    // make sure all indexes are written to disk and mapped as required (forcing IndexPersistor to run).
-    log.flush();
-    reloadIndex(false);
-    verifyState();
-    assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
-    assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
-    assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
-  }
-
-  /**
-   * Adds some curated entries into the index in order to ensure a good mix for testing. For understanding the created
-   * index, please read the source code which is annotated with comments.
-   * @param sizeToMakeIndexEntriesFor the size to make index entries for.
-   * @param expectedLogSegmentCount the number of log segments that are expected to assist after the addition of the
-   *                                first entry and at the end of the addition of all entries.
-   * @throws IOException
-   * @throws StoreException
-   */
-  private void addCuratedIndexEntriesToLogSegment(long sizeToMakeIndexEntriesFor, int expectedLogSegmentCount)
-      throws IOException, StoreException {
-    // First Index Segment
-    // 1 PUT
-    Offset firstJournalEntryAddedNow = addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time).getStartOffset();
-    assertEquals("Incorrect log segment count", expectedLogSegmentCount, index.getLogSegmentCount());
-    // 2 more PUT
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    // 2 PUT EXPIRED
-    addPutEntries(2, PUT_RECORD_SIZE, 0);
-    // 5 entries were added - firstJournalEntryAddedNow should still be a part of the journal
-    List<JournalEntry> entries = index.journal.getEntriesSince(firstJournalEntryAddedNow, true);
-    assertEquals("There should have been exactly 5 entries returned from the journal", 5, entries.size());
-
-    // Second Index Segment
-    // 4 PUT
-    addPutEntries(4, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    // 1 DELETE for a PUT in the same index segment
-    MockId idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey());
-    addDeleteEntry(idToDelete);
-    // 5 more entries (for a total of 10) were added - firstJournalEntryAddedNow should still be a part of the journal
-    entries = index.journal.getEntriesSince(firstJournalEntryAddedNow, true);
-    assertEquals("There should have been exactly 10 entries returned from the journal", 10, entries.size());
-    // 1 DELETE for a PUT in the first index segment
-    Offset firstIndexSegmentStartOffset = referenceIndex.lowerKey(referenceIndex.lastKey());
-    idToDelete = getIdToDeleteFromIndexSegment(firstIndexSegmentStartOffset);
-    addDeleteEntry(idToDelete);
-    // 1 more entry (for a total of 11) was added - firstJournalEntryAddedNow should no longer be a part of the journal
-    assertNull("There should no entries returned from the journal",
-        index.journal.getEntriesSince(firstJournalEntryAddedNow, true));
-
-    // Third and Fourth Index Segment
-    for (int seg = 0; seg < 2; seg++) {
-      // 3 PUT
-      addPutEntries(3, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      // 1 PUT for an expired blob
-      addPutEntries(1, PUT_RECORD_SIZE, 0);
-      // 1 DELETE for the expired PUT
-      MockId expiredId = logOrder.lastEntry().getValue().getFirst();
-      addDeleteEntry(expiredId);
-      deletedKeys.add(expiredId);
-      expiredKeys.remove(expiredId);
-      // 1 PUT
-      addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    }
-
-    Offset fourthIndexSegmentStartOffset = referenceIndex.lastKey();
-    Offset thirdIndexSegmentStartOffset = referenceIndex.lowerKey(fourthIndexSegmentStartOffset);
-    // Fifth Index Segment
-    // 1 PUT entry
-    addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    // 1 DELETE for a PUT in each of the third and fourth segments
-    idToDelete = getIdToDeleteFromIndexSegment(thirdIndexSegmentStartOffset);
-    addDeleteEntry(idToDelete);
-    idToDelete = getIdToDeleteFromIndexSegment(fourthIndexSegmentStartOffset);
-    addDeleteEntry(idToDelete);
-    // 1 DELETE for the PUT in the same segment
-    idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey());
-    addDeleteEntry(idToDelete);
-    // 1 PUT entry that spans the rest of the data in the segment
-    long size = sizeToMakeIndexEntriesFor - index.getCurrentEndOffset().getOffset();
-    addPutEntries(1, size, Utils.Infinite_Time);
-    assertEquals("Incorrect log segment count", expectedLogSegmentCount, index.getLogSegmentCount());
-  }
-
-  /**
-   * Verifies that the state in {@link PersistentIndex} is the same as the one in {@link #referenceIndex}.
-   * @throws IOException
-   * @throws StoreException
-   */
-  private void verifyState() throws IOException, StoreException {
-    assertEquals("Incorrect log segment count", isLogSegmented ? 3 : 1, index.getLogSegmentCount());
-    NavigableMap<Offset, IndexSegment> realIndex = index.indexes;
-    assertEquals("Number of index segments does not match expected", referenceIndex.size(), realIndex.size());
-    Map.Entry<Offset, IndexSegment> realIndexEntry = realIndex.firstEntry();
-    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> referenceIndexEntry : referenceIndex.entrySet()) {
-      assertEquals("Offset of index segment does not match expected", referenceIndexEntry.getKey(),
-          realIndexEntry.getKey());
-      TreeMap<MockId, IndexValue> referenceIndexSegment = referenceIndexEntry.getValue();
-      IndexSegment realIndexSegment = realIndexEntry.getValue();
-      List<MessageInfo> messageInfos = new ArrayList<>();
-      FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE);
-      assertTrue("There should have been entries returned from the index segment",
-          realIndexSegment.getEntriesSince(null, condition, messageInfos, new AtomicLong(0)));
-      assertEquals("Size of index segment differs from expected", referenceIndexSegment.size(), messageInfos.size());
-      for (Map.Entry<MockId, IndexValue> referenceIndexSegmentEntry : referenceIndexSegment.entrySet()) {
-        IndexValue value = realIndexSegment.find(referenceIndexSegmentEntry.getKey());
-        IndexValue referenceValue = referenceIndexSegmentEntry.getValue();
-        assertEquals("Value from IndexSegment does not match expected", referenceValue.getBytes(), value.getBytes());
-      }
-      realIndexEntry = realIndex.higherEntry(realIndexEntry.getKey());
-    }
-    assertNull("There should no more index segments left", realIndexEntry);
-    // all the elements in the last segment should be in the journal
-    assertNotNull("There is no offset in the log that corresponds to the last index segment start offset",
-        logOrder.floorEntry(referenceIndex.lastKey()));
-    Map.Entry<Offset, Pair<MockId, IndexValue>> logEntry = logOrder.floorEntry(referenceIndex.lastKey());
-    List<JournalEntry> entries = index.journal.getEntriesSince(referenceIndex.lastKey(), true);
-    for (JournalEntry entry : entries) {
-      assertNotNull("There are no more entries in the reference log but there are entries in the journal", logEntry);
-      assertEquals("Offset in journal not as expected", logEntry.getKey(), entry.getOffset());
-      assertEquals("Key in journal not as expected", logEntry.getValue().getFirst(), entry.getKey());
-      logEntry = logOrder.higherEntry(logEntry.getKey());
-    }
-    assertNull("There should be no more entries in the reference log", logEntry);
-  }
-
   // findKey test helpers
 
   /**
-   * Verifies that {@code valueFromFind} matches the expected value from {@link #referenceIndex}.
+   * Verifies that {@code valueFromFind} matches the expected value from {@link CuratedLogIndexState#referenceIndex}.
    * @param id the {@link MockId} whose value is required.
    * @param valueFromFind the {@link IndexValue} that needs to be verified.
    */
   private void verifyValue(MockId id, IndexValue valueFromFind) {
-    if (allKeys.containsKey(id)) {
+    if (state.allKeys.containsKey(id)) {
       assertNotNull("Value should be successfully fetched", valueFromFind);
-      IndexValue expectedValue = getExpectedValue(id, !deletedKeys.contains(id));
+      IndexValue expectedValue = state.getExpectedValue(id, !state.deletedKeys.contains(id));
       assertEquals("Offset in value from index not as expected", expectedValue.getOffset(), valueFromFind.getOffset());
       assertEquals("Bytes from value from index not as expected", expectedValue.getBytes(), valueFromFind.getBytes());
     } else {
@@ -1596,12 +962,12 @@ public class IndexTest {
    */
   private Offset getLastRecordOffset(LogSegment segment) {
     Offset lastOffset;
-    LogSegment nextSegment = log.getNextSegment(segment);
+    LogSegment nextSegment = state.log.getNextSegment(segment);
     if (nextSegment == null) {
-      lastOffset = logOrder.lastKey();
+      lastOffset = state.logOrder.lastKey();
     } else {
       Offset nextSegmentStartOffset = new Offset(nextSegment.getName(), nextSegment.getStartOffset());
-      lastOffset = logOrder.lowerKey(nextSegmentStartOffset);
+      lastOffset = state.logOrder.lowerKey(nextSegmentStartOffset);
     }
     return lastOffset;
   }
@@ -1616,70 +982,70 @@ public class IndexTest {
    * @throws StoreException
    */
   private void testHardDeletePauseResume(boolean reloadIndex) throws InterruptedException, IOException, StoreException {
-    properties.put("store.deleted.message.retention.days", Integer.toString(1));
-    properties.put("store.hard.delete.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
-    properties.setProperty("store.data.flush.interval.seconds", "3600");
+    state.properties.put("store.deleted.message.retention.days", Integer.toString(1));
+    state.properties.put("store.hard.delete.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
+    state.properties.setProperty("store.data.flush.interval.seconds", "3600");
     // enable daemon thread to run hard deletes
-    properties.put("store.enable.hard.delete", "true");
-    reloadIndex(false);
-    assertTrue("Hard delete is not enabled", index.hardDeleter.isRunning());
+    state.properties.put("store.enable.hard.delete", "true");
+    state.reloadIndex(true, false);
+    assertTrue("Hard delete is not enabled", state.index.hardDeleter.isRunning());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
-    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
-    long expectedProgress = index.getAbsolutePositionInLogForOffset(logOrder.lastKey());
+    state.advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    long expectedProgress = state.index.getAbsolutePositionInLogForOffset(state.logOrder.lastKey());
     // give it some time so that hard delete completes one cycle
     waitUntilExpectedProgress(expectedProgress, 5000);
-    verifyEntriesForHardDeletes(deletedKeys);
+    state.verifyEntriesForHardDeletes(state.deletedKeys);
 
     Set<MockId> idsDeleted = new HashSet<>();
     // delete two entries
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     Set<MockId> idsToDelete = new HashSet<>();
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
     for (MockId id : idsToDelete) {
-      addDeleteEntry(id);
+      state.addDeleteEntry(id);
     }
     idsDeleted.addAll(idsToDelete);
     // pause hard delete
-    index.hardDeleter.pause();
-    assertTrue("Hard deletes should have been paused ", index.hardDeleter.isPaused());
+    state.index.hardDeleter.pause();
+    assertTrue("Hard deletes should have been paused ", state.index.hardDeleter.isPaused());
     waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
 
     // delete two entries
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
+    state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     idsToDelete.clear();
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-    addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
     for (MockId id : idsToDelete) {
-      addDeleteEntry(id);
+      state.addDeleteEntry(id);
     }
     idsDeleted.addAll(idsToDelete);
 
     if (reloadIndex) {
-      reloadIndex(true);
+      state.reloadIndex(true, true);
       waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
       idsToDelete.clear();
-      addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
-      addPutEntries(2, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      idsToDelete.add(getIdToDeleteFromIndexSegment(referenceIndex.lastKey()));
+      state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+      idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+      state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+      idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
       for (MockId id : idsToDelete) {
-        addDeleteEntry(id);
+        state.addDeleteEntry(id);
       }
       idsDeleted.addAll(idsToDelete);
     }
 
     // advance time so that deleted entries becomes eligible to be hard deleted
-    advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    state.advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
     // resume and verify new entries have been hard deleted
-    index.hardDeleter.resume();
-    assertFalse("Hard deletes should have been resumed ", index.hardDeleter.isPaused());
-    expectedProgress = index.getAbsolutePositionInLogForOffset(logOrder.lastKey());
+    state.index.hardDeleter.resume();
+    assertFalse("Hard deletes should have been resumed ", state.index.hardDeleter.isPaused());
+    expectedProgress = state.index.getAbsolutePositionInLogForOffset(state.logOrder.lastKey());
     // after resuming. hard deletes should progress. Give it some time to hard delete next range
     waitUntilExpectedProgress(expectedProgress, 5000);
-    verifyEntriesForHardDeletes(idsDeleted);
+    state.verifyEntriesForHardDeletes(idsDeleted);
   }
 
   // recoverySuccessTest() helpers
@@ -1691,12 +1057,12 @@ public class IndexTest {
    * @throws StoreException
    */
   private void singleSegmentRecoveryTest() throws InterruptedException, IOException, StoreException {
-    Offset indexEndOffsetBeforeRecovery = index.getCurrentEndOffset();
-    MockId idToCreateAndDelete = getUniqueId();
+    Offset indexEndOffsetBeforeRecovery = state.index.getCurrentEndOffset();
+    MockId idToCreateAndDelete = state.getUniqueId();
     // recover a few messages in a single segment
     final List<MessageInfo> infos = getCuratedSingleSegmentRecoveryInfos(idToCreateAndDelete);
     final AtomicInteger returnTracker = new AtomicInteger(0);
-    recovery = new MessageStoreRecovery() {
+    state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
@@ -1709,12 +1075,12 @@ public class IndexTest {
       }
     };
     // This test relies on log segment not spilling over. If that happens, this test will fail.
-    LogSegment activeSegment = log.getSegment(indexEndOffsetBeforeRecovery.getName());
+    LogSegment activeSegment = state.log.getSegment(indexEndOffsetBeforeRecovery.getName());
     long expectedSegmentEndOffset = activeSegment.getEndOffset();
     // write a little "extra" data
-    appendToLog(2 * PUT_RECORD_SIZE);
+    state.appendToLog(2 * CuratedLogIndexState.PUT_RECORD_SIZE);
 
-    reloadIndex(false);
+    state.reloadIndex(true, false);
     assertEquals("End offset not as expected", expectedSegmentEndOffset, activeSegment.getEndOffset());
     checkInfos(infos, idToCreateAndDelete, indexEndOffsetBeforeRecovery);
   }
@@ -1726,25 +1092,28 @@ public class IndexTest {
    * @throws StoreException
    */
   private void multipleSegmentRecoveryTest() throws InterruptedException, IOException, StoreException {
-    Offset indexEndOffsetBeforeRecovery = index.getCurrentEndOffset();
-    LogSegment activeSegment = log.getSegment(indexEndOffsetBeforeRecovery.getName());
+    Offset indexEndOffsetBeforeRecovery = state.index.getCurrentEndOffset();
+    LogSegment activeSegment = state.log.getSegment(indexEndOffsetBeforeRecovery.getName());
     // recover a few messages across segments
     final List<MessageInfo> activeSegmentInfos = new ArrayList<>();
     // 1 PUT record that will be deleted in the next segment
-    MockId idToCreateAndDeleteAcrossSegments = getUniqueId();
-    appendToLog(PUT_RECORD_SIZE);
-    activeSegmentInfos.add(new MessageInfo(idToCreateAndDeleteAcrossSegments, PUT_RECORD_SIZE));
+    MockId idToCreateAndDeleteAcrossSegments = state.getUniqueId();
+    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+    activeSegmentInfos.add(new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.PUT_RECORD_SIZE));
     // 1 PUT record that will remain and covers almost the rest of the active segment.
-    long size = activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() - (DELETE_RECORD_SIZE - 1);
-    appendToLog(size);
-    activeSegmentInfos.add(new MessageInfo(getUniqueId(), size));
-    MockId idToCreateAndDeleteInSameSegment = getUniqueId();
+    long size =
+        activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() - (CuratedLogIndexState.DELETE_RECORD_SIZE
+            - 1);
+    state.appendToLog(size);
+    activeSegmentInfos.add(new MessageInfo(state.getUniqueId(), size));
+    MockId idToCreateAndDeleteInSameSegment = state.getUniqueId();
     final List<MessageInfo> nextSegmentInfos = getCuratedSingleSegmentRecoveryInfos(idToCreateAndDeleteInSameSegment);
     // 1 DELETE record for the PUT in the previous segment
-    appendToLog(DELETE_RECORD_SIZE);
-    nextSegmentInfos.add(new MessageInfo(idToCreateAndDeleteAcrossSegments, DELETE_RECORD_SIZE, true));
+    state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
+    nextSegmentInfos.add(
+        new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true));
     final AtomicInteger returnTracker = new AtomicInteger(0);
-    recovery = new MessageStoreRecovery() {
+    state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
@@ -1759,14 +1128,14 @@ public class IndexTest {
       }
     };
     long activeSegmentExpectedEndOffset = activeSegment.getEndOffset();
-    long nextSegmentExpectedEndOffset = log.getNextSegment(activeSegment).getEndOffset();
+    long nextSegmentExpectedEndOffset = state.log.getNextSegment(activeSegment).getEndOffset();
     // write a little "extra" data
-    appendToLog(2 * PUT_RECORD_SIZE);
+    state.appendToLog(2 * CuratedLogIndexState.PUT_RECORD_SIZE);
 
-    reloadIndex(false);
+    state.reloadIndex(true, false);
     assertEquals("End offset of former active segment not as expected", activeSegmentExpectedEndOffset,
         activeSegment.getEndOffset());
-    activeSegment = log.getNextSegment(activeSegment);
+    activeSegment = state.log.getNextSegment(activeSegment);
     assertNotNull("A new segment has not been created", activeSegment);
     assertEquals("End offset active segment not as expected", nextSegmentExpectedEndOffset,
         activeSegment.getEndOffset());
@@ -1784,17 +1153,18 @@ public class IndexTest {
    */
   private List<MessageInfo> getCuratedSingleSegmentRecoveryInfos(MockId idToCreateAndDelete) throws IOException {
     List<MessageInfo> infos = new ArrayList<>();
-    appendToLog(2 * DELETE_RECORD_SIZE + 4 * PUT_RECORD_SIZE);
+    state.appendToLog(2 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE);
     // 1 DELETE for a PUT not in the infos
-    infos.add(new MessageInfo(getIdToDeleteFromLogSegment(log.getFirstSegment()), DELETE_RECORD_SIZE, true));
+    infos.add(new MessageInfo(state.getIdToDeleteFromLogSegment(state.log.getFirstSegment()),
+        CuratedLogIndexState.DELETE_RECORD_SIZE, true));
     // 3 PUT
-    infos.add(new MessageInfo(idToCreateAndDelete, PUT_RECORD_SIZE));
-    infos.add(new MessageInfo(getUniqueId(), PUT_RECORD_SIZE));
-    infos.add(new MessageInfo(getUniqueId(), PUT_RECORD_SIZE));
+    infos.add(new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.PUT_RECORD_SIZE));
+    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE));
+    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE));
     // 1 DELETE for a PUT in the infos
-    infos.add(new MessageInfo(idToCreateAndDelete, DELETE_RECORD_SIZE, true));
+    infos.add(new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true));
     // 1 expired PUT
-    infos.add(new MessageInfo(getUniqueId(), PUT_RECORD_SIZE, 0));
+    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE, 0));
     return infos;
   }
 
@@ -1809,9 +1179,9 @@ public class IndexTest {
       throws StoreException {
     Offset currCheckOffset = indexEndOffsetBeforeRecovery;
     for (MessageInfo info : infos) {
-      FileSpan expectedFileSpan = log.getFileSpanForMessage(currCheckOffset, info.getSize());
+      FileSpan expectedFileSpan = state.log.getFileSpanForMessage(currCheckOffset, info.getSize());
       if (!info.getStoreKey().equals(putRecordIdToIgnore) || info.isDeleted()) {
-        IndexValue value = index.findKey(info.getStoreKey());
+        IndexValue value = state.index.findKey(info.getStoreKey());
         assertEquals("Incorrect value for start offset", currCheckOffset, value.getOffset());
         assertEquals("Inconsistent size", info.getSize(), value.getSize());
         assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
@@ -1826,26 +1196,28 @@ public class IndexTest {
    * @throws StoreException
    */
   private void totalIndexLossRecoveryTest() throws StoreException {
-    closeAndClearIndex();
+    state.closeAndClearIndex();
     final AtomicInteger returnTracker = new AtomicInteger(0);
-    recovery = new MessageStoreRecovery() {
+    state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
         switch (returnTracker.getAndIncrement()) {
           case 0:
-            return Collections.singletonList(new MessageInfo(getUniqueId(), PUT_RECORD_SIZE));
+            return Collections.singletonList(
+                new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE));
           default:
             return Collections.emptyList();
         }
       }
     };
-    reloadIndex(false);
-    assertEquals("Incorrect log segment count", 1, index.getLogSegmentCount());
-    assertEquals("Index should contain exactly one index segment", 1, index.indexes.size());
-    LogSegment segment = log.getFirstSegment();
+    state.reloadIndex(true, false);
+    assertEquals("Incorrect log segment count", 1, state.index.getLogSegmentCount());
+    assertEquals("Index should contain exactly one index segment", 1, state.index.indexes.size());
+    LogSegment segment = state.log.getFirstSegment();
     assertEquals("End offset not as expected",
-        new Offset(segment.getName(), segment.getStartOffset() + PUT_RECORD_SIZE), index.getCurrentEndOffset());
+        new Offset(segment.getName(), segment.getStartOffset() + CuratedLogIndexState.PUT_RECORD_SIZE),
+        state.index.getCurrentEndOffset());
   }
 
   // recoveryFailureTest() helpers
@@ -1856,7 +1228,7 @@ public class IndexTest {
    * @param expectedErrorCode the {@link StoreErrorCodes} expected for the failure.
    */
   private void doRecoveryFailureTest(final MessageInfo info, StoreErrorCodes expectedErrorCode) {
-    recovery = new MessageStoreRecovery() {
+    state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
@@ -1864,7 +1236,7 @@ public class IndexTest {
       }
     };
     try {
-      reloadIndex(false);
+      state.reloadIndex(true, false);
       fail("Loading index should have failed because recovery contains invalid info");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
@@ -1882,23 +1254,24 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceToIndexBasedTest() throws StoreException {
-    Offset logAbsoluteZero = new Offset(log.getFirstSegment().getName(), 0);
+    Offset logAbsoluteZero = new Offset(state.log.getFirstSegment().getName(), 0);
 
     // ------------------
     // 1. Index -> Index
-    Offset firstIndexSegmentStartOffset = referenceIndex.firstKey();
-    Offset secondIndexSegmentStartOffset = referenceIndex.higherKey(firstIndexSegmentStartOffset);
-    MockId firstId = referenceIndex.get(firstIndexSegmentStartOffset).firstKey();
+    Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
+    Offset secondIndexSegmentStartOffset = state.referenceIndex.higherKey(firstIndexSegmentStartOffset);
+    MockId firstId = state.referenceIndex.get(firstIndexSegmentStartOffset).firstKey();
     // All elements from first index segment and two from the second to be returned (because of size restrictions)
     Set<MockId> expectedKeys = new HashSet<>();
     long maxTotalSizeOfEntries = 0;
-    for (Map.Entry<MockId, IndexValue> segmentEntry : referenceIndex.get(firstIndexSegmentStartOffset).entrySet()) {
+    for (Map.Entry<MockId, IndexValue> segmentEntry : state.referenceIndex.get(firstIndexSegmentStartOffset)
+        .entrySet()) {
       if (!segmentEntry.getKey().equals(firstId)) {
         expectedKeys.add(segmentEntry.getKey());
         maxTotalSizeOfEntries += segmentEntry.getValue().getSize();
       }
     }
-    TreeMap<MockId, IndexValue> secondIndexSegment = referenceIndex.get(secondIndexSegmentStartOffset);
+    TreeMap<MockId, IndexValue> secondIndexSegment = state.referenceIndex.get(secondIndexSegmentStartOffset);
     Map.Entry<MockId, IndexValue> secondIndexSegmentEntry = secondIndexSegment.firstEntry();
     expectedKeys.add(secondIndexSegmentEntry.getKey());
     maxTotalSizeOfEntries += secondIndexSegmentEntry.getValue().getSize();
@@ -1906,23 +1279,25 @@ public class IndexTest {
     expectedKeys.add(secondIndexSegmentEntry.getKey());
     maxTotalSizeOfEntries += secondIndexSegmentEntry.getValue().getSize();
 
-    StoreFindToken startToken = new StoreFindToken(firstId, firstIndexSegmentStartOffset, sessionId, incarnationId);
+    StoreFindToken startToken =
+        new StoreFindToken(firstId, firstIndexSegmentStartOffset, state.sessionId, state.incarnationId);
     StoreFindToken expectedEndToken =
-        new StoreFindToken(secondIndexSegmentEntry.getKey(), secondIndexSegmentStartOffset, sessionId, incarnationId);
-    expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(secondIndexSegmentStartOffset));
+        new StoreFindToken(secondIndexSegmentEntry.getKey(), secondIndexSegmentStartOffset, state.sessionId,
+            state.incarnationId);
+    expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(secondIndexSegmentStartOffset));
     doFindEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
 
     // ------------------
     // 2. Uninitialized -> Index
     // add firstStoreKey and its size
     expectedKeys.add(firstId);
-    maxTotalSizeOfEntries += allKeys.get(firstId).getFirst().getSize();
+    maxTotalSizeOfEntries += state.allKeys.get(firstId).getFirst().getSize();
     doFindEntriesSinceTest(new StoreFindToken(), maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
 
     // ------------------
     // 3. Journal -> Index
     // create a journal based token for an offset that isn't in the journal
-    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId, false);
+    startToken = new StoreFindToken(state.logOrder.firstKey(), state.sessionId, state.incarnationId, false);
     doFindEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
   }
 
@@ -1936,21 +1311,22 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceToJournalBasedTest() throws StoreException {
-    StoreFindToken absoluteEndToken = new StoreFindToken(logOrder.lastKey(), sessionId, incarnationId, false);
-    absoluteEndToken.setBytesRead(index.getLogUsedCapacity());
+    StoreFindToken absoluteEndToken =
+        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false);
+    absoluteEndToken.setBytesRead(state.index.getLogUsedCapacity());
 
     // ------------------
     // 1. Uninitialized -> Journal
-    doFindEntriesSinceTest(new StoreFindToken(), Long.MAX_VALUE, allKeys.keySet(), absoluteEndToken);
+    doFindEntriesSinceTest(new StoreFindToken(), Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
 
     // ------------------
     // 2. Index -> Journal
-    Offset firstIndexSegmentStartOffset = referenceIndex.firstKey();
-    StoreKey firstStoreKey = referenceIndex.get(firstIndexSegmentStartOffset).firstKey();
+    Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
+    StoreKey firstStoreKey = state.referenceIndex.get(firstIndexSegmentStartOffset).firstKey();
     StoreFindToken startToken =
-        new StoreFindToken(firstStoreKey, firstIndexSegmentStartOffset, sessionId, incarnationId);
-    Set<MockId> expectedKeys = new HashSet<>(allKeys.keySet());
-    if (!deletedKeys.contains(firstStoreKey)) {
+        new StoreFindToken(firstStoreKey, firstIndexSegmentStartOffset, state.sessionId, state.incarnationId);
+    Set<MockId> expectedKeys = new HashSet<>(state.allKeys.keySet());
+    if (!state.deletedKeys.contains(firstStoreKey)) {
       // if firstStoreKey has not been deleted, it will not show up in findEntries since its PUT record is ignored
       expectedKeys.remove(firstStoreKey);
     }
@@ -1959,21 +1335,21 @@ public class IndexTest {
     // ------------------
     // 3. Journal -> Journal
     // a. Token no longer in journal
-    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId, false);
-    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, allKeys.keySet(), absoluteEndToken);
+    startToken = new StoreFindToken(state.logOrder.firstKey(), state.sessionId, state.incarnationId, false);
+    doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
 
     // b. Token still in journal
-    startToken = new StoreFindToken(index.journal.getFirstOffset(), sessionId, incarnationId, false);
+    startToken = new StoreFindToken(state.index.journal.getFirstOffset(), state.sessionId, state.incarnationId, false);
     expectedKeys = new HashSet<>();
-    for (Map.Entry<Offset, Pair<MockId, IndexValue>> entry : logOrder.tailMap(startToken.getOffset(), false)
-        .entrySet()) {
+    for (Map.Entry<Offset, Pair<MockId, CuratedLogIndexState.LogEntry>> entry : state.logOrder.tailMap(
+        startToken.getOffset(), false).entrySet()) {
       expectedKeys.add(entry.getValue().getFirst());
     }
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, expectedKeys, absoluteEndToken);
 
     // c. Token still in journal with inclusiveness set to true
-    startToken = new StoreFindToken(index.journal.getFirstOffset(), sessionId, incarnationId, true);
-    expectedKeys.add(logOrder.tailMap(startToken.getOffset(), true).firstEntry().getValue().getFirst());
+    startToken = new StoreFindToken(state.index.journal.getFirstOffset(), state.sessionId, state.incarnationId, true);
+    expectedKeys.add(state.logOrder.tailMap(startToken.getOffset(), true).firstEntry().getValue().getFirst());
     doFindEntriesSinceTest(startToken, Long.MAX_VALUE, expectedKeys, absoluteEndToken);
 
     // ------------------
@@ -1986,11 +1362,11 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceOneByOneTest() throws StoreException {
-    Offset logAbsoluteZero = new Offset(log.getFirstSegment().getName(), 0);
-    Offset journalStartOffset = index.journal.getFirstOffset();
+    Offset logAbsoluteZero = new Offset(state.log.getFirstSegment().getName(), 0);
+    Offset journalStartOffset = state.index.journal.getFirstOffset();
     StoreFindToken startToken = new StoreFindToken();
     Offset stoppedAt = null;
-    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry : referenceIndex.entrySet()) {
+    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry : state.referenceIndex.entrySet()) {
       Offset indexSegmentStartOffset = indexEntry.getKey();
       // We get index based tokens as long as
       // 1. The original token is index based
@@ -2001,27 +1377,28 @@ public class IndexTest {
       }
       for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
-        StoreFindToken expectedEndToken = new StoreFindToken(id, indexSegmentStartOffset, sessionId, incarnationId);
-        expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(indexSegmentStartOffset));
+        StoreFindToken expectedEndToken =
+            new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId);
+        expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(indexSegmentStartOffset));
         doFindEntriesSinceTest(startToken, indexSegmentEntry.getValue().getSize(), Collections.singleton(id),
             expectedEndToken);
         startToken = expectedEndToken;
       }
     }
 
-    Map.Entry<Offset, Pair<MockId, IndexValue>> logEntry = logOrder.floorEntry(stoppedAt);
+    Map.Entry<Offset, Pair<MockId, CuratedLogIndexState.LogEntry>> logEntry = state.logOrder.floorEntry(stoppedAt);
     while (logEntry != null) {
       Offset startOffset = logEntry.getKey();
       MockId id = logEntry.getValue().getFirst();
-      Pair<IndexValue, IndexValue> putDelete = allKeys.get(id);
+      Pair<IndexValue, IndexValue> putDelete = state.allKeys.get(id);
       // size returned is the size of the delete if the key has been deleted.
       long size = putDelete.getSecond() != null ? putDelete.getSecond().getSize() : putDelete.getFirst().getSize();
-      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, sessionId, incarnationId, false);
-      Offset endOffset = log.getFileSpanForMessage(startOffset, size).getEndOffset();
-      expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(endOffset));
+      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false);
+      Offset endOffset = state.log.getFileSpanForMessage(startOffset, size).getEndOffset();
+      expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(endOffset));
       doFindEntriesSinceTest(startToken, size, Collections.singleton(id), expectedEndToken);
       startToken = expectedEndToken;
-      logEntry = logOrder.higherEntry(logEntry.getKey());
+      logEntry = state.logOrder.higherEntry(logEntry.getKey());
     }
   }
 
@@ -2032,10 +1409,11 @@ public class IndexTest {
    */
   private void findEntriesSinceIndexBasedTokenForOffsetInJournalTest() throws StoreException {
     Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry =
-        referenceIndex.floorEntry(index.journal.getFirstOffset());
-    Offset nextIndexSegmentStartOffset = referenceIndex.higherKey(indexEntry.getKey());
+        state.referenceIndex.floorEntry(state.index.journal.getFirstOffset());
+    Offset nextIndexSegmentStartOffset = state.referenceIndex.higherKey(indexEntry.getKey());
     MockId firstIdInSegment = indexEntry.getValue().firstKey();
-    StoreFindToken startToken = new StoreFindToken(firstIdInSegment, indexEntry.getKey(), sessionId, incarnationId);
+    StoreFindToken startToken =
+        new StoreFindToken(firstIdInSegment, indexEntry.getKey(), state.sessionId, state.incarnationId);
     long maxSize = 0;
     Set<MockId> expectedKeys = new HashSet<>();
     for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
@@ -2044,15 +1422,16 @@ public class IndexTest {
         maxSize += indexSegmentEntry.getValue().getSize();
       }
     }
-    MockId logId = logOrder.get(nextIndexSegmentStartOffset).getFirst();
+    MockId logId = state.logOrder.get(nextIndexSegmentStartOffset).getFirst();
     expectedKeys.add(logId);
-    long size = deletedKeys.contains(logId) ? DELETE_RECORD_SIZE
-        : logOrder.get(nextIndexSegmentStartOffset).getSecond().getSize();
+    long size = state.deletedKeys.contains(logId) ? CuratedLogIndexState.DELETE_RECORD_SIZE
+        : state.logOrder.get(nextIndexSegmentStartOffset).getSecond().indexValue.getSize();
     maxSize += size;
 
-    Offset endOffset = log.getFileSpanForMessage(nextIndexSegmentStartOffset, size).getEndOffset();
-    StoreFindToken expectedEndToken = new StoreFindToken(nextIndexSegmentStartOffset, sessionId, incarnationId, false);
-    expectedEndToken.setBytesRead(index.getAbsolutePositionInLogForOffset(endOffset));
+    Offset endOffset = state.log.getFileSpanForMessage(nextIndexSegmentStartOffset, size).getEndOffset();
+    StoreFindToken expectedEndToken =
+        new StoreFindToken(nextIndexSegmentStartOffset, state.sessionId, state.incarnationId, false);
+    expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(endOffset));
     doFindEntriesSinceTest(startToken, maxSize, expectedKeys, expectedEndToken);
   }
 
@@ -2067,7 +1446,7 @@ public class IndexTest {
    */
   private void doFindEntriesSinceTest(StoreFindToken startToken, long maxTotalSizeOfEntries, Set<MockId> expectedKeys,
       StoreFindToken expectedEndToken) throws StoreException {
-    FindInfo findInfo = index.findEntriesSince(startToken, maxTotalSizeOfEntries);
+    FindInfo findInfo = state.index.findEntriesSince(startToken, maxTotalSizeOfEntries);
     StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
     compareTokens(expectedEndToken, token);
     assertEquals("Returned token should have the right number of bytes read", expectedEndToken.getBytesRead(),
@@ -2075,7 +1454,7 @@ public class IndexTest {
     List<MessageInfo> infos = findInfo.getMessageEntries();
     Set<StoreKey> keysExamined = new HashSet<>();
     for (MessageInfo info : infos) {
-      Pair<IndexValue, IndexValue> putDelete = allKeys.get(info.getStoreKey());
+      Pair<IndexValue, IndexValue> putDelete = state.allKeys.get(info.getStoreKey());
       IndexValue value = putDelete.getFirst();
       // size returned is hard to predict if the key has been deleted - it depends on the locations of the PUT and
       // DELETE entries and whether both or one of them is present in the return list. It is not useful to recompute the
@@ -2102,7 +1481,7 @@ public class IndexTest {
    */
   private void doFindEntriesSinceFailureTest(StoreFindToken token, StoreErrorCodes expectedCode) {
     try {
-      index.findEntriesSince(token, Long.MAX_VALUE);
+      state.index.findEntriesSince(token, Long.MAX_VALUE);
       fail("Should have failed because token is beyond the end offset in the index");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedCode, e.getErrorCode());
@@ -2119,8 +1498,8 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceInEmptyIndexTest(boolean deletedEntries) throws StoreException {
-    closeAndClearIndex();
-    reloadIndex(false);
+    state.closeAndClearIndex();
+    state.reloadIndex(true, false);
     StoreFindToken token = new StoreFindToken();
     token.setBytesRead(0);
     if (deletedEntries) {
@@ -2143,13 +1522,15 @@ public class IndexTest {
   private void findDeletedEntriesSinceToIndexBasedTest() throws StoreException {
     // ------------------
     // 1. Index -> Index
-    Offset secondIndexSegmentStartOffset = referenceIndex.higherKey(referenceIndex.firstKey());
-    Map.Entry<MockId, IndexValue> firstSegmentEntry = referenceIndex.get(secondIndexSegmentStartOffset).firstEntry();
+    Offset secondIndexSegmentStartOffset = state.referenceIndex.higherKey(state.referenceIndex.firstKey());
+    Map.Entry<MockId, IndexValue> firstSegmentEntry =
+        state.referenceIndex.get(secondIndexSegmentStartOffset).firstEntry();
     // Most elements from the second to be returned (because of size restrictions)
     Set<MockId> expectedKeys = new HashSet<>();
     long maxTotalSizeOfEntries = 0;
     MockId lastKey = null;
-    for (Map.Entry<MockId, IndexValue> segmentEntry : referenceIndex.get(secondIndexSegmentStartOffset).entrySet()) {
+    for (Map.Entry<MockId, IndexValue> segmentEntry : state.referenceIndex.get(secondIndexSegmentStartOffset)
+        .entrySet()) {
       if (!segmentEntry.equals(firstSegmentEntry)) {
         if (segmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
           expectedKeys.add(segmentEntry.getKey());
@@ -2159,15 +1540,16 @@ public class IndexTest {
       lastKey = segmentEntry.getKey();
     }
     StoreFindToken startToken =
-        new StoreFindToken(firstSegmentEntry.getKey(), secondIndexSegmentStartOffset, sessionId, incarnationId);
+        new StoreFindToken(firstSegmentEntry.getKey(), secondIndexSegmentStartOffset, state.sessionId,
+            state.incarnationId);
     StoreFindToken expectedEndToken =
-        new StoreFindToken(lastKey, secondIndexSegmentStartOffset, sessionId, incarnationId);
+        new StoreFindToken(lastKey, secondIndexSegmentStartOffset, state.sessionId, state.incarnationId);
     doFindDeletedEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
 
     // ------------------
     // 2. Uninitialized -> Index
     // add size of values and any keys that are supposed to be returned from the first index segment
-    for (Map.Entry<MockId, IndexValue> segmentEntry : referenceIndex.firstEntry().getValue().entrySet()) {
+    for (Map.Entry<MockId, IndexValue> segmentEntry : state.referenceIndex.firstEntry().getValue().entrySet()) {
       if (segmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
         expectedKeys.add(segmentEntry.getKey());
       }
@@ -2183,7 +1565,7 @@ public class IndexTest {
     // ------------------
     // 3. Journal -> Index
     // create a journal based token for an offset that isn't in the journal
-    startToken = new StoreFindToken(logOrder.firstKey(), sessionId, incarnationId, false);
+    startToken = new StoreFindToken(state.logOrder.firstKey(), state.sessionId, state.incarnationId, false);
     doFindDeletedEntriesSinceTest(startToken, maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
   }
 
@@ -2197,36 +1579,37 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findDeletedEntriesSinceToJournalBasedTest() throws StoreException {
-    StoreFindToken absoluteEndToken = new StoreFindToken(logOrder.lastKey(), sessionId, incarnationId, false);
+    StoreFindToken absoluteEndToken =
+        new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false);
 
     // ------------------
     // 1. Uninitialized -> Journal
-    doFindDeletedEntriesSinceTest(new StoreFindToken(), Long.MAX_VALUE, deletedKeys, absoluteEndToken);
+    doFindDeletedEntriesSinceTest(new StoreFindToken(), Long.MAX_VALUE, state.deletedKeys, absoluteEndToken);
 
     // ------------------
     // 2. Index -> Journal
-    Offset secondIndexSegmentStartOffset = referenceIndex.higherKey(referenceIndex.firstKey());
+    Offset secondIndexSegmentStartOffset = state.referenceIndex.higherKey(state.referenceIndex.firstKey());
     // second index segment contains the first delete entry
     StoreKey firstDeletedKey = getDeletedKeyFromIndexSegment(secondIndexSegmentStartOffset);
     StoreFindToken startToken =
-        new StoreFindToken(firstDeletedKey, secondIndexSegmentStartOffset, sessionId, incarnationId);
-    Set<MockId> expectedKeys = new HashSet<>(deletedKeys);
+        new StoreFindToken(firstDeletedKey, secondIndexSegmentStartOffset, state.sessionId, state.incarnationId);
+    Set<MockId> expectedKeys = new HashSet<>(state.deletedKeys);
     expectedKeys.remove(firstDeletedKey);
     doFindDeletedEntriesSinceTest(startToken, Long.MAX_VALUE, expectedKeys, absoluteEndToken);
 
     // ------------------
     // 3. Journal -> Journal
     // a. Token no longer in journal
-    startToken =
-        new StoreFindToken(allKeys.get(firstDeletedKey).getSecond().getOffset(), sessionId, incarnationId, false);
-    doFindDeletedEntriesSinceTest(startToken, Long.MAX_VALUE, deletedKeys, absoluteEndToken);
+    startToken = new StoreFindToken(state.allKeys.get(firstDeletedKey).getSecond().getOffset(), state.sessionId,
+        state.incarnationId, false);
+    doFindDeletedEntriesSinceTest(startToken, Long.MAX_VALUE, state.deletedKeys, absoluteEndToken);
 
     // b. Token still in journal
-    startToken = new StoreFindToken(index.journal.getFirstOffset(), sessionId, incarnationId, false);
+    startToken = new StoreFindToken(state.index.journal.getFirstOffset(), state.sessionId, state.incarnationId, false);
     expectedKeys.clear();
-    for (Map.Entry<Offset, Pair<MockId, IndexValue>> entry : logOrder.tailMap(startToken.getOffset(), false)
-        .entrySet()) {
-      if (entry.getValue().getSecond().isFlagSet(IndexValue.Flags.Delete_Index)) {
+    for (Map.Entry<Offset, Pair<MockId, CuratedLogIndexState.LogEntry>> entry : state.logOrder.tailMap(
+        startToken.getOffset(), false).entrySet()) {
+      if (entry.getValue().getSecond().indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
         expectedKeys.add(entry.getValue().getFirst());
       }
     }
@@ -2242,10 +1625,10 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findDeletedEntriesSinceOneByOneTest() throws StoreException {
-    Offset journalStartOffset = index.journal.getFirstOffset();
+    Offset journalStartOffset = state.index.journal.getFirstOffset();
     StoreFindToken startToken = new StoreFindToken();
     Offset stoppedAt = null;
-    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry : referenceIndex.entrySet()) {
+    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry : state.referenceIndex.entrySet()) {
       Offset indexSegmentStartOffset = indexEntry.getKey();
       // We get index based tokens as long as
       // 1. The original token is index based
@@ -2257,7 +1640,8 @@ public class IndexTest {
       for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
         boolean isDeleted = indexSegmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index);
-        StoreFindToken expectedEndToken = new StoreFindToken(id, indexSegmentStartOffset, sessionId, incarnationId);
+        StoreFindToken expectedEndToken =
+            new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId);
         long size = indexSegmentEntry.getValue().getSize();
         doFindDeletedEntriesSinceTest(startToken, size, isDeleted ? Collections.singleton(id) : Collections.EMPTY_SET,
             expectedEndToken);
@@ -2265,19 +1649,19 @@ public class IndexTest {
       }
     }
 
-    Map.Entry<Offset, Pair<MockId, IndexValue>> logEntry = logOrder.floorEntry(stoppedAt);
+    Map.Entry<Offset, Pair<MockId, CuratedLogIndexState.LogEntry>> logEntry = state.logOrder.floorEntry(stoppedAt);
     while (logEntry != null) {
       Offset startOffset = logEntry.getKey();
       MockId id = logEntry.getValue().getFirst();
-      Pair<IndexValue, IndexValue> putDelete = allKeys.get(id);
+      Pair<IndexValue, IndexValue> putDelete = state.allKeys.get(id);
       boolean isDeleted = putDelete.getSecond() != null;
       // size returned is the size of the delete if the key has been deleted.
       long size = isDeleted ? putDelete.getSecond().getSize() : putDelete.getFirst().getSize();
-      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, sessionId, incarnationId, false);
+      StoreFindToken expectedEndToken = new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false);
       doFindDeletedEntriesSinceTest(startToken, size, isDeleted ? Collections.singleton(id) : Collections.EMPTY_SET,
           expectedEndToken);
       startToken = expectedEndToken;
-      logEntry = logOrder.higherEntry(logEntry.getKey());
+      logEntry = state.logOrder.higherEntry(logEntry.getKey());
     }
   }
 
@@ -2288,10 +1672,11 @@ public class IndexTest {
    */
   private void findDeletedEntriesSinceIndexBasedTokenForOffsetInJournalTest() throws StoreException {
     Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry =
-        referenceIndex.floorEntry(index.journal.getFirstOffset());
-    Offset nextIndexSegmentStartOffset = referenceIndex.higherKey(indexEntry.getKey());
+        state.referenceIndex.floorEntry(state.index.journal.getFirstOffset());
+    Offset nextIndexSegmentStartOffset = state.referenceIndex.higherKey(indexEntry.getKey());
     MockId firstIdInSegment = indexEntry.getValue().firstKey();
-    StoreFindToken startToken = new StoreFindToken(firstIdInSegment, indexEntry.getKey(), sessionId, incarnationId);
+    StoreFindToken startToken =
+        new StoreFindToken(firstIdInSegment, indexEntry.getKey(), state.sessionId, state.incarnationId);
     long maxSize = 0;
     Set<MockId> expectedKeys = new HashSet<>();
     for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
@@ -2302,15 +1687,16 @@ public class IndexTest {
         maxSize += indexSegmentEntry.getValue().getSize();
       }
     }
-    MockId logId = logOrder.get(nextIndexSegmentStartOffset).getFirst();
-    long size = logOrder.get(nextIndexSegmentStartOffset).getSecond().getSize();
-    if (deletedKeys.contains(logId)) {
+    MockId logId = state.logOrder.get(nextIndexSegmentStartOffset).getFirst();
+    long size = state.logOrder.get(nextIndexSegmentStartOffset).getSecond().indexValue.getSize();
+    if (state.deletedKeys.contains(logId)) {
       expectedKeys.add(logId);
-      size = DELETE_RECORD_SIZE;
+      size = CuratedLogIndexState.DELETE_RECORD_SIZE;
     }
     maxSize += size;
 
-    StoreFindToken expectedEndToken = new StoreFindToken(nextIndexSegmentStartOffset, sessionId, incarnationId, false);
+    StoreFindToken expectedEndToken =
+        new StoreFindToken(nextIndexSegmentStartOffset, state.sessionId, state.incarnationId, false);
     doFindDeletedEntriesSinceTest(startToken, maxSize, expectedKeys, expectedEndToken);
   }
 
@@ -2325,13 +1711,13 @@ public class IndexTest {
    */
   private void doFindDeletedEntriesSinceTest(StoreFindToken startToken, long maxTotalSizeOfEntries,
       Set<MockId> expectedKeys, StoreFindToken expectedEndToken) throws StoreException {
-    FindInfo findInfo = index.findDeletedEntriesSince(startToken, maxTotalSizeOfEntries, Long.MAX_VALUE);
+    FindInfo findInfo = state.index.findDeletedEntriesSince(startToken, maxTotalSizeOfEntries, Long.MAX_VALUE);
     StoreFindToken token = (StoreFindToken) findInfo.getFindToken();
     compareTokens(expectedEndToken, token);
     List<MessageInfo> infos = findInfo.getMessageEntries();
     Set<StoreKey> keysExamined = new HashSet<>();
     for (MessageInfo info : infos) {
-      IndexValue value = allKeys.get(info.getStoreKey()).getSecond();
+      IndexValue value = state.allKeys.get(info.getStoreKey()).getSecond();
       assertEquals("Inconsistent size", value.getSize(), info.getSize());
       assertTrue("Not deleted", info.isDeleted());
       assertEquals("Inconsistent expiresAtMs", value.getExpiresAtMs(), info.getExpirationTimeInMs());
@@ -2347,7 +1733,8 @@ public class IndexTest {
    */
   private MockId getDeletedKeyFromIndexSegment(Offset indexSegmentStartOffset) {
     MockId deletedId = null;
-    for (Map.Entry<MockId, IndexValue> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset).entrySet()) {
+    for (Map.Entry<MockId, IndexValue> indexSegmentEntry : state.referenceIndex.get(indexSegmentStartOffset)
+        .entrySet()) {
       if (indexSegmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
         deletedId = indexSegmentEntry.getKey();
         break;
@@ -2364,7 +1751,46 @@ public class IndexTest {
    * @param numLogSegmentsPreceding number of log segments that precede the log segment that contains {@code offset}.
    */
   private void verifyAbsolutePosition(Offset offset, long numLogSegmentsPreceding) {
-    long expectedPosition = numLogSegmentsPreceding * log.getSegmentCapacity() + offset.getOffset();
-    assertEquals("Position not as expected", expectedPosition, index.getAbsolutePositionInLogForOffset(offset));
+    long expectedPosition = numLogSegmentsPreceding * state.log.getSegmentCapacity() + offset.getOffset();
+    assertEquals("Position not as expected", expectedPosition, state.index.getAbsolutePositionInLogForOffset(offset));
+  }
+
+  // hardDelete tests helpers
+
+  /**
+   * Sleeps in intervals of 10ms until expected progress is made or {@code maxTimeToCheck} is reached
+   * @param expectedProgress expected progress value
+   * @param maxTimeToCheck max time to check if expected progress is reached
+   * @throws InterruptedException
+   */
+  private void waitUntilExpectedProgress(long expectedProgress, int maxTimeToCheck) throws InterruptedException {
+    int sleptSoFar = 0;
+    while (expectedProgress != state.index.hardDeleter.getProgress()) {
+      sleptSoFar += 5;
+      Thread.sleep(5);
+      if (sleptSoFar >= maxTimeToCheck) {
+        fail("HardDelete failed to catch up in " + maxTimeToCheck);
+      }
+      state.index.hardDeleter.preLogFlush();
+      state.index.hardDeleter.postLogFlush();
+    }
+  }
+
+  /**
+   * Waits until the HardDeleter thread is in the {@code expectedState} for the specified {@code timeToCheckInMs} time.
+   * @param expectedState Expected HardDeleter thread state
+   * @param timeToCheckInMs time for which the state has to be checked for
+   * @param intervalToCheckInMs interval at which the check has to be done
+   */
+  private void waitUntilExpectedState(Thread.State expectedState, long timeToCheckInMs, long intervalToCheckInMs)
+      throws InterruptedException {
+    long timeSoFar = 0;
+    while (expectedState != state.index.hardDeleteThread.getState()) {
+      Thread.sleep(intervalToCheckInMs);
+      timeSoFar += intervalToCheckInMs;
+      if (timeSoFar >= timeToCheckInMs) {
+        fail("Hard Deleter thread state failed to move to " + Thread.State.WAITING + " in " + timeToCheckInMs);
+      }
+    }
   }
 }
