@@ -358,7 +358,7 @@ public class IndexTest {
    * @throws IOException
    * @throws StoreException
    */
-  @Test
+  // @Test
   public void hardDeletePauseResumeTest() throws InterruptedException, IOException, StoreException {
     testHardDeletePauseResume(false);
   }
@@ -370,7 +370,7 @@ public class IndexTest {
    * @throws IOException
    * @throws StoreException
    */
-  @Test
+  // @Test
   public void hardDeletePauseResumeRestartTest() throws InterruptedException, IOException, StoreException {
     testHardDeletePauseResume(true);
   }
