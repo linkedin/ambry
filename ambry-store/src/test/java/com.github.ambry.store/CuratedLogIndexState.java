@@ -602,7 +602,7 @@ class CuratedLogIndexState {
    */
   private void verifyState(boolean isLogSegmented) throws IOException, StoreException {
     assertEquals("Incorrect log segment count", isLogSegmented ? 3 : 1, index.getLogSegmentCount());
-    NavigableMap<Offset, IndexSegment> realIndex = index.indexes;
+    NavigableMap<Offset, IndexSegment> realIndex = index.getIndexSegments();
     assertEquals("Number of index segments does not match expected", referenceIndex.size(), realIndex.size());
     Map.Entry<Offset, IndexSegment> realIndexEntry = realIndex.firstEntry();
     for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> referenceIndexEntry : referenceIndex.entrySet()) {

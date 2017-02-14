@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -449,6 +451,67 @@ public class IndexTest {
       assertNull("There should have been no more segments", state.log.getNextSegment(activeSegment));
       assertEquals("End offset of active segment should have been reset", offsetBeforeAppend,
           activeSegment.getEndOffset());
+    }
+  }
+
+  /**
+   * Tests {@link PersistentIndex#changeIndexSegments(List, Set)} for good and bad cases.
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void changeIndexSegmentsTest() throws IOException, StoreException {
+    ConcurrentSkipListMap<Offset, IndexSegment> indexes = state.index.getIndexSegments();
+    Set<Offset> saved = indexes.clone().keySet();
+
+    Map<Offset, IndexSegment> toRemoveOne = new HashMap<>();
+    Set<Offset> toRetainOne = new HashSet<>();
+
+    partitionIndexSegments(toRemoveOne, toRetainOne);
+
+    // remove the first batch without adding anything
+    state.index.changeIndexSegments(Collections.EMPTY_LIST, toRemoveOne.keySet());
+    assertEquals("Offsets in index do not match expected", toRetainOne, state.index.getIndexSegments().keySet());
+    // make sure persist does not throw errors
+    state.index.persistIndex();
+
+    Map<Offset, IndexSegment> toRemoveTwo = new HashMap<>();
+    Set<Offset> toRetainTwo = new HashSet<>();
+
+    partitionIndexSegments(toRemoveTwo, toRetainTwo);
+
+    // remove the second batch and add the batch that was removed earlier
+    toRetainTwo.addAll(toRemoveOne.keySet());
+    List<File> filesToAdd = new ArrayList<>();
+    for (IndexSegment indexSegment : toRemoveOne.values()) {
+      filesToAdd.add(indexSegment.getFile());
+    }
+    state.index.changeIndexSegments(filesToAdd, toRemoveTwo.keySet());
+    assertEquals("Offsets in index do not match expected", toRetainTwo, state.index.getIndexSegments().keySet());
+    // make sure persist does not throw errors
+    state.index.persistIndex();
+
+    // add the second batch that was removed
+    filesToAdd.clear();
+    for (IndexSegment indexSegment : toRemoveTwo.values()) {
+      filesToAdd.add(indexSegment.getFile());
+    }
+    state.index.changeIndexSegments(filesToAdd, Collections.EMPTY_SET);
+    assertEquals("Offsets in index do not match expected", saved, state.index.getIndexSegments().keySet());
+    // make sure persist does not throw errors
+    state.index.persistIndex();
+
+    // error case
+    // add an entry into the journal for the very first offset in the index
+    state.index.journal.addEntry(state.logOrder.firstKey(), state.logOrder.firstEntry().getValue().getFirst());
+    // remove the first index segment
+    IndexSegment firstSegment = state.index.getIndexSegments().remove(state.index.getIndexSegments().firstKey());
+    // try to add it back and it should result in an error
+    try {
+      state.index.changeIndexSegments(Collections.singletonList(firstSegment.getFile()), Collections.EMPTY_SET);
+      fail("Should have failed to add index segment because its end offset is past the first offset in the journal");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
     }
   }
 
@@ -1213,7 +1276,7 @@ public class IndexTest {
     };
     state.reloadIndex(true, false);
     assertEquals("Incorrect log segment count", 1, state.index.getLogSegmentCount());
-    assertEquals("Index should contain exactly one index segment", 1, state.index.indexes.size());
+    assertEquals("Index should contain exactly one index segment", 1, state.index.getIndexSegments().size());
     LogSegment segment = state.log.getFirstSegment();
     assertEquals("End offset not as expected",
         new Offset(segment.getName(), segment.getStartOffset() + CuratedLogIndexState.PUT_RECORD_SIZE),
@@ -1791,6 +1854,28 @@ public class IndexTest {
       if (timeSoFar >= timeToCheckInMs) {
         fail("Hard Deleter thread state failed to move to " + Thread.State.WAITING + " in " + timeToCheckInMs);
       }
+    }
+  }
+
+  // changeIndexSegmentsTest() helpers
+
+  /**
+   * Partitions all the available index segments in {@link CuratedLogIndexState#index} into ones that will be removed
+   * and ones that will be retained.
+   * @param toRemove a {@link Map} that will contain all the {@link Offset} and {@link IndexSegment} instances that need
+   *                 to be removed.
+   * @param toRetain a {@link Set} that will contain all the {@link Offset} of {@link IndexSegment} instances that need
+   *                 to be retained.
+   */
+  private void partitionIndexSegments(Map<Offset, IndexSegment> toRemove, Set<Offset> toRetain) {
+    int i = 0;
+    for (Map.Entry<Offset, IndexSegment> indexSegmentEntry : state.index.getIndexSegments().entrySet()) {
+      if (indexSegmentEntry.equals(state.index.getIndexSegments().lastEntry()) || i % 3 != 0) {
+        toRetain.add(indexSegmentEntry.getKey());
+      } else {
+        toRemove.put(indexSegmentEntry.getKey(), indexSegmentEntry.getValue());
+      }
+      i++;
     }
   }
 }
