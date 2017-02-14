@@ -722,18 +722,18 @@ public class BlobStoreTest {
     if (!isLogSegmented) {
       // log is filled about ~50%.
       expectedStoreSize = segmentCapacity / 2;
-      addCuratedData(expectedStoreSize, 0);
+      addCuratedData(expectedStoreSize);
     } else {
       expectedStoreSize = segmentCapacity;
       // first log segment is filled to capacity.
-      addCuratedData(segmentCapacity, 0);
+      addCuratedData(segmentCapacity);
       assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
 
       // second log segment is filled but has some space at the end (free space has to be less than the lesser of the
       // standard delete and put record sizes so that the next write causes a roll over of log segments).
       long sizeToWrite = segmentCapacity - (DELETE_RECORD_SIZE - 1);
       expectedStoreSize += sizeToWrite;
-      addCuratedData(sizeToWrite, 1);
+      addCuratedData(sizeToWrite);
       assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
 
       // third log segment is partially filled and is left as the "active" segment
@@ -773,10 +773,9 @@ public class BlobStoreTest {
    * Adds some curated data into the store in order to ensure a good mix for testing. For understanding the created
    * store, please read the source code which is annotated with comments.
    * @param sizeToWrite the size to add for.
-   * @param logSegmentIndex the index of the log segment being written to (0 being the first one).
    * @throws StoreException
    */
-  private void addCuratedData(long sizeToWrite, int logSegmentIndex) throws StoreException {
+  private void addCuratedData(long sizeToWrite) throws StoreException {
     Set<MockId> idsInLogSegment = new HashSet<>();
     idsByLogSegment.add(idsInLogSegment);
     List<Set<MockId>> idsGroupedByIndexSegment = new ArrayList<>();
