@@ -64,6 +64,16 @@ public class MessageInfo {
     return getExpirationTimeInMs() != Utils.Infinite_Time && System.currentTimeMillis() > getExpirationTimeInMs();
   }
 
+  public String getServiceId() {
+    String id = getStoreKey().getID();
+    return id.substring(0, 1);
+  }
+
+  public String getContainerId() {
+    String id = getStoreKey().getID();
+    return id.substring(id.length() - 1);
+  }
+
   @Override
   public String toString() {
     StringBuilder stringBuilder = new StringBuilder();

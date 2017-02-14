@@ -20,6 +20,7 @@ import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.FilterFactory;
 import com.github.ambry.utils.IFilter;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -81,7 +82,7 @@ class IndexSegment {
   private final File bloomFile;
   private final StoreMetrics metrics;
   // an approximation of the last modified time.
-  private final AtomicLong lastModifiedTimeSec;
+  private AtomicLong lastModifiedTimeSec;
   private final AtomicInteger numberOfItems;
 
   private MappedByteBuffer mmap = null;
@@ -90,6 +91,7 @@ class IndexSegment {
   private int valueSize;
   private Offset prevSafeEndPoint = null;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
+  private final Time time;
 
   /**
    * Creates a new segment
@@ -101,7 +103,7 @@ class IndexSegment {
    * @param config The store config used to initialize the index segment
    */
   IndexSegment(String dataDir, Offset startOffset, StoreKeyFactory factory, int keySize, int valueSize,
-      StoreConfig config, StoreMetrics metrics) {
+      StoreConfig config, StoreMetrics metrics, Time time) {
     this.rwLock = new ReentrantReadWriteLock();
     this.startOffset = startOffset;
     this.endOffset = new AtomicReference<>(startOffset);
@@ -119,6 +121,7 @@ class IndexSegment {
     indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix();
     indexFile = new File(dataDir, indexSegmentFilenamePrefix + INDEX_SEGMENT_FILE_NAME_SUFFIX);
     bloomFile = new File(dataDir, indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
+    this.time = time;
   }
 
   /**
@@ -133,7 +136,7 @@ class IndexSegment {
    * @throws StoreException
    */
   IndexSegment(File indexFile, boolean shouldMap, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
-      Journal journal) throws StoreException {
+      Journal journal, Time time) throws StoreException {
     try {
       startOffset = getIndexSegmentStartOffset(indexFile.getName());
       endOffset = new AtomicReference<>(startOffset);
@@ -142,6 +145,7 @@ class IndexSegment {
       this.lastModifiedTimeSec = new AtomicLong(indexFile.lastModified() / 1000);
       this.rwLock = new ReentrantReadWriteLock();
       this.factory = factory;
+      this.time = time;
       sizeWritten = new AtomicLong(0);
       numberOfItems = new AtomicInteger(0);
       mapped = new AtomicBoolean(false);
@@ -374,7 +378,7 @@ class IndexSegment {
         bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
       endOffset.set(fileEndOffset);
-      lastModifiedTimeSec.set(SystemTime.getInstance().milliseconds() / 1000);
+      lastModifiedTimeSec.set(time.milliseconds() / 1000);
       if (keySize == Key_Size_Invalid_Value) {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();
