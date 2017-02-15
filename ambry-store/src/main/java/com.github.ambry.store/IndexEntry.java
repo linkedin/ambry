@@ -19,10 +19,16 @@ package com.github.ambry.store;
 class IndexEntry {
   private final StoreKey key;
   private final IndexValue value;
+  private final Long crc;
 
-  IndexEntry(StoreKey key, IndexValue value) {
+  IndexEntry(StoreKey key, IndexValue value, Long crc) {
     this.key = key;
     this.value = value;
+    this.crc = crc;
+  }
+
+  IndexEntry(StoreKey key, IndexValue value) {
+    this(key, value, null);
   }
 
   StoreKey getKey() {
@@ -31,5 +37,9 @@ class IndexEntry {
 
   IndexValue getValue() {
     return this.value;
+  }
+
+  Long getCrc() {
+    return this.crc;
   }
 }

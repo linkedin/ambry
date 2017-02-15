@@ -38,6 +38,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,6 +48,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import junit.framework.Assert;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -77,6 +79,8 @@ public class BlobStoreTest {
   // deliberately do not divide the capacities perfectly.
   private static final long PUT_RECORD_SIZE = 53;
   private static final long DELETE_RECORD_SIZE = 29;
+
+  private final Random random = new Random();
 
   /**
    * A mock implementation of {@link MessageWriteSet} to help write to the {@link BlobStore}
@@ -516,6 +520,29 @@ public class BlobStoreTest {
     verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
   }
 
+  @Test
+  public void idCollisionTest() throws Exception {
+    MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds() + 1).get(0);
+    long addedIdCrc = allKeys.get(addedId).getFirst().getCrc();
+    // same crc. should succeed.
+    MessageInfo info = new MessageInfo(addedId, PUT_RECORD_SIZE, false, Utils.Infinite_Time, addedIdCrc);
+    MessageWriteSet writeSet =
+        new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
+    store.put(writeSet);
+    // different crc. should fail.
+    long differentCrc = addedIdCrc + 1;
+    info = new MessageInfo(addedId, PUT_RECORD_SIZE, false, Utils.Infinite_Time, differentCrc);
+    writeSet =
+        new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
+    try {
+      store.put(writeSet);
+      fail("Attempt to put a non-identical object with the same blob id should fail.");
+    } catch (StoreException e) {
+      Assert.assertEquals("Attempt to put a non-identical object with the same blob id should fail with Already_Exist.",
+          e.getErrorCode(), StoreErrorCodes.Already_Exist);
+    }
+  }
+
   /**
    * Tests {@link BlobStore#findEntriesSince(FindToken, long)}.
    * <p/>
@@ -619,7 +646,8 @@ public class BlobStoreTest {
     List<ByteBuffer> buffers = new ArrayList<>(count);
     for (int i = 0; i < count; i++) {
       MockId id = getUniqueId();
-      MessageInfo info = new MessageInfo(id, size, expiresAtMs);
+      long crc = random.nextLong();
+      MessageInfo info = new MessageInfo(id, size, false, expiresAtMs, crc);
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
       infos.add(info);

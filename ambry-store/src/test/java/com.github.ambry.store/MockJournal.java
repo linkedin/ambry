@@ -25,12 +25,14 @@ import java.util.List;
 class MockJournal extends Journal {
   private List<Offset> savedOffsets;
   private List<StoreKey> savedKeys;
+  private List<Long> savedCrcs;
   boolean paused;
 
   public MockJournal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
     super(dataDir, maxEntriesToJournal, maxEntriesToReturn);
     savedOffsets = new ArrayList<>();
     savedKeys = new ArrayList<>();
+    savedCrcs = new ArrayList<>();
     paused = false;
   }
 
@@ -40,18 +42,24 @@ class MockJournal extends Journal {
 
   public void resume() {
     for (int i = 0; i < savedOffsets.size(); i++) {
-      super.addEntry(savedOffsets.get(i), savedKeys.get(i));
+      super.addEntry(savedOffsets.get(i), savedKeys.get(i), savedCrcs.get(i));
     }
     paused = false;
   }
 
   @Override
   public void addEntry(Offset offset, StoreKey key) {
+    addEntry(offset, key, null);
+  }
+
+  @Override
+  public void addEntry(Offset offset, StoreKey key, Long crc) {
     if (paused) {
       savedOffsets.add(offset);
       savedKeys.add(key);
+      savedCrcs.add(crc);
     } else {
-      super.addEntry(offset, key);
+      super.addEntry(offset, key, crc);
     }
   }
 }

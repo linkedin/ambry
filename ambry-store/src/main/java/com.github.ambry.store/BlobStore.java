@@ -157,44 +157,73 @@ class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.putResponse.time();
     try {
-      if (messageSetToWrite.getMessageSetInfo().size() == 0) {
+      int totalEntries = messageSetToWrite.getMessageSetInfo().size();
+      if (totalEntries == 0) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
-      // if any of the keys already exist in the store, we fail
+      // if any existing entry is found and is identical, then return if all entries are already present.
+      int existingIdenticalEntries = 0;
       for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
         if (index.findKey(info.getStoreKey()) != null) {
-          throw new StoreException("Key already exists in store", StoreErrorCodes.Already_Exist);
-        }
-      }
-
-      synchronized (lock) {
-        // Validate that log end offset was not changed. If changed, check once again for existing
-        // keys in store
-        Offset currentIndexEndOffset = index.getCurrentEndOffset();
-        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
-          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
-          for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-            if (index.findKey(info.getStoreKey(), fileSpan) != null) {
-              throw new StoreException("Key already exists on filespan check", StoreErrorCodes.Already_Exist);
-            }
+          if (index.recentlySeen(info)) {
+            existingIdenticalEntries++;
+            metrics.identicalPutAttemptCount.inc();
+          } else {
+            throw new StoreException("Another blob with same key exists in store", StoreErrorCodes.Already_Exist);
           }
         }
-        Offset endOffsetOfLastMessage = log.getEndOffset();
-        messageSetToWrite.writeTo(log);
-        logger.trace("Store : {} message set written to log", dataDir);
-        List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
-        ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
-        for (MessageInfo info : messageInfo) {
-          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          IndexValue value = new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs());
-          IndexEntry entry = new IndexEntry(info.getStoreKey(), value);
-          indexEntries.add(entry);
-          endOffsetOfLastMessage = fileSpan.getEndOffset();
+      }
+      if (existingIdenticalEntries == totalEntries) {
+        logger.trace("All entries to put already exist in the store");
+      } else if (existingIdenticalEntries > 0) {
+        // At least one entry in the given write set is already present, and at least one of them is not. The
+        // operation cannot succeed.
+        throw new StoreException("An identical blob exists in store", StoreErrorCodes.Already_Exist);
+      } else {
+        synchronized (lock) {
+          // Validate that log end offset was not changed. If changed, check once again for existing
+          // keys in store
+          Offset currentIndexEndOffset = index.getCurrentEndOffset();
+          if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+            FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+            for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
+              if (index.findKey(info.getStoreKey(), fileSpan) != null) {
+                if (index.recentlySeen(info)) {
+                  existingIdenticalEntries++;
+                  metrics.identicalPutAttemptCount.inc();
+                } else {
+                  throw new StoreException("Key already exists on filespan check", StoreErrorCodes.Already_Exist);
+                }
+              }
+            }
+          }
+
+          if (existingIdenticalEntries == totalEntries) {
+            logger.trace("All entries to put already exist in the store");
+          } else if (existingIdenticalEntries > 0) {
+            // At least one entry in the given write set is already present, and at least one of them is not. The
+            // operation cannot succeed.
+            throw new StoreException("An identical blob exists in store", StoreErrorCodes.Already_Exist);
+          } else {
+            Offset endOffsetOfLastMessage = log.getEndOffset();
+            messageSetToWrite.writeTo(log);
+            logger.trace("Store : {} message set written to log", dataDir);
+            List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
+            ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
+            for (MessageInfo info : messageInfo) {
+              FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+              IndexValue value =
+                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs());
+              IndexEntry entry = new IndexEntry(info.getStoreKey(), value, info.getCrc());
+              indexEntries.add(entry);
+              endOffsetOfLastMessage = fileSpan.getEndOffset();
+            }
+            FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
+            index.addToIndex(indexEntries, fileSpan);
+            logger.trace("Store : {} message set written to index ", dataDir);
+          }
         }
-        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
-        index.addToIndex(indexEntries, fileSpan);
-        logger.trace("Store : {} message set written to index ", dataDir);
       }
     } catch (StoreException e) {
       throw e;
