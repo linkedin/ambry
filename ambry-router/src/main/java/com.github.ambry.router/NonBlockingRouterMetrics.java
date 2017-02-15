@@ -120,6 +120,13 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobPutCount;
   public final Counter compositeBlobGetCount;
 
+  // AdaptiveOperationTracker Histograms
+  public final Histogram getBlobLocalColoLatency;
+  public final Histogram getBlobCrossColoLatency;
+
+  public final Histogram getBlobInfoLocalColoLatency;
+  public final Histogram getBlobInfoCrossColoLatency;
+
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
 
@@ -261,6 +268,15 @@ public class NonBlockingRouterMetrics {
           dataNodeId.getPort());
       dataNodeToMetrics.put(dataNodeId, new NodeLevelMetrics(metricRegistry, dataNodeName));
     }
+
+    // AdaptiveOperationTracker trackers
+    getBlobLocalColoLatency = metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalColoLatency"));
+    getBlobCrossColoLatency = metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossColoLatency"));
+
+    getBlobInfoLocalColoLatency =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalColoLatency"));
+    getBlobInfoCrossColoLatency =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossColoLatency"));
   }
 
   /**

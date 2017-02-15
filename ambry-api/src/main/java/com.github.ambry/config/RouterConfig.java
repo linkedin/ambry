@@ -132,6 +132,14 @@ public class RouterConfig {
   public final boolean routerGetCrossDcEnabled;
 
   /**
+   * If an adaptive operation tracker is being used, a request is discounted from the parallelism count if has been
+   * outstanding for more than the quantile defined here (compared to latencies of other requests of the same class).
+   */
+  @Config("router.latency.tolerance.quantile")
+  @Default("0.9")
+  public final double routerLatencyToleranceQuantile;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -155,5 +163,6 @@ public class RouterConfig {
     routerGetRequestParallelism = verifiableProperties.getInt("router.get.request.parallelism", 2);
     routerGetSuccessTarget = verifiableProperties.getInt("router.get.success.target", 1);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
+    routerLatencyToleranceQuantile = verifiableProperties.getDoubleInRange("router.latency.tolerance.quantile", 0.9, 0.0, 1.0);
   }
 }

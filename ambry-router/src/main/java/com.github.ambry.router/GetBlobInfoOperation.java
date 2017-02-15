@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
 class GetBlobInfoOperation extends GetOperation {
-  private final SimpleOperationTracker operationTracker;
+  private final OperationTracker operationTracker;
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
 
@@ -65,9 +65,10 @@ class GetBlobInfoOperation extends GetOperation {
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback, time);
-    operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
+    operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
         routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
-        routerConfig.routerGetRequestParallelism);
+        routerConfig.routerGetRequestParallelism, time, routerMetrics.getBlobInfoLocalColoLatency,
+        routerMetrics.getBlobInfoCrossColoLatency, routerConfig.routerLatencyToleranceQuantile);
   }
 
   @Override

@@ -27,16 +27,16 @@ public class MockDataNodeId extends DataNodeId {
   List<String> mountPaths;
   String hostname = "localhost";
   String datacenter;
-  ArrayList<String> sslEnabledDataCenters = new ArrayList<String>();
+  List<String> sslEnabledDataCenters = new ArrayList<String>();
 
-  public MockDataNodeId(ArrayList<Port> ports, List<String> mountPaths, String dataCenter) {
+  public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter) {
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
     this.ports = new HashMap<PortType, Port>();
     populatePorts(ports);
   }
 
-  private void populatePorts(ArrayList<Port> ports) {
+  private void populatePorts(List<Port> ports) {
     boolean plainTextPortFound = false;
     for (Port port : ports) {
       if (port.getPortType() == PortType.PLAINTEXT) {
