@@ -203,7 +203,7 @@ class BlobStore implements Store {
         }
         FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
         index.addToIndex(indexEntries, fileSpan);
-        blobStoreStats.processPutEntries(messageInfo, indexEntries);
+        blobStoreStats.processNewPutEntries(messageInfo, indexEntries);
         logger.trace("Store : {} message set written to index ", dataDir);
       }
     } catch (StoreException e) {
@@ -258,7 +258,7 @@ class BlobStore implements Store {
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          blobStoreStats.processDeleteEntry(info, indexValues.get(i), fileSpan.getEndOffset().getName());
+          blobStoreStats.processNewDeleteEntry(info, indexValues.get(i), fileSpan.getEndOffset().getName());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
           i++;
         }

@@ -23,8 +23,8 @@ public class BlobStoreStats implements StoreStats {
   private final long SEGMENT_SCAN_OFFSET;
   private StatsEngine statsEngine;
   private Log log;
-  private HashMap<String, SizeStats> containerMap;
-  private HashMap<String, SizeStats> segmentMap;
+  private HashMap<String, Long> containerMap;
+  private HashMap<String, Long> segmentMap;
   private TreeMap<Long, Bucket> containerBuckets;
   private TreeMap<Long, Bucket> segmentBuckets;
   private long lastScanTime;
@@ -58,7 +58,7 @@ public class BlobStoreStats implements StoreStats {
 
   @Override
   public long getUsedCapacity() {
-    return log.getUsedCapacity();
+    return log.getCapacityInBytes();
   }
 
   /**
@@ -75,35 +75,26 @@ public class BlobStoreStats implements StoreStats {
     return usedCapacityBySegments;
   }
 
+  /**
+   * Gets the total size of valid data for all log segments
+   * @param timeRange the time range for the expected output. Defines both the reference time and the acceptable resolution.
+   * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second
+   * element is the total valid data size.
+   */
   @Override
   public Pair<Long, Long> getValidDataSize(TimeRange timeRange) {
     long lastBucketEndTime = processTimeRange(timeRange);
     if (lastBucketEndTime != -1) {
       long allSegmentValidDataSize = 0;
-      for (String segmentName : segmentMap.keySet()) {
-        allSegmentValidDataSize += extractValidDataSize(segmentMap, segmentBuckets,
-            segmentName, lastBucketEndTime);
+      synchronized (swapLock) {
+        for (String segmentName : segmentMap.keySet()) {
+          allSegmentValidDataSize += extractValidDataSize(segmentMap, segmentBuckets, segmentName, lastBucketEndTime);
+        }
       }
       return new Pair<>(lastBucketEndTime / time.MsPerSec, allSegmentValidDataSize);
     } else {
       return new Pair<>(-1L, 0L);
     }
-  }
-
-  /**
-   * Gets the size of valid data for all containers belonging to the given serviceId.
-   * @param serviceId the serviceId at interest.
-   * @return a {@link Long} representing the total valid data size for the given serviceId.
-   */
-  Long getValidDataSize(String serviceId) {
-    long lastBucketEndTime = statsEngine.getPreviousBucketEndTime(time.milliseconds());
-    long allValidDataSize = 0;
-    for (Map.Entry<String, SizeStats> entry : containerMap.entrySet()) {
-      if ((entry.getKey().split("-"))[0].equals(serviceId)) {
-        allValidDataSize += extractValidDataSize(containerMap, containerBuckets, entry.getKey(), lastBucketEndTime);
-      }
-    }
-    return allValidDataSize;
   }
 
   /**
@@ -118,8 +109,10 @@ public class BlobStoreStats implements StoreStats {
     TreeMap<String, Long> map = new TreeMap<>();
     long lastBucketEndTime = processTimeRange(timeRange);
     if (lastBucketEndTime != -1) {
-      for (String segmentName : segmentMap.keySet()) {
-        map.put(segmentName, extractValidDataSize(segmentMap, segmentBuckets, segmentName, lastBucketEndTime));
+      synchronized (swapLock) {
+        for (String segmentName : segmentMap.keySet()) {
+          map.put(segmentName, extractValidDataSize(segmentMap, segmentBuckets, segmentName, lastBucketEndTime));
+        }
       }
       return new Pair<>(lastBucketEndTime / time.MsPerSec, map);
     } else {
@@ -128,22 +121,48 @@ public class BlobStoreStats implements StoreStats {
   }
 
   /**
+   * Gets the size of valid data for all containers belonging to the given serviceId.
+   * @param serviceId The serviceId at interest.
+   * @return A {@link Long} representing the total valid data size for the given serviceId.
+   */
+  Long getValidDataSize(String serviceId) {
+    long lastBucketEndTime = statsEngine.getPreviousBucketEndTime(time.milliseconds());
+    long allValidDataSize = 0;
+    synchronized (swapLock) {
+      for (Map.Entry<String, Long> entry : containerMap.entrySet()) {
+        if ((entry.getKey().split("-"))[0].equals(serviceId)) {
+          allValidDataSize += extractValidDataSize(containerMap, containerBuckets, entry.getKey(), lastBucketEndTime);
+        }
+      }
+    }
+    return allValidDataSize;
+  }
+
+  /**
    * Gets the size of valid data for each requested containerId belonging to a single service Id
    * at the time when the API is called.
-   * @param serviceId the serviceId at interest.
-   * @param containerIds a list of containerIds.
-   * @return a {@link SortedMap} of containerIds to their corresponding valid data size.
+   * @param serviceId The serviceId at interest.
+   * @param containerIds A list of containerIds.
+   * @return A {@link SortedMap} of containerIds to their corresponding valid data size.
    */
   SortedMap<String, Long> getValidDataSizeByContainer(String serviceId, List<String> containerIds) {
     TreeMap<String, Long> map = new TreeMap<>();
     long lastBucketEndTime = statsEngine.getPreviousBucketEndTime(time.milliseconds());
-    for (String containerId : containerIds) {
-      String key = serviceId.concat("-").concat(containerId);
-      map.put(containerId, extractValidDataSize(containerMap, containerBuckets, key, lastBucketEndTime));
+    synchronized (swapLock) {
+      for (String containerId : containerIds) {
+        String key = serviceId.concat("-").concat(containerId);
+        map.put(containerId, extractValidDataSize(containerMap, containerBuckets, key, lastBucketEndTime));
+      }
     }
     return map;
   }
 
+  /**
+   * Helper function that takes a {@link TimeRange} and compute the latest bucket that falls into the given time range.
+   * @param timeRange
+   * @return The latest bucket end time that is within the given time range or -1 if there are no bucket found within
+   * the given time range.
+   */
   private long processTimeRange(TimeRange timeRange) {
     long startTimeInMs = timeRange.getStart() * time.MsPerSec;
     long endTimeInMs = timeRange.getEnd() * time.MsPerSec;
@@ -190,7 +209,7 @@ public class BlobStoreStats implements StoreStats {
     }
   }
 
-  public void swapStructs(HashMap<String, SizeStats> containerMap, HashMap<String, SizeStats> segmentMap,
+  public void swapStructs(HashMap<String, Long> containerMap, HashMap<String, Long> segmentMap,
       TreeMap<Long, Bucket> containerBuckets, TreeMap<Long, Bucket> segmentBuckets,
       long windowBoundary, long scanTime) {
     synchronized (swapLock) {
@@ -207,7 +226,7 @@ public class BlobStoreStats implements StoreStats {
     }
   }
 
-  public void processPutEntries(List<MessageInfo> messageInfos, ArrayList<IndexEntry> indexEntries) {
+  public void processNewPutEntries(List<MessageInfo> messageInfos, ArrayList<IndexEntry> indexEntries) {
     synchronized (scanLock) {
       int i = 0;
       for (MessageInfo messageInfo : messageInfos) {
@@ -222,7 +241,7 @@ public class BlobStoreStats implements StoreStats {
     }
   }
 
-  public void processDeleteEntry(MessageInfo messageInfo, IndexValue putIndexValue, String segmentName) {
+  public void processNewDeleteEntry(MessageInfo messageInfo, IndexValue putIndexValue, String segmentName) {
     synchronized (scanLock) {
       if (redirect) {
         bufferedEvents.add(new StatsEvent(messageInfo, segmentName, putIndexValue, time.milliseconds(), true));
@@ -271,33 +290,19 @@ public class BlobStoreStats implements StoreStats {
     }
   }
 
-  /*private void handleMapInsertion(HashMap<String, SizeStats> map, String key, long size) {
-    if (!map.containsKey(key)) {
-      handleEntryCount(-1);
-      totalEntryCount++;
-    }
-    statsEngine.updateMap(map, key, size);
-  }
-
-  private void handleBucketInsertion(TreeMap<Long, Bucket> buckets, Long bucketEndTime, String key, long size) {
-    if (!statsEngine.checkBucketEntryExists(buckets, bucketEndTime, key)) {
-      handleEntryCount(bucketEndTime);
-      totalEntryCount++;
-    }
-    statsEngine.updateBuckets(buckets, bucketEndTime, key, size);
-  }
-
-  private void handleEntryCount(long newEntryTime) {
-    if (totalEntryCount >= statsEngine.getMaxEntryCount()) {
-      totalEntryCount -= statsEngine.popBucket(containerBuckets, segmentBuckets);
-      windowBoundary = statsEngine.determineNewWindow(containerBuckets, segmentBuckets, newEntryTime);
-      statsEngine.rescheduleScan(windowBoundary);
-    }
-  }*/
-
-  private long extractValidDataSize(HashMap<String, SizeStats> map, TreeMap<Long, Bucket> buckets,
+  /**
+   * Compute the delta that needs to be applied on the base value by aggregating all bucket values that is before the
+   * lastBucketEndTime.
+   * @param map The {@link HashMap} containing the base value.
+   * @param buckets The {@link TreeMap} holding the buckets.
+   * @param key The key of the base value map.
+   * @param lastBucketEndTime All buckets that is less than and equal to this reference time is aggregated to compute
+   *                          the total delta.
+   * @return
+   */
+  private long extractValidDataSize(HashMap<String, Long> map, TreeMap<Long, Bucket> buckets,
       String key, long lastBucketEndTime) {
-    long baseValue = map.containsKey(key) ? map.get(key).getTotalSize() : 0;
+    long baseValue = map.containsKey(key) ? map.get(key) : 0;
     long deltaValue = 0;
     if (!buckets.isEmpty() && lastBucketEndTime >= buckets.firstKey()) {
       SortedMap<Long, Bucket> bucketsInRange = buckets.subMap(buckets.firstKey(), true, lastBucketEndTime, true);

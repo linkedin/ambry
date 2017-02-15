@@ -1,10 +1,10 @@
 package com.github.ambry.store;
 
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,15 +18,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * The stats engine contains most of the business logic responsible for constructing and maintaining the data structures
+ * required by the {@link BlobStoreStats} to forecast the valid data size per segment and container at various time
+ * points.
+ */
 public class StatsEngine {
   private final long SEGMENT_SCAN_OFFSET;
   private final long BUCKET_COUNT;
   private final long BUCKET_TIMESPAN;
-  private final HashMap<String, SizeStats> containerMap;
-  private final HashMap<String, SizeStats> segmentMap;
+  private final HashMap<String, Long> containerMap;
+  private final HashMap<String, Long> segmentMap;
   private final TreeMap<Long, Bucket> containerBuckets;
   private final TreeMap<Long, Bucket>  segmentBuckets;
-  private final Log log;
   private final PersistentIndex index;
   private BlobStoreStats blobStoreStats;
   private ScheduledExecutorService scheduler;
@@ -40,7 +44,6 @@ public class StatsEngine {
 
   public StatsEngine(Log log, PersistentIndex index, long capacityInBytes, int bucketCount,
       long bucketTimeSpan, long segmentScanOffset, Time time, Object notifyObject) {
-    this.log = log;
     this.index = index;
     this.time = time;
     this.blobStoreStats = new BlobStoreStats(this, log, segmentScanOffset, time);
@@ -62,13 +65,6 @@ public class StatsEngine {
   }
 
   public void start() {
-    /*
-    * Deserialize persisted supporting data structures and swap part or all of it to BlobStoreStats
-    * so there is something available to answer incoming requests while scanning.
-    * deserialize();
-    * blolbStoreStats.swapContainerStruct()
-    * blobStoreStats.swapSegmentStruct
-    **/
     nextScan = scheduler.schedule(new IndexScanner(time.milliseconds()), 0, TimeUnit.MILLISECONDS);
   }
 
@@ -100,20 +96,33 @@ public class StatsEngine {
   }
 
   public long generateBucketTime(long refTime) {
-    return refTime - refTime % BUCKET_TIMESPAN + BUCKET_TIMESPAN;
+    long remainder = refTime % BUCKET_TIMESPAN;
+    return remainder == 0 ? refTime : refTime - remainder + BUCKET_TIMESPAN;
   }
 
-  public void updateMap(HashMap<String, SizeStats> map, String key, long size) {
-    SizeStats sizeStats = map.get(key);
-    if (sizeStats == null) {
-      sizeStats = new SizeStats();
-      sizeStats.setTotalSize(size);
-      map.put(key, sizeStats);
+  /**
+   * Helper function for inserting and updating HashMap entries.
+   * @param map The {@link HashMap} to be updated.
+   * @param key The key of the entry.
+   * @param size The value that is going to be added.
+   */
+  public void updateMap(HashMap<String, Long> map, String key, Long size) {
+    Long existingValue = map.get(key);
+    if (existingValue == null) {
+      existingValue = size;
     } else {
-      sizeStats.setTotalSize(sizeStats.getTotalSize() + size);
+      existingValue += size;
     }
+    map.put(key, existingValue);
   }
 
+  /**
+   * Helper function for inserting and updating bucket entries.
+   * @param buckets The {@link TreeMap} representation of the buckets to be updated.
+   * @param bucketKey The key of the bucket (bucket end time).
+   * @param key The key for the {@link HashMap} inside the bucket.
+   * @param value The value that is going to be added.
+   */
   public void updateBuckets(TreeMap<Long, Bucket> buckets, Long bucketKey, String key, Long value) {
     Bucket bucket = buckets.get(bucketKey);
     if (bucket == null) {
@@ -125,23 +134,28 @@ public class StatsEngine {
     }
   }
 
-  public void processDeleteIndex(IndexValue value, String key, long refTime,
-      HashMap<String, SizeStats> map, TreeMap<Long, Bucket> buckets) {
-    if (value.getExpiresAtMs() == -1) {
-      updateMap(map, key, value.getSize() * -1);
-    } else if (!isExpired(value.getExpiresAtMs(), refTime)) {
-      updateMap(map, key, value.getSize() * -1);
-      /** Could check window instead of contains */
-      if (checkBucketEntryExists(buckets, generateBucketTime(value.getExpiresAtMs()), key)) {
-        updateBuckets(buckets, generateBucketTime(value.getExpiresAtMs()), key, value.getSize());
+  /**
+   * Helper function that processes deleted put record.
+   * @param putIndexValue The {@link IndexValue} of the deleted put record.
+   * @param key The key of the deleted record (either segment name or serviceId + containerId).
+   * @param refTime A reference time indicating the time of the deletion.
+   * @param map The corresponding {@link HashMap} that needs to be updated.
+   * @param buckets The corresponding {@link TreeMap} that needs to be updated.
+   */
+  public void processDeleteIndex(IndexValue putIndexValue, String key, Long refTime,
+      HashMap<String, Long> map, TreeMap<Long, Bucket> buckets) {
+    if (putIndexValue.getExpiresAtMs() == -1) {
+      updateMap(map, key, putIndexValue.getSize() * -1);
+    } else if (!isExpired(putIndexValue.getExpiresAtMs(), refTime)) {
+      updateMap(map, key, putIndexValue.getSize() * -1);
+      if (checkBucketEntryExists(buckets, generateBucketTime(putIndexValue.getExpiresAtMs()), key)) {
+        updateBuckets(buckets, generateBucketTime(putIndexValue.getExpiresAtMs()), key, putIndexValue.getSize());
       }
     }
   }
 
-  public IndexValue investigateDeleteIndex(MessageInfo messageInfo,
-      IndexValue indexValue, FileSpan backwardSearchSpan) throws StoreException {
-    IndexValue retValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
-    return retValue;
+  public IndexValue investigateDeleteIndex(MessageInfo messageInfo, FileSpan backwardSearchSpan) throws StoreException {
+    return index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
   }
 
   public boolean isWithinWindow(long eventRefTime, long window, long offSet) {
@@ -152,56 +166,8 @@ public class StatsEngine {
     return buckets.containsKey(bucketKey) && buckets.get(bucketKey).contains(key);
   }
 
-  /**public int popBucket(TreeMap<Long, Bucket> containerBuckets, TreeMap<Long, Bucket> segmentBuckets) {
-    long normalizedSegmentEndTime = segmentBuckets.isEmpty() ? 0 : segmentBuckets.lastKey() + SEGMENT_SCAN_OFFSET;
-    long containerEndTime = containerBuckets.isEmpty() ? 0 : containerBuckets.lastKey();
-    TreeMap<Long, Bucket> selected;
-    if (normalizedSegmentEndTime >= containerEndTime) {
-      selected = segmentBuckets;
-    } else {
-      selected = containerBuckets;
-    }
-    return selected.pollLastEntry().getValue().getEntryCount();
-  }
-
-  public long determineNewWindow(TreeMap<Long, Bucket> containerBuckets, TreeMap<Long, Bucket> segmentBuckets, long newEntryTimeRef) {
-    long lastContainerBucket = containerBuckets.isEmpty() ? 0L : containerBuckets.lastKey();
-    long lastSegmentBucket = segmentBuckets.isEmpty() ? 0L : segmentBuckets.lastKey() + SEGMENT_SCAN_OFFSET;
-    return Math.max(Math.max(lastContainerBucket, lastSegmentBucket), newEntryTimeRef);
-  }*/
-
-  public boolean isExpired(long expirationTime, long refTime) {
-    return expirationTime < refTime && expirationTime != Utils.Infinite_Time;
-  }
-
-  /*private void handleMapInsertion(HashMap<String, SizeStats> map, String key, long size) {
-    if (!map.containsKey(key)) {
-      handleEntryCount(-1);
-      totalEntryCount++;
-    }
-    updateMap(map, key, size);
-  }*/
-
-  /*private void handleBucketInsertion(TreeMap<Long, Bucket> buckets, Long bucketEndTime, String key, long size) {
-    if (!checkBucketEntryExists(buckets, bucketEndTime, key)) {
-      handleEntryCount(bucketEndTime);
-      totalEntryCount++;
-    }
-    updateBuckets(buckets, bucketEndTime, key, size);
-  }*/
-
-  /*private void handleEntryCount(long newEntryTime) {
-    if (totalEntryCount >= MAX_ENTRY_COUNT) {
-      totalEntryCount -= popBucket(containerBuckets, segmentBuckets);
-      windowBoundary = determineNewWindow(containerBuckets, segmentBuckets, newEntryTime);
-    }
-  }*/
-
-  private void clearStructs() {
-    this.containerMap.clear();
-    this.segmentMap.clear();
-    this.containerBuckets.clear();
-    this.segmentBuckets.clear();
+  public boolean isExpired(long expirationTime, long referenceTime) {
+    return expirationTime < referenceTime && expirationTime != Utils.Infinite_Time;
   }
 
   private long createStructs(long startRefTime) {
@@ -214,6 +180,13 @@ public class StatsEngine {
       segmentBucketEndTime += BUCKET_TIMESPAN;
     }
     return containerBucketEndTime;
+  }
+
+  private void clearStructs() {
+    this.containerMap.clear();
+    this.segmentMap.clear();
+    this.containerBuckets.clear();
+    this.segmentBuckets.clear();
   }
 
   private class IndexScanner implements Runnable {
@@ -230,40 +203,6 @@ public class StatsEngine {
 
     @Override
     public void run() {
-      /**
-       * long scanTime = now;
-       * long nextScanTime = -1;
-       *
-       * for (MockIndexSegment indexSegment : index.indexes.values()) {
-       *   List<MockMessageInfo> entries = new List<>()
-       *   indexSegment.getEntries(entries);
-       *   for (MockMessageInfo messageInfo : entries) {
-       *
-       *    segment mapping:
-       *        Non-expired (based on scanTime and segmentScanOffset) PUTs and DELETEs that already occurred are
-       *        aggregated into appropriate entries in segmentMap.
-       *        PUTs that are expiring within the current window are aggregated into appropriate entries in segmentBuckets.
-       *        PUTs and DELETEs after the scanTime - segmentScanOffset are also aggregated into appropriate entries in segmentBuckets.
-       *
-       *        DELETEs associated with blobs that are expiring within current window will require update to appropriate
-       *        buckets to avoid double counting.
-       *
-       *     serviceId/containerId mapping:
-       *        All non-expired (based on scan time) PUTs and DELETEs (including permanent data) are aggregated into
-       *        appropriate  entries in containerMap.
-       *        Expiring PUTs within the current window are aggregated into appropriate entries in containerBuckets as
-       *        negative values.
-       *        Delete associated with blobs that are expiring within current window will require update to appropriate
-       *        buckets to avoid double counting.
-       *
-       *     During the process dynamically adjust the window by adjusting nextScanTime
-       *   }
-       * }
-       *
-       * Copy local data struct and call blobStoreStats swap struct functions to update the data structs
-       * Schedule the nextScan with nextScanTime
-       * Free local data struct space
-       */
       Offset checkpoint = blobStoreStats.prepareForScanning();
       isScanning = true;
       Offset previousSegmentOffset = null;
@@ -284,16 +223,16 @@ public class StatsEngine {
             if (segment.getLogSegmentName().equals(checkpoint.getName()) && indexValue.getOffset().getOffset() > checkpoint.getOffset()) {
               break outerLoop;
             }
-            processIndexPerSegment(messageInfo, indexValue,
-                segment.getLastModifiedTime() * 1000, segment.getLogSegmentName(), backwardSearchSpan);
-            processIndexPerContainer(messageInfo, indexValue, backwardSearchSpan);
+            processIndexPerSegment(messageInfo, segment.getLastModifiedTime() * 1000, segment.getLogSegmentName(),
+                backwardSearchSpan);
+            processIndexPerContainer(messageInfo, backwardSearchSpan);
           }
           previousSegmentOffset = segment.getStartOffset();
         }
       } catch (StoreException e) {
-        logger.error("StoreException thrown while calculating valid data size ", e);
+        logger.error("StoreException thrown while scanning for valid data size ", e);
       } catch (IOException e) {
-        logger.error("IOException thrown while calculating valid data size ", e);
+        logger.error("IOException thrown while scanning for valid data size ", e);
       } finally {
         isScanning = false;
       }
@@ -312,34 +251,53 @@ public class StatsEngine {
       }
     }
 
-    private void processIndexPerSegment(MessageInfo messageInfo, IndexValue indexValue,
-        long lastModifiedTime, String segmentName, FileSpan backwardSearchSpan)
-        throws StoreException {
+    /**
+     * Helper function to process a {@link MessageInfo} to collect data for valid data size per segment for compaction
+     * purpose.
+     * @param messageInfo The {@link MessageInfo} to be processed.
+     * @param lastModifiedTime The time stamp of the processed index value.
+     * @param segmentName The name of the segment where the processed index value belongs to.
+     * @param backwardSearchSpan A {@link FileSpan} that spans from the beginning of the index to the end of the
+     *                           previous index segment.
+     * @throws StoreException
+     */
+    private void processIndexPerSegment(MessageInfo messageInfo, Long lastModifiedTime, String segmentName,
+        FileSpan backwardSearchSpan) throws StoreException {
       if (!messageInfo.isDeleted() && isExpired(messageInfo.getExpirationTimeInMs(), segmentScanTimeInMs)) {
         return;
       }
       if (messageInfo.isDeleted()) {
         // Delete record
         updateMap(segmentMap, segmentName, messageInfo.getSize());
-        IndexValue putIndexValue = investigateDeleteIndex(messageInfo, indexValue, backwardSearchSpan);
+        IndexValue putIndexValue = investigateDeleteIndex(messageInfo, backwardSearchSpan);
         if (putIndexValue == null) {
-          return;
-        }
-        String putSegmentName = putIndexValue.getOffset().getName();
-        if (lastModifiedTime < segmentScanTimeInMs) {
-          processDeleteIndex(putIndexValue, putSegmentName, segmentScanTimeInMs, segmentMap, segmentBuckets);
-        } else if (isWithinWindow(lastModifiedTime, windowBoundary, SEGMENT_SCAN_OFFSET)) {
-          // Delete records that we need to capture in buckets
-          updateBuckets(segmentBuckets, generateBucketTime(lastModifiedTime),
-              putSegmentName, putIndexValue.getSize() * -1);
-          /** Could check for window instead of contains*/
-          if (checkBucketEntryExists(segmentBuckets, generateBucketTime(putIndexValue.getExpiresAtMs()),
-              putSegmentName) && putIndexValue.getExpiresAtMs() >= lastModifiedTime) {
-            updateBuckets(segmentBuckets, generateBucketTime(putIndexValue.getExpiresAtMs()),
-                putSegmentName, putIndexValue.getSize());
+          if (lastModifiedTime > segmentScanTimeInMs) {
+            BlobReadOptions originalPutInfo = index.getBlobReadInfo(messageInfo.getStoreKey(),
+                EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired));
+            if (originalPutInfo != null && !isExpired(originalPutInfo.getExpiresAtMs(), segmentScanTimeInMs)) {
+              updateMap(segmentMap, segmentName, originalPutInfo.getSize());
+              long removalTime = originalPutInfo.getExpiresAtMs() == Utils.Infinite_Time ?
+                  lastModifiedTime : Math.min(lastModifiedTime, originalPutInfo.getExpiresAtMs());
+              updateBuckets(segmentBuckets, generateBucketTime(removalTime), segmentName,
+                  originalPutInfo.getSize() * -1);
+            }
+          }
+        } else {
+          String putSegmentName = putIndexValue.getOffset().getName();
+          if (lastModifiedTime < segmentScanTimeInMs) {
+            processDeleteIndex(putIndexValue, putSegmentName, segmentScanTimeInMs, segmentMap, segmentBuckets);
+          } else if (isWithinWindow(lastModifiedTime, windowBoundary, SEGMENT_SCAN_OFFSET)) {
+            // Delete records that we need to capture in buckets
+            updateBuckets(segmentBuckets, generateBucketTime(lastModifiedTime), putSegmentName,
+                putIndexValue.getSize() * -1);
+            if (checkBucketEntryExists(segmentBuckets, generateBucketTime(putIndexValue.getExpiresAtMs()),
+                putSegmentName) && putIndexValue.getExpiresAtMs() >= lastModifiedTime) {
+              updateBuckets(segmentBuckets, generateBucketTime(putIndexValue.getExpiresAtMs()), putSegmentName,
+                  putIndexValue.getSize());
+            }
           }
         }
-      } else {
+      } else if (!isExpired(messageInfo.getExpirationTimeInMs(), segmentScanTimeInMs)) {
         // Put record that is not expired
         updateMap(segmentMap, segmentName, messageInfo.getSize());
         if (messageInfo.getExpirationTimeInMs() != -1 &&
@@ -350,25 +308,32 @@ public class StatsEngine {
       }
     }
 
-    private void processIndexPerContainer(MessageInfo messageInfo, IndexValue indexValue,
-        FileSpan backwardSearchSpan) throws StoreException {
+    /**
+     * Helper function to process a {@link MessageInfo} to collect data for valid data size per container for quota
+     * purpose.
+     * @param messageInfo The {@link MessageInfo} to be processed.
+     * @param backwardSearchSpan A {@link FileSpan} that spans from the beginning of the index to the end of the
+     *                           previous index segment.
+     * @throws StoreException
+     */
+    private void processIndexPerContainer(MessageInfo messageInfo, FileSpan backwardSearchSpan) throws StoreException {
       if (isExpired(messageInfo.getExpirationTimeInMs(), scanTimeInMs)) {
         return;
       }
       String key = messageInfo.getServiceId().concat("-".concat(messageInfo.getContainerId()));
       if (messageInfo.isDeleted()) {
-        // Delete record (may need to find and remove previously counted put data size).
-        IndexValue putIndexValue = investigateDeleteIndex(messageInfo, indexValue, backwardSearchSpan);
+        // delete record (may need to find and remove previously counted put data size).
+        IndexValue putIndexValue = investigateDeleteIndex(messageInfo, backwardSearchSpan);
         if (putIndexValue == null) {
           return;
         }
         processDeleteIndex(putIndexValue, key, scanTimeInMs, containerMap, containerBuckets);
       } else {
-        // Put record that is not expired
+        // put record that is not expired
         updateMap(containerMap, key, messageInfo.getSize());
         if (messageInfo.getExpirationTimeInMs() != -1 &&
             isWithinWindow(messageInfo.getExpirationTimeInMs(), windowBoundary, 0)) {
-          // Put record that will be expiring within current window
+          // put record that will be expiring within current window
           updateBuckets(containerBuckets, generateBucketTime(messageInfo.getExpirationTimeInMs()),
               key, messageInfo.getSize() * -1);
         }
