@@ -16,8 +16,6 @@ package com.github.ambry.store;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
-import static com.github.ambry.store.IndexValue.*;
-
 
 /**
  * IndexValue utils to assist in constructing {@link IndexValue} in different versions. For
@@ -57,11 +55,7 @@ class IndexValueUtils {
     if (version == PersistentIndex.VERSION_0) {
       return getIndexValue(size, offset, expirationTimeInMs);
     } else {
-      return new IndexValueBuilder(size, offset).expirationTimeAtMs(expirationTimeInMs)
-          .operationTimeInSecs(operationTimeInSecs)
-          .serviceId(serviceId)
-          .containerId(containerId)
-          .build();
+      return new IndexValue(size, offset, (byte) 0, expirationTimeInMs, operationTimeInSecs, serviceId, containerId);
     }
   }
 
@@ -77,7 +71,7 @@ class IndexValueUtils {
     if (version == PersistentIndex.VERSION_0) {
       return getIndexValue(size, offset);
     } else {
-      return new IndexValueBuilder(size, offset).operationTimeInSecs(operationTimeInSecs).build();
+      return new IndexValue(size, offset, (byte) 0, Utils.Infinite_Time, operationTimeInSecs);
     }
   }
 
@@ -91,12 +85,8 @@ class IndexValueUtils {
     if (version == PersistentIndex.VERSION_0) {
       return getIndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs());
     } else {
-      return new IndexValueBuilder(value.getSize(), value.getOffset()).flags(value.getFlags())
-          .expirationTimeAtMs(value.getExpiresAtMs())
-          .operationTimeInSecs(value.getOperationTimeInSecs())
-          .serviceId(value.getServiceId())
-          .containerId(value.getContainerId())
-          .build();
+      return new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
+          value.getOperationTimeInSecs(), value.getServiceId(), value.getContainerId());
     }
   }
 
@@ -123,7 +113,15 @@ class IndexValueUtils {
    */
   private static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
       long originalMessageOffset) {
-    ByteBuffer value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V0);
+    int Blob_Size_In_Bytes = 8;
+    int Offset_Size_In_Bytes = 8;
+    int Flag_Size_In_Bytes = 1;
+    int Expires_At_Ms_Size_In_Bytes = 8;
+    int Original_Message_Offset_Size_In_Bytes = 8;
+    int Index_Value_Size_In_Bytes =
+        Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes
+            + Original_Message_Offset_Size_In_Bytes;
+    ByteBuffer value = ByteBuffer.allocate(Index_Value_Size_In_Bytes);
     value.putLong(size);
     value.putLong(offset.getOffset());
     value.put(flags);

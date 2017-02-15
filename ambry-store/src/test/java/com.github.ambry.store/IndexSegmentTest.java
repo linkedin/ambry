@@ -55,7 +55,7 @@ public class IndexSegmentTest {
       IndexValueUtils.getIndexValue(0, new Offset("", 0), Utils.Infinite_Time, PersistentIndex.VERSION_0)
           .getBytes()
           .capacity();
-  private static final int VALUE_SIZE_V1 = new IndexValueBuilder(0, new Offset("", 0)).build().getBytes().capacity();
+  private static final int VALUE_SIZE_V1 = new IndexValue(0, new Offset("", 0)).getBytes().capacity();
   private static final StoreConfig STORE_CONFIG = new StoreConfig(new VerifiableProperties(new Properties()));
   private static final Time time = new MockTime();
   private static final long DELETE_FILE_SPAN_SIZE = 10;
@@ -116,7 +116,7 @@ public class IndexSegmentTest {
    * @throws StoreException
    */
   @Test
-  public void comprehensiveTest() throws IOException, StoreException {
+  public void comprehensiveTest() throws IOException, StoreException, InterruptedException {
     String[] logSegmentNames = {LogSegmentNameHelper.generateFirstSegmentName(false), generateRandomLogSegmentName()};
     for (String logSegmentName : logSegmentNames) {
       long writeStartOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
@@ -156,7 +156,7 @@ public class IndexSegmentTest {
       resetKey = indexSegment.getResetKey();
       // write to file
       if (version == PersistentIndex.VERSION_0) {
-        IndexSegmentUtils.writeIndexSegmentToFile(indexSegment, indexSegment.getEndOffset());
+        StoreTestUtils.writeIndexSegmentToFile(indexSegment, indexSegment.getEndOffset());
       } else {
         indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       }
@@ -198,7 +198,7 @@ public class IndexSegmentTest {
 
     // provide end offset such that nothing is written
     if (version == PersistentIndex.VERSION_0) {
-      IndexSegmentUtils.writeIndexSegmentToFile(indexSegment, new Offset(prevLogSegmentName, 0));
+      StoreTestUtils.writeIndexSegmentToFile(indexSegment, new Offset(prevLogSegmentName, 0));
     } else {
       indexSegment.writeIndexSegmentToFile(new Offset(prevLogSegmentName, 0));
     }
@@ -210,7 +210,7 @@ public class IndexSegmentTest {
       // repeat twice
       for (int i = 0; i < 2; i++) {
         if (version == PersistentIndex.VERSION_0) {
-          IndexSegmentUtils.writeIndexSegmentToFile(indexSegment, new Offset(logSegmentName, safeEndPoint));
+          StoreTestUtils.writeIndexSegmentToFile(indexSegment, new Offset(logSegmentName, safeEndPoint));
         } else {
           indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, safeEndPoint));
         }

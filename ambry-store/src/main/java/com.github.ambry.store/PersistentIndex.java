@@ -293,9 +293,7 @@ class PersistentIndex {
               StoreErrorCodes.Initialization_Error);
         } else {
           // create a new entry in the index
-          IndexValue newValue =
-              new IndexValueBuilder(info.getSize(), runningOffset).expirationTimeAtMs(info.getExpirationTimeInMs())
-                  .build();
+          IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
           addToIndex(new IndexEntry(info.getStoreKey(), newValue, null), new FileSpan(runningOffset, infoEndOffset));
           logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
@@ -559,10 +557,8 @@ class PersistentIndex {
       throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
     IndexValue newValue =
-        new IndexValueBuilder(value.getSize(), value.getOffset()).expirationTimeAtMs(value.getExpiresAtMs())
-            .serviceId(value.getServiceId())
-            .containerId(value.getContainerId())
-            .build();
+        new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), time.seconds(), value.getServiceId(),
+            value.getContainerId());
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset());

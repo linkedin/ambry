@@ -55,10 +55,7 @@ class BlobIndexMetrics extends PersistentIndex {
     synchronized (lock) {
       long startTimeInMs = System.currentTimeMillis();
       long size = new Random().nextInt(10000);
-      IndexEntry entry = new IndexEntry(id,
-          new IndexValueBuilder(size, new Offset("", lastOffsetUsed.get())).flags((byte) 1)
-              .expirationTimeAtMs(1000)
-              .build());
+      IndexEntry entry = new IndexEntry(id, new IndexValue(size, new Offset("", lastOffsetUsed.get()), (byte) 1, 1000));
       lastOffsetUsed.addAndGet(size);
       long offset = getCurrentEndOffset().getOffset();
       addToIndex(entry, new FileSpan(new Offset("", offset), new Offset("", offset + entry.getValue().getSize())));

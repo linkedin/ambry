@@ -67,9 +67,7 @@ public class HardDeleterTest {
 
     void add(MockId id) throws IOException, StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
-      IndexValue indexValue = new IndexValueBuilder(sizeOfEntry, offset).expirationTimeAtMs(12345)
-          .operationTimeInSecs(time.seconds())
-          .build();
+      IndexValue indexValue = new IndexValue(sizeOfEntry, offset, (byte) 0, 12345, time.seconds());
       index.addToIndex(new IndexEntry(id, indexValue),
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);

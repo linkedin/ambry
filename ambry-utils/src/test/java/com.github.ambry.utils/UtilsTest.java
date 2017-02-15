@@ -397,12 +397,8 @@ public class UtilsTest {
    * @param time the {@link Time} instance to use
    * @param sleepTimeInMs the time in ms to sleep for
    */
-  public static void advanceTime(Time time, long sleepTimeInMs) {
-    try {
-      time.sleep(sleepTimeInMs);
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    }
+  public static void advanceTime(Time time, long sleepTimeInMs) throws InterruptedException {
+    time.sleep(sleepTimeInMs);
   }
 }
 

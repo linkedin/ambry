@@ -115,10 +115,10 @@ class CuratedLogIndexState {
   UUID sessionId = UUID.randomUUID();
   // the incarnationId associated with the store
   UUID incarnationId = UUID.randomUUID();
-
   // Variables that represent the folder where the data resides
+  final String tempDirStr;
+
   private final File tempDir;
-  private final String tempDirStr;
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
   private final Set<MockId> generatedKeys = new HashSet<>();
   // The MetricRegistry that is used with the index
@@ -218,7 +218,8 @@ class CuratedLogIndexState {
     index.markAsDeleted(idToDelete, fileSpan);
 
     IndexValue value = getExpectedValue(idToDelete, true);
-    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs());
+    IndexValue newValue =
+        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), time.seconds());
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
