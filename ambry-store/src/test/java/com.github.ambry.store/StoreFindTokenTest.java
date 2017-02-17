@@ -174,6 +174,25 @@ public class StoreFindTokenTest {
   }
 
   /**
+   * Reads a Version 1 token and writes it back in Version2 and tries reading it back
+   */
+  @Test
+  public void version1ToVersion2SwitchTest() throws IOException {
+    UUID sessionId = UUID.randomUUID();
+    String logSegmentName = LogSegmentNameHelper.generateFirstSegmentName(isLogSegmented);
+    Offset offset = new Offset(logSegmentName, 0);
+    MockId key = new MockId(UtilsTest.getRandomString(10));
+
+    // create journal based token in V1
+    StoreFindToken token = new StoreFindToken(offset, sessionId, null, false);
+    testVersionSwitchFromV1ToV2(token);
+
+    // create index based token in V1
+    token = new StoreFindToken(key, offset, sessionId, null);
+    testVersionSwitchFromV1ToV2(token);
+  }
+
+  /**
    * Tests {@link StoreFindToken} for construction error cases.
    */
   @Test
@@ -230,6 +249,23 @@ public class StoreFindTokenTest {
       assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
       assertEquals("Stream should have ended ", 0, stream.available());
     }
+  }
+
+  /**
+   * Tests the switch of version 1 to version 2 for {@link StoreFindToken}
+   * @param token the {@link StoreFindToken} in old version that needs to be tested
+   * @throws IOException
+   */
+  private void testVersionSwitchFromV1ToV2(StoreFindToken token) throws IOException {
+    DataInputStream stream = getSerializedStream(token, StoreFindToken.VERSION_1);
+
+    // read the token back which will be latest version i.e. V2
+    StoreFindToken deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
+    // write back and read it back
+    StoreFindToken latestToken =
+        StoreFindToken.fromBytes(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes()))),
+            STORE_KEY_FACTORY);
+    compareTokens(token, latestToken);
   }
 
   /**
