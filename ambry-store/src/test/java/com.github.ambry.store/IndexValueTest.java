@@ -148,8 +148,8 @@ public class IndexValueTest {
    * @param isDeleted the expected record type referred to by {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
    * @param originalMessageOffset the original message offset expected in {@code value}.
-<<<<<<< HEAD
-=======
+  <<<<<<< HEAD
+  =======
    */
   private void verifyIndexValue(IndexValue value, String logSegmentName, long size, long offset, boolean isDeleted,
       long expiresAtMs, long originalMessageOffset) {
@@ -171,7 +171,7 @@ public class IndexValueTest {
    * @param isDeleted the expected record type referred to by {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
    * @param originalMessageOffset the original message offset expected in {@code value}.
->>>>>>> Adding IndexValueBuilder
+  >>>>>>> Adding IndexValueBuilder
    * @param operationTimeInSecs the operation time in secs
    * @param serviceId the serviceId of the Index value
    * @param containerId the containerId of the Index value
@@ -213,7 +213,7 @@ public class IndexValueTest {
     }
     assertEquals("Original message offset not as expected", originalMessageOffset, value.getOriginalMessageOffset());
     if (version == 1) {
-      assertEquals("Operation time mismatch", Math.toIntExact(operationTimeInSecs), value.getOperationTimeInSecs());
+      assertEquals("Operation time mismatch", (int) operationTimeInSecs, value.getOperationTimeInSecs());
       assertEquals("ServiceId mismatch ", serviceId, value.getServiceId());
       assertEquals("ContainerId mismatch ", containerId, value.getContainerId());
     } else {

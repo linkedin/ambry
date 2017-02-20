@@ -113,22 +113,14 @@ class IndexValueUtils {
    */
   private static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
       long originalMessageOffset) {
-    int Blob_Size_In_Bytes = 8;
-    int Offset_Size_In_Bytes = 8;
-    int Flag_Size_In_Bytes = 1;
-    int Expires_At_Ms_Size_In_Bytes = 8;
-    int Original_Message_Offset_Size_In_Bytes = 8;
-    int Index_Value_Size_In_Bytes =
-        Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes
-            + Original_Message_Offset_Size_In_Bytes;
-    ByteBuffer value = ByteBuffer.allocate(Index_Value_Size_In_Bytes);
+    ByteBuffer value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0);
     value.putLong(size);
     value.putLong(offset.getOffset());
     value.put(flags);
     value.putLong(expiresAtMs);
     value.putLong(originalMessageOffset);
     value.position(0);
-    return new IndexValue(offset.getName(), value, (short) PersistentIndex.VERSION_0);
+    return new IndexValue(offset.getName(), value, PersistentIndex.VERSION_0);
   }
 
   /**

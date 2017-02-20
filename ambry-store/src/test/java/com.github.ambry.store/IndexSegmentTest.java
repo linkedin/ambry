@@ -126,7 +126,8 @@ public class IndexSegmentTest {
       // segments
       UtilsTest.advanceTime(time, 10000);
       IndexSegment indexSegment = generateIndexSegment(startOffset);
-      verifyIndexSegmentDetails(indexSegment, startOffset, 0, false, startOffset.getOffset(), time.seconds(), null);
+      verifyIndexSegmentDetails(indexSegment, startOffset, 0, false, startOffset.getOffset(), false, time.seconds(),
+          null);
       resetKey = indexSegment.getResetKey();
       int numItems = 10;
       List<Long> offsets = new ArrayList<>();
@@ -140,7 +141,8 @@ public class IndexSegmentTest {
       long lastEntrySize = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
       long endOffset = offsets.get(offsets.size() - 1) + lastEntrySize;
       addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex);
-      verifyIndexSegmentDetails(indexSegment, startOffset, offsets.size(), false, endOffset, time.seconds(), resetKey);
+      verifyIndexSegmentDetails(indexSegment, startOffset, offsets.size(), false, endOffset, false, time.seconds(),
+          resetKey);
       verifyFind(referenceIndex, indexSegment);
       verifyGetEntriesSince(referenceIndex, indexSegment);
 
@@ -149,7 +151,7 @@ public class IndexSegmentTest {
       Map<Offset, MockId> extraOffsetsToCheck = addDeleteEntries(idsToDelete, indexSegment, referenceIndex);
       endOffset += idsToDelete.size() * DELETE_FILE_SPAN_SIZE;
       numItems += extraIdsToDelete;
-      verifyIndexSegmentDetails(indexSegment, startOffset, numItems, false, endOffset, time.seconds(), resetKey);
+      verifyIndexSegmentDetails(indexSegment, startOffset, numItems, false, endOffset, false, time.seconds(), resetKey);
       verifyFind(referenceIndex, indexSegment);
       verifyGetEntriesSince(referenceIndex, indexSegment);
       lastModifiedTime = indexSegment.getLastModifiedTime();
@@ -245,8 +247,16 @@ public class IndexSegmentTest {
    * @return an {@link IndexSegment} for entries from {@code startOffset}.
    */
   private IndexSegment generateIndexSegment(Offset startOffset) {
-    IndexSegment indexSegment = new IndexSegment(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY, KEY_SIZE,
-        (version == 0 ? VALUE_SIZE_V0 : VALUE_SIZE_V1), STORE_CONFIG, metrics, time);
+    IndexSegment indexSegment;
+    if (version == PersistentIndex.VERSION_0) {
+      indexSegment =
+          new MockIndexSegmentV0(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY, KEY_SIZE, VALUE_SIZE_V0,
+              STORE_CONFIG, metrics, time);
+    } else {
+      indexSegment =
+          new IndexSegment(tempDir.getAbsolutePath(), startOffset, STORE_KEY_FACTORY, KEY_SIZE, VALUE_SIZE_V1,
+              STORE_CONFIG, metrics, time);
+    }
     return indexSegment;
   }
 
@@ -285,7 +295,7 @@ public class IndexSegmentTest {
           IndexValueUtils.getIndexValue(size, new Offset(segment.getLogSegmentName(), offset), time.seconds(), version);
       segment.addEntry(new IndexEntry(id, value), new Offset(segment.getLogSegmentName(), offset + size));
       if (resetKey == null) {
-        resetKey = new Pair<>(id,
+        resetKey = new Pair<StoreKey, PersistentIndex.IndexEntryType>(id,
             (value.isFlagSet(IndexValue.Flags.Delete_Index)) ? PersistentIndex.IndexEntryType.DELETE
                 : PersistentIndex.IndexEntryType.PUT);
       }
@@ -301,11 +311,14 @@ public class IndexSegmentTest {
    * @param numItems the expected numner of items the {@code indexSegment}
    * @param isMapped the expected mapped state of the {@code indexSegment}
    * @param endOffset the expected end offset of the {@code indexSegment}
+   * @param verifyLastModifiedTime {@code true} if last modified time needs to be verified for {@link PersistentIndex#VERSION_0},
+   *                                           {@code false} otherwise
    * @param lastModifiedTimeInSecs the last modified time in secs
    * @param resetKey the reset key for the index segment
    */
   private void verifyIndexSegmentDetails(IndexSegment indexSegment, Offset startOffset, int numItems, boolean isMapped,
-      long endOffset, long lastModifiedTimeInSecs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) {
+      long endOffset, boolean verifyLastModifiedTime, long lastModifiedTimeInSecs,
+      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) {
     String logSegmentName = startOffset.getName();
     long indexEntrySize = KEY_SIZE + (version == 0 ? VALUE_SIZE_V0 : VALUE_SIZE_V1);
     assertEquals("LogSegment name not as expected", logSegmentName, indexSegment.getLogSegmentName());
@@ -315,7 +328,12 @@ public class IndexSegmentTest {
     assertEquals("Key size is incorrect", KEY_SIZE, indexSegment.getKeySize());
     assertEquals("Value size is incorrect", (version == 0 ? VALUE_SIZE_V0 : VALUE_SIZE_V1),
         indexSegment.getValueSize());
-    if (version == (byte) 1) {
+    if (version == PersistentIndex.VERSION_0) {
+      assertEquals("Reset key mismatch ", null, indexSegment.getResetKey());
+      if (verifyLastModifiedTime) {
+        assertEquals("Last modified time is incorrect", lastModifiedTimeInSecs, indexSegment.getLastModifiedTime());
+      }
+    } else if (version == (byte) 1) {
       assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
       assertEquals("Last modified time is incorrect", lastModifiedTimeInSecs, indexSegment.getLastModifiedTime());
     }
@@ -530,7 +548,10 @@ public class IndexSegmentTest {
     // read from file (unmapped) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
-    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, false, endOffset, lastModifiedTimeInSecs, resetKey);
+    lastModifiedTimeInSecs =
+        version == PersistentIndex.VERSION_0 ? (file.lastModified() / 1000) : lastModifiedTimeInSecs;
+    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, false, endOffset, true, lastModifiedTimeInSecs,
+        resetKey);
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
     // journal should contain all the entries
@@ -540,7 +561,7 @@ public class IndexSegmentTest {
     // read from file (mapped) and verify that everything is ok
     journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     fromDisk = createIndexSegmentFromFile(file, true, journal);
-    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, true, endOffset, lastModifiedTimeInSecs, resetKey);
+    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, true, endOffset, true, lastModifiedTimeInSecs, resetKey);
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
     // journal should not contain any entries
@@ -579,6 +600,19 @@ public class IndexSegmentTest {
     seenKeys.containsAll(referenceIndex.keySet());
     if (extraEntriesCheckState != null) {
       assertFalse("One of the extraOffsetsToCheck was not found", extraEntriesCheckState.values().contains(false));
+    }
+  }
+
+  private class MockIndexSegmentV0 extends IndexSegment {
+
+    MockIndexSegmentV0(String dataDir, Offset startOffset, StoreKeyFactory factory, int keySize, int valueSize,
+        StoreConfig config, StoreMetrics metrics, Time time) {
+      super(dataDir, startOffset, factory, keySize, valueSize, config, metrics, time);
+    }
+
+    @Override
+    Pair<StoreKey, PersistentIndex.IndexEntryType> getResetKey() {
+      return null;
     }
   }
 }

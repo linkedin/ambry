@@ -52,7 +52,14 @@ class IndexValue {
   private final static int SERVICE_ID_SIZE_IN_BYTES = 2;
   private final static int CONTAINER_ID_SIZE_IN_BYTES = 2;
 
-  private final int indexValueSizeInBytes;
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V0 =
+      BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES;
+
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V1 =
+      BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES +
+          SERVICE_ID_SIZE_IN_BYTES + CONTAINER_ID_SIZE_IN_BYTES;
 
   private long size;
   private Offset offset;
@@ -68,15 +75,12 @@ class IndexValue {
    * Constructs the {@link IndexValue} with the passed in {@link ByteBuffer} and the given {@code version}
    * @param logSegmentName the log segment name to be used to construct the offset
    * @param value the {@link ByteBuffer} representation of the {@link IndexValue}
-   * @param version the version of the index value
+   * @param version the version of the {@link PersistentIndex}
    */
   IndexValue(String logSegmentName, ByteBuffer value, short version) {
     this.version = version;
     if (version == PersistentIndex.VERSION_0) {
-      indexValueSizeInBytes =
-          BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0
-              + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES;
-      if (value.capacity() != indexValueSizeInBytes) {
+      if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V0) {
         throw new IllegalArgumentException("Invalid buffer size for version 0");
       }
       size = value.getLong();
@@ -88,11 +92,7 @@ class IndexValue {
       serviceId = 0;
       containerId = 0;
     } else if (version == PersistentIndex.VERSION_1) {
-      indexValueSizeInBytes =
-          BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
-              + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + SERVICE_ID_SIZE_IN_BYTES
-              + CONTAINER_ID_SIZE_IN_BYTES;
-      if (value.capacity() != indexValueSizeInBytes) {
+      if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V1) {
         throw new IllegalArgumentException("Invalid buffer size for version 1");
       }
       size = value.getLong();
@@ -197,17 +197,13 @@ class IndexValue {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
-    int expiryInSecs = Math.toIntExact(expiresAtMs / Time.MsPerSec);
+    int expiryInSecs = (int) (expiresAtMs / Time.MsPerSec);
     this.expiresAtMs = expiresAtMs != Utils.Infinite_Time ? expiryInSecs * Time.MsPerSec : -1;
     this.originalMessageOffset = originalMessageOffset;
-    this.operationTimeInSecs = Math.toIntExact(operationTimeInSecs);
+    this.operationTimeInSecs = (int) (operationTimeInSecs);
     this.serviceId = serviceId;
     this.containerId = containerId;
     version = PersistentIndex.VERSION_1;
-    indexValueSizeInBytes =
-        BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
-            + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + SERVICE_ID_SIZE_IN_BYTES
-            + CONTAINER_ID_SIZE_IN_BYTES;
   }
 
   /**
@@ -308,8 +304,9 @@ class IndexValue {
    * @return the {@link ByteBuffer} representation of this {@link IndexValue}
    */
   ByteBuffer getBytes() {
-    ByteBuffer value = ByteBuffer.allocate(indexValueSizeInBytes);
+    ByteBuffer value = null;
     if (version == PersistentIndex.VERSION_0) {
+      value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V0);
       value.putLong(size);
       value.putLong(offset.getOffset());
       value.put(flags);
@@ -317,11 +314,11 @@ class IndexValue {
       value.putLong(originalMessageOffset);
       value.position(0);
     } else if (version == PersistentIndex.VERSION_1) {
+      value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V1);
       value.putLong(size);
       value.putLong(offset.getOffset());
       value.put(flags);
-      value.putInt(
-          expiresAtMs != Utils.Infinite_Time ? Math.toIntExact(expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
+      value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
       value.putLong(originalMessageOffset);
       value.putInt(operationTimeInSecs);
       value.putShort(serviceId);
