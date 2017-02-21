@@ -226,9 +226,22 @@ public class StoreFindTokenTest {
     for (Short version : versions) {
       DataInputStream stream = getSerializedStream(token, version);
       StoreFindToken deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
+      assertEquals("Stream should have ended ", 0, stream.available());
+      assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
       compareTokens(token, deSerToken);
       assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
+      if (version == StoreFindToken.VERSION_2) {
+        assertEquals("IncarnationId mismatch ", token.getIncarnationId(), deSerToken.getIncarnationId());
+      }
+      stream = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes())));
+      deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
       assertEquals("Stream should have ended ", 0, stream.available());
+      assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
+      compareTokens(token, deSerToken);
+      assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
+      if (version == StoreFindToken.VERSION_2) {
+        assertEquals("IncarnationId mismatch ", token.getIncarnationId(), deSerToken.getIncarnationId());
+      }
     }
   }
 

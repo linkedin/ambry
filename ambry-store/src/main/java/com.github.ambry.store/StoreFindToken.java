@@ -65,12 +65,14 @@ public class StoreFindToken implements FindToken {
   private final UUID incarnationId;
   // refers to the bytes read so far (from the beginning of the log)
   private long bytesRead;
+  // refers to the version of the StoreFindToken
+  private short version;
 
   /**
    * Uninitialized token. Refers to the starting of the log.
    */
   StoreFindToken() {
-    this(Type.Uninitialized, null, null, null, null, true);
+    this(Type.Uninitialized, null, null, null, null, true, VERSION_2);
   }
 
   /**
@@ -81,7 +83,7 @@ public class StoreFindToken implements FindToken {
    * @param incarnationId the incarnationId of the store
    */
   StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId) {
-    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false);
+    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, VERSION_2);
   }
 
   /**
@@ -93,11 +95,56 @@ public class StoreFindToken implements FindToken {
    *                  {@code false} otherwise
    */
   StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive) {
-    this(Type.JournalBased, offset, null, sessionId, incarnationId, inclusive);
+    this(Type.JournalBased, offset, null, sessionId, incarnationId, inclusive, VERSION_2);
   }
 
-  private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId,
-      boolean inclusive) {
+  /**
+   * Uninitialized token. Refers to the starting of the log.
+   * @param version refers to the version of the token
+   */
+  private StoreFindToken(short version) {
+    this(Type.Uninitialized, null, null, null, null, true, version);
+  }
+
+  /**
+   * Index based token. Refers to an index segment start offset and a store key that belongs to that index segment
+   * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence
+   * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
+   * @param sessionId the sessionId of the store
+   * @param incarnationId the incarnationId of the store
+   * @param version refers to the version of the token
+   */
+  private StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId,
+      short version) {
+    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, version);
+  }
+
+  /**
+   * Journal based token. Refers to an offset in the journal
+   * @param offset the offset that this token refers to in the journal
+   * @param sessionId the sessionId of the store
+   * @param incarnationId the incarnationId of the store
+   * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
+   *                  {@code false} otherwise
+   * @param version refers to the version of the token
+   */
+  private StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive, short version) {
+    this(Type.JournalBased, offset, null, sessionId, incarnationId, inclusive, version);
+  }
+
+  /**
+   * Instantiating {@link StoreFindToken}
+   * @param type the {@link Type} of the token
+   * @param offset the offset that this token refers to
+   * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence
+   * @param sessionId the sessionId of the store that this token referes to
+   * @param incarnationId the incarnationId of the store that this token refers to
+   * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
+   *                  {@code false} otherwise
+   * @param version refers to the version of the token
+   */
+  private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive,
+      short version) {
     if (!type.equals(Type.Uninitialized)) {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
@@ -112,6 +159,7 @@ public class StoreFindToken implements FindToken {
     this.inclusive = inclusive ? (byte) 1 : 0;
     this.incarnationId = incarnationId;
     this.bytesRead = -1;
+    this.version = version;
   }
 
   void setBytesRead(long bytesRead) {
@@ -139,11 +187,12 @@ public class StoreFindToken implements FindToken {
         if (indexStartOffset != UNINITIALIZED_OFFSET) {
           // read store key if needed
           storeFindToken = new StoreFindToken(factory.getStoreKey(stream), new Offset(logSegmentName, indexStartOffset),
-              sessionIdUUID, null);
+              sessionIdUUID, null, VERSION_0);
         } else if (offset != UNINITIALIZED_OFFSET) {
-          storeFindToken = new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID, null, false);
+          storeFindToken =
+              new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID, null, false, VERSION_0);
         } else {
-          storeFindToken = new StoreFindToken();
+          storeFindToken = new StoreFindToken(VERSION_0);
         }
         break;
       case VERSION_1:
@@ -157,16 +206,17 @@ public class StoreFindToken implements FindToken {
         Type type = Type.values()[stream.readShort()];
         switch (type) {
           case Uninitialized:
-            storeFindToken = new StoreFindToken();
+            storeFindToken = new StoreFindToken(VERSION_1);
             break;
           case JournalBased:
             Offset logOffset = Offset.fromBytes(stream);
-            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, null, false);
+            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, null, false, VERSION_1);
             break;
           case IndexBased:
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             storeFindToken =
-                new StoreFindToken(factory.getStoreKey(stream), indexSegmentStartOffset, sessionIdUUID, null);
+                new StoreFindToken(factory.getStoreKey(stream), indexSegmentStartOffset, sessionIdUUID, null,
+                    VERSION_1);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -235,6 +285,10 @@ public class StoreFindToken implements FindToken {
     return inclusive == (byte) 1;
   }
 
+  short getVersion() {
+    return version;
+  }
+
   @Override
   public long getBytesRead() {
     if (this.bytesRead == -1) {
@@ -245,40 +299,87 @@ public class StoreFindToken implements FindToken {
 
   @Override
   public byte[] toBytes() {
-    byte[] offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
-    byte[] sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
-    byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
-    byte[] storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
-    int size = VERSION_SIZE + TYPE_SIZE;
-    if (type != Type.Uninitialized) {
-      size += INCARNATION_ID_LENGTH_SIZE + incarnationIdBytes.length + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length
-          + offsetBytes.length;
-      if (type == Type.JournalBased) {
-        size += INCLUSIVE_BYTE_SIZE;
-      } else if (type == Type.IndexBased) {
-        size += storeKeyBytes.length;
-      }
-    }
-    byte[] buf = new byte[size];
-    ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-    // add version
-    bufWrap.putShort(VERSION_2);
-    // add type
-    bufWrap.putShort((short) type.ordinal());
-    if (type != Type.Uninitialized) {
-      // add incarnationId
-      bufWrap.putInt(incarnationIdBytes.length);
-      bufWrap.put(incarnationIdBytes);
-      // add sessionId
-      bufWrap.putInt(sessionIdBytes.length);
-      bufWrap.put(sessionIdBytes);
-      // add offset
-      bufWrap.put(offsetBytes);
-      if (type == Type.JournalBased) {
-        bufWrap.put(getInclusive() ? (byte) 1 : (byte) 0);
-      } else if (type == Type.IndexBased) {
+    byte[] buf = null;
+    switch (version) {
+      case VERSION_0:
+        int OFFSET_SIZE = 8;
+        int START_OFFSET_SIZE = 8;
+        byte[] sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+        byte[] storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+        int size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length +
+            OFFSET_SIZE + START_OFFSET_SIZE + storeKeyBytes.length;
+        buf = new byte[size];
+        ByteBuffer bufWrap = ByteBuffer.wrap(buf);
+        // add version
+        bufWrap.putShort(version);
+        // add sessionId
+        bufWrap.putInt(sessionIdBytes.length);
+        bufWrap.put(sessionIdBytes);
+        // add offset
+        bufWrap.putLong(offset == null ? UNINITIALIZED_OFFSET : offset.getOffset());
+        // add index start offset
+        bufWrap.putLong(offset == null ? UNINITIALIZED_OFFSET : offset.getOffset());
+        // add storekey
         bufWrap.put(storeKeyBytes);
-      }
+        break;
+      case VERSION_1:
+        byte[] offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
+        sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+        storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+        size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length + TYPE_SIZE + offsetBytes.length
+            + storeKeyBytes.length;
+        buf = new byte[size];
+        bufWrap = ByteBuffer.wrap(buf);
+        // add version
+        bufWrap.putShort(VERSION_1);
+        // add sessionId
+        bufWrap.putInt(sessionIdBytes.length);
+        bufWrap.put(sessionIdBytes);
+        // add type
+        bufWrap.putShort((short) type.ordinal());
+        // add offset
+        bufWrap.put(offsetBytes);
+        // add StoreKey
+        bufWrap.put(storeKeyBytes);
+        break;
+      case VERSION_2:
+        offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
+        sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+        byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+        storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
+        size = VERSION_SIZE + TYPE_SIZE;
+        if (type != Type.Uninitialized) {
+          size +=
+              INCARNATION_ID_LENGTH_SIZE + incarnationIdBytes.length + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length
+                  + offsetBytes.length;
+          if (type == Type.JournalBased) {
+            size += INCLUSIVE_BYTE_SIZE;
+          } else if (type == Type.IndexBased) {
+            size += storeKeyBytes.length;
+          }
+        }
+        buf = new byte[size];
+        bufWrap = ByteBuffer.wrap(buf);
+        // add version
+        bufWrap.putShort(VERSION_2);
+        // add type
+        bufWrap.putShort((short) type.ordinal());
+        if (type != Type.Uninitialized) {
+          // add incarnationId
+          bufWrap.putInt(incarnationIdBytes.length);
+          bufWrap.put(incarnationIdBytes);
+          // add sessionId
+          bufWrap.putInt(sessionIdBytes.length);
+          bufWrap.put(sessionIdBytes);
+          // add offset
+          bufWrap.put(offsetBytes);
+          if (type == Type.JournalBased) {
+            bufWrap.put(getInclusive() ? (byte) 1 : (byte) 0);
+          } else if (type == Type.IndexBased) {
+            bufWrap.put(storeKeyBytes);
+          }
+        }
+        break;
     }
     return buf;
   }
@@ -286,11 +387,12 @@ public class StoreFindToken implements FindToken {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    sb.append("type: ").append(type);
+    sb.append("version: ").append(version);
+    sb.append(" type: ").append(type);
     if (incarnationId != null) {
       sb.append(" incarnationId ").append(incarnationId);
     }
-    sb.append(" inclusiveness ").append(inclusive == 1 ? true : false);
+    sb.append(" inclusiveness ").append(inclusive == 1);
     if (!type.equals(Type.Uninitialized)) {
       if (sessionId != null) {
         sb.append(" sessionId ").append(sessionId);
