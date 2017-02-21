@@ -48,7 +48,7 @@ public class PutRequest extends RequestOrResponse {
   // BlobData
   private final Crc32 crc;
   private final ByteBuffer crcBuf;
-  private boolean blobWriteComplete = false;
+  private boolean okayToWriteCrc = false;
 
   private static final int UserMetadata_Size_InBytes = 4;
   private static final int Blob_Size_InBytes = 8;
@@ -144,11 +144,13 @@ public class PutRequest extends RequestOrResponse {
       if (!bufferToSend.hasRemaining()) {
         written += channel.write(blob);
         if (!blob.hasRemaining()) {
-          blobWriteComplete = true;
+          if (currentVersion == Put_Request_Version_V3) {
+            okayToWriteCrc = true;
+          }
         }
       }
 
-      if (currentVersion == Put_Request_Version_V3 && blobWriteComplete && crcBuf.hasRemaining()) {
+      if (okayToWriteCrc && crcBuf.hasRemaining()) {
         written += channel.write(crcBuf);
       }
 
@@ -328,6 +330,30 @@ public class PutRequest extends RequestOrResponse {
      */
     public Long getCrc() {
       return receivedCrc;
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder();
+      sb.append("ReceivedPutRequest[");
+      sb.append("BlobID=").append(blobId.getID());
+      sb.append(", ").append("ClientId=").append(clientId);
+      sb.append(", ").append("CorrelationId=").append(correlationId);
+      if (blobProperties != null) {
+        sb.append(", ").append(blobProperties);
+      } else {
+        sb.append(", ").append("Properties=Null");
+      }
+      if (userMetadata != null) {
+        sb.append(", ").append("UserMetaDataSize=").append(userMetadata.capacity());
+      } else {
+        sb.append(", ").append("UserMetaDataSize=0");
+      }
+      sb.append(", ").append("blobType=").append(blobType);
+      sb.append(", ").append("blobSize=").append(blobSize);
+      sb.append(", ").append("crc=").append(receivedCrc);
+      sb.append("]");
+      return sb.toString();
     }
   }
 }

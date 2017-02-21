@@ -14,9 +14,9 @@
 package com.github.ambry.store;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,7 +48,7 @@ class JournalEntry {
 class Journal {
 
   private final ConcurrentSkipListMap<Offset, StoreKey> journal;
-  private final ConcurrentHashMap<StoreKey, Long> recentCrcs;
+  private final HashMap<StoreKey, Long> recentCrcs;
   private final int maxEntriesToJournal;
   private final int maxEntriesToReturn;
   private final AtomicInteger currentNumberOfEntries;
@@ -63,7 +63,7 @@ class Journal {
    */
   Journal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
     journal = new ConcurrentSkipListMap<>();
-    recentCrcs = new ConcurrentHashMap<>();
+    recentCrcs = new HashMap<>();
     this.maxEntriesToJournal = maxEntriesToJournal;
     this.maxEntriesToReturn = maxEntriesToReturn;
     this.currentNumberOfEntries = new AtomicInteger(0);
@@ -174,7 +174,7 @@ class Journal {
    * @param key the key for which the crc is to be obtained.
    * @return the crc associated with this key in the journal if there is one; else returns null.
    */
-  Long getCrcIfExists(StoreKey key) {
+  Long getCrcOfKey(StoreKey key) {
     return recentCrcs.get(key);
   }
 }

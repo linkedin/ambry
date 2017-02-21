@@ -476,8 +476,8 @@ class PersistentIndex {
    * @param info the {@link MessageInfo} to check.
    * @return true if the exact message was recently added to this index; false otherwise.
    */
-  boolean recentlySeen(MessageInfo info) {
-    Long crcInJournal = journal.getCrcIfExists(info.getStoreKey());
+  boolean wasRecentlySeen(MessageInfo info) {
+    Long crcInJournal = journal.getCrcOfKey(info.getStoreKey());
     return info.getCrc() != null && info.getCrc().equals(crcInJournal);
   }
 
@@ -525,7 +525,7 @@ class PersistentIndex {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     } else {
       readOptions = new BlobReadOptions(log, value.getOffset(), value.getSize(), value.getExpiresAtMs(), id,
-          value.isFlagSet(IndexValue.Flags.Delete_Index), journal.getCrcIfExists(id));
+          value.isFlagSet(IndexValue.Flags.Delete_Index), journal.getCrcOfKey(id));
     }
     return readOptions;
   }

@@ -34,6 +34,9 @@ class MessageInfoListSerde {
 
   private final short version;
 
+  private static final byte CRC_PRESENT = (byte) 1;
+  private static final byte DELETED = (byte) 1;
+
   MessageInfoListSerde(List<MessageInfo> messageInfoList, short version) {
     this.messageInfoList = messageInfoList;
     this.version = version;
@@ -74,14 +77,14 @@ class MessageInfoListSerde {
         outputBuffer.put(messageInfo.getStoreKey().toBytes());
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
-        outputBuffer.put(messageInfo.isDeleted() ? (byte) 1 : 0);
+        outputBuffer.put(messageInfo.isDeleted() ? DELETED : (byte) ~DELETED);
         if (version == MessageInfoListVersion_V2) {
           Long crc = messageInfo.getCrc();
           if (crc != null) {
-            outputBuffer.put((byte) 1);
+            outputBuffer.put(CRC_PRESENT);
             outputBuffer.putLong(crc);
           } else {
-            outputBuffer.put((byte) 0);
+            outputBuffer.put((byte) ~CRC_PRESENT);
           }
         }
       }
@@ -96,10 +99,10 @@ class MessageInfoListSerde {
       BlobId id = new BlobId(stream, map);
       long size = stream.readLong();
       long ttl = stream.readLong();
-      boolean isDeleted = stream.readByte() == 1;
+      boolean isDeleted = stream.readByte() == DELETED;
       Long crc = null;
       if (versionToDeserializeIn == MessageInfoListVersion_V2) {
-        crc = stream.readByte() == 1 ? stream.readLong() : null;
+        crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
       }
       messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl, crc));
     }

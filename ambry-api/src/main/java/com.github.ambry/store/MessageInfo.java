@@ -20,11 +20,11 @@ import com.github.ambry.utils.Utils;
  * A message info class that contains basic info about a message
  */
 public class MessageInfo {
-  private StoreKey key;
-  private long size;
-  private long expirationTimeInMs;
-  private boolean isDeleted;
-  private Long crc;
+  private final StoreKey key;
+  private final long size;
+  private final long expirationTimeInMs;
+  private final boolean isDeleted;
+  private final Long crc;
 
   public MessageInfo(StoreKey key, long size, long expirationTimeInMs) {
     this(key, size, false, expirationTimeInMs);
@@ -100,6 +100,9 @@ public class MessageInfo {
         .append(",")
         .append("IsDeleted-")
         .append(isDeleted)
+        .append(",")
+        .append("Crc-")
+        .append(crc)
         .append("]");
     return stringBuilder.toString();
   }
