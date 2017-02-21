@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.MockSSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.InMemoryRouterFactory;
 import java.io.IOException;
@@ -115,6 +116,15 @@ public class RestServerTest {
    * @return an instance of {@link VerifiableProperties}.
    */
   private VerifiableProperties getVProps(Properties properties) {
+    setMandatoryValues(properties);
+    return new VerifiableProperties(properties);
+  }
+
+  /**
+   * Set some mandatory values in the {@link Properties} passed in.
+   * @param properties The {@link Properties} to set these values in.
+   */
+  private void setMandatoryValues(Properties properties) {
     properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
     properties.setProperty("rest.server.response.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
@@ -123,7 +133,8 @@ public class RestServerTest {
     properties.setProperty("rest.server.request.handler.factory",
         MockRestRequestResponseHandlerFactory.class.getCanonicalName());
     properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
-    return new VerifiableProperties(properties);
+    properties.setProperty("rest.server.ssl.factory", MockSSLFactory.class.getCanonicalName());
+    properties.setProperty("rest.server.enable.https", "true");
   }
 
   // serverCreationWithBadInputTest() helpers
@@ -170,28 +181,23 @@ public class RestServerTest {
    * @throws Exception
    */
   private void badFactoriesTest() throws Exception {
-    doBadFactoryClassTest("rest.server.nio.server.factory");
-    doBadFactoryClassTest("rest.server.blob.storage.service.factory");
-    doBadFactoryClassTest("rest.server.router.factory");
-    doBadFactoryClassTest("rest.server.response.handler.factory");
-    doBadFactoryClassTest("rest.server.request.handler.factory");
+    doBadFactoryClassTest("rest.server.nio.server.factory", true);
+    doBadFactoryClassTest("rest.server.blob.storage.service.factory", true);
+    doBadFactoryClassTest("rest.server.router.factory", true);
+    doBadFactoryClassTest("rest.server.response.handler.factory", true);
+    doBadFactoryClassTest("rest.server.request.handler.factory", true);
+    doBadFactoryClassTest("rest.server.ssl.factory", false);
   }
 
   /**
    * Tests for bad factory class name for {@code configKey} in {@link RestServer}.
    * @param configKey the property whose value is the bad factory class
+   * @param testFaultyFactory {@code true} if the faulty factory should be tested.
    * @throws Exception
    */
-  private void doBadFactoryClassTest(String configKey) throws Exception {
+  private void doBadFactoryClassTest(String configKey, boolean testFaultyFactory) throws Exception {
     Properties properties = new Properties();
-    properties.setProperty("rest.server.router.factory", InMemoryRouterFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.response.handler.factory",
-        MockRestRequestResponseHandlerFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.blob.storage.service.factory",
-        MockBlobStorageServiceFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.request.handler.factory",
-        MockRestRequestResponseHandlerFactory.class.getCanonicalName());
-    properties.setProperty("rest.server.nio.server.factory", MockNioServerFactory.class.getCanonicalName());
+    setMandatoryValues(properties);
 
     // Non existent class.
     properties.setProperty(configKey, "non.existent.factory");
@@ -209,20 +215,22 @@ public class RestServerTest {
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
       fail("Properties file contained invalid " + configKey + " class, yet no exception was thrown");
-    } catch (NullPointerException e) {
+    } catch (InstantiationException | NullPointerException e) {
       // nothing to do. expected.
     }
 
-    // faulty factory class
-    properties.setProperty(configKey, FaultyFactory.class.getCanonicalName());
-    verifiableProperties = new VerifiableProperties(properties);
-    try {
-      RestServer restServer =
-          new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
-      restServer.start();
-      fail("Properties file contained faulty " + configKey + " class, yet no exception was thrown");
-    } catch (InstantiationException | NullPointerException e) {
-      // nothing to do. expected.
+    if (testFaultyFactory) {
+      // faulty factory class
+      properties.setProperty(configKey, FaultyFactory.class.getCanonicalName());
+      verifiableProperties = new VerifiableProperties(properties);
+      try {
+        RestServer restServer =
+            new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem());
+        restServer.start();
+        fail("Properties file contained faulty " + configKey + " class, yet no exception was thrown");
+      } catch (InstantiationException e) {
+        // nothing to do. expected.
+      }
     }
   }
 }

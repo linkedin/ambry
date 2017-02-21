@@ -85,7 +85,8 @@ class RouterServerTestFramework {
     this.notificationSystem = notificationSystem;
 
     VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProps);
-    router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, notificationSystem).getRouter();
+    router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, notificationSystem,
+        ServerTestUtil.getSSLFactoryIfRequired(routerVerifiableProps)).getRouter();
   }
 
   /**

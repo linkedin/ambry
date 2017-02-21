@@ -32,11 +32,18 @@ public class NettyConfig {
   public final int nettyServerIdleTimeSeconds;
 
   /**
-   * Port on which to run netty server.
+   * Port on which to run netty server for plaintext connections.
    */
   @Config("netty.server.port")
   @Default("1174")
   public final int nettyServerPort;
+
+  /**
+   * Port on which to run netty server for SSL connections.
+   */
+  @Config("netty.server.ssl.port")
+  @Default("1175")
+  public final int nettyServerSSLPort;
 
   /**
    * Socket backlog size. Defines the number of connections that can wait in queue to be accepted.
@@ -87,6 +94,7 @@ public class NettyConfig {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
     nettyServerPort = verifiableProperties.getInt("netty.server.port", 1174);
+    nettyServerSSLPort = verifiableProperties.getInt("netty.server.ssl.port", 1175);
     nettyServerSoBacklog = verifiableProperties.getInt("netty.server.so.backlog", 100);
     nettyServerWorkerThreadCount = verifiableProperties.getInt("netty.server.worker.thread.count", 1);
     nettyServerMaxInitialLineLength = verifiableProperties.getInt("netty.server.max.initial.line.length", 4096);

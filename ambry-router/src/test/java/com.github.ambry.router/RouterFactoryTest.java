@@ -65,7 +65,7 @@ public class RouterFactoryTest {
     for (FactoryAndRouter factoryAndRouter : factoryAndRouters) {
       RouterFactory routerFactory =
           Utils.getObj(factoryAndRouter.factoryStr, verifiableProperties, new MockClusterMap(),
-              new LoggingNotificationSystem());
+              new LoggingNotificationSystem(), null);
       Router router = routerFactory.getRouter();
       Assert.assertEquals("Did not receive expected Router instance", factoryAndRouter.routerStr,
           router.getClass().getCanonicalName());

@@ -16,12 +16,13 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.MockSSLFactory;
+import com.github.ambry.network.SSLFactory;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.http.HttpServerCodec;
-import io.netty.handler.stream.ChunkedWriteHandler;
-import io.netty.handler.timeout.IdleStateHandler;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -66,32 +67,20 @@ public class NettyServerTest {
    */
   @Test
   public void startWithBadInputTest() throws InstantiationException, IOException {
-    Properties properties = new Properties();
-    // Should be int. So will throw at instantiation.
-    properties.setProperty("netty.server.port", "abcd");
-    NioServer nioServer = null;
-    try {
-      nioServer = getNettyServer(properties);
-      fail("NettyServer instantiation should have failed because of bad nettyServerPort value");
-    } catch (NumberFormatException e) {
-      // nothing to do. expected.
-    } finally {
-      if (nioServer != null) {
-        nioServer.shutdown();
-      }
-    }
-
-    // Should be > 0. So will throw at start().
-    properties.setProperty("netty.server.port", "-1");
-    nioServer = getNettyServer(properties);
-    try {
-      nioServer.start();
-      fail("NettyServer start() should have failed because of bad nettyServerPort value");
-    } catch (IllegalArgumentException e) {
-      // nothing to do. expected.
-    } finally {
-      if (nioServer != null) {
-        nioServer.shutdown();
+    for (int i = 0; i < 2; i++) {
+      Properties properties = new Properties();
+      // Should be > 0. So will throw at start().
+      properties.setProperty(i == 0 ? "netty.server.port" : "netty.server.ssl.port", "-1");
+      NioServer nioServer = getNettyServer(properties);
+      try {
+        nioServer.start();
+        fail("NettyServer start() should have failed because of bad port number value");
+      } catch (IllegalArgumentException e) {
+        // nothing to do. expected.
+      } finally {
+        if (nioServer != null) {
+          nioServer.shutdown();
+        }
       }
     }
   }
@@ -118,26 +107,15 @@ public class NettyServerTest {
     final PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
     final RestServerState restServerState = new RestServerState("/healthCheck");
     final ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
-    return new NettyServer(nettyConfig, nettyMetrics, new ChannelInitializer<SocketChannel>() {
-      @Override
-      protected void initChannel(SocketChannel ch) {
-        ch.pipeline()
-            // connection stats handler to track connection related metrics
-            .addLast("ConnectionStatsHandler", connectionStatsHandler)
-            // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-            // to go here.
-            .addLast("codec", new HttpServerCodec())
-            // for health check request handling
-            .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
-            // for public access logging
-            .addLast("publicAccessLogHandler", new PublicAccessLogHandler(publicAccessLogger, nettyMetrics))
-            // for detecting connections that have been idle too long - probably because of an error.
-            .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-            // for safe writing of chunks for responses
-            .addLast("chunker", new ChunkedWriteHandler())
-            // custom processing class that interfaces with a BlobStorageService.
-            .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
-      }
-    });
+    final SSLFactory sslFactory = new MockSSLFactory(verifiableProperties);
+
+    Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = new HashMap<>();
+    channelInitializers.put(nettyConfig.nettyServerPort,
+        new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
+            publicAccessLogger, restServerState, null));
+    channelInitializers.put(nettyConfig.nettyServerSSLPort,
+        new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
+            publicAccessLogger, restServerState, sslFactory));
+    return new NettyServer(nettyConfig, nettyMetrics, channelInitializers);
   }
 }

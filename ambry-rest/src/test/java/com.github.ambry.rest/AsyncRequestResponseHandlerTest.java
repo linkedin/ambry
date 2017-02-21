@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.SSLSession;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.AfterClass;
@@ -879,6 +880,11 @@ class BadRestRequest implements RestRequest {
 
   @Override
   public Map<String, Object> getArgs() {
+    return null;
+  }
+
+  @Override
+  public SSLSession getSSLSession() {
     return null;
   }
 

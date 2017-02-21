@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.SSLConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -34,10 +35,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Factory to create SSLContext and SSLEngine
  */
-public class SSLFactory {
-  protected Logger logger = LoggerFactory.getLogger(SSLFactory.class);
-
-  public enum Mode {CLIENT, SERVER}
+public class SSLFactoryImpl implements SSLFactory {
+  protected Logger logger = LoggerFactory.getLogger(SSLFactoryImpl.class);
 
   private String protocol;
   private String provider;
@@ -53,7 +52,23 @@ public class SSLFactory {
   private boolean needClientAuth;
   private boolean wantClientAuth;
 
-  public SSLFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
+  /**
+   * Construct an {@link SSLFactoryImpl}.
+   * @param verifiableProperties the {@link VerifiableProperties} to use.
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
+  public SSLFactoryImpl(VerifiableProperties verifiableProperties) throws GeneralSecurityException, IOException {
+    this(new SSLConfig(verifiableProperties));
+  }
+
+  /**
+   * Construct an {@link SSLFactoryImpl}.
+   * @param sslConfig the {@link SSLConfig} to use.
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
+  public SSLFactoryImpl(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
 
     this.protocol = sslConfig.sslContextProtocol;
     if (sslConfig.sslContextProvider.length() > 0) {
@@ -138,6 +153,7 @@ public class SSLFactory {
    * @param mode The local SSL mode, Client or Server
    * @return SSLEngine
    */
+  @Override
   public SSLEngine createSSLEngine(String peerHost, int peerPort, Mode mode) {
     SSLEngine sslEngine = sslContext.createSSLEngine(peerHost, peerPort);
     if (cipherSuites != null) {
@@ -167,6 +183,7 @@ public class SSLFactory {
    * Returns a configured SSLContext.
    * @return SSLContext.
    */
+  @Override
   public SSLContext getSSLContext() {
     return sslContext;
   }

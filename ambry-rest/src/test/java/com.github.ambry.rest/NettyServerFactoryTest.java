@@ -14,7 +14,13 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.MockSSLFactory;
+import com.github.ambry.network.SSLFactory;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.socket.SocketChannel;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -30,28 +36,40 @@ public class NettyServerFactoryTest {
    * Checks to see that getting the default {@link NioServer} (currently {@link NettyServer}) works.
    */
   @Test
-  public void getNettyServerTest() {
+  public void getNettyServerTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
     PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
     RestServerState restServerState = new RestServerState("/healthCheck");
+    SSLFactory sslFactory = new MockSSLFactory(verifiableProperties);
 
-    NettyServerFactory nettyServerFactory =
-        new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler, publicAccessLogger,
-            restServerState);
-    NioServer nioServer = nettyServerFactory.getNioServer();
-    assertNotNull("No NioServer returned", nioServer);
-    assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
-        nioServer.getClass().getCanonicalName());
+    for (int i = 0; i < 2; i++) {
+      NettyServerFactory nettyServerFactory =
+          new NettyServerFactory(verifiableProperties, new MetricRegistry(), restRequestHandler, publicAccessLogger,
+              restServerState, i == 0 ? sslFactory : null);
+      NioServer nioServer = nettyServerFactory.getNioServer();
+      assertNotNull("No NioServer returned", nioServer);
+      assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
+          nioServer.getClass().getCanonicalName());
+      Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = nettyServerFactory.getChannelInitializers();
+      if (i == 0) {
+        assertEquals("Expected two ChannelInitializers when SSLFactoryImpl is not null", 2, channelInitializers.size());
+        assertNotNull("No ChannelInitializer for SSL port", channelInitializers.get(nettyConfig.nettyServerSSLPort));
+      } else {
+        assertEquals("Expected one ChannelInitializer when SSLFactoryImpl is null", 1, channelInitializers.size());
+      }
+      assertNotNull("No ChannelInitializer for plaintext port", channelInitializers.get(nettyConfig.nettyServerPort));
+    }
   }
 
   /**
    * Tests instantiation of {@link NettyServerFactory} with bad input.
    */
   @Test
-  public void getNettyServerFactoryWithBadInputTest() {
+  public void getNettyServerFactoryWithBadInputTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -59,45 +77,27 @@ public class NettyServerFactoryTest {
     RestRequestHandler restRequestHandler = new MockRestRequestResponseHandler();
     PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
     RestServerState restServerState = new RestServerState("/healthCheck");
+    SSLFactory sslFactory = new MockSSLFactory(verifiableProperties);
 
-    // VerifiableProperties null.
-    try {
-      new NettyServerFactory(null, metricRegistry, restRequestHandler, publicAccessLogger, restServerState);
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
+    for (int i = 0; i < 5; i++) {
+      try {
+        new NettyServerFactory(i == 0 ? verifiableProperties : null, i == 1 ? metricRegistry : null,
+            i == 2 ? restRequestHandler : null, i == 3 ? publicAccessLogger : null, i == 4 ? restServerState : null,
+            sslFactory);
+        fail("Instantiation should have failed because argument " + i + " was null");
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
     }
 
-    // MetricRegistry null.
+    // Should be int. So will throw at instantiation.
+    properties.setProperty("netty.server.ssl.port", "abcd");
     try {
-      new NettyServerFactory(verifiableProperties, null, restRequestHandler, publicAccessLogger, restServerState);
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
-    // RestRequestHandler null.
-    try {
-      new NettyServerFactory(verifiableProperties, metricRegistry, null, publicAccessLogger, restServerState);
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
-    // PublicAccessLogger null.
-    try {
-      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, null, restServerState);
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
-    // RestServerState null.
-    try {
-      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger, null);
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
+      new NettyServerFactory(verifiableProperties, metricRegistry, restRequestHandler, publicAccessLogger,
+          restServerState, sslFactory);
+      fail("NettyServerFactory instantiation should have failed because of bad port number value");
+    } catch (NumberFormatException e) {
+      // nothing to do. expected.
     }
   }
 }

@@ -19,8 +19,10 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
@@ -157,8 +159,17 @@ public class RestServer {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
+
+    boolean sslRequired = restServerConfig.restServerEnableHTTPS
+        || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
+    SSLFactory sslFactory = null;
+    if (sslRequired) {
+      sslFactory = Utils.getObj(restServerConfig.restServerSSLFactory, verifiableProperties);
+    }
+
     RouterFactory routerFactory =
-        Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
+        Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem,
+            sslFactory);
     router = routerFactory.getRouter();
 
     RestResponseHandlerFactory restResponseHandlerFactory =
@@ -176,12 +187,14 @@ public class RestServer {
     restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
         restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
+
     NioServerFactory nioServerFactory =
         Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,
-            restRequestHandler, publicAccessLogger, restServerState);
+            restRequestHandler, publicAccessLogger, restServerState, sslFactory);
     nioServer = nioServerFactory.getNioServer();
+
     if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
-        || nioServer == null) {
+        || nioServer == null || (sslRequired && sslFactory == null)) {
       throw new InstantiationException("Some of the server components were null");
     }
     logger.trace("Instantiated RestServer");

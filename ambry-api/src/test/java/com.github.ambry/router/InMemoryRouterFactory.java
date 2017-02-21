@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 
 
@@ -31,7 +32,7 @@ public class InMemoryRouterFactory implements RouterFactory {
   private final NotificationSystem notificationSystem;
 
   public InMemoryRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem) {
+      NotificationSystem notificationSystem, SSLFactory sslFactory) {
     this.verifiableProperties = verifiableProperties;
     this.notificationSystem = notificationSystem;
   }

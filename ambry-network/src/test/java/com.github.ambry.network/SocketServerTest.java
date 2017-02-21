@@ -51,7 +51,7 @@ public class SocketServerTest {
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
     clientSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
-    clientSSLFactory = new SSLFactory(clientSSLConfig);
+    clientSSLFactory = new SSLFactoryImpl(clientSSLConfig);
     SSLContext sslContext = clientSSLFactory.getSSLContext();
     clientSSLSocketFactory = sslContext.getSocketFactory();
   }

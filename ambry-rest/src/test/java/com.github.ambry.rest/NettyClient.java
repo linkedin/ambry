@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.network.SSLFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import io.netty.bootstrap.Bootstrap;
@@ -20,6 +21,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -32,11 +34,13 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.Closeable;
+import java.net.InetSocketAddress;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.Future;
@@ -75,14 +79,20 @@ public class NettyClient implements Closeable {
    * Create a NettyClient.
    * @param hostname the host to connect to.
    * @param port the port to connect to.
+   * @param sslFactory the {@link SSLFactory} to use if SSL is enabled.
    */
-  public NettyClient(String hostname, int port) throws InterruptedException {
+  public NettyClient(final String hostname, final int port, final SSLFactory sslFactory) throws InterruptedException {
     this.hostname = hostname;
     this.port = port;
     b.group(group).channel(NioSocketChannel.class).handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) throws Exception {
-        ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(communicationHandler);
+        ChannelPipeline pipeline = ch.pipeline();
+        if (sslFactory != null) {
+          pipeline.addLast("sslHandler", new SslHandler(
+              sslFactory.createSSLEngine(hostname, port, SSLFactory.Mode.CLIENT)));
+        }
+        pipeline.addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(communicationHandler);
       }
     });
     createChannel();

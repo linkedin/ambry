@@ -68,6 +68,7 @@ import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLSession;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
@@ -1274,6 +1275,11 @@ class BadRestRequest extends BadRSC implements RestRequest {
   @Override
   public Map<String, Object> getArgs() {
     throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public SSLSession getSSLSession() {
+    return null;
   }
 
   @Override

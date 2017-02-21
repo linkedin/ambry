@@ -71,7 +71,7 @@ public class BlockingChannelConnectionPoolTest {
     sslConfig = new SSLConfig(sslClientProps);
     sslEnabledClusterMapConfig = new ClusterMapConfig(sslClientProps);
     plainTextClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
-    sslFactory = new SSLFactory(sslConfig);
+    sslFactory = new SSLFactoryImpl(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }

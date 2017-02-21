@@ -39,6 +39,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.net.ssl.SSLSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -252,6 +253,11 @@ class PerfNioServer implements NioServer {
     @Override
     public Map<String, Object> getArgs() {
       return args;
+    }
+
+    @Override
+    public SSLSession getSSLSession() {
+      return null;
     }
 
     @Override

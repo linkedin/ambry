@@ -18,8 +18,12 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.AdminConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.SSLFactory;
+import com.github.ambry.network.SSLFactoryImpl;
+import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
@@ -45,8 +49,11 @@ import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.ReferenceCountUtil;
+import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
@@ -71,30 +78,47 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class AdminIntegrationTest {
-  private static final int SERVER_PORT = 16503;
+  private static final int PLAINTEXT_SERVER_PORT = 1174;
+  private static final int SSL_SERVER_PORT = 1175;
   private static final ClusterMap CLUSTER_MAP;
-  private static final VerifiableProperties ADMIN_VERIFIABLE_PROPS = buildAdminVProps();
-  private static final AdminConfig ADMIN_CONFIG = new AdminConfig(ADMIN_VERIFIABLE_PROPS);
+  private static final File TRUST_STORE_FILE;
+  private static final VerifiableProperties ADMIN_VERIFIABLE_PROPS;
+  private static final AdminConfig ADMIN_CONFIG;
+  private static final SSLConfig CLIENT_SSL_CONFIG;
 
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
-    } catch (IOException e) {
+      TRUST_STORE_FILE = File.createTempFile("truststore", ".jks");
+      ADMIN_VERIFIABLE_PROPS = buildAdminVProps();
+      ADMIN_CONFIG = new AdminConfig(ADMIN_VERIFIABLE_PROPS);
+      CLIENT_SSL_CONFIG =
+          new SSLConfig(TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, TRUST_STORE_FILE, "client"));
+    } catch (IOException | GeneralSecurityException e) {
       throw new IllegalStateException(e);
     }
   }
 
   private static RestServer adminRestServer = null;
-  private static NettyClient nettyClient = null;
   private static InMemoryRouter router = null;
+  private static NettyClient plaintextNettyClient = null;
+  private static NettyClient sslNettyClient = null;
+
+  private final NettyClient nettyClient;
 
   /**
    * Running it many times so that keep-alive bugs are caught.
-   * @return an array representing the number of times to run.
+   * We also want to test using both the SSL and plaintext ports.
+   * @return a list of arrays that represent the constructor arguments for that run of the test.
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[5][0]);
+    List<Object[]> parameters = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      parameters.add(new Object[]{false});
+      parameters.add(new Object[]{true});
+    }
+    return parameters;
   }
 
   /**
@@ -106,7 +130,8 @@ public class AdminIntegrationTest {
     adminRestServer = new RestServer(ADMIN_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem());
     router = InMemoryRouterFactory.getLatestInstance();
     adminRestServer.start();
-    nettyClient = new NettyClient("localhost", SERVER_PORT);
+    plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
+    sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactoryImpl(CLIENT_SSL_CONFIG));
   }
 
   /**
@@ -114,12 +139,22 @@ public class AdminIntegrationTest {
    */
   @AfterClass
   public static void teardown() {
-    if (nettyClient != null) {
-      nettyClient.close();
+    if (plaintextNettyClient != null) {
+      plaintextNettyClient.close();
+    }
+    if (sslNettyClient != null) {
+      sslNettyClient.close();
     }
     if (adminRestServer != null) {
       adminRestServer.shutdown();
     }
+  }
+
+  /**
+   * @param useSSL {@code true} if SSL should be tested.
+   */
+  public AdminIntegrationTest(boolean useSSL) {
+    nettyClient = useSSL ? sslNettyClient : plaintextNettyClient;
   }
 
   /**
@@ -244,11 +279,16 @@ public class AdminIntegrationTest {
    * Builds properties required to start a {@link RestServer} as an Admin server.
    * @return a {@link VerifiableProperties} with the parameters for an Admin server.
    */
-  private static VerifiableProperties buildAdminVProps() {
+  private static VerifiableProperties buildAdminVProps() throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.blob.storage.service.factory", "com.github.ambry.admin.AdminBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
-    properties.put("netty.server.port", Integer.toString(SERVER_PORT));
+    properties.put("rest.server.enable.https", "true");
+    properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
+    properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
+    // to test that backpressure does not impede correct operation.
+    properties.put("netty.server.request.buffer.watermark", "1");
+    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, TRUST_STORE_FILE, "frontend");
     return new VerifiableProperties(properties);
   }
 
