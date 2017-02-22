@@ -1878,7 +1878,8 @@ public class IndexTest {
   private void partitionIndexSegments(Map<Offset, IndexSegment> toRemove, Set<Offset> toRetain) {
     int i = 0;
     for (Map.Entry<Offset, IndexSegment> indexSegmentEntry : state.index.getIndexSegments().entrySet()) {
-      if (indexSegmentEntry.equals(state.index.getIndexSegments().lastEntry()) || i % 3 != 0) {
+      if (indexSegmentEntry.getValue().getEndOffset().compareTo(state.index.journal.getFirstOffset()) >= 0
+          || i % 3 != 0) {
         toRetain.add(indexSegmentEntry.getKey());
       } else {
         toRemove.put(indexSegmentEntry.getKey(), indexSegmentEntry.getValue());
