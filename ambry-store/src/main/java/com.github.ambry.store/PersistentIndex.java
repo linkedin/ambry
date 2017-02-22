@@ -339,37 +339,36 @@ class PersistentIndex {
   }
 
   /**
-   * Atomically adds {@code filesToAdd} to and removes {@code segmentsToRemove} from the map of {@link Offset} to
+   * Atomically adds {@code segmentFilesToAdd} to and removes {@code segmentsToRemove} from the map of {@link Offset} to
    * {@link IndexSegment} instances.
-   * @param filesToAdd the backing files of the {@link IndexSegment} instances to add.
+   * @param segmentFilesToAdd the backing files of the {@link IndexSegment} instances to add.
    * @param segmentsToRemove the start {@link Offset} of {@link IndexSegment} instances to remove.
-   * @throws IllegalArgumentException if any {@link IndexSegment} that needs to be added has an offset higher than that
-   * in the journal.
-   * @throws StoreException if an {@link IndexSegment} instance cannot be created for a provided segment to add.
+   * @throws IllegalArgumentException if any {@link IndexSegment} that needs to be added or removed has an offset higher
+   * than that in the journal.
+   * @throws StoreException if an {@link IndexSegment} instance cannot be created for the provided files to add.
    */
-  void changeIndexSegments(List<File> filesToAdd, Set<Offset> segmentsToRemove) throws StoreException {
+  void changeIndexSegments(List<File> segmentFilesToAdd, Set<Offset> segmentsToRemove) throws StoreException {
     TreeMap<Offset, IndexSegment> segmentsToAdd = new TreeMap<>();
-    for (File indexSegmentFile : filesToAdd) {
+    Offset journalFirstOffset = journal.getFirstOffset();
+    for (File indexSegmentFile : segmentFilesToAdd) {
       IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal);
+      if (indexSegment.getEndOffset().compareTo(journalFirstOffset) > 0) {
+        throw new IllegalArgumentException("One of the index segments has an end offset " + indexSegment.getEndOffset()
+            + " that is higher than the first offset in the journal " + journalFirstOffset);
+      }
       segmentsToAdd.put(indexSegment.getStartOffset(), indexSegment);
     }
 
     indexesChangeLock.lock();
     try {
-      if (segmentsToAdd.size() > 0) {
-        Offset lastSegmentToAddEndOffset = segmentsToAdd.lastEntry().getValue().getEndOffset();
-        Offset journalFirstOffset = journal.getFirstOffset();
-        if (lastSegmentToAddEndOffset.compareTo(journal.getFirstOffset()) > 0) {
-          throw new IllegalArgumentException("One of the index segments has an end offset " + lastSegmentToAddEndOffset
-              + " that is higher than the first offset in the journal " + journalFirstOffset);
-        }
-      }
-
       ConcurrentSkipListMap<Offset, IndexSegment> oldIndexSegments = indexesRef.get();
       ConcurrentSkipListMap<Offset, IndexSegment> newIndexSegments = new ConcurrentSkipListMap<>();
       for (Map.Entry<Offset, IndexSegment> entry : oldIndexSegments.entrySet()) {
         if (!segmentsToRemove.contains(entry.getKey())) {
           newIndexSegments.put(entry.getKey(), entry.getValue());
+        } else if (entry.getKey().compareTo(journal.getFirstOffset()) >= 0) {
+          throw new IllegalArgumentException("Offset of the one of the segments to remove [" + entry.getKey() + "] is"
+              + " higher than the first offset in the journal");
         }
       }
       newIndexSegments.putAll(segmentsToAdd);
@@ -827,14 +826,23 @@ class PersistentIndex {
     return storeToken;
   }
 
-  private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,
-      Offset logEndOffsetBeforeFind, ConcurrentSkipListMap<Offset, IndexSegment> indexes) {
+  /**
+   * Gets the total number of bytes read from the log at the position of {@code token}. This includes any overhead due
+   * to headers and empty space.
+   * @param token the point until which the log has been read.
+   * @param messageEntries the list of {@link MessageInfo} that were read when producing {@code token}.
+   * @param logEndOffsetBeforeFind the end offset of the log before a find was attempted.
+   * @param indexes the list of index segments to use.
+   * @return the total number of bytes read from the log at the position of {@code token}.
+   */
+  private long getTotalBytesRead(StoreFindToken token, List<MessageInfo> messageEntries, Offset logEndOffsetBeforeFind,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexes) {
     long bytesRead = 0;
-    if (newToken.getType().equals(StoreFindToken.Type.IndexBased)) {
-      bytesRead = getAbsolutePositionInLogForOffset(newToken.getOffset(), indexes);
-    } else if (newToken.getType().equals(StoreFindToken.Type.JournalBased)) {
+    if (token.getType().equals(StoreFindToken.Type.IndexBased)) {
+      bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexes);
+    } else if (token.getType().equals(StoreFindToken.Type.JournalBased)) {
       if (messageEntries.size() > 0) {
-        bytesRead = getAbsolutePositionInLogForOffset(newToken.getOffset(), indexes) + messageEntries.get(
+        bytesRead = getAbsolutePositionInLogForOffset(token.getOffset(), indexes) + messageEntries.get(
             messageEntries.size() - 1).getSize();
       } else {
         bytesRead = getAbsolutePositionInLogForOffset(logEndOffsetBeforeFind, indexes);
@@ -948,6 +956,7 @@ class PersistentIndex {
       Offset journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       Offset journalLastOffsetBeforeCheck = journal.getLastOffset();
       List<JournalEntry> entries = journal.getEntriesSince(segmentStartOffset, true);
+      Offset endOffsetOfSnapshot = getCurrentEndOffset(indexes);
       if (entries != null) {
         logger.trace("Index : " + dataDir + " findEntriesFromOffset journal offset " + segmentStartOffset
             + " total entries received " + entries.size());
@@ -966,7 +975,9 @@ class PersistentIndex {
             }
           }
           newTokenOffsetInJournal = entry.getOffset();
-          IndexValue value = findKey(entry.getKey());
+          IndexValue value =
+              findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot), IndexEntryType.ANY,
+                  indexes);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.getExpiresAtMs()));

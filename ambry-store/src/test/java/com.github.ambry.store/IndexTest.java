@@ -502,6 +502,14 @@ public class IndexTest {
     state.index.persistIndex();
 
     // error case
+    // try to remove the last segment (its offset is in the journal)
+    try {
+      state.index.changeIndexSegments(Collections.EMPTY_LIST, Collections.singleton(state.referenceIndex.lastKey()));
+      fail("Should have failed to remove index segment because start offset is past the first offset in the journal");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
     // add an entry into the journal for the very first offset in the index
     state.index.journal.addEntry(state.logOrder.firstKey(), state.logOrder.firstEntry().getValue().getFirst());
     // remove the first index segment
