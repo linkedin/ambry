@@ -351,6 +351,9 @@ public class StoreFindToken implements FindToken {
       case VERSION_2:
         offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
         sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
+        if (type != Type.Uninitialized && incarnationId == null) {
+          throw new IllegalStateException("IncarnationId cannot be null for Journal or Index based token ");
+        }
         byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
         storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
         size = VERSION_SIZE + TYPE_SIZE;

@@ -171,6 +171,18 @@ public class StoreFindTokenTest {
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_1,
           StoreFindToken.VERSION_2);
     }
+
+    // Journal based token toBytes() will fail if incarnationId is null
+    try {
+      new StoreFindToken(offset, sessionId, null, false).toBytes();
+    } catch (IllegalStateException e) {
+    }
+
+    // Index based token toBytes() will fail if incarnationId is null
+    try {
+      new StoreFindToken(key, offset, sessionId, null).toBytes();
+    } catch (IllegalStateException e) {
+    }
   }
 
   /**
