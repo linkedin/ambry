@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -66,6 +67,7 @@ public class AdaptiveOperationTrackerTest {
   private final MetricRegistry registry = new MetricRegistry();
   private final Histogram localColoTracker = registry.histogram("LocalColoTracker");
   private final Histogram crossColoTracker = registry.histogram("CrossColoTracker");
+  private final Counter pastDueCounter = registry.counter("PastDueCounter");
 
   /**
    * Constructor that sets up state.
@@ -94,7 +96,7 @@ public class AdaptiveOperationTrackerTest {
     double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
     double crossColoCutoff = crossColoTracker.getSnapshot().getValue(QUANTILE);
 
-    OperationTracker ot = getOperationTracker(true, 1, 2);
+    OperationTracker ot = getOperationTracker(true, REPLICA_COUNT, 2);
     // 3-0-0-0; 3-0-0-0
     sendRequests(ot, 2);
     // 1-2-0-0; 3-0-0-0
@@ -103,33 +105,35 @@ public class AdaptiveOperationTrackerTest {
     sendRequests(ot, 0);
     // push it over the edge
     time.sleep(5);
-    // should only send one request
-    sendRequests(ot, 1);
-    // 0-3-0-0; 3-0-0-0
-    time.sleep((long) localColoCutoff + 2);
-    // first cross colo request sent
-    sendRequests(ot, 1);
+    // should send two requests because both of the oldest requests are past their due times
+    // the second of the two requests is a cross colo request
+    sendRequests(ot, 2);
     // 0-3-0-0; 2-1-0-0
+    time.sleep((long) localColoCutoff + 2);
+    // second cross colo request sent (local colo request is past due but the first cross colo request is not past due).
+    sendRequests(ot, 1);
+    // 0-3-0-0; 1-2-0-0
     long sleepTime = (long) localColoCutoff + 2;
     time.sleep(sleepTime);
     // no requests should be sent
     sendRequests(ot, 0);
-    // 0-3-0-0; 2-1-0-0
+    // 0-3-0-0; 1-2-0-0
     sleepTime = (long) (crossColoCutoff - localColoCutoff) + 2;
     time.sleep(sleepTime);
-    // second cross colo request sent
-    sendRequests(ot, 1);
-    // 0-3-0-0; 1-2-0-0
-    time.sleep((long) crossColoCutoff + 2);
-    // third cross colo request sent
+    // third cross colo request sent (first cross colo request is past due)
     sendRequests(ot, 1);
     // 0-3-0-0; 0-3-0-0
     time.sleep((long) crossColoCutoff + 2);
     // no more replicas left to send requests to
     sendRequests(ot, 0);
-    ot.onResponse(inflightReplicas.poll(), true);
+    // generate a response for every request and make sure there are no errors
+    for (int i = 0; i < REPLICA_COUNT; i++) {
+      assertFalse("Operation should not be done", ot.isDone());
+      ot.onResponse(inflightReplicas.poll(), true);
+    }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
+    // past due counter should be REPLICA_COUNT - 2
+    assertEquals("Past due counter is inconsistent", REPLICA_COUNT - 2, pastDueCounter.getCount());
   }
 
   /**
@@ -152,29 +156,6 @@ public class AdaptiveOperationTrackerTest {
     doTrackerUpdateTest(false);
   }
 
-  /**
-   * Tests a corner case where the latest request is the first one to receive a response.
-   * @throws InterruptedException
-   */
-  @Test
-  public void latestRequestFinishingFirstTest() throws InterruptedException {
-    primeTracker(localColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
-    OperationTracker ot = getOperationTracker(false, 1, 1);
-    long localColoCutoff = (long) localColoTracker.getSnapshot().getValue(QUANTILE) + 2;
-    // 3-0-0-0; 3-0-0-0
-    sendRequests(ot, 1);
-    // 2-1-0-0; 3-0-0-0
-    time.sleep(localColoCutoff);
-    sendRequests(ot, 1);
-    // 1-2-0-0; 3-0-0-0
-    sendRequests(ot, 0);
-    // provide a response for the latest request
-    ot.onResponse(inflightReplicas.pollLast(), false);
-    assertFalse("Operation should be not be done", ot.isDone());
-    // should be able to send another request now since the latest request has had a response
-    sendRequests(ot, 1);
-  }
-
   // helpers
 
   // general
@@ -188,7 +169,7 @@ public class AdaptiveOperationTrackerTest {
    */
   private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism) {
     return new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, successTarget, parallelism, time,
-        localColoTracker, crossColoEnabled ? crossColoTracker : null, QUANTILE);
+        localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
   }
 
   /**

@@ -28,7 +28,7 @@ import java.util.Iterator;
  * When an operation is progressing by receiving responses from replicas, its {@code OperationTracker}
  * needs to be informed by calling {@link #onResponse(ReplicaId, boolean)}.
  *
- * Typical usage of an {@code SimpleOperationTracker} would be:
+ * Typical usage of an {@code OperationTracker} would be:
  * <pre>
  *{@code
  *

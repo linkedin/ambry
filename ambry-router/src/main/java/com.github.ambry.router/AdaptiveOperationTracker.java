@@ -13,15 +13,14 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.utils.Time;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
@@ -35,28 +34,21 @@ import java.util.NoSuchElementException;
  * obtained from a {@link Histogram} with latencies of all requests of the same class. In this way it "adapts" to
  * perceived latencies.
  */
-class AdaptiveOperationTracker implements OperationTracker {
+class AdaptiveOperationTracker extends SimpleOperationTracker {
   static final long MIN_DATA_POINTS_REQUIRED = 1000;
 
   private final Time time;
   private final String datacenterName;
-  private final int successTarget;
-  private final int parallelism;
   private final double quantile;
   private final Histogram localColoTracker;
   private final Histogram crossColoTracker;
+  private final Counter pastDueCounter;
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
-  private final LinkedList<ReplicaId> replicaPool = new LinkedList<ReplicaId>();
-  private final Map<ReplicaId, Long> replicaRequestSendTimes = new HashMap<>();
-
-  private int totalReplicaCount = 0;
-  private int inflightCount = 0;
-  private int succeededCount = 0;
-  private int failedCount = 0;
+  private final LinkedHashMap<ReplicaId, Long> unexpiredRequestSendTimes = new LinkedHashMap<>();
+  private final Map<ReplicaId, Long> expiredRequestSendTimes = new HashMap<>();
 
   private ReplicaId lastReturned = null;
-  private ReplicaId mostRecentlyTracked = null;
 
   /**
    * Constructs an {@link AdaptiveOperationTracker}
@@ -67,83 +59,40 @@ class AdaptiveOperationTracker implements OperationTracker {
    * @param successTarget The number of successful responses required to succeed the operation.
    * @param parallelism The maximum number of inflight requests at any point of time.
    * @param time the {@link Time} instance to use.
-   * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests
-   * @param crossColoTracker the {@link Histogram} that tracks inter datacenter latencies for this class of requests
+   * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
+   * @param crossColoTracker the {@link Histogram} that tracks inter datacenter latencies for this class of requests.
+   * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
    * @param quantile the quantile cutoff to use for when evaluating requests against the trackers.
    */
   AdaptiveOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
-      int parallelism, Time time, Histogram localColoTracker, Histogram crossColoTracker, double quantile) {
+      int parallelism, Time time, Histogram localColoTracker, Histogram crossColoTracker, Counter pastDueCounter,
+      double quantile) {
+    super(datacenterName, partitionId, crossColoEnabled, successTarget, parallelism, true);
     this.datacenterName = datacenterName;
     this.time = time;
-    this.successTarget = successTarget;
-    this.parallelism = parallelism;
     this.localColoTracker = localColoTracker;
     this.crossColoTracker = crossColoTracker;
+    this.pastDueCounter = pastDueCounter;
     this.quantile = quantile;
-
-    // Order the replicas so that local healthy replicas are ordered and returned first,
-    // then the remote healthy ones, and finally the possibly down ones.
-    List<ReplicaId> replicas = partitionId.getReplicaIds();
-    LinkedList<ReplicaId> downReplicas = new LinkedList<>();
-    Collections.shuffle(replicas);
-
-    for (ReplicaId replicaId : replicas) {
-      String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
-      if (!replicaId.isDown()) {
-        if (replicaDcName.equals(datacenterName)) {
-          replicaPool.addFirst(replicaId);
-        } else if (crossColoEnabled) {
-          replicaPool.addLast(replicaId);
-        }
-      } else {
-        if (replicaDcName.equals(datacenterName)) {
-          downReplicas.addFirst(replicaId);
-        } else if (crossColoEnabled) {
-          downReplicas.addLast(replicaId);
-        }
-      }
-    }
-    replicaPool.addAll(downReplicas);
-    totalReplicaCount = replicaPool.size();
-    if (totalReplicaCount < successTarget) {
-      throw new IllegalArgumentException(
-          "Total Replica count " + totalReplicaCount + " is less than success target " + successTarget);
-    }
     this.otIterator = new OpTrackerIterator();
   }
 
   @Override
-  public boolean hasSucceeded() {
-    return succeededCount >= successTarget;
-  }
-
-  @Override
-  public boolean isDone() {
-    return hasSucceeded() || hasFailed();
-  }
-
-  @Override
   public void onResponse(ReplicaId replicaId, boolean isSuccessFul) {
-    inflightCount--;
-    if (isSuccessFul) {
-      succeededCount++;
+    super.onResponse(replicaId, isSuccessFul);
+    long elapsedTime;
+    if (unexpiredRequestSendTimes.containsKey(replicaId)) {
+      elapsedTime = time.milliseconds() - unexpiredRequestSendTimes.remove(replicaId);
     } else {
-      failedCount++;
+      elapsedTime = time.milliseconds() - expiredRequestSendTimes.remove(replicaId);
     }
-    getTracker(replicaId).update(time.milliseconds() - replicaRequestSendTimes.remove(replicaId));
+    getTracker(replicaId).update(elapsedTime);
   }
 
   @Override
   public Iterator<ReplicaId> getReplicaIterator() {
     replicaIterator = replicaPool.iterator();
     return otIterator;
-  }
-
-  /**
-   * @return {@code true} if the operation has failed.
-   */
-  private boolean hasFailed() {
-    return (totalReplicaCount - failedCount) < successTarget;
   }
 
   /**
@@ -168,14 +117,20 @@ class AdaptiveOperationTracker implements OperationTracker {
 
     @Override
     public boolean hasNext() {
-      return replicaIterator.hasNext() && (inflightCount < parallelism || isMostRecentRequestPastDue());
+      return replicaIterator.hasNext() && (inflightCount < parallelism || isOldestRequestPastDue());
     }
 
     @Override
     public void remove() {
       replicaIterator.remove();
-      replicaRequestSendTimes.put(lastReturned, time.milliseconds());
-      mostRecentlyTracked = lastReturned;
+      if (inflightCount >= parallelism) {
+        // we are here because oldest request is past due
+        Map.Entry<ReplicaId, Long> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
+        expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue());
+        unexpiredRequestSendTimes.remove(oldestEntry.getKey());
+        pastDueCounter.inc();
+      }
+      unexpiredRequestSendTimes.put(lastReturned, time.milliseconds());
       inflightCount++;
     }
 
@@ -189,22 +144,16 @@ class AdaptiveOperationTracker implements OperationTracker {
     }
 
     /**
-     * @return {@code true} if the most recent request that was sent has been outstanding for more than the cutoff
-     * latency or if a response has already been received for it.
+     * @return {@code true} if the oldest request that was sent has been outstanding for more than the cutoff latency.
      * @throws IllegalStateException if no requests have been sent yet.
      */
-    private boolean isMostRecentRequestPastDue() {
-      if (replicaRequestSendTimes.size() == 0) {
-        throw new IllegalStateException("There have been no requests");
+    private boolean isOldestRequestPastDue() {
+      if (unexpiredRequestSendTimes.size() == 0) {
+        throw new IllegalStateException("There are no unexpired requests");
       }
-      if (!replicaRequestSendTimes.containsKey(mostRecentlyTracked)) {
-        // if the most recently tracked request has already had a response, it is considered past due since
-        // the next most recent request is probably due.
-        return true;
-      }
-      long requestSendTime = replicaRequestSendTimes.get(mostRecentlyTracked);
-      Histogram latencyTracker = getTracker(mostRecentlyTracked);
-      return (latencyTracker.getCount() >= MIN_DATA_POINTS_REQUIRED) && (time.milliseconds() - requestSendTime
+      Map.Entry<ReplicaId, Long> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
+      Histogram latencyTracker = getTracker(oldestEntry.getKey());
+      return (latencyTracker.getCount() >= MIN_DATA_POINTS_REQUIRED) && (time.milliseconds() - oldestEntry.getValue()
           >= latencyTracker.getSnapshot().getValue(quantile));
     }
   }

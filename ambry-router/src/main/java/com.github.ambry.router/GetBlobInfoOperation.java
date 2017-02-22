@@ -68,7 +68,8 @@ class GetBlobInfoOperation extends GetOperation {
     operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
         routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
         routerConfig.routerGetRequestParallelism, time, routerMetrics.getBlobInfoLocalColoLatency,
-        routerMetrics.getBlobInfoCrossColoLatency, routerConfig.routerLatencyToleranceQuantile);
+        routerMetrics.getBlobInfoCrossColoLatency, routerMetrics.getBlobInfoPastDueCount,
+        routerConfig.routerLatencyToleranceQuantile);
   }
 
   @Override

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -72,6 +73,7 @@ public class OperationTrackerTest {
   private final MetricRegistry registry = new MetricRegistry();
   private final Histogram localColoTracker = registry.histogram("LocalColoTracker");
   private final Histogram crossColoTracker = registry.histogram("CrossColoTracker");
+  private final Counter pastDueCounter = registry.counter("PastDueCounter");
 
   /**
    * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
@@ -377,7 +379,7 @@ public class OperationTrackerTest {
       case ADAPTIVE_OP_TRACKER:
         tracker =
             new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, successTarget, parallelism, time,
-                localColoTracker, crossColoEnabled ? crossColoTracker : null, QUANTILE);
+                localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);

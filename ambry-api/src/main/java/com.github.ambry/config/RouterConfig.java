@@ -132,7 +132,7 @@ public class RouterConfig {
   public final boolean routerGetCrossDcEnabled;
 
   /**
-   * If an adaptive operation tracker is being used, a request is discounted from the parallelism count if has been
+   * If an adaptive operation tracker is being used, a request is discounted from the parallelism count if it has been
    * outstanding for more than the quantile defined here (compared to latencies of other requests of the same class).
    */
   @Config("router.latency.tolerance.quantile")
