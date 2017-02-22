@@ -99,7 +99,7 @@ public class StoreFindToken implements FindToken {
   }
 
   /**
-   * Uninitialized token. Refers to the starting of the log.
+   * Uninitialized token with the given version. Refers to the starting of the log.
    * @param version refers to the version of the token
    */
   private StoreFindToken(short version) {
@@ -107,7 +107,8 @@ public class StoreFindToken implements FindToken {
   }
 
   /**
-   * Index based token. Refers to an index segment start offset and a store key that belongs to that index segment
+   * Index based token with the given version. Refers to an index segment start offset and a store key that belongs to
+   * that index segment
    * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence
    * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
    * @param sessionId the sessionId of the store
@@ -120,7 +121,7 @@ public class StoreFindToken implements FindToken {
   }
 
   /**
-   * Journal based token. Refers to an offset in the journal
+   * Journal based token with the given version. Refers to an offset in the journal
    * @param offset the offset that this token refers to in the journal
    * @param sessionId the sessionId of the store
    * @param incarnationId the incarnationId of the store
@@ -145,6 +146,9 @@ public class StoreFindToken implements FindToken {
    */
   private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive,
       short version) {
+    if (version != VERSION_0 && version != VERSION_1 && version != VERSION_2) {
+      throw new IllegalArgumentException("Unsupported version " + version + " for StoreFindToken ");
+    }
     if (!type.equals(Type.Uninitialized)) {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
@@ -315,10 +319,12 @@ public class StoreFindToken implements FindToken {
         // add sessionId
         bufWrap.putInt(sessionIdBytes.length);
         bufWrap.put(sessionIdBytes);
-        // add offset
-        bufWrap.putLong(offset == null ? UNINITIALIZED_OFFSET : offset.getOffset());
-        // add index start offset
-        bufWrap.putLong(offset == null ? UNINITIALIZED_OFFSET : offset.getOffset());
+        // add offset for journal based token
+        bufWrap.putLong((type == Type.JournalBased) ? (offset != null ? offset.getOffset() : UNINITIALIZED_OFFSET)
+            : UNINITIALIZED_OFFSET);
+        // add index start offset for Index based token
+        bufWrap.putLong((type == Type.IndexBased) ? (offset != null ? offset.getOffset() : UNINITIALIZED_OFFSET)
+            : UNINITIALIZED_OFFSET);
         // add storekey
         bufWrap.put(storeKeyBytes);
         break;
