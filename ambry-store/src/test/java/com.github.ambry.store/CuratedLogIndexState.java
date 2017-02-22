@@ -115,10 +115,10 @@ class CuratedLogIndexState {
   UUID sessionId = UUID.randomUUID();
   // the incarnationId associated with the store
   UUID incarnationId = UUID.randomUUID();
-  // Variables that represent the folder where the data resides
-  final String tempDirStr;
 
+  // Variables that represent the folder where the data resides
   private final File tempDir;
+  private final String tempDirStr;
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
   private final Set<MockId> generatedKeys = new HashSet<>();
   // The MetricRegistry that is used with the index
@@ -435,6 +435,12 @@ class CuratedLogIndexState {
     for (File indexSegmentFile : indexSegmentFiles) {
       assertTrue("Could not deleted index segment file", indexSegmentFile.delete());
     }
+    logOrder.clear();
+    referenceIndex.clear();
+    indexSegmentStartOffsets.clear();
+    allKeys.clear();
+    liveKeys.clear();
+    expiredKeys.clear();
   }
 
   /**

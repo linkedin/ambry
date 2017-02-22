@@ -86,16 +86,16 @@ class IndexSegment {
   private final Time time;
 
   // an approximation of the last modified time.
-  private AtomicLong lastModifiedTimeSec;
+  private final AtomicLong lastModifiedTimeSec;
   private MappedByteBuffer mmap = null;
   private IFilter bloomFilter;
   private int keySize;
   private int valueSize;
   private short version;
+  private Offset prevSafeEndPoint = null;
   // reset key refers to the first StoreKey that is added to the index segment
   private Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
   protected ConcurrentSkipListMap<StoreKey, IndexValue> index = null;
-  Offset prevSafeEndPoint = null;
 
   /**
    * Creates a new segment
@@ -105,7 +105,7 @@ class IndexSegment {
    * @param keySize The key size that this segment supports
    * @param valueSize The value size that this segment supports
    * @param config The store config used to initialize the index segment
-   * @param time the {@link Time} instance to use for last modified time
+   * @param time the {@link Time} instance to use
    */
   IndexSegment(String dataDir, Offset startOffset, StoreKeyFactory factory, int keySize, int valueSize,
       StoreConfig config, StoreMetrics metrics, Time time) {
@@ -139,7 +139,7 @@ class IndexSegment {
    * @param config The store config used to initialize the index segment
    * @param metrics The store metrics used to track metrics
    * @param journal The journal to use
-   * @param time the {@link Time} instance to use for last modified time
+   * @param time the {@link Time} instance to use
    * @throws StoreException
    */
   IndexSegment(File indexFile, boolean shouldMap, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
@@ -155,6 +155,7 @@ class IndexSegment {
       sizeWritten = new AtomicLong(0);
       numberOfItems = new AtomicInteger(0);
       mapped = new AtomicBoolean(false);
+      lastModifiedTimeSec = new AtomicLong(0);
       if (shouldMap) {
         map(false);
         // Load the bloom filter for this index
@@ -261,6 +262,14 @@ class IndexSegment {
    */
   long getLastModifiedTime() {
     return lastModifiedTimeSec.get();
+  }
+
+  /**
+   * The version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
+   * @return the version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
+   */
+  short getVersion() {
+    return this.version;
   }
 
   /**
@@ -447,10 +456,10 @@ class IndexSegment {
 
   /**
    * Writes the index to a persistent file. Writes the data in the following format in version 1
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   * | version | keysize | valuesize | fileendpointer |  last modified time | Reset key | Reset key type
-   * |(2 bytes)|(4 bytes)| (4 bytes) |    (8 bytes)   |     (4 bytes)       | (n bytes) |   ( 2 bytes)
-   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * | version | keysize | valuesize | fileendpointer |  last modified time(in secs) | Reset key | Reset key type
+   * |(2 bytes)|(4 bytes)| (4 bytes) |    (8 bytes)   |     (4 bytes)                | (n bytes) |   ( 2 bytes)
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *                                                   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *                                                     key 1  | value 1  |  ...  |   key n   | value n   | crc      |
    *                                                   (n bytes)| (n bytes)|       | (n bytes) | (n bytes) | (8 bytes)|
@@ -499,12 +508,13 @@ class IndexSegment {
         rwLock.readLock().lock();
 
         // write the current version
-        writer.writeShort(version);
-        // write key, value size, file end pointer, last modified time and reset key for this index
+        writer.writeShort(getVersion());
+        // write key, value size, file end pointer
         writer.writeInt(this.keySize);
         writer.writeInt(this.valueSize);
         writer.writeLong(safeEndPoint.getOffset());
-        if (version == PersistentIndex.VERSION_1) {
+        if (getVersion() == PersistentIndex.VERSION_1) {
+          // write last modified time and reset key incase of version 1
           writer.writeLong(lastModifiedTimeSec.get());
           writer.write(resetKey.getFirst().toBytes());
           writer.writeShort(resetKey.getSecond().ordinal());
@@ -560,14 +570,14 @@ class IndexSegment {
           keySize = mmap.getInt();
           valueSize = mmap.getInt();
           endOffset.set(new Offset(startOffset.getName(), mmap.getLong()));
-          lastModifiedTimeSec = new AtomicLong(indexFile.lastModified() / 1000);
+          lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
         case 1:
           keySize = mmap.getInt();
           valueSize = mmap.getInt();
           endOffset.set(new Offset(startOffset.getName(), mmap.getLong()));
-          lastModifiedTimeSec = new AtomicLong(mmap.getLong());
+          lastModifiedTimeSec.set(mmap.getLong());
           StoreKey storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
           short resetKeyType = mmap.getShort();
           resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
@@ -610,94 +620,84 @@ class IndexSegment {
     DataInputStream stream = new DataInputStream(crcStream);
     try {
       version = stream.readShort();
-      if (version == PersistentIndex.VERSION_0 || version == PersistentIndex.VERSION_1) {
-        readFromStream(stream, crcStream, journal);
-      } else {
-        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " invalid version found ",
-            StoreErrorCodes.Index_Version_Error);
+      switch (version) {
+        case PersistentIndex.VERSION_0:
+        case PersistentIndex.VERSION_1:
+          keySize = stream.readInt();
+          valueSize = stream.readInt();
+          long logEndOffset = stream.readLong();
+          indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH +
+              LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
+          if (version == PersistentIndex.VERSION_0) {
+            lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
+          } else if (version == PersistentIndex.VERSION_1) {
+            lastModifiedTimeSec.set(stream.readLong());
+            StoreKey storeKey = factory.getStoreKey(stream);
+            short resetKeyType = stream.readShort();
+            resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
+            indexSizeExcludingEntries += (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() +
+                RESET_KEY_TYPE_FIELD_LENGTH);
+          }
+          firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
+          logger.trace("IndexSegment : {} reading log end offset {} from file", indexFile.getAbsolutePath(),
+              logEndOffset);
+          long maxEndOffset = Long.MIN_VALUE;
+          while (stream.available() > CRC_FIELD_LENGTH) {
+            StoreKey key = factory.getStoreKey(stream);
+            byte[] value = new byte[valueSize];
+            stream.read(value);
+            IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value), version);
+            long offsetInLogSegment = blobValue.getOffset().getOffset();
+            // ignore entries that have offsets outside the log end offset that this index represents
+            if (offsetInLogSegment + blobValue.getSize() <= logEndOffset) {
+              index.put(key, blobValue);
+              logger.trace("IndexSegment : {} putting key {} in index offset {} size {}", indexFile.getAbsolutePath(),
+                  key, blobValue.getOffset(), blobValue.getSize());
+              // regenerate the bloom filter for in memory indexes
+              bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+              // add to the journal
+              if (offsetInLogSegment != -1 && offsetInLogSegment != blobValue.getOriginalMessageOffset()
+                  && blobValue.getOriginalMessageOffset() >= startOffset.getOffset()) {
+                // we add an entry for the original message offset if it is within the same index segment
+                journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
+              }
+              journal.addEntry(blobValue.getOffset(), key);
+              sizeWritten.addAndGet(key.sizeInBytes() + valueSize);
+              numberOfItems.incrementAndGet();
+              if (offsetInLogSegment + blobValue.getSize() > maxEndOffset) {
+                maxEndOffset = offsetInLogSegment + blobValue.getSize();
+              }
+            } else {
+              logger.info(
+                  "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset "
+                      + "{} key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getAbsolutePath(),
+                  logEndOffset, key, blobValue.getOffset(), blobValue.getSize(),
+                  blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
+            }
+          }
+          endOffset.set(new Offset(startOffset.getName(), maxEndOffset));
+          logger.trace("IndexSegment : {} setting end offset for index {}", indexFile.getAbsolutePath(), maxEndOffset);
+          long crc = crcStream.getValue();
+          if (crc != stream.readLong()) {
+            // reset structures
+            keySize = KEY_SIZE_INVALID_VALUE;
+            valueSize = VALUE_SIZE_INVALID_VALUE;
+            endOffset.set(startOffset);
+            index.clear();
+            bloomFilter.clear();
+            throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
+                StoreErrorCodes.Index_Creation_Failure);
+          }
+          break;
+        default:
+          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " invalid version in index file ",
+              StoreErrorCodes.Index_Version_Error);
       }
     } catch (IOException e) {
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while reading from file ",
           e, StoreErrorCodes.IOError);
     } finally {
       stream.close();
-    }
-  }
-
-  /**
-   * Reads and constructs the index segment from the DataInputStream and CrcInputStream
-   * @param stream the {@link DataInputStream} that needs to be read
-   * @param crcStream the {@link CrcInputStream} from which crc needs to be read
-   * @param journal the {@link Journal} to use to populate new entries
-   * @throws IOException
-   * @throws StoreException
-   */
-  private void readFromStream(DataInputStream stream, CrcInputStream crcStream, Journal journal)
-      throws IOException, StoreException {
-    keySize = stream.readInt();
-    valueSize = stream.readInt();
-    long logEndOffset = stream.readLong();
-    indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH +
-        LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
-    if (version == PersistentIndex.VERSION_0) {
-      lastModifiedTimeSec = new AtomicLong(indexFile.lastModified() / 1000);
-      firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
-    } else if (version == PersistentIndex.VERSION_1) {
-      lastModifiedTimeSec = new AtomicLong(stream.readLong());
-      StoreKey storeKey = factory.getStoreKey(stream);
-      short resetKeyType = stream.readShort();
-      resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
-      indexSizeExcludingEntries += (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() +
-          RESET_KEY_TYPE_FIELD_LENGTH);
-      firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
-    }
-    logger.trace("IndexSegment : {} reading log end offset {} from file", indexFile.getAbsolutePath(), logEndOffset);
-    long maxEndOffset = Long.MIN_VALUE;
-    while (stream.available() > CRC_FIELD_LENGTH) {
-      StoreKey key = factory.getStoreKey(stream);
-      byte[] value = new byte[valueSize];
-      stream.read(value);
-      IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value), version);
-      long offsetInLogSegment = blobValue.getOffset().getOffset();
-      // ignore entries that have offsets outside the log end offset that this index represents
-      if (offsetInLogSegment + blobValue.getSize() <= logEndOffset) {
-        index.put(key, blobValue);
-        logger.trace("IndexSegment : {} putting key {} in index offset {} size {}", indexFile.getAbsolutePath(), key,
-            blobValue.getOffset(), blobValue.getSize());
-        // regenerate the bloom filter for in memory indexes
-        bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
-        // add to the journal
-        if (offsetInLogSegment != -1 && offsetInLogSegment != blobValue.getOriginalMessageOffset()
-            && blobValue.getOriginalMessageOffset() >= startOffset.getOffset()) {
-          // we add an entry for the original message offset if it is within the same index segment
-          journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
-        }
-        journal.addEntry(blobValue.getOffset(), key);
-        sizeWritten.addAndGet(key.sizeInBytes() + valueSize);
-        numberOfItems.incrementAndGet();
-        if (offsetInLogSegment + blobValue.getSize() > maxEndOffset) {
-          maxEndOffset = offsetInLogSegment + blobValue.getSize();
-        }
-      } else {
-        logger.info(
-            "IndexSegment : {} ignoring index entry outside the log end offset that was not synced logEndOffset "
-                + "{} key {} entryOffset {} entrySize {} entryDeleteState {}", indexFile.getAbsolutePath(),
-            logEndOffset, key, blobValue.getOffset(), blobValue.getSize(),
-            blobValue.isFlagSet(IndexValue.Flags.Delete_Index));
-      }
-    }
-    endOffset.set(new Offset(startOffset.getName(), maxEndOffset));
-    logger.trace("IndexSegment : {} setting end offset for index {}", indexFile.getAbsolutePath(), maxEndOffset);
-    long crc = crcStream.getValue();
-    if (crc != stream.readLong()) {
-      // reset structures
-      keySize = KEY_SIZE_INVALID_VALUE;
-      valueSize = VALUE_SIZE_INVALID_VALUE;
-      endOffset.set(startOffset);
-      index.clear();
-      bloomFilter.clear();
-      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
-          StoreErrorCodes.Index_Creation_Failure);
     }
   }
 

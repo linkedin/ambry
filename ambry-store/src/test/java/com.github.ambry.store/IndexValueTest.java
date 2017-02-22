@@ -35,7 +35,6 @@ import static org.junit.Assert.*;
 public class IndexValueTest {
 
   final short version;
-  static final short DEFAULT_SHORT_VALUE = 0;
   private final Time time = new MockTime();
 
   /**
@@ -59,7 +58,7 @@ public class IndexValueTest {
    * Tests an {@link IndexValue} that is representative of a PUT index entry value.
    */
   @Test
-  public void putValueTest() {
+  public void putValueTest() throws InterruptedException {
     long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
@@ -68,16 +67,16 @@ public class IndexValueTest {
     long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
     short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    time.sleep(Time.MsPerSec + TestUtils.RANDOM.nextInt(Time.MsPerSec));
     IndexValue value =
-        IndexValueUtils.getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, time.seconds(), serviceId,
+        getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, time.milliseconds(), serviceId,
             containerId, version);
-    verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset, time.seconds(), serviceId,
+    verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset, time.milliseconds(), serviceId,
         containerId);
-    value =
-        IndexValueUtils.getIndexValue(size, new Offset(logSegmentName, offset), time.seconds(), serviceId, containerId,
-            version);
-    verifyIndexValue(value, logSegmentName, size, offset, false, Utils.Infinite_Time, offset, time.seconds(), serviceId,
-        containerId);
+    value = getIndexValue(size, new Offset(logSegmentName, offset), Utils.Infinite_Time, time.milliseconds(), serviceId,
+        containerId, version);
+    verifyIndexValue(value, logSegmentName, size, offset, false, Utils.Infinite_Time, offset, time.milliseconds(),
+        serviceId, containerId);
   }
 
   /**
@@ -95,8 +94,8 @@ public class IndexValueTest {
     short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     IndexValue value =
-        IndexValueUtils.getIndexValue(oldSize, new Offset(logSegmentName, oldOffset), expiresAtMs, time.seconds(),
-            serviceId, containerId, version);
+        getIndexValue(oldSize, new Offset(logSegmentName, oldOffset), expiresAtMs, time.seconds(), serviceId,
+            containerId, version);
     long newOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long newSize = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     IndexValue newValue = new IndexValue(logSegmentName, value.getBytes(), version);
@@ -106,9 +105,9 @@ public class IndexValueTest {
     newValue.setNewSize(newSize);
     if (version == 0) {
       verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset, Utils.Infinite_Time,
-          DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+          IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
     } else {
-      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset, time.seconds(),
+      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset, time.milliseconds(),
           serviceId, containerId);
     }
 
@@ -116,10 +115,10 @@ public class IndexValueTest {
     newValue.clearOriginalMessageOffset();
     if (version == 0) {
       verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
-          DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+          IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
     } else {
-      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1, time.seconds(), serviceId,
-          containerId);
+      verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1, time.milliseconds(),
+          serviceId, containerId);
     }
 
     newValue = new IndexValue(logSegmentName, value.getBytes(), version);
@@ -130,9 +129,9 @@ public class IndexValueTest {
     newValue.setNewSize(newSize);
     if (version == 0) {
       verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
-          DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
+          IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
     } else {
-      verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1, time.seconds(),
+      verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1, time.milliseconds(),
           serviceId, containerId);
     }
   }
@@ -148,40 +147,16 @@ public class IndexValueTest {
    * @param isDeleted the expected record type referred to by {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
    * @param originalMessageOffset the original message offset expected in {@code value}.
-  <<<<<<< HEAD
-  =======
-   */
-  private void verifyIndexValue(IndexValue value, String logSegmentName, long size, long offset, boolean isDeleted,
-      long expiresAtMs, long originalMessageOffset) {
-    verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset,
-        Utils.Infinite_Time, DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
-    verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, isDeleted,
-        expiresAtMs, originalMessageOffset, Utils.Infinite_Time, DEFAULT_SHORT_VALUE, DEFAULT_SHORT_VALUE);
-    verifyInvalidValueSize(value, logSegmentName);
-  }
-
-  /**
-   * Verifies the given {@code value} for the returns of the getters. Also verifies that an {@link IndexValue} created
-   * with {@link IndexValue#getBytes()} from {@code value} exports the same data.
-   * @param value the {@link IndexValue} that needs to be checked.
-   * @param logSegmentName the name of the log segment containing the record for which {@code value} is the
-   * {@link IndexValue}.
-   * @param size the size expected in {@code value}.
-   * @param offset the offset expected in {@code value}.
-   * @param isDeleted the expected record type referred to by {@code value}.
-   * @param expiresAtMs the expected expiration time in {@code value}.
-   * @param originalMessageOffset the original message offset expected in {@code value}.
-  >>>>>>> Adding IndexValueBuilder
-   * @param operationTimeInSecs the operation time in secs
+   * @param operationTimeInMs the operation time in ms
    * @param serviceId the serviceId of the Index value
    * @param containerId the containerId of the Index value
    */
   private void verifyIndexValue(IndexValue value, String logSegmentName, long size, long offset, boolean isDeleted,
-      long expiresAtMs, long originalMessageOffset, long operationTimeInSecs, short serviceId, short containerId) {
-    verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset,
-        operationTimeInSecs, serviceId, containerId);
+      long expiresAtMs, long originalMessageOffset, long operationTimeInMs, short serviceId, short containerId) {
+    verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset, operationTimeInMs,
+        serviceId, containerId);
     verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, isDeleted,
-        expiresAtMs, originalMessageOffset, operationTimeInSecs, serviceId, containerId);
+        expiresAtMs, originalMessageOffset, operationTimeInMs, serviceId, containerId);
     verifyInvalidValueSize(value, logSegmentName);
   }
 
@@ -195,32 +170,31 @@ public class IndexValueTest {
    * @param isDeleted the expected record type referred to by {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
    * @param originalMessageOffset the original message offset expected in {@code value}.
-   * @param operationTimeInSecs the operation time in secs
+   * @param operationTimeInMs the operation time in ms
    * @param serviceId the serviceId of the Index value
    * @param containerId the containerId of the Index value
    */
   private void verifyGetters(IndexValue value, String logSegmentName, long size, long offset, boolean isDeleted,
-      long expiresAtMs, long originalMessageOffset, long operationTimeInSecs, short serviceId, short containerId) {
+      long expiresAtMs, long originalMessageOffset, long operationTimeInMs, short serviceId, short containerId) {
     assertEquals("Size is not as expected", size, value.getSize());
     assertEquals("Offset is not as expected", new Offset(logSegmentName, offset), value.getOffset());
     assertEquals("Delete status not as expected", isDeleted, value.isFlagSet(IndexValue.Flags.Delete_Index));
     if (version == 0) {
       assertEquals("ExpiresAtMs not as expected", expiresAtMs, value.getExpiresAtMs());
+      assertEquals("Operation time mismatch", Utils.Infinite_Time, value.getOperationTimeInMs());
+      assertEquals("ServiceId mismatch ", IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, value.getServiceId());
+      assertEquals("ContainerId mismatch ", IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, value.getContainerId());
     } else {
       assertEquals("ExpiresAtMs not as expected",
           expiresAtMs != Utils.Infinite_Time ? (expiresAtMs / Time.MsPerSec) * Time.MsPerSec : Utils.Infinite_Time,
           value.getExpiresAtMs());
-    }
-    assertEquals("Original message offset not as expected", originalMessageOffset, value.getOriginalMessageOffset());
-    if (version == 1) {
-      assertEquals("Operation time mismatch", (int) operationTimeInSecs, value.getOperationTimeInSecs());
+      assertEquals("Operation time mismatch",
+          operationTimeInMs != Utils.Infinite_Time ? (operationTimeInMs / Time.MsPerSec) * Time.MsPerSec
+              : Utils.Infinite_Time, value.getOperationTimeInMs());
       assertEquals("ServiceId mismatch ", serviceId, value.getServiceId());
       assertEquals("ContainerId mismatch ", containerId, value.getContainerId());
-    } else {
-      assertEquals("Operation time mismatch", Utils.Infinite_Time, value.getOperationTimeInSecs());
-      assertEquals("ServiceId mismatch ", DEFAULT_SHORT_VALUE, value.getServiceId());
-      assertEquals("ContainerId mismatch ", DEFAULT_SHORT_VALUE, value.getContainerId());
     }
+    assertEquals("Original message offset not as expected", originalMessageOffset, value.getOriginalMessageOffset());
   }
 
   /**
@@ -238,6 +212,82 @@ public class IndexValueTest {
           "Contruction of IndexValue expected to fail with invalid byte buffer capacity of " + invalidValue.capacity());
     } catch (IllegalArgumentException e) {
     }
+  }
+
+  /**
+   * Constructs IndexValue based on the args passed and for the given version
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param expirationTimeInMs the expiration time in ms at which the blob expires
+   * @param operationTimeInSecs operation time of the entry
+   * @param serviceId the serviceId that this blob belongs to
+   * @param containerId the containerId that this blob belongs to
+   * @param version the version with which to construct the {@link IndexValue}
+   * @return the {@link IndexValue} thus constructed
+   */
+  static IndexValue getIndexValue(long size, Offset offset, long expirationTimeInMs, long operationTimeInSecs,
+      short serviceId, short containerId, short version) {
+    if (version == PersistentIndex.VERSION_0) {
+      return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, expirationTimeInMs, offset.getOffset());
+    } else {
+      return new IndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, expirationTimeInMs, operationTimeInSecs,
+          serviceId, containerId);
+    }
+  }
+
+  /**
+   * Constructs IndexValue based on the args passed and for the given version
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param operationTimeInSecs operation time of the entry
+   * @param version the version with which to construct the {@link IndexValue}
+   * @return the {@link IndexValue} thus constructed
+   */
+  static IndexValue getIndexValue(long size, Offset offset, long operationTimeInSecs, short version) {
+    if (version == PersistentIndex.VERSION_0) {
+      return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time, offset.getOffset());
+    } else {
+      return new IndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time, operationTimeInSecs);
+    }
+  }
+
+  /**
+   * Constructs IndexValue based on another {@link IndexValue}
+   * @param value the {@link IndexValue} using which to create another {@link IndexValue}
+   * @param version the version with which to construct the {@link IndexValue}
+   * @return the {@link IndexValue} thus constructed
+   */
+  static IndexValue getIndexValue(IndexValue value, short version) {
+    if (version == PersistentIndex.VERSION_0) {
+      return getIndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
+          value.getOffset().getOffset());
+    } else {
+      return new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
+          value.getOperationTimeInMs(), value.getServiceId(), value.getContainerId());
+    }
+  }
+
+  // Instantiation of {@link IndexValue} in version {@link PersistentIndex#VERSION_0}
+
+  /**
+   * Constructs IndexValue based on the args passed in version {@link PersistentIndex#VERSION_0}
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param expiresAtMs the expiration time in ms at which the blob expires
+   * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
+   *                              in the same log segment. Set to -1 otherwise.
+   * @return the {@link IndexValue} thus constructed
+   */
+  private static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
+      long originalMessageOffset) {
+    ByteBuffer value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0);
+    value.putLong(size);
+    value.putLong(offset.getOffset());
+    value.put(flags);
+    value.putLong(expiresAtMs);
+    value.putLong(originalMessageOffset);
+    value.position(0);
+    return new IndexValue(offset.getName(), value, PersistentIndex.VERSION_0);
   }
 }
 
