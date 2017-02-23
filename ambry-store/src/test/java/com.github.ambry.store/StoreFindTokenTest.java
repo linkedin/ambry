@@ -175,12 +175,14 @@ public class StoreFindTokenTest {
     // Journal based token toBytes() will fail if incarnationId is null
     try {
       new StoreFindToken(offset, sessionId, null, false).toBytes();
+      fail("Serialization should have failed");
     } catch (IllegalStateException e) {
     }
 
     // Index based token toBytes() will fail if incarnationId is null
     try {
       new StoreFindToken(key, offset, sessionId, null).toBytes();
+      fail("Serialization should have failed");
     } catch (IllegalStateException e) {
     }
   }

@@ -66,7 +66,7 @@ public class StoreFindToken implements FindToken {
   // refers to the bytes read so far (from the beginning of the log)
   private long bytesRead;
   // refers to the version of the StoreFindToken
-  private short version;
+  private final short version;
 
   /**
    * Uninitialized token. Refers to the starting of the log.
@@ -146,9 +146,6 @@ public class StoreFindToken implements FindToken {
    */
   private StoreFindToken(Type type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive,
       short version) {
-    if (version != VERSION_0 && version != VERSION_1 && version != VERSION_2) {
-      throw new IllegalArgumentException("Unsupported version " + version + " for StoreFindToken ");
-    }
     if (!type.equals(Type.Uninitialized)) {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
@@ -289,6 +286,10 @@ public class StoreFindToken implements FindToken {
     return inclusive == (byte) 1;
   }
 
+  /**
+   * Returns the version of the {@link StoreFindToken}
+   * @return the version of the {}@link {@link StoreFindToken}
+   */
   short getVersion() {
     return version;
   }
@@ -306,12 +307,12 @@ public class StoreFindToken implements FindToken {
     byte[] buf = null;
     switch (version) {
       case VERSION_0:
-        int OFFSET_SIZE = 8;
-        int START_OFFSET_SIZE = 8;
+        int offsetSize = 8;
+        int startOffsetSize = 8;
         byte[] sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
         byte[] storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
         int size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length +
-            OFFSET_SIZE + START_OFFSET_SIZE + storeKeyBytes.length;
+            offsetSize + startOffsetSize + storeKeyBytes.length;
         buf = new byte[size];
         ByteBuffer bufWrap = ByteBuffer.wrap(buf);
         // add version
