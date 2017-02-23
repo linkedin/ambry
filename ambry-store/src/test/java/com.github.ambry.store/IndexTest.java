@@ -34,7 +34,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -520,6 +525,91 @@ public class IndexTest {
       fail("Should have failed to add index segment because its end offset is past the first offset in the journal");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
+    }
+  }
+
+  /**
+   * Test that verifies that there are no concurrency issues with the execution of
+   * {@link PersistentIndex#addToIndex(IndexEntry, FileSpan)} and {@link PersistentIndex#changeIndexSegments(List, Set)}
+   * @throws Exception
+   */
+  @Test
+  public void addToIndexAndChangeIndexSegmentsConcurrencyTest() throws Exception {
+    long ITERATIONS = 500;
+    final Set<Offset> indexSegmentStartOffsets = new HashSet<>(state.referenceIndex.keySet());
+    final AtomicReference<Offset> logEndOffset = new AtomicReference<>(state.log.getEndOffset());
+    final AtomicReference<Exception> exception = new AtomicReference<>(null);
+    final AtomicReference<CountDownLatch> latch = new AtomicReference<>();
+    ExecutorService executorService = Executors.newFixedThreadPool(2);
+
+    // make sure rollover occurs on every index entry
+    state.properties.put("store.index.max.number.of.inmem.elements", "1");
+    state.reloadIndex(true, false);
+    state.appendToLog(ITERATIONS);
+
+    final Set<IndexEntry> entriesAdded = Collections.newSetFromMap(new ConcurrentHashMap<IndexEntry, Boolean>());
+    Runnable adder = new Runnable() {
+      @Override
+      public void run() {
+        try {
+          FileSpan fileSpan = state.log.getFileSpanForMessage(logEndOffset.get(), 1);
+          IndexValue value = new IndexValue(1, fileSpan.getStartOffset());
+          IndexEntry entry = new IndexEntry(state.getUniqueId(), value);
+          state.index.addToIndex(entry, fileSpan);
+          logEndOffset.set(fileSpan.getEndOffset());
+          entriesAdded.add(entry);
+          indexSegmentStartOffsets.add(fileSpan.getStartOffset());
+        } catch (Exception e) {
+          exception.set(e);
+        } finally {
+          latch.get().countDown();
+        }
+      }
+    };
+    final List<IndexSegment> candidateIndexSegments = new ArrayList<>();
+    for (IndexSegment indexSegment : state.index.getIndexSegments().values()) {
+      if (indexSegment.getEndOffset().compareTo(state.index.journal.getFirstOffset()) < 0) {
+        candidateIndexSegments.add(indexSegment);
+      }
+    }
+    Runnable changer = new Runnable() {
+      @Override
+      public void run() {
+        try {
+          int idx = TestUtils.RANDOM.nextInt(candidateIndexSegments.size());
+          IndexSegment segmentToUse = candidateIndexSegments.get(idx);
+          // remove the index segment
+          state.index.changeIndexSegments(Collections.EMPTY_LIST, Collections.singleton(segmentToUse.getStartOffset()));
+          // ensure that the relevant index segment is gone.
+          if (state.index.getIndexSegments().containsKey(segmentToUse.getStartOffset())) {
+            throw new IllegalStateException(
+                "Segment with offset " + segmentToUse.getStartOffset() + " should have been" + " removed.");
+          }
+          // add it back
+          state.index.changeIndexSegments(Collections.singletonList(segmentToUse.getFile()), Collections.EMPTY_SET);
+          // ensure that the relevant index segment is back.
+          if (!state.index.getIndexSegments().containsKey(segmentToUse.getStartOffset())) {
+            throw new IllegalStateException(
+                "Segment with offset " + segmentToUse.getStartOffset() + " should have been" + " present.");
+          }
+        } catch (Exception e) {
+          exception.set(e);
+        } finally {
+          latch.get().countDown();
+        }
+      }
+    };
+
+    for (int i = 0; i < ITERATIONS; i++) {
+      latch.set(new CountDownLatch(2));
+      executorService.submit(adder);
+      executorService.submit(changer);
+      assertTrue("Took too long to add/change index segments", latch.get().await(1, TimeUnit.SECONDS));
+      if (exception.get() != null) {
+        throw exception.get();
+      }
+      assertEquals("Index segment start offsets do not match expected", indexSegmentStartOffsets,
+          state.index.getIndexSegments().keySet());
     }
   }
 

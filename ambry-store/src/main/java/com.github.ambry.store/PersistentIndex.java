@@ -38,8 +38,6 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,11 +95,11 @@ class PersistentIndex {
   private final Time time;
   private final File cleanShutdownFile;
 
-  // switching this is thread safe as long as there are no modifications to IndexSegment instances whose offsets are
-  // still present in the journal.
-  private final AtomicReference<ConcurrentSkipListMap<Offset, IndexSegment>> indexSegmentsRef =
-      new AtomicReference<>(new ConcurrentSkipListMap<Offset, IndexSegment>());
-  private final ReentrantLock indexSegmentsChangeLock = new ReentrantLock();
+  // switching the ref to this is thread safe as long as there are no modifications to IndexSegment instances whose
+  // offsets are still present in the journal.
+  private volatile ConcurrentSkipListMap<Offset, IndexSegment> validIndexSegments = new ConcurrentSkipListMap<>();
+  // this is used by addToIndex() and changeIndexSegments() to resolve concurrency b/w them and is not for general use.
+  private volatile ConcurrentSkipListMap<Offset, IndexSegment> inFluxIndexSegments = validIndexSegments;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final IndexPersistor persistor = new IndexPersistor();
 
@@ -180,7 +178,7 @@ class PersistentIndex {
         IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
-        indexSegmentsRef.get().put(info.getStartOffset(), info);
+        validIndexSegments.put(info.getStartOffset(), info);
       }
       logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getEndOffset());
       // delete the shutdown file
@@ -264,8 +262,8 @@ class PersistentIndex {
     final Timer.Context context = metrics.recoveryTime.time();
     LogSegment firstSegment = log.getFirstSegment();
     Offset recoveryStartOffset = new Offset(firstSegment.getName(), firstSegment.getStartOffset());
-    if (indexSegmentsRef.get().size() > 0) {
-      IndexSegment indexSegment = indexSegmentsRef.get().lastEntry().getValue();
+    if (validIndexSegments.size() > 0) {
+      IndexSegment indexSegment = validIndexSegments.lastEntry().getValue();
       recoveryStartOffset =
           indexSegment.getEndOffset() == null ? indexSegment.getStartOffset() : indexSegment.getEndOffset();
     }
@@ -319,12 +317,12 @@ class PersistentIndex {
    * @throws IOException if an end offset could not be set due to I/O error.
    */
   private void setEndOffsets() throws IOException {
-    for (Offset segmentStartOffset : indexSegmentsRef.get().keySet()) {
-      Offset nextIndexSegmentStartOffset = indexSegmentsRef.get().higherKey(segmentStartOffset);
+    for (Offset segmentStartOffset : validIndexSegments.keySet()) {
+      Offset nextIndexSegmentStartOffset = validIndexSegments.higherKey(segmentStartOffset);
       if (nextIndexSegmentStartOffset == null || !segmentStartOffset.getName()
           .equals(nextIndexSegmentStartOffset.getName())) {
         // this is the last index segment for the log segment it refers to.
-        IndexSegment indexSegment = indexSegmentsRef.get().get(segmentStartOffset);
+        IndexSegment indexSegment = validIndexSegments.get(segmentStartOffset);
         LogSegment logSegment = log.getSegment(segmentStartOffset.getName());
         logSegment.setEndOffset(indexSegment.getEndOffset().getOffset());
       }
@@ -335,7 +333,7 @@ class PersistentIndex {
    * @return the map of {@link Offset} to {@link IndexSegment} instances.
    */
   ConcurrentSkipListMap<Offset, IndexSegment> getIndexSegments() {
-    return indexSegmentsRef.get();
+    return validIndexSegments;
   }
 
   /**
@@ -361,7 +359,7 @@ class PersistentIndex {
     }
 
     for (Offset offset : segmentsToRemove) {
-      IndexSegment segmentToRemove = indexSegmentsRef.get().get(offset);
+      IndexSegment segmentToRemove = validIndexSegments.get(offset);
       if (segmentToRemove.getEndOffset().compareTo(journalFirstOffset) >= 0) {
         throw new IllegalArgumentException(
             "End Offset of the one of the segments to remove [" + segmentToRemove.getFile() + "] is"
@@ -369,16 +367,14 @@ class PersistentIndex {
       }
     }
 
-    indexSegmentsChangeLock.lock();
-    try {
-      ConcurrentSkipListMap<Offset, IndexSegment> newIndexSegments =
-          new ConcurrentSkipListMap<>(indexSegmentsRef.get());
-      newIndexSegments.keySet().removeAll(segmentsToRemove);
-      newIndexSegments.putAll(segmentsToAdd);
-      indexSegmentsRef.set(newIndexSegments);
-    } finally {
-      indexSegmentsChangeLock.unlock();
-    }
+    // first update the influx index segments reference
+    inFluxIndexSegments = new ConcurrentSkipListMap<>();
+    // now copy over all valid segments to the influx reference, remove ones that need removing and add the new ones.
+    inFluxIndexSegments.putAll(validIndexSegments);
+    inFluxIndexSegments.keySet().removeAll(segmentsToRemove);
+    inFluxIndexSegments.putAll(segmentsToAdd);
+    // change the reference (this is guaranteed to be atomic by java)
+    validIndexSegments = inFluxIndexSegments;
   }
 
   /**
@@ -393,14 +389,12 @@ class PersistentIndex {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
           entry.getValue().getBytes().capacity(), config, metrics);
       info.addEntry(entry, fileSpan.getEndOffset());
-      indexSegmentsChangeLock.lock();
-      try {
-        indexSegmentsRef.get().put(info.getStartOffset(), info);
-      } finally {
-        indexSegmentsChangeLock.unlock();
-      }
+      // always add to both valid and in-flux index segment map to account for the fact that changeIndexSegments()
+      // might be in the process of updating the reference to validIndexSegments
+      validIndexSegments.put(info.getStartOffset(), info);
+      inFluxIndexSegments.put(info.getStartOffset(), info);
     } else {
-      indexSegmentsRef.get().lastEntry().getValue().addEntry(entry, fileSpan.getEndOffset());
+      validIndexSegments.lastEntry().getValue().addEntry(entry, fileSpan.getEndOffset());
     }
     journal.addEntry(entry.getValue().getOffset(), entry.getKey());
   }
@@ -426,12 +420,12 @@ class PersistentIndex {
    * @return True, if segment needs to roll over. False, otherwise
    */
   private boolean needToRollOverIndex(IndexEntry entry) {
-    if (indexSegmentsRef.get().size() == 0) {
+    if (validIndexSegments.size() == 0) {
       logger.info("Creating first segment");
       return true;
     }
 
-    IndexSegment lastSegment = indexSegmentsRef.get().lastEntry().getValue();
+    IndexSegment lastSegment = validIndexSegments.lastEntry().getValue();
     if (lastSegment.getSizeWritten() >= maxInMemoryIndexSizeInBytes) {
       logger.info("Index: {} Rolling over because the size written {} >= maxInMemoryIndexSizeInBytes {}", dataDir,
           lastSegment.getSizeWritten(), maxInMemoryIndexSizeInBytes);
@@ -475,7 +469,7 @@ class PersistentIndex {
    * @throws StoreException
    */
   IndexValue findKey(StoreKey key, FileSpan fileSpan) throws StoreException {
-    return findKey(key, fileSpan, IndexEntryType.ANY, indexSegmentsRef.get());
+    return findKey(key, fileSpan, IndexEntryType.ANY, validIndexSegments);
   }
 
   /**
@@ -567,7 +561,7 @@ class PersistentIndex {
    * @throws StoreException
    */
   BlobReadOptions getBlobReadInfo(StoreKey id, EnumSet<StoreGetOptions> getOptions) throws StoreException {
-    ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = indexSegmentsRef.get();
+    ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
     IndexValue value = findKey(id, null, IndexEntryType.ANY, indexSegments);
     BlobReadOptions readOptions;
     if (value == null) {
@@ -696,7 +690,7 @@ class PersistentIndex {
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, storeToken.getInclusive());
         logger.trace("Journal based token, Time used to get entries: {}", (time.milliseconds() - startTimeInMs));
-        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = indexSegmentsRef.get();
+        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
 
         if (entries != null && journal.getFirstOffset().compareTo(offsetToStart) <= 0) {
           startTimeInMs = time.milliseconds();
@@ -764,7 +758,7 @@ class PersistentIndex {
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
-        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = indexSegmentsRef.get();
+        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
         StoreFindToken newToken =
             findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
                 new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments);
@@ -860,7 +854,7 @@ class PersistentIndex {
    * {@link LogSegment} instances that are not fully filled.
    */
   long getLogUsedCapacity() {
-    ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = indexSegmentsRef.get();
+    ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
     return getAbsolutePositionInLogForOffset(getCurrentEndOffset(indexSegments), indexSegments);
   }
 
@@ -868,14 +862,14 @@ class PersistentIndex {
    * @return the number of valid log segments starting from the first segment.
    */
   long getLogSegmentCount() {
-    return getLogSegmentToIndexSegmentMapping(indexSegmentsRef.get()).size();
+    return getLogSegmentToIndexSegmentMapping(validIndexSegments).size();
   }
 
   /**
    * @return the absolute position represented by {@code offset} in the {@link Log}.
    */
   long getAbsolutePositionInLogForOffset(Offset offset) {
-    return getAbsolutePositionInLogForOffset(offset, indexSegmentsRef.get());
+    return getAbsolutePositionInLogForOffset(offset, validIndexSegments);
   }
 
   /**
@@ -994,7 +988,7 @@ class PersistentIndex {
         break; // we have entered and finished reading from the journal, so we are done.
       }
 
-      if (segmentStartOffset == indexSegmentsRef.get().lastKey()) {
+      if (segmentStartOffset == validIndexSegments.lastKey()) {
         /* The start offset is of the latest segment, and was not found in the journal. This means an entry was added
          * to the index (creating a new segment) but not yet to the journal. However, if the journal does not contain
          * the latest segment's start offset, then it *must* have the previous segment's start offset (if it did not,
@@ -1120,7 +1114,7 @@ class PersistentIndex {
    * @return the start offset of the index.
    */
   Offset getStartOffset() {
-    return getStartOffset(indexSegmentsRef.get());
+    return getStartOffset(validIndexSegments);
   }
 
   /**
@@ -1143,7 +1137,7 @@ class PersistentIndex {
    * @return The end offset in the log that this index currently represents
    */
   Offset getCurrentEndOffset() {
-    return getCurrentEndOffset(indexSegmentsRef.get());
+    return getCurrentEndOffset(validIndexSegments);
   }
 
   /**
@@ -1196,7 +1190,7 @@ class PersistentIndex {
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
         newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-            new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), indexSegmentsRef.get());
+            new FindEntriesCondition(maxTotalSizeOfEntries, endTimeSeconds), validIndexSegments);
         if (newToken.getType().equals(StoreFindToken.Type.Uninitialized)) {
           newToken = storeToken;
         }
@@ -1209,7 +1203,7 @@ class PersistentIndex {
           inclusive = true;
         }
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
-        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = indexSegmentsRef.get();
+        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
 
         Offset offsetEnd = offsetToStart;
         if (entries != null && journal.getFirstOffset().compareTo(offsetToStart) <= 0) {
@@ -1321,7 +1315,7 @@ class PersistentIndex {
     public synchronized void write() throws StoreException {
       final Timer.Context context = metrics.indexFlushTime.time();
       try {
-        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = indexSegmentsRef.get();
+        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
         if (indexSegments.size() > 0) {
           // before iterating the map, get the current file end pointer
           Map.Entry<Offset, IndexSegment> lastEntry = indexSegments.lastEntry();
