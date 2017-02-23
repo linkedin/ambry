@@ -2,58 +2,75 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Exposes stats related to {@link BlobStore} that is useful to different components.
  *
- * Note: The initial implementation of this class will scan the indexes completely when any of these API calls are made.
- * It may store some data in memory and "expire" them but the data will not be persisted. Going forward, this will
- * change. We may persist the data, collect stats more "intelligently", actively push data from the {@link BlobStore} or
- * any other multitude of things.
+ * Note: This is the v1 implementation of BlobStoreStats. The v1 implementation walks through the
+ * entire index and collect data needed to serve stats related requests for a predefined amount of
+ * time. Requests that are outside of this time range will trigger a new scan.
  */
 public class BlobStoreStats implements StoreStats {
-  private final long SEGMENT_SCAN_OFFSET;
-  private StatsEngine statsEngine;
-  private Log log;
-  private HashMap<String, Long> containerMap;
-  private HashMap<String, Long> segmentMap;
-  private TreeMap<Long, Bucket> containerBuckets;
-  private TreeMap<Long, Bucket> segmentBuckets;
+  private final long bucketCount;
+  private final long bucketTimeSpan;
+  private final long segmentScanOffset;
+  private final boolean autoReschedule;
+  private final Log log;
+  private final PersistentIndex index;
+  private final ScheduledExecutorService scheduler;
+  private final ConcurrentLinkedQueue<StatsEvent> bufferedEvents;
+  private final Object swapLock = new Object();
+  private final Object notifyObject = new Object();
+  private final Time time;
+  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private ScheduledFuture<?> nextScan;
+  private boolean scanComplete;
+  private boolean redirectToBuffer;
+  private ScanResults scanResults;
   private long lastScanTime;
   private long windowBoundary;
-  private ConcurrentLinkedQueue<StatsEvent> bufferedEvents;
-  private boolean redirect;
-  private final Object scanLock = new Object();
-  private final Object swapLock = new Object();
-  private final Time time;
+  private IndexScanner scanner;
 
-  BlobStoreStats(StatsEngine statsEngine, Log log, long segmentScanOffset, Time time) {
-    this.statsEngine = statsEngine;
+  BlobStoreStats(Log log, PersistentIndex index, long bucketCount, long bucketTimeSpan,
+      long segmentScanOffset, boolean autoReschedule, Time time) {
     this.log = log;
-    this.containerMap = new HashMap<>();
-    this.segmentMap = new HashMap<>();
-    this.containerBuckets = new TreeMap<>();
-    this.segmentBuckets = new TreeMap<>();
-    this.bufferedEvents = new ConcurrentLinkedQueue<>();
-    this.SEGMENT_SCAN_OFFSET = segmentScanOffset;
-    this.redirect = false;
+    this.index = index;
+    this.bucketCount = bucketCount;
+    this.bucketTimeSpan = bucketTimeSpan;
+    this.segmentScanOffset = segmentScanOffset;
+    this.autoReschedule = autoReschedule;
+    this.redirectToBuffer = true;
     this.time = time;
     this.windowBoundary = -1;
     this.lastScanTime = -1;
+    this.scheduler = Utils.newScheduler(1, true);
+    ((ScheduledThreadPoolExecutor)scheduler).setRemoveOnCancelPolicy(true);
+    this.bufferedEvents = new ConcurrentLinkedQueue<>();
+    this.scanner = null;
+    this.scanComplete = false;
   }
-
 
   @Override
   public long getTotalCapacity() {
-    return statsEngine.getCapacityInBytes();
+    return log.getCapacityInBytes();
   }
 
   @Override
@@ -83,93 +100,74 @@ public class BlobStoreStats implements StoreStats {
    */
   @Override
   public Pair<Long, Long> getValidDataSize(TimeRange timeRange) {
-    long lastBucketEndTime = processTimeRange(timeRange);
+    checkForInitialScan();
+    Long allSegmentValidDataSize = 0L;
+    Long lastBucketEndTime = processTimeRange(timeRange);
     if (lastBucketEndTime != -1) {
-      long allSegmentValidDataSize = 0;
       synchronized (swapLock) {
-        for (String segmentName : segmentMap.keySet()) {
-          allSegmentValidDataSize += extractValidDataSize(segmentMap, segmentBuckets, segmentName, lastBucketEndTime);
+        SortedMap<String, Long> map = scanResults.getValidDataSizePerSegment(lastBucketEndTime);
+        for (Long value : map.values()) {
+          allSegmentValidDataSize += value;
         }
       }
-      return new Pair<>(lastBucketEndTime / time.MsPerSec, allSegmentValidDataSize);
+      return new Pair<>(lastBucketEndTime / Time.MsPerSec, allSegmentValidDataSize);
     } else {
-      return new Pair<>(-1L, 0L);
+      return outOfBoundValidDataSizeRequest(timeRange);
     }
   }
 
   /**
    * Gets the size of valid data at a particular point in time for all log segments. The caller specifies a reference time and
-   * acceptable resolution for the stats in the form of a {@code timeRange}. The store will return data for a point in time within
+   * acceptable resolution for the stats in the form of a {@link TimeRange}. The store will return data for a point in time within
    * the specified range.
    * @param timeRange the time range for the expected output. Defines both the reference time and the acceptable resolution.
    * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second element is the valid data
    * size for each segment in the form of a {@link SortedMap} of segment names to valid data sizes.
    */
   Pair<Long, SortedMap<String, Long>> getValidDataSizeBySegment(TimeRange timeRange) {
-    TreeMap<String, Long> map = new TreeMap<>();
-    long lastBucketEndTime = processTimeRange(timeRange);
+    checkForInitialScan();
+    SortedMap<String, Long> map;
+    Long lastBucketEndTime = processTimeRange(timeRange);
     if (lastBucketEndTime != -1) {
       synchronized (swapLock) {
-        for (String segmentName : segmentMap.keySet()) {
-          map.put(segmentName, extractValidDataSize(segmentMap, segmentBuckets, segmentName, lastBucketEndTime));
-        }
+        map = scanResults.getValidDataSizePerSegment(lastBucketEndTime);
       }
-      return new Pair<>(lastBucketEndTime / time.MsPerSec, map);
+      return new Pair<>(lastBucketEndTime / Time.MsPerSec, map);
     } else {
-      return new Pair<>(-1L, map);
+      return outOfBoundValidDataSizeBySegmentRequest(timeRange);
     }
   }
 
   /**
-   * Gets the size of valid data for all containers belonging to the given serviceId.
-   * @param serviceId The serviceId at interest.
-   * @return A {@link Long} representing the total valid data size for the given serviceId.
+   * Gets the valid data size of all containers in this blob store.
+   * @return nested {@link HashMap} of serviceIds to containerIds to their corresponding valid data size
    */
-  Long getValidDataSize(String serviceId) {
-    long lastBucketEndTime = statsEngine.getPreviousBucketEndTime(time.milliseconds());
-    long allValidDataSize = 0;
-    synchronized (swapLock) {
-      for (Map.Entry<String, Long> entry : containerMap.entrySet()) {
-        if ((entry.getKey().split("-"))[0].equals(serviceId)) {
-          allValidDataSize += extractValidDataSize(containerMap, containerBuckets, entry.getKey(), lastBucketEndTime);
-        }
-      }
+  HashMap<String, HashMap<String, Long>> getValidDataSize() {
+    checkForInitialScan();
+    Long referenceTime = time.milliseconds();
+    if (referenceTime > windowBoundary) {
+      scanComplete = false;
+      rescheduleScan(referenceTime, -1);
+      waitForScanToComplete();
     }
-    return allValidDataSize;
+    Long lastBucketEndTime = referenceTime - referenceTime % bucketTimeSpan;
+    synchronized (swapLock) {
+      return scanResults.getValidDataSizePerContainer(lastBucketEndTime);
+    }
   }
 
   /**
-   * Gets the size of valid data for each requested containerId belonging to a single service Id
-   * at the time when the API is called.
-   * @param serviceId The serviceId at interest.
-   * @param containerIds A list of containerIds.
-   * @return A {@link SortedMap} of containerIds to their corresponding valid data size.
-   */
-  SortedMap<String, Long> getValidDataSizeByContainer(String serviceId, List<String> containerIds) {
-    TreeMap<String, Long> map = new TreeMap<>();
-    long lastBucketEndTime = statsEngine.getPreviousBucketEndTime(time.milliseconds());
-    synchronized (swapLock) {
-      for (String containerId : containerIds) {
-        String key = serviceId.concat("-").concat(containerId);
-        map.put(containerId, extractValidDataSize(containerMap, containerBuckets, key, lastBucketEndTime));
-      }
-    }
-    return map;
-  }
-
-  /**
-   * Helper function that takes a {@link TimeRange} and compute the latest bucket that falls into the given time range.
+   * Takes a {@link TimeRange} and compute the latest bucket that falls into the given time range.
    * @param timeRange
    * @return The latest bucket end time that is within the given time range or -1 if there are no bucket found within
    * the given time range.
    */
   private long processTimeRange(TimeRange timeRange) {
-    long startTimeInMs = timeRange.getStart() * time.MsPerSec;
-    long endTimeInMs = timeRange.getEnd() * time.MsPerSec;
-    if (lastScanTime != -1 && startTimeInMs <= windowBoundary - SEGMENT_SCAN_OFFSET &&
-        endTimeInMs >= lastScanTime - SEGMENT_SCAN_OFFSET) {
+    long startTimeInMs = timeRange.getStart() * Time.MsPerSec;
+    long endTimeInMs = timeRange.getEnd() * Time.MsPerSec;
+    if (startTimeInMs <= windowBoundary - segmentScanOffset && endTimeInMs >= lastScanTime - segmentScanOffset) {
       long referenceTime = endTimeInMs > windowBoundary ? windowBoundary : endTimeInMs;
-      long previousBucketEndTime = statsEngine.getPreviousBucketEndTime(referenceTime);
+      long previousBucketEndTime = referenceTime - referenceTime % bucketTimeSpan;
       if (previousBucketEndTime >= startTimeInMs) {
         return previousBucketEndTime;
       }
@@ -177,141 +175,395 @@ public class BlobStoreStats implements StoreStats {
     return -1;
   }
 
-  public Offset prepareForScanning() {
-    synchronized (scanLock) {
-      Offset checkpoint = log.getEndOffset();
-      this.redirect = true;
-      return checkpoint;
+  void start() {
+    scanner = new IndexScanner(time.milliseconds(), -1);
+    nextScan = scheduler.schedule(scanner, 0, TimeUnit.MILLISECONDS);
+  }
+
+  void close () {
+    if (nextScan != null) {
+      nextScan.cancel(true);
+    }
+    scanComplete = true;
+  }
+
+  private void rescheduleScan(long newScanTime, long requestedReferenceTime) {
+    if (nextScan != null && !nextScan.isDone()) {
+      nextScan.cancel(false);
+    }
+    nextScan = scheduler.schedule(new IndexScanner(newScanTime, requestedReferenceTime),
+        newScanTime - time.milliseconds(), TimeUnit.MILLISECONDS);
+  }
+
+  private Pair<Long, Long> outOfBoundValidDataSizeRequest(TimeRange timeRange) {
+    if (!scanComplete && timeRange.getStart() * Time.MsPerSec <= scanner.scanWindowBoundary - segmentScanOffset &&
+        timeRange.getEnd() * Time.MsPerSec >= scanner.segmentScanTimeInMs) {
+      waitForScanToComplete();
+      return getValidDataSize(timeRange);
+    } else {
+      scanComplete = false;
+      rescheduleScan(time.milliseconds(), timeRange.getStart() * Time.MsPerSec);
+      waitForScanToComplete();
+      Long allSegmentValidDataSize = 0L;
+      for (Long value : scanResults.getRequestedSegmentMap().values()) {
+        allSegmentValidDataSize += value;
+      }
+      return new Pair<>(timeRange.getStart(), allSegmentValidDataSize);
     }
   }
 
-  public void wrapUpScanning() {
-    synchronized (scanLock) {
-      redirect = false;
-      boolean isCaughtUp = processStatsEvent();
-      while (!isCaughtUp) {
-        isCaughtUp = processStatsEvent();
+  private Pair<Long, SortedMap<String, Long>> outOfBoundValidDataSizeBySegmentRequest(TimeRange timeRange) {
+    if (!scanComplete && timeRange.getStart() * Time.MsPerSec <= scanner.scanWindowBoundary - segmentScanOffset &&
+        timeRange.getEnd() * Time.MsPerSec >= scanner.segmentScanTimeInMs) {
+      waitForScanToComplete();
+      return getValidDataSizeBySegment(timeRange);
+    } else {
+      scanComplete = false;
+      rescheduleScan(time.milliseconds(), timeRange.getStart() * Time.MsPerSec);
+      waitForScanToComplete();
+      return new Pair<>(timeRange.getStart(), scanResults.getRequestedSegmentMap());
+    }
+  }
+
+  private void checkForInitialScan() {
+    if (lastScanTime == -1) {
+      waitForScanToComplete();
+    }
+  }
+
+  private void waitForScanToComplete() {
+    synchronized (notifyObject) {
+      while (!scanComplete) {
+        try {
+          notifyObject.wait();
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
       }
     }
   }
 
-  public boolean processStatsEvent() {
+  private Offset prepareForScanning() {
+    this.redirectToBuffer = true;
+    Offset checkpoint = index.getCurrentEndOffset();
+    return checkpoint;
+  }
+
+  private void wrapUpScanning(Offset checkPoint) {
+    redirectToBuffer = false;
+    boolean isCaughtUp = processBufferedStatsEvent(checkPoint);
+    while (!isCaughtUp) {
+      isCaughtUp = processBufferedStatsEvent(checkPoint);
+    }
+  }
+
+  private boolean processBufferedStatsEvent(Offset checkPoint) {
     StatsEvent event = bufferedEvents.poll();
     if (event == null) {
       return true;
     } else {
-      if (event.isDelete()) {
-        handleNewDelete(event.getMessageInfo(), event.getPutIndexValue(), event.getSegmentName(), event.getEventTime());
-      } else {
-        handleNewPut(event.getMessageInfo(), event.getSegmentName());
+      if (event.getOffset().compareTo(checkPoint) >= 0) {
+        if (event.isDelete()) {
+          handleNewDelete(event.getMessageInfo(), event.getPutIndexValue(), event.getOffset(), event.getEventTime());
+        } else {
+          handleNewPut(event.getMessageInfo(), event.getOffset());
+        }
       }
       return false;
     }
   }
 
-  public void swapStructs(HashMap<String, Long> containerMap, HashMap<String, Long> segmentMap,
-      TreeMap<Long, Bucket> containerBuckets, TreeMap<Long, Bucket> segmentBuckets,
-      long windowBoundary, long scanTime) {
+  private void swapStructs(ScanResults results, long windowBoundary, long scanTime) {
     synchronized (swapLock) {
-      this.containerMap.clear();
-      this.containerBuckets.clear();
-      this.segmentMap.clear();
-      this.segmentBuckets.clear();
-      this.containerMap.putAll(containerMap);
-      this.segmentMap.putAll(segmentMap);
-      this.containerBuckets.putAll(containerBuckets);
-      this.segmentBuckets.putAll(segmentBuckets);
+      this.scanResults = results;
       this.windowBoundary = windowBoundary;
       this.lastScanTime = scanTime;
     }
   }
 
-  public void processNewPutEntries(List<MessageInfo> messageInfos, ArrayList<IndexEntry> indexEntries) {
-    synchronized (scanLock) {
-      int i = 0;
-      for (MessageInfo messageInfo : messageInfos) {
-        if (redirect) {
-          bufferedEvents.add(new StatsEvent(messageInfo, indexEntries.get(i).getValue().getOffset().getName(),
-              time.milliseconds()));
-        } else {
-          handleNewPut(messageInfo, indexEntries.get(i).getValue().getOffset().getName());
-        }
-        i++;
+  void processNewPutEntries(List<MessageInfo> messageInfos, ArrayList<IndexEntry> indexEntries) {
+    if (redirectToBuffer) {
+      for (int i = 0; i < messageInfos.size(); i++) {
+        bufferedEvents.add(new StatsEvent(messageInfos.get(i), indexEntries.get(i).getValue().getOffset(),
+            time.milliseconds()));
+      }
+    } else {
+      for (int i = 0; i < messageInfos.size(); i++) {
+        handleNewPut(messageInfos.get(i), indexEntries.get(i).getValue().getOffset());
       }
     }
   }
 
-  public void processNewDeleteEntry(MessageInfo messageInfo, IndexValue putIndexValue, String segmentName) {
-    synchronized (scanLock) {
-      if (redirect) {
-        bufferedEvents.add(new StatsEvent(messageInfo, segmentName, putIndexValue, time.milliseconds(), true));
-      } else {
-        handleNewDelete(messageInfo, putIndexValue, segmentName, time.milliseconds());
-      }
+  void processNewDeleteEntry(MessageInfo messageInfo, IndexValue putIndexValue, Offset offset) {
+    if (redirectToBuffer) {
+      bufferedEvents.add(new StatsEvent(messageInfo, offset, putIndexValue, time.milliseconds(), true));
+    } else {
+      handleNewDelete(messageInfo, putIndexValue, offset, time.milliseconds());
     }
   }
 
-  private void handleNewPut(MessageInfo messageInfo, String segmentName) {
-    String key = messageInfo.getServiceId().concat("-".concat(messageInfo.getContainerId()));
-    statsEngine.updateMap(segmentMap, segmentName, messageInfo.getSize());
+  void handleNewPut(MessageInfo messageInfo, Offset offset) {
+    scanResults.updateSegmentBaseMap(offset.getName(), messageInfo.getSize());
     long expirationTime = messageInfo.getExpirationTimeInMs();
-    if (!statsEngine.isExpired(expirationTime, time.milliseconds())) {
-      statsEngine.updateMap(containerMap, key, messageInfo.getSize());
-      if (expirationTime != -1 && statsEngine.isWithinWindow(expirationTime, windowBoundary, 0)) {
-        statsEngine.updateBuckets(containerBuckets, statsEngine.generateBucketTime(expirationTime),
-            key, messageInfo.getSize() * -1);
+    if (!isExpired(expirationTime, time.milliseconds())) {
+      scanResults.updateContainerBaseMap(messageInfo.getServiceId(), messageInfo.getContainerId(),
+          messageInfo.getSize());
+      if (expirationTime != -1 && isWithinWindow(expirationTime, windowBoundary, 0)) {
+        scanResults.updateContainerBucket(expirationTime, messageInfo.getServiceId(), messageInfo.getContainerId(),
+            messageInfo.getSize() * -1);
       }
     }
 
-    if (!statsEngine.isExpired(expirationTime, time.milliseconds() - SEGMENT_SCAN_OFFSET) &&
-        expirationTime != -1 && statsEngine.isWithinWindow(expirationTime, windowBoundary, SEGMENT_SCAN_OFFSET)) {
-      statsEngine.updateBuckets(segmentBuckets, statsEngine.generateBucketTime(expirationTime),
-          segmentName, messageInfo.getSize() * -1);
+    if (expirationTime != -1  && isWithinWindow(expirationTime, windowBoundary, segmentScanOffset) &&
+        !isExpired(expirationTime, time.milliseconds() - segmentScanOffset)) {
+      scanResults.updateSegmentBucket(expirationTime, offset.getName(), messageInfo.getSize() * -1);
     }
   }
 
   private void handleNewDelete(MessageInfo messageInfo, IndexValue putIndexValue,
-      String segmentName, long deleteTimeInMs) {
-    String key = messageInfo.getServiceId().concat("-".concat(messageInfo.getContainerId()));
-    statsEngine.processDeleteIndex(putIndexValue, key, time.milliseconds(), containerMap, containerBuckets);
-    statsEngine.updateMap(segmentMap, segmentName, messageInfo.getSize());
-    if (statsEngine.isWithinWindow(deleteTimeInMs, windowBoundary, SEGMENT_SCAN_OFFSET)) {
+      Offset offset, long deleteTimeInMs) {
+    processDeleteIndexForContainer(putIndexValue, scanResults, messageInfo.getServiceId(), messageInfo.getContainerId(),
+        time.milliseconds());
+    scanResults.updateSegmentBaseMap(offset.getName(), messageInfo.getSize());
+    if (isWithinWindow(deleteTimeInMs, windowBoundary, segmentScanOffset)) {
       // Delete records that we need to capture in buckets
-      statsEngine.updateBuckets(segmentBuckets, statsEngine.generateBucketTime(deleteTimeInMs),
-          putIndexValue.getOffset().getName(), putIndexValue.getSize() * -1);
-      /** Could check for window instead contains*/
       String putSegmentName = putIndexValue.getOffset().getName();
+      scanResults.updateSegmentBucket(deleteTimeInMs, putSegmentName,putIndexValue.getSize() * -1);
       long putExpirationTime = putIndexValue.getExpiresAtMs();
-      if (statsEngine.checkBucketEntryExists(segmentBuckets,
-          statsEngine.generateBucketTime(putExpirationTime), putSegmentName) && putExpirationTime >= deleteTimeInMs) {
-        statsEngine.updateBuckets(segmentBuckets, statsEngine.generateBucketTime(putExpirationTime),
-            segmentName, putIndexValue.getSize());
+      if (scanResults.checkIfBucketEntryExists(putExpirationTime, putSegmentName) &&
+          putExpirationTime >= deleteTimeInMs) {
+        scanResults.updateSegmentBucket(putExpirationTime, putSegmentName, putIndexValue.getSize());
       }
     }
   }
 
-  /**
-   * Compute the delta that needs to be applied on the base value by aggregating all bucket values that is before the
-   * lastBucketEndTime.
-   * @param map The {@link HashMap} containing the base value.
-   * @param buckets The {@link TreeMap} holding the buckets.
-   * @param key The key of the base value map.
-   * @param lastBucketEndTime All buckets that is less than and equal to this reference time is aggregated to compute
-   *                          the total delta.
-   * @return
-   */
-  private long extractValidDataSize(HashMap<String, Long> map, TreeMap<Long, Bucket> buckets,
-      String key, long lastBucketEndTime) {
-    long baseValue = map.containsKey(key) ? map.get(key) : 0;
-    long deltaValue = 0;
-    if (!buckets.isEmpty() && lastBucketEndTime >= buckets.firstKey()) {
-      SortedMap<Long, Bucket> bucketsInRange = buckets.subMap(buckets.firstKey(), true, lastBucketEndTime, true);
-      for (Map.Entry<Long, Bucket> bucketEntry : bucketsInRange.entrySet()) {
-        if (bucketEntry.getValue().contains(key)) {
-          deltaValue += bucketEntry.getValue().getSize(key);
+  private boolean isExpired(long expirationTime, long referenceTime) {
+    return expirationTime < referenceTime && expirationTime != Utils.Infinite_Time;
+  }
+
+  private void processDeleteIndexForSegment(IndexValue putIndexValue, ScanResults results, String key,
+      Long referenceTime) {
+    if (putIndexValue.getExpiresAtMs() == -1) {
+      results.updateSegmentBaseMap(key, putIndexValue.getSize() * -1);
+    } else if (!isExpired(putIndexValue.getExpiresAtMs(), referenceTime)) {
+      results.updateSegmentBaseMap(key, putIndexValue.getSize() * -1);
+      if (results.checkIfBucketEntryExists(putIndexValue.getExpiresAtMs(), key)) {
+        results.updateSegmentBucket(putIndexValue.getExpiresAtMs(), key, putIndexValue.getSize());
+      }
+    }
+  }
+
+  private void processDeleteIndexForContainer(IndexValue putIndexValue, ScanResults results, String serviceId,
+      String containerId, Long referenceTime) {
+    if (putIndexValue.getExpiresAtMs() == -1) {
+      results.updateContainerBaseMap(serviceId, containerId, putIndexValue.getSize() * -1);
+    } else if (!isExpired(putIndexValue.getExpiresAtMs(), referenceTime)) {
+      results.updateContainerBaseMap(serviceId, containerId, putIndexValue.getSize() * -1);
+      if (results.checkIfBucketEntryExists(putIndexValue.getExpiresAtMs(), serviceId, containerId)) {
+        results.updateContainerBucket(putIndexValue.getExpiresAtMs(), serviceId, containerId,
+            putIndexValue.getSize());
+      }
+    }
+  }
+
+  private boolean isWithinWindow(long referenceTime, long window, long offSet) {
+    return referenceTime < window - offSet;
+  }
+
+  private class IndexScanner implements Runnable {
+    final long scanTimeInMs;
+    final long segmentScanTimeInMs;
+    final ScanResults newScanResults;
+    final long scanWindowBoundary;
+    final long requestedReferenceTime;
+
+    public IndexScanner(long scanTimeInMs, long requestedReferenceTime) {
+      this.scanTimeInMs = scanTimeInMs;
+      this.segmentScanTimeInMs = scanTimeInMs - segmentScanOffset;
+      this.newScanResults = new ScanResults(bucketCount, bucketTimeSpan);
+      this.scanWindowBoundary = newScanResults.createBuckets(scanTimeInMs, segmentScanOffset);
+      this.requestedReferenceTime = requestedReferenceTime;
+    }
+
+    @Override
+    public void run() {
+      Offset checkpoint = prepareForScanning();
+      Offset previousSegmentOffset = null;
+      try {
+        for (Map.Entry<Offset, IndexSegment> indexSegmentEntry : index.indexes.entrySet()) {
+          IndexSegment segment = indexSegmentEntry.getValue();
+          if (segment.getStartOffset().compareTo(checkpoint) >= 0) {
+            break;
+          }
+          List<MessageInfo> messageInfos = new ArrayList<>();
+          segment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE),
+              messageInfos, new AtomicLong(0));
+          FileSpan currentSpan = new FileSpan(segment.getStartOffset(), segment.getStartOffset());
+          Offset backwardSearchEndOffset = previousSegmentOffset == null ?
+              segment.getStartOffset() : previousSegmentOffset;
+          FileSpan backwardSearchSpan = new FileSpan(index.indexes.firstEntry().getValue().getStartOffset(),
+              backwardSearchEndOffset);
+          for (MessageInfo messageInfo : messageInfos) {
+            IndexValue indexValue = index.findKey(messageInfo.getStoreKey(), currentSpan);
+            if (indexValue.getOffset().compareTo(checkpoint) >= 0) {
+              continue;
+            }
+            populateValidSizePerSegment(messageInfo, segment.getLastModifiedTime() * 1000, segment.getLogSegmentName(),
+                backwardSearchSpan);
+            populateValidSizePerContainer(messageInfo, backwardSearchSpan);
+
+            if (requestedReferenceTime != -1) {
+              populateRequestedSegmentMap(messageInfo, segment.getLastModifiedTime() * 1000, segment.getLogSegmentName(),
+                  backwardSearchSpan);
+            }
+          }
+          previousSegmentOffset = segment.getStartOffset();
+        }
+      } catch (StoreException e) {
+        logger.error("StoreException thrown while scanning for valid data size ", e);
+      } catch (IOException e) {
+        logger.error("IOException thrown while scanning for valid data size ", e);
+      } finally {
+        swapStructs(newScanResults, scanWindowBoundary, scanTimeInMs);
+        boolean isCaughtUp = processBufferedStatsEvent(checkpoint);
+        while(!isCaughtUp) {
+          isCaughtUp = processBufferedStatsEvent(checkpoint);
+        }
+        wrapUpScanning(checkpoint);
+        if (autoReschedule) { rescheduleScan(windowBoundary, -1); }
+        synchronized (notifyObject) {
+          scanComplete = true;
+          notifyObject.notify();
         }
       }
     }
-    return baseValue + deltaValue;
+
+    /**
+     * Process a record in the index to collect data for valid data size per segment.
+     * purpose.
+     * @param messageInfo The {@link MessageInfo} to be processed.
+     * @param lastModifiedTime The time stamp of the processed index value.
+     * @param segmentName The name of the segment where the processed index value belongs to.
+     * @param backwardSearchSpan A {@link FileSpan} that spans from the beginning of the index to the end of the
+     *                           previous index segment.
+     * @throws StoreException
+     */
+    private void populateValidSizePerSegment(MessageInfo messageInfo, Long lastModifiedTime, String segmentName,
+        FileSpan backwardSearchSpan) throws StoreException {
+      if (!messageInfo.isDeleted() && isExpired(messageInfo.getExpirationTimeInMs(), segmentScanTimeInMs)) {
+        return;
+      }
+      if (messageInfo.isDeleted()) {
+        // Delete record
+        newScanResults.updateSegmentBaseMap(segmentName, messageInfo.getSize());
+        IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
+        if (putIndexValue == null) {
+          if (lastModifiedTime > segmentScanTimeInMs) {
+            BlobReadOptions originalPutInfo = index.getBlobReadInfo(messageInfo.getStoreKey(),
+                EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired));
+            if (originalPutInfo != null && !isExpired(originalPutInfo.getExpiresAtMs(), segmentScanTimeInMs)) {
+              newScanResults.updateSegmentBaseMap(segmentName, originalPutInfo.getSize());
+              long removalTime = originalPutInfo.getExpiresAtMs() == Utils.Infinite_Time ?
+                  lastModifiedTime : Math.min(lastModifiedTime, originalPutInfo.getExpiresAtMs());
+              newScanResults.updateSegmentBucket(removalTime, segmentName, originalPutInfo.getSize() * -1);
+            }
+          }
+        } else {
+          String putSegmentName = putIndexValue.getOffset().getName();
+          if (lastModifiedTime < segmentScanTimeInMs) {
+            processDeleteIndexForSegment(putIndexValue, newScanResults, putSegmentName, segmentScanTimeInMs);
+          } else if (isWithinWindow(lastModifiedTime, scanWindowBoundary, segmentScanOffset)) {
+            // Delete records that we need to capture in buckets
+            newScanResults.updateSegmentBucket(lastModifiedTime, putSegmentName, putIndexValue.getSize() * -1);
+            if (newScanResults.checkIfBucketEntryExists(putIndexValue.getExpiresAtMs(), putSegmentName) &&
+                putIndexValue.getExpiresAtMs() >= lastModifiedTime) {
+              newScanResults.updateSegmentBucket(putIndexValue.getExpiresAtMs(), putSegmentName,
+                  putIndexValue.getSize());
+            }
+          }
+        }
+      } else {
+        // Put record that is not expired
+        newScanResults.updateSegmentBaseMap(segmentName, messageInfo.getSize());
+        if (messageInfo.getExpirationTimeInMs() != -1 &&
+            isWithinWindow(messageInfo.getExpirationTimeInMs(), scanWindowBoundary, segmentScanOffset)) {
+          newScanResults.updateSegmentBucket(messageInfo.getExpirationTimeInMs(), segmentName,
+              messageInfo.getSize() * -1);
+        }
+      }
+    }
+
+    /**
+     * Process a record in the index to collect data for valid data size per container.
+     * purpose.
+     * @param messageInfo The {@link MessageInfo} to be processed.
+     * @param backwardSearchSpan A {@link FileSpan} that spans from the beginning of the index to the end of the
+     *                           previous index segment.
+     * @throws StoreException
+     */
+    private void populateValidSizePerContainer(MessageInfo messageInfo, FileSpan backwardSearchSpan) throws StoreException {
+      if (isExpired(messageInfo.getExpirationTimeInMs(), scanTimeInMs)) {
+        return;
+      }
+      if (messageInfo.isDeleted()) {
+        // delete record (may need to find and remove previously counted put data size).
+        IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
+        if (putIndexValue == null) {
+          return;
+        }
+        processDeleteIndexForContainer(putIndexValue, newScanResults, messageInfo.getServiceId(),
+            messageInfo.getContainerId(), scanTimeInMs);
+      } else {
+        // put record that is not expired
+        newScanResults.updateContainerBaseMap(messageInfo.getServiceId(), messageInfo.getContainerId(),
+            messageInfo.getSize());
+        if (messageInfo.getExpirationTimeInMs() != -1 &&
+            isWithinWindow(messageInfo.getExpirationTimeInMs(), scanWindowBoundary, 0)) {
+          // put record that will be expiring within current window
+          newScanResults.updateContainerBucket(messageInfo.getExpirationTimeInMs(),
+              messageInfo.getServiceId(), messageInfo.getContainerId(), messageInfo.getSize() * -1);
+        }
+      }
+    }
+
+    /**
+     * Process a record in the index to collect data with the requested reference time for valid data size per segment.
+     * @param messageInfo The {@link MessageInfo} to be processed.
+     * @param lastModifiedTime The time stamp of the processed index value.
+     * @param segmentName The name of the segment where the processed index value belongs to.
+     * @param backwardSearchSpan A {@link FileSpan} that spans from the beginning of the index to the end of the
+     *                           previous index segment.
+     * @throws StoreException
+     */
+    private void populateRequestedSegmentMap(MessageInfo messageInfo, Long lastModifiedTime, String segmentName,
+        FileSpan backwardSearchSpan) throws StoreException {
+      if (!messageInfo.isDeleted() && isExpired(messageInfo.getExpirationTimeInMs(), requestedReferenceTime)) {
+        return;
+      }
+      if (messageInfo.isDeleted()) {
+        // Delete record
+        newScanResults.updateRequestedSegmentMap(segmentName, messageInfo.getSize());
+        IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
+        if (putIndexValue == null) {
+          if (lastModifiedTime > requestedReferenceTime){
+            BlobReadOptions originalPutInfo = index.getBlobReadInfo(messageInfo.getStoreKey(),
+                EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired));
+            if (originalPutInfo != null && !isExpired(originalPutInfo.getExpiresAtMs(), requestedReferenceTime)) {
+              newScanResults.updateRequestedSegmentMap(segmentName, originalPutInfo.getSize());
+            }
+          }
+        }
+        else {
+          if (lastModifiedTime < requestedReferenceTime && !isExpired(putIndexValue.getExpiresAtMs(),
+              requestedReferenceTime)) {
+            String putSegmentName = putIndexValue.getOffset().getName();
+            newScanResults.updateRequestedSegmentMap(putSegmentName, putIndexValue.getSize() * -1);
+          }
+        }
+      } else {
+        // Put record that is not expired
+        newScanResults.updateRequestedSegmentMap(segmentName, messageInfo.getSize());
+      }
+    }
   }
 }

@@ -1,42 +1,45 @@
 package com.github.ambry.store;
 
+/**
+ * Hold all relevant information of new writes during a scan so they can be buffered and processed later.
+ */
 public class StatsEvent {
   private MessageInfo messageInfo;
   private IndexValue putIndexValue;
-  private String segmentName;
+  private Offset offset;
   private long eventTimeInMs;
   private boolean isDelete;
 
-  public StatsEvent(MessageInfo messageInfo, String segmentName, IndexValue putIndexValue,
+  StatsEvent(MessageInfo messageInfo, Offset offset, IndexValue putIndexValue,
       long eventTimeInMs, boolean isDelete) {
     this.messageInfo = messageInfo;
     this.putIndexValue = putIndexValue;
-    this.segmentName = segmentName;
+    this.offset = offset;
     this.eventTimeInMs = eventTimeInMs;
     this.isDelete =  isDelete;
   }
 
-  public StatsEvent(MessageInfo messageInfo, String segmentName, long eventTimeInMs) {
-    this(messageInfo, segmentName, null, eventTimeInMs, false);
+  StatsEvent(MessageInfo messageInfo, Offset offset, long eventTimeInMs) {
+    this(messageInfo, offset, null, eventTimeInMs, false);
   }
 
-  public boolean isDelete() {
+  boolean isDelete() {
     return isDelete;
   }
 
-  public MessageInfo getMessageInfo() {
+  MessageInfo getMessageInfo() {
     return messageInfo;
   }
 
-  public IndexValue getPutIndexValue() {
+  IndexValue getPutIndexValue() {
     return putIndexValue;
   }
 
-  public String getSegmentName() {
-    return segmentName;
+  Offset getOffset() {
+    return offset;
   }
 
-  public long getEventTime() {
+  long getEventTime() {
     return eventTimeInMs;
   }
 }

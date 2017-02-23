@@ -127,8 +127,9 @@ class CuratedLogIndexState {
 
   // BlobStoreStats related data structures for verification purposes
   final TreeMap<Long, HashMap<String, Long>> validDataSizePerSegment = new TreeMap<>();
-  final HashMap<String, Long> validDataSizePerContainer = new HashMap<>();
+  final HashMap<String, HashMap<String, Long>> validDataSizePerContainer = new HashMap<>();
   final HashMap<StoreKey, MessageInfo> expirableMap = new HashMap<>();
+  Offset populateValidDataSizeCheckPoint = null;
 
   /**
    * Creates state in order to make sure all cases are represented and log-index tests don't need to do any setup
@@ -174,7 +175,7 @@ class CuratedLogIndexState {
    * @throws IOException
    * @throws StoreException
    */
-  FileSpan addPutEntries(int count, long size, long expiresAtMs)
+  Pair<FileSpan, List<IndexEntry>> addPutEntries(int count, long size, long expiresAtMs)
       throws IOException, StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
@@ -215,7 +216,7 @@ class CuratedLogIndexState {
     FileSpan fileSpan = new FileSpan(newEntries.get(0).getValue().getOffset(), endOffsetOfPrevMsg);
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
     assertEquals("Journal's last offset not as expected", expectedJournalLastOffset, index.journal.getLastOffset());
-    return fileSpan;
+    return new Pair<FileSpan, List<IndexEntry>>(fileSpan, newEntries);
   }
 
   void populateValidDataSize(IndexSegment indexSegment) throws IOException, StoreException {
@@ -223,17 +224,19 @@ class CuratedLogIndexState {
     long currentIndexLastModifiedTimeInSecs = indexSegment.getLastModifiedTime();
     String currentLogSegmentName = indexSegment.getLogSegmentName();
 
-    if (!validDataSizePerSegment.isEmpty()) {
-      prevHashMap = validDataSizePerSegment.lastEntry().getValue();
-    }
-    validDataSizePerSegment.put(currentIndexLastModifiedTimeInSecs, new HashMap<>());
-
-    if (validDataSizePerSegment.size() > 1) {
-      validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).putAll(prevHashMap);
-    }
-
-    if (!validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).containsKey(currentLogSegmentName)) {
-      validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).put(currentLogSegmentName, 0L);
+    if (validDataSizePerSegment.isEmpty() ||
+        validDataSizePerSegment.lastEntry().getKey() != currentIndexLastModifiedTimeInSecs) {
+      // new index segment with different last modified time.
+      if (!validDataSizePerSegment.isEmpty()) {
+        prevHashMap = validDataSizePerSegment.lastEntry().getValue();
+      }
+      validDataSizePerSegment.put(currentIndexLastModifiedTimeInSecs, new HashMap<String, Long>());
+      if (validDataSizePerSegment.size() > 1) {
+        validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).putAll(prevHashMap);
+      }
+      if (!validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).containsKey(currentLogSegmentName)) {
+        validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).put(currentLogSegmentName, 0L);
+      }
     }
 
     long validDataSize = 0;
@@ -241,7 +244,12 @@ class CuratedLogIndexState {
     ArrayList<MessageInfo> messageInfos = new ArrayList<>();
     indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos, new AtomicLong(0));
     for (MessageInfo messageInfo : messageInfos) {
-      String containerKey = messageInfo.getServiceId().concat("-").concat(messageInfo.getContainerId());
+      Pair<IndexValue, IndexValue> recordInfo = allKeys.get(messageInfo.getStoreKey());
+      IndexValue indexValue = recordInfo.getSecond() != null ? recordInfo.getSecond() : recordInfo.getFirst();
+      if (populateValidDataSizeCheckPoint != null &&
+          populateValidDataSizeCheckPoint.compareTo(indexValue.getOffset()) == 1) {
+        continue;
+      }
       if (!messageInfo.isDeleted()) {
         // put record
         if (!isExpired(messageInfo.getExpirationTimeInMs(), currentIndexLastModifiedTimeInSecs * Time.MsPerSec)) {
@@ -250,9 +258,7 @@ class CuratedLogIndexState {
             // expiry set for a put record
             expirableMap.put(messageInfo.getStoreKey(), messageInfo);
           }
-          long containerValidDataSize = validDataSizePerContainer.containsKey(containerKey) ?
-              validDataSizePerContainer.get(containerKey) : 0L;
-          validDataSizePerContainer.put(containerKey, containerValidDataSize + messageInfo.getSize());
+          updateContainerValidDataSize(messageInfo.getServiceId(), messageInfo.getContainerId(), messageInfo.getSize());
         } else {
           immediatelyExpiredDeletedPuts.add(messageInfo);
         }
@@ -260,30 +266,27 @@ class CuratedLogIndexState {
         // delete record
         validDataSize += messageInfo.getSize();
         // invalidate the put record size in the corresponding index segment
-        Pair<IndexValue, IndexValue> recordInfo = allKeys.get(messageInfo.getStoreKey());
-        if (recordInfo != null) {
-          String putRecordSegmentName = recordInfo.getFirst().getOffset().getName();
-          if (index.indexes.floorKey(recordInfo.getFirst().getOffset()).compareTo(index.indexes.floorKey(
-              recordInfo.getSecond().getOffset())) == 0) {
-            long appropriateRemovalTime = recordInfo.getFirst().getExpiresAtMs() == Utils.Infinite_Time ?
-                currentIndexLastModifiedTimeInSecs * Time.MsPerSec:
-                Math.min(currentIndexLastModifiedTimeInSecs * Time.MsPerSec, recordInfo.getFirst().getExpiresAtMs());
-            immediatelyExpiredDeletedPuts.add(new MessageInfo(messageInfo.getStoreKey(),
-                recordInfo.getFirst().getSize(), appropriateRemovalTime));
-          } else {
-            String putRecordContainerKey = getContainerKey(messageInfo.getStoreKey());
-            if (!isExpired(recordInfo.getFirst().getExpiresAtMs(), currentIndexLastModifiedTimeInSecs)) {
-              long putRecordSegmentValidDataSize = validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).get(putRecordSegmentName);
-              validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs)
-                  .put(putRecordSegmentName, putRecordSegmentValidDataSize - recordInfo.getFirst().getSize());
-              if (validDataSizePerContainer.containsKey(putRecordContainerKey)) {
-                long putRecordContainerValidDataSize = validDataSizePerContainer.get(putRecordContainerKey);
-                validDataSizePerContainer.put(putRecordContainerKey,
-                    putRecordContainerValidDataSize - recordInfo.getFirst().getSize());
-              }
-              if (expirableMap.containsKey(messageInfo.getStoreKey())) {
-                expirableMap.remove(messageInfo.getStoreKey());
-              }
+        String putRecordSegmentName = recordInfo.getFirst().getOffset().getName();
+        if (index.indexes.floorKey(recordInfo.getFirst().getOffset()).compareTo(index.indexes.floorKey(
+            recordInfo.getSecond().getOffset())) == 0) {
+          long appropriateRemovalTime = recordInfo.getFirst().getExpiresAtMs() == Utils.Infinite_Time ?
+              currentIndexLastModifiedTimeInSecs * Time.MsPerSec:
+              Math.min(currentIndexLastModifiedTimeInSecs * Time.MsPerSec, recordInfo.getFirst().getExpiresAtMs());
+          immediatelyExpiredDeletedPuts.add(new MessageInfo(messageInfo.getStoreKey(),
+              recordInfo.getFirst().getSize(), appropriateRemovalTime));
+        } else {
+          if (!isExpired(recordInfo.getFirst().getExpiresAtMs(), currentIndexLastModifiedTimeInSecs)) {
+            long putRecordSegmentValidDataSize =
+                validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).get(putRecordSegmentName);
+            validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs)
+                .put(putRecordSegmentName, putRecordSegmentValidDataSize - recordInfo.getFirst().getSize());
+            if (validDataSizePerContainer.containsKey(messageInfo.getServiceId()) &&
+                validDataSizePerContainer.get(messageInfo.getServiceId()).containsKey(messageInfo.getContainerId())) {
+              updateContainerValidDataSize(messageInfo.getServiceId(), messageInfo.getContainerId(),
+                  recordInfo.getFirst().getSize() * -1);
+            }
+            if (expirableMap.containsKey(messageInfo.getStoreKey())) {
+              expirableMap.remove(messageInfo.getStoreKey());
             }
           }
         }
@@ -311,15 +314,30 @@ class CuratedLogIndexState {
         long oldSegmentValidDataSize = validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).get(segmentName);
         validDataSizePerSegment.get(currentIndexLastModifiedTimeInSecs).put(segmentName,
             oldSegmentValidDataSize - expirableEntry.getValue().getSize());
-        long oldContainerValidDataSize = validDataSizePerContainer.get(getContainerKey(expirableEntry.getKey()));
-        validDataSizePerContainer.put(getContainerKey(expirableEntry.getKey()),
-            oldContainerValidDataSize - expirableEntry.getValue().getSize());
+        MessageInfo expiredInfo = expirableEntry.getValue();
+        updateContainerValidDataSize(expiredInfo.getServiceId(), expiredInfo.getContainerId(),
+            expiredInfo.getSize() * -1);
       }
     }
 
     for (StoreKey expiredID : expiredIds) {
       expirableMap.remove(expiredID);
     }
+
+    populateValidDataSizeCheckPoint = indexSegment.getEndOffset();
+  }
+
+  private void updateContainerValidDataSize(String serviceId, String containerId, Long value) {
+    if (!validDataSizePerContainer.containsKey(serviceId)) {
+      validDataSizePerContainer.put(serviceId, new HashMap<String, Long>());
+    }
+    Long existingValue = validDataSizePerContainer.get(serviceId).get(containerId);
+    if (existingValue == null) {
+      existingValue = value;
+    } else {
+      existingValue += value;
+    }
+    validDataSizePerContainer.get(serviceId).put(containerId, existingValue);
   }
 
   /**
@@ -594,14 +612,6 @@ class CuratedLogIndexState {
   }
 
   /**
-   * Temporary method to get containerKey from StoreKey (BlobId)
-   */
-  private static String getContainerKey(StoreKey storeKey) {
-    String id = storeKey.getID();
-    return id.substring(0, 1).concat("-").concat(id.substring(id.length() - 1));
-  }
-
-  /**
    * Sets up some state in order to make sure all cases are represented and the tests don't need to do any setup
    * individually. For understanding the created index, please read the source code which is annotated with comments.
    * <p/>
@@ -699,7 +709,7 @@ class CuratedLogIndexState {
     // First Index Segment
     // 1 PUT
     Offset firstJournalEntryAddedNow =
-        addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).getStartOffset();
+        addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).getFirst().getStartOffset();
     assertEquals("Incorrect log segment count", expectedLogSegmentCount, index.getLogSegmentCount());
     // 2 more PUT
     addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);

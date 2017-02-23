@@ -35,6 +35,10 @@ import org.slf4j.LoggerFactory;
  * The blob store that controls the log and index
  */
 class BlobStore implements Store {
+  private static final int BUCKET_COUNT = 24;
+  private static final long BUCKET_TIME_SPAN = 3600000;
+  private static final long SEGMENT_SCAN_OFFSET = 604800000;
+
   static final String SEPARATOR = "_";
   private final static String LockFile = ".lock";
 
@@ -58,7 +62,6 @@ class BlobStore implements Store {
   private boolean started;
   private FileLock fileLock;
 
-  private StatsEngine statsEngine;
   private BlobStoreStats blobStoreStats;
 
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler, DiskIOScheduler diskIOScheduler,
@@ -113,11 +116,10 @@ class BlobStore implements Store {
             sessionId, storeDescriptor.getIncarnationId());
         metrics.initializeIndexGauges(index, capacityInBytes);
         /**
-         * Initialize StatsEngine and BlobStoreStats
+         * Initialize BlobStoreStats
          * */
-        statsEngine = new StatsEngine(log, index, capacityInBytes, 1000, 604800000L,
-            3600000L, time, new Object());
-        blobStoreStats = statsEngine.getBlobStoreStats();
+        blobStoreStats = new BlobStoreStats(log, index, BUCKET_COUNT, BUCKET_TIME_SPAN, SEGMENT_SCAN_OFFSET,
+            true, time);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -258,7 +260,7 @@ class BlobStore implements Store {
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan);
-          blobStoreStats.processNewDeleteEntry(info, indexValues.get(i), fileSpan.getEndOffset().getName());
+          blobStoreStats.processNewDeleteEntry(info, indexValues.get(i), fileSpan.getEndOffset());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
           i++;
         }
@@ -320,10 +322,6 @@ class BlobStore implements Store {
     return index.getLogUsedCapacity();
   }
 
-  public StatsEngine getStatsEngine() {
-    return statsEngine;
-  }
-
   @Override
   public void shutdown() throws StoreException {
     synchronized (lock) {
@@ -332,7 +330,7 @@ class BlobStore implements Store {
         logger.info("Store : " + dataDir + " shutting down");
         index.close();
         log.close();
-        statsEngine.close();
+        blobStoreStats.close();
         started = false;
       } catch (Exception e) {
         logger.error("Store : " + dataDir + " shutdown of store failed for directory ", e);
