@@ -158,7 +158,7 @@ public class BlobStoreStats implements StoreStats {
 
   /**
    * Takes a {@link TimeRange} and compute the latest bucket that falls into the given time range.
-   * @param timeRange
+   * @param timeRange the time range for the expected output. Defines both the reference time and the acceptable resolution.
    * @return The latest bucket end time that is within the given time range or -1 if there are no bucket found within
    * the given time range.
    */
@@ -245,8 +245,7 @@ public class BlobStoreStats implements StoreStats {
 
   private Offset prepareForScanning() {
     this.redirectToBuffer = true;
-    Offset checkpoint = index.getCurrentEndOffset();
-    return checkpoint;
+    return index.getCurrentEndOffset();
   }
 
   private void wrapUpScanning(Offset checkPoint) {
@@ -302,7 +301,7 @@ public class BlobStoreStats implements StoreStats {
     }
   }
 
-  void handleNewPut(MessageInfo messageInfo, Offset offset) {
+  private void handleNewPut(MessageInfo messageInfo, Offset offset) {
     scanResults.updateSegmentBaseMap(offset.getName(), messageInfo.getSize());
     long expirationTime = messageInfo.getExpirationTimeInMs();
     if (!isExpired(expirationTime, time.milliseconds())) {
@@ -377,7 +376,7 @@ public class BlobStoreStats implements StoreStats {
     final long scanWindowBoundary;
     final long requestedReferenceTime;
 
-    public IndexScanner(long scanTimeInMs, long requestedReferenceTime) {
+    IndexScanner(long scanTimeInMs, long requestedReferenceTime) {
       this.scanTimeInMs = scanTimeInMs;
       this.segmentScanTimeInMs = scanTimeInMs - segmentScanOffset;
       this.newScanResults = new ScanResults(bucketCount, bucketTimeSpan);

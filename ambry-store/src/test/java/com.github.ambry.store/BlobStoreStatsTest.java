@@ -260,6 +260,7 @@ public class BlobStoreStatsTest {
   /**
    * Verifies the valid data size of individual segments in the store
    * @param timeRange the {@link TimeRange} that needs to be used while fetching valid data size
+   * @param selectedBlobStoreStats the {@link BlobStoreStats} to be used
    * @throws IOException
    * @throws StoreException
    */
@@ -287,6 +288,7 @@ public class BlobStoreStatsTest {
 
   /**
    * Verifies the valid data size of containers
+   * @param selectedBlobStoreStats the {@link BlobStoreStats} to be used
    */
   private void verifyValidDataSizeByContainer(BlobStoreStats selectedBlobStoreStats) {
     HashMap<String, HashMap<String, Long>> actualValidDataSizePerContainer = selectedBlobStoreStats.getValidDataSize();

@@ -10,7 +10,7 @@ import java.util.TreeMap;
  * Hold the data structures needed by {@link BlobStoreStats} to serve requests. The class also holds helper methods
  * used to modify and access the stored data structures.
  */
-public class ScanResults {
+class ScanResults {
   private final long bucketCount;
   private final long bucketTimeSpan;
   private final SortedMap<String, Long> requestedSegmentMap = new TreeMap<>();
@@ -26,8 +26,8 @@ public class ScanResults {
 
   /**
    * Create the bucket data structures in advance based on the given scanStartTime and segmentScanTimeOffset.
-   * @param scanStartTime
-   * @param segmentScanTimeOffset
+   * @param scanStartTime reference time indicating when the scan was started
+   * @param segmentScanTimeOffset scan reference time offset for building data structure for valid data size of segments
    * @return the reference time of the last container bucket. This is the coverage boundary of this ScanResult
    */
   long createBuckets(long scanStartTime, long segmentScanTimeOffset) {
@@ -44,8 +44,8 @@ public class ScanResults {
 
   /**
    * Update the data structure that is used to hold on demand scan results for valid data size per segment.
-   * @param segmentName
-   * @param value
+   * @param segmentName name of the segment
+   * @param value value to be added
    */
   void updateRequestedSegmentMap(String segmentName, Long value) {
     Long existingValue = requestedSegmentMap.get(segmentName);
