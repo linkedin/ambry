@@ -186,15 +186,22 @@ class IndexValue {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
-    int expiryInSecs = (int) (expiresAtMs / Time.MsPerSec);
-    this.expiresAtMs = expiresAtMs != Utils.Infinite_Time ? expiryInSecs * Time.MsPerSec : Utils.Infinite_Time;
+    this.expiresAtMs = getTimeInMsToTheNearestSec(expiresAtMs);
     this.originalMessageOffset = originalMessageOffset;
-    int operationTimeInSecs = (int) (operationTimeInMs / Time.MsPerSec);
-    this.operationTimeInMs =
-        operationTimeInMs != Utils.Infinite_Time ? operationTimeInSecs * Time.MsPerSec : Utils.Infinite_Time;
+    this.operationTimeInMs = getTimeInMsToTheNearestSec(operationTimeInMs);
     this.serviceId = serviceId;
     this.containerId = containerId;
-    version = PersistentIndex.VERSION_1;
+    version = PersistentIndex.CURRENT_VERSION;
+  }
+
+  /**
+   * Get time in ms to the nearest second(floored) for the given time in ms
+   * @param timeInMs the time in ms that needs to be converted
+   * @return the time in ms to the nearest second(floored) for the given time in ms
+   */
+  private long getTimeInMsToTheNearestSec(long timeInMs) {
+    int timeInSecs = (int) (timeInMs / Time.MsPerSec);
+    return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
   }
 
   /**

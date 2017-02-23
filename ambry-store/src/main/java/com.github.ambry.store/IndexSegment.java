@@ -118,7 +118,7 @@ class IndexSegment {
     this.factory = factory;
     this.keySize = keySize;
     this.valueSize = valueSize;
-    this.version = PersistentIndex.VERSION_1;
+    this.version = PersistentIndex.CURRENT_VERSION;
     bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
         config.storeIndexBloomMaxFalsePositiveProbability);
     numberOfItems = new AtomicInteger(0);

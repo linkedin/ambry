@@ -363,8 +363,6 @@ public class BlobStoreTest {
   @Test
   public void basicTest() throws InterruptedException, IOException, StoreException {
     // PUT a key that is slated to expire when time advances by 1s
-    // since index loses precision to int for expiration time, move time to atleast by a second
-    time.sleep(Time.MsPerSec);
     MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds()).get(0);
     time.sleep(Time.MsPerSec);
     liveKeys.remove(addedId);
@@ -805,9 +803,9 @@ public class BlobStoreTest {
         new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, tempDirStr, LOG_CAPACITY, STORE_KEY_FACTORY,
             recovery, hardDelete, time);
     store.start();
-    // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
+    // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
-    time.sleep(1);
+    time.sleep(Time.MsPerSec);
     long expectedStoreSize;
     if (!isLogSegmented) {
       // log is filled about ~50%.

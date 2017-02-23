@@ -57,6 +57,7 @@ class PersistentIndex {
 
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
+  static final short CURRENT_VERSION = VERSION_1;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
   static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
