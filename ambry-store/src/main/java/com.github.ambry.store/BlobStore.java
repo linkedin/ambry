@@ -175,11 +175,6 @@ class BlobStore implements Store {
    */
   private MessageWriteSetStateInStore checkWriteSetStateInStore(MessageWriteSet messageSetToWrite, FileSpan fileSpan)
       throws StoreException {
-    int totalEntries = messageSetToWrite.getMessageSetInfo().size();
-    if (totalEntries == 0) {
-      throw new IllegalArgumentException("Message write set cannot be empty");
-    }
-    // if any existing entry is found and is identical, then return if all entries are already present.
     int existingIdenticalEntries = 0;
     for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
       if (index.findKey(info.getStoreKey(), fileSpan) != null) {
@@ -191,12 +186,9 @@ class BlobStore implements Store {
         }
       }
     }
-    if (existingIdenticalEntries == totalEntries) {
-      logger.trace("All entries to put already exist in the store");
+    if (existingIdenticalEntries == messageSetToWrite.getMessageSetInfo().size()) {
       return MessageWriteSetStateInStore.ALL_DUPLICATE;
     } else if (existingIdenticalEntries > 0) {
-      // At least one entry in the given write set is already present, and at least one of them is not. The
-      // operation cannot succeed.
       return MessageWriteSetStateInStore.SOME_NOT_ALL_DUPLICATE;
     } else {
       return MessageWriteSetStateInStore.ALL_ABSENT;
@@ -208,8 +200,7 @@ class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.putResponse.time();
     try {
-      int totalEntries = messageSetToWrite.getMessageSetInfo().size();
-      if (totalEntries == 0) {
+      if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();

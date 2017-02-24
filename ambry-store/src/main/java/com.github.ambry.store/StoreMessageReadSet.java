@@ -88,14 +88,6 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     return expiresAtMs;
   }
 
-  boolean getIsDeleted() {
-    return isDeleted;
-  }
-
-  Long getCrc() {
-    return crc;
-  }
-
   StoreKey getStoreKey() {
     return storeKey;
   }
