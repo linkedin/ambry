@@ -46,7 +46,7 @@ public class BlobStoreStats implements StoreStats {
   private boolean redirectToBuffer;
   private ScanResults scanResults;
   private long lastScanTime;
-  private long windowBoundary;
+  private long servingWindowBoundary;
   private IndexScanner scanner;
 
   BlobStoreStats(Log log, PersistentIndex index, long bucketCount, long bucketTimeSpan,
@@ -59,7 +59,7 @@ public class BlobStoreStats implements StoreStats {
     this.autoReschedule = autoReschedule;
     this.redirectToBuffer = true;
     this.time = time;
-    this.windowBoundary = -1;
+    this.servingWindowBoundary = -1;
     this.lastScanTime = -1;
     this.scheduler = Utils.newScheduler(1, true);
     ((ScheduledThreadPoolExecutor)scheduler).setRemoveOnCancelPolicy(true);
@@ -82,7 +82,7 @@ public class BlobStoreStats implements StoreStats {
    * Gets the used capacity of each log segment.
    * @return the used capacity of each log segment.
    */
-  SortedMap<String, Long> getUsedCapacityBySegment() {
+  public SortedMap<String, Long> getUsedCapacityBySegment() {
     SortedMap<String, Long> usedCapacityBySegments = new TreeMap<>();
     LogSegment logSegment = log.getFirstSegment();
     while (logSegment != null) {
@@ -98,7 +98,6 @@ public class BlobStoreStats implements StoreStats {
    * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second
    * element is the total valid data size.
    */
-  @Override
   public Pair<Long, Long> getValidDataSize(TimeRange timeRange) {
     checkForInitialScan();
     Long allSegmentValidDataSize = 0L;
@@ -124,7 +123,7 @@ public class BlobStoreStats implements StoreStats {
    * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second element is the valid data
    * size for each segment in the form of a {@link SortedMap} of segment names to valid data sizes.
    */
-  Pair<Long, SortedMap<String, Long>> getValidDataSizeBySegment(TimeRange timeRange) {
+  public Pair<Long, SortedMap<String, Long>> getValidDataSizeBySegment(TimeRange timeRange) {
     checkForInitialScan();
     SortedMap<String, Long> map;
     Long lastBucketEndTime = processTimeRange(timeRange);
@@ -142,10 +141,10 @@ public class BlobStoreStats implements StoreStats {
    * Gets the valid data size of all containers in this blob store.
    * @return nested {@link HashMap} of serviceIds to containerIds to their corresponding valid data size
    */
-  HashMap<String, HashMap<String, Long>> getValidDataSize() {
+  public HashMap<String, HashMap<String, Long>> getValidDataSize() {
     checkForInitialScan();
     Long referenceTime = time.milliseconds();
-    if (referenceTime > windowBoundary) {
+    if (referenceTime > servingWindowBoundary) {
       scanComplete = false;
       rescheduleScan(referenceTime, -1);
       waitForScanToComplete();
@@ -165,8 +164,8 @@ public class BlobStoreStats implements StoreStats {
   private long processTimeRange(TimeRange timeRange) {
     long startTimeInMs = timeRange.getStart() * Time.MsPerSec;
     long endTimeInMs = timeRange.getEnd() * Time.MsPerSec;
-    if (startTimeInMs <= windowBoundary - segmentScanOffset && endTimeInMs >= lastScanTime - segmentScanOffset) {
-      long referenceTime = endTimeInMs > windowBoundary ? windowBoundary : endTimeInMs;
+    if (startTimeInMs <= servingWindowBoundary - segmentScanOffset && endTimeInMs >= lastScanTime - segmentScanOffset) {
+      long referenceTime = endTimeInMs > servingWindowBoundary ? servingWindowBoundary : endTimeInMs;
       long previousBucketEndTime = referenceTime - referenceTime % bucketTimeSpan;
       if (previousBucketEndTime >= startTimeInMs) {
         return previousBucketEndTime;
@@ -197,7 +196,7 @@ public class BlobStoreStats implements StoreStats {
 
   private Pair<Long, Long> outOfBoundValidDataSizeRequest(TimeRange timeRange) {
     if (!scanComplete && timeRange.getStart() * Time.MsPerSec <= scanner.scanWindowBoundary - segmentScanOffset &&
-        timeRange.getEnd() * Time.MsPerSec >= scanner.segmentScanTimeInMs) {
+        timeRange.getEnd() * Time.MsPerSec >= scanner.scanTimeWithOffsetInMs) {
       waitForScanToComplete();
       return getValidDataSize(timeRange);
     } else {
@@ -214,7 +213,7 @@ public class BlobStoreStats implements StoreStats {
 
   private Pair<Long, SortedMap<String, Long>> outOfBoundValidDataSizeBySegmentRequest(TimeRange timeRange) {
     if (!scanComplete && timeRange.getStart() * Time.MsPerSec <= scanner.scanWindowBoundary - segmentScanOffset &&
-        timeRange.getEnd() * Time.MsPerSec >= scanner.segmentScanTimeInMs) {
+        timeRange.getEnd() * Time.MsPerSec >= scanner.scanTimeWithOffsetInMs) {
       waitForScanToComplete();
       return getValidDataSizeBySegment(timeRange);
     } else {
@@ -275,7 +274,7 @@ public class BlobStoreStats implements StoreStats {
   private void swapStructs(ScanResults results, long windowBoundary, long scanTime) {
     synchronized (swapLock) {
       this.scanResults = results;
-      this.windowBoundary = windowBoundary;
+      this.servingWindowBoundary = windowBoundary;
       this.lastScanTime = scanTime;
     }
   }
@@ -307,13 +306,13 @@ public class BlobStoreStats implements StoreStats {
     if (!isExpired(expirationTime, time.milliseconds())) {
       scanResults.updateContainerBaseMap(messageInfo.getServiceId(), messageInfo.getContainerId(),
           messageInfo.getSize());
-      if (expirationTime != -1 && isWithinWindow(expirationTime, windowBoundary, 0)) {
+      if (expirationTime != -1 && isWithinWindow(expirationTime, servingWindowBoundary, 0)) {
         scanResults.updateContainerBucket(expirationTime, messageInfo.getServiceId(), messageInfo.getContainerId(),
             messageInfo.getSize() * -1);
       }
     }
 
-    if (expirationTime != -1  && isWithinWindow(expirationTime, windowBoundary, segmentScanOffset) &&
+    if (expirationTime != -1  && isWithinWindow(expirationTime, servingWindowBoundary, segmentScanOffset) &&
         !isExpired(expirationTime, time.milliseconds() - segmentScanOffset)) {
       scanResults.updateSegmentBucket(expirationTime, offset.getName(), messageInfo.getSize() * -1);
     }
@@ -324,7 +323,7 @@ public class BlobStoreStats implements StoreStats {
     processDeleteIndexForContainer(putIndexValue, scanResults, messageInfo.getServiceId(), messageInfo.getContainerId(),
         time.milliseconds());
     scanResults.updateSegmentBaseMap(offset.getName(), messageInfo.getSize());
-    if (isWithinWindow(deleteTimeInMs, windowBoundary, segmentScanOffset)) {
+    if (isWithinWindow(deleteTimeInMs, servingWindowBoundary, segmentScanOffset)) {
       // Delete records that we need to capture in buckets
       String putSegmentName = putIndexValue.getOffset().getName();
       scanResults.updateSegmentBucket(deleteTimeInMs, putSegmentName,putIndexValue.getSize() * -1);
@@ -371,17 +370,17 @@ public class BlobStoreStats implements StoreStats {
 
   private class IndexScanner implements Runnable {
     final long scanTimeInMs;
-    final long segmentScanTimeInMs;
+    final long scanTimeWithOffsetInMs;
     final ScanResults newScanResults;
     final long scanWindowBoundary;
-    final long requestedReferenceTime;
+    final long requestedScanReferenceTime;
 
-    IndexScanner(long scanTimeInMs, long requestedReferenceTime) {
+    IndexScanner(long scanTimeInMs, long requestedScanReferenceTime) {
       this.scanTimeInMs = scanTimeInMs;
-      this.segmentScanTimeInMs = scanTimeInMs - segmentScanOffset;
+      this.scanTimeWithOffsetInMs = scanTimeInMs - segmentScanOffset;
       this.newScanResults = new ScanResults(bucketCount, bucketTimeSpan);
       this.scanWindowBoundary = newScanResults.createBuckets(scanTimeInMs, segmentScanOffset);
-      this.requestedReferenceTime = requestedReferenceTime;
+      this.requestedScanReferenceTime = requestedScanReferenceTime;
     }
 
     @Override
@@ -411,7 +410,7 @@ public class BlobStoreStats implements StoreStats {
                 backwardSearchSpan);
             populateValidSizePerContainer(messageInfo, backwardSearchSpan);
 
-            if (requestedReferenceTime != -1) {
+            if (requestedScanReferenceTime != -1) {
               populateRequestedSegmentMap(messageInfo, segment.getLastModifiedTime() * 1000, segment.getLogSegmentName(),
                   backwardSearchSpan);
             }
@@ -429,7 +428,7 @@ public class BlobStoreStats implements StoreStats {
           isCaughtUp = processBufferedStatsEvent(checkpoint);
         }
         wrapUpScanning(checkpoint);
-        if (autoReschedule) { rescheduleScan(windowBoundary, -1); }
+        if (autoReschedule) { rescheduleScan(servingWindowBoundary, -1); }
         synchronized (notifyObject) {
           scanComplete = true;
           notifyObject.notify();
@@ -449,7 +448,7 @@ public class BlobStoreStats implements StoreStats {
      */
     private void populateValidSizePerSegment(MessageInfo messageInfo, Long lastModifiedTime, String segmentName,
         FileSpan backwardSearchSpan) throws StoreException {
-      if (!messageInfo.isDeleted() && isExpired(messageInfo.getExpirationTimeInMs(), segmentScanTimeInMs)) {
+      if (!messageInfo.isDeleted() && isExpired(messageInfo.getExpirationTimeInMs(), scanTimeWithOffsetInMs)) {
         return;
       }
       if (messageInfo.isDeleted()) {
@@ -457,10 +456,10 @@ public class BlobStoreStats implements StoreStats {
         newScanResults.updateSegmentBaseMap(segmentName, messageInfo.getSize());
         IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
         if (putIndexValue == null) {
-          if (lastModifiedTime > segmentScanTimeInMs) {
+          if (lastModifiedTime > scanTimeWithOffsetInMs) {
             BlobReadOptions originalPutInfo = index.getBlobReadInfo(messageInfo.getStoreKey(),
                 EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired));
-            if (originalPutInfo != null && !isExpired(originalPutInfo.getExpiresAtMs(), segmentScanTimeInMs)) {
+            if (originalPutInfo != null && !isExpired(originalPutInfo.getExpiresAtMs(), scanTimeWithOffsetInMs)) {
               newScanResults.updateSegmentBaseMap(segmentName, originalPutInfo.getSize());
               long removalTime = originalPutInfo.getExpiresAtMs() == Utils.Infinite_Time ?
                   lastModifiedTime : Math.min(lastModifiedTime, originalPutInfo.getExpiresAtMs());
@@ -469,8 +468,8 @@ public class BlobStoreStats implements StoreStats {
           }
         } else {
           String putSegmentName = putIndexValue.getOffset().getName();
-          if (lastModifiedTime < segmentScanTimeInMs) {
-            processDeleteIndexForSegment(putIndexValue, newScanResults, putSegmentName, segmentScanTimeInMs);
+          if (lastModifiedTime < scanTimeWithOffsetInMs) {
+            processDeleteIndexForSegment(putIndexValue, newScanResults, putSegmentName, scanTimeWithOffsetInMs);
           } else if (isWithinWindow(lastModifiedTime, scanWindowBoundary, segmentScanOffset)) {
             // Delete records that we need to capture in buckets
             newScanResults.updateSegmentBucket(lastModifiedTime, putSegmentName, putIndexValue.getSize() * -1);
@@ -536,7 +535,7 @@ public class BlobStoreStats implements StoreStats {
      */
     private void populateRequestedSegmentMap(MessageInfo messageInfo, Long lastModifiedTime, String segmentName,
         FileSpan backwardSearchSpan) throws StoreException {
-      if (!messageInfo.isDeleted() && isExpired(messageInfo.getExpirationTimeInMs(), requestedReferenceTime)) {
+      if (!messageInfo.isDeleted() && isExpired(messageInfo.getExpirationTimeInMs(), requestedScanReferenceTime)) {
         return;
       }
       if (messageInfo.isDeleted()) {
@@ -544,17 +543,17 @@ public class BlobStoreStats implements StoreStats {
         newScanResults.updateRequestedSegmentMap(segmentName, messageInfo.getSize());
         IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
         if (putIndexValue == null) {
-          if (lastModifiedTime > requestedReferenceTime){
+          if (lastModifiedTime > requestedScanReferenceTime){
             BlobReadOptions originalPutInfo = index.getBlobReadInfo(messageInfo.getStoreKey(),
                 EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired));
-            if (originalPutInfo != null && !isExpired(originalPutInfo.getExpiresAtMs(), requestedReferenceTime)) {
+            if (originalPutInfo != null && !isExpired(originalPutInfo.getExpiresAtMs(), requestedScanReferenceTime)) {
               newScanResults.updateRequestedSegmentMap(segmentName, originalPutInfo.getSize());
             }
           }
         }
         else {
-          if (lastModifiedTime < requestedReferenceTime && !isExpired(putIndexValue.getExpiresAtMs(),
-              requestedReferenceTime)) {
+          if (lastModifiedTime < requestedScanReferenceTime && !isExpired(putIndexValue.getExpiresAtMs(),
+              requestedScanReferenceTime)) {
             String putSegmentName = putIndexValue.getOffset().getName();
             newScanResults.updateRequestedSegmentMap(putSegmentName, putIndexValue.getSize() * -1);
           }

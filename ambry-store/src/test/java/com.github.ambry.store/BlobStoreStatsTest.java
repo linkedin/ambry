@@ -195,6 +195,12 @@ public class BlobStoreStatsTest {
     }
   }
 
+  /**
+   * Helper method to handle the states in {@link CuratedLogIndexState} when deleting a specific put entry.
+   * @param storeKey of the put entry to be deleted
+   * @throws IOException
+   * @throws StoreException
+   */
   private void addNewDeleteEntry(StoreKey storeKey) throws IOException, StoreException {
     MockId deleteCandidate = new MockId(storeKey.getID());
     if (state.liveKeys.contains(deleteCandidate)) {
@@ -260,7 +266,7 @@ public class BlobStoreStatsTest {
   /**
    * Verifies the valid data size of individual segments in the store
    * @param timeRange the {@link TimeRange} that needs to be used while fetching valid data size
-   * @param selectedBlobStoreStats the {@link BlobStoreStats} to be used
+   * @param selectedBlobStoreStats the {@link BlobStoreStats} to be used for verification
    * @throws IOException
    * @throws StoreException
    */
@@ -288,7 +294,7 @@ public class BlobStoreStatsTest {
 
   /**
    * Verifies the valid data size of containers
-   * @param selectedBlobStoreStats the {@link BlobStoreStats} to be used
+   * @param selectedBlobStoreStats the {@link BlobStoreStats} to be used for verification
    */
   private void verifyValidDataSizeByContainer(BlobStoreStats selectedBlobStoreStats) {
     HashMap<String, HashMap<String, Long>> actualValidDataSizePerContainer = selectedBlobStoreStats.getValidDataSize();
