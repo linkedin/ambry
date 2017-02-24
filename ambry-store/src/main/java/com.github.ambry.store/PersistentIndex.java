@@ -171,7 +171,7 @@ class PersistentIndex {
         // The recent index segment would go through recovery after they have been
         // read into memory
         boolean map = i < indexFiles.size() - 1;
-        IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal);
+        IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
         indexes.put(info.getStartOffset(), info);
@@ -331,7 +331,7 @@ class PersistentIndex {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
-          entry.getValue().getBytes().capacity(), config, metrics);
+          entry.getValue().getBytes().capacity(), config, metrics, time);
       info.addEntry(entry, fileSpan.getEndOffset());
       indexes.put(info.getStartOffset(), info);
     } else {
