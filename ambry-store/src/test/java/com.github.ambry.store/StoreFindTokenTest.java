@@ -140,17 +140,12 @@ public class StoreFindTokenTest {
       doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
 
       // Journal based token
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, null, false), StoreFindToken.VERSION_0,
-          StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_0,
           StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
       // inclusiveness is present only in VERSION_2
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
 
       // Index based
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, null), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_0,
           StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
     } else {
@@ -158,32 +153,14 @@ public class StoreFindTokenTest {
       doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
 
       // Journal based token
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, null, false), StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_1,
           StoreFindToken.VERSION_2);
       // inclusiveness is present only in VERSION_2
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
 
       // Index based
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, null), StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_1,
           StoreFindToken.VERSION_2);
-    }
-
-    // Journal based token toBytes() will fail if incarnationId is null
-    try {
-      new StoreFindToken(offset, sessionId, null, false).toBytes();
-      fail("Serialization should have failed");
-    } catch (IllegalStateException e) {
-    }
-
-    // Index based token toBytes() will fail if incarnationId is null
-    try {
-      new StoreFindToken(key, offset, sessionId, null).toBytes();
-      fail("Serialization should have failed");
-    } catch (IllegalStateException e) {
     }
   }
 
@@ -202,8 +179,8 @@ public class StoreFindTokenTest {
     testConstructionFailure(key, sessionId, incarnationId, null);
     // no session id
     testConstructionFailure(key, null, incarnationId, offset);
-    // no incarnation Id. TODO: Uncomment this once incarnationId validation for not null is enabled in StoreFindToken
-    // testConstructionFailure(key, sessionId, null, offset);
+    // no incarnation Id
+    testConstructionFailure(key, sessionId, null, offset);
 
     // no key in IndexBased
     try {
@@ -265,7 +242,7 @@ public class StoreFindTokenTest {
    * @param version the version to serialize it in.
    * @return a serialized format of {@code token} in the version {@code version}.
    */
-  private DataInputStream getSerializedStream(StoreFindToken token, short version) {
+  static DataInputStream getSerializedStream(StoreFindToken token, short version) {
     byte[] bytes;
     switch (version) {
       case StoreFindToken.VERSION_0:

@@ -52,6 +52,15 @@ public class IndexTest {
   private final boolean isLogSegmented;
   private final File tempDir;
   private final CuratedLogIndexState state;
+  private static final StoreKeyFactory STORE_KEY_FACTORY;
+
+  static {
+    try {
+      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   /**
    * Running for both segmented and non-segmented log.
@@ -580,7 +589,13 @@ public class IndexTest {
     for (UUID incarnationIdToTest : incarnationIds) {
       long bytesRead = state.index.getAbsolutePositionInLogForOffset(firstRecordFileSpan.getEndOffset());
       // create a token that will be past the index end offset on startup after recovery.
-      startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, incarnationIdToTest, false);
+      if (incarnationIdToTest == null) {
+        startToken = getTokenWithNullIncarnationId(
+            new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, state.incarnationId, false));
+        assertNull("IncarnationId is expected to be null ", startToken.getIncarnationId());
+      } else {
+        startToken = new StoreFindToken(secondRecordFileSpan.getEndOffset(), oldSessionId, incarnationIdToTest, false);
+      }
       // token should get reset internally, no keys should be returned and the returned token should be correct (offset
       // in it will be the current log end offset = firstRecordFileSpan.getEndOffset()).
       StoreFindToken expectedEndToken =
@@ -589,12 +604,29 @@ public class IndexTest {
       doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.EMPTY_SET, expectedEndToken);
 
       // create a token that is not past the index end offset on startup after recovery. Should work as expected
-      startToken = new StoreFindToken(lastRecordOffset, oldSessionId, incarnationIdToTest, false);
+      if (incarnationIdToTest == null) {
+        startToken = getTokenWithNullIncarnationId(
+            new StoreFindToken(lastRecordOffset, oldSessionId, state.incarnationId, false));
+        assertNull("IncarnationId is expected to be null ", startToken.getIncarnationId());
+      } else {
+        startToken = new StoreFindToken(lastRecordOffset, oldSessionId, incarnationIdToTest, false);
+      }
       expectedEndToken =
           new StoreFindToken(firstRecordFileSpan.getStartOffset(), state.sessionId, state.incarnationId, false);
       expectedEndToken.setBytesRead(bytesRead);
       doFindEntriesSinceTest(startToken, Long.MAX_VALUE, Collections.singleton(newId), expectedEndToken);
     }
+  }
+
+  /**
+   * Generates token in {@link StoreFindToken#VERSION_1} so that incarnationId is null
+   * @param token the {@link StoreFindToken} that needs be parsed to generate the token with null incarnationId
+   * @return the {@link StoreFindToken} with null incarnationId
+   * @throws IOException
+   */
+  private StoreFindToken getTokenWithNullIncarnationId(StoreFindToken token) throws IOException {
+    return StoreFindToken.fromBytes(StoreFindTokenTest.getSerializedStream(token, StoreFindToken.VERSION_1),
+        STORE_KEY_FACTORY);
   }
 
   /**

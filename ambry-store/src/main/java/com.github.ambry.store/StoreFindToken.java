@@ -99,41 +99,6 @@ public class StoreFindToken implements FindToken {
   }
 
   /**
-   * Uninitialized token with the given version. Refers to the starting of the log.
-   * @param version refers to the version of the token
-   */
-  private StoreFindToken(short version) {
-    this(Type.Uninitialized, null, null, null, null, true, version);
-  }
-
-  /**
-   * Index based token with the given version. Refers to an index segment start offset and a store key that belongs to
-   * that index segment
-   * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence
-   * @param indexSegmentStartOffset the start offset of the index segment which the token refers to
-   * @param sessionId the sessionId of the store
-   * @param incarnationId the incarnationId of the store
-   * @param version refers to the version of the token
-   */
-  private StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId,
-      short version) {
-    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, version);
-  }
-
-  /**
-   * Journal based token with the given version. Refers to an offset in the journal
-   * @param offset the offset that this token refers to in the journal
-   * @param sessionId the sessionId of the store
-   * @param incarnationId the incarnationId of the store
-   * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
-   *                  {@code false} otherwise
-   * @param version refers to the version of the token
-   */
-  private StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive, short version) {
-    this(Type.JournalBased, offset, null, sessionId, incarnationId, inclusive, version);
-  }
-
-  /**
    * Instantiating {@link StoreFindToken}
    * @param type the {@link Type} of the token
    * @param offset the offset that this token refers to
@@ -151,6 +116,9 @@ public class StoreFindToken implements FindToken {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");
       } else if (type.equals(Type.IndexBased) && key == null) {
         throw new IllegalArgumentException("StoreKey cannot be null for an index based token");
+      }
+      if(version == StoreFindToken.VERSION_2 && incarnationId == null){
+        throw new IllegalArgumentException("IncarnationId cannot be null for StoreFindToken of version 2");
       }
     }
     this.type = type;
@@ -187,13 +155,14 @@ public class StoreFindToken implements FindToken {
         long indexStartOffset = stream.readLong();
         if (indexStartOffset != UNINITIALIZED_OFFSET) {
           // read store key if needed
-          storeFindToken = new StoreFindToken(factory.getStoreKey(stream), new Offset(logSegmentName, indexStartOffset),
-              sessionIdUUID, null, VERSION_0);
+          storeFindToken = new StoreFindToken(Type.IndexBased, new Offset(logSegmentName, indexStartOffset),
+              factory.getStoreKey(stream), sessionIdUUID, null, false, VERSION_0);
         } else if (offset != UNINITIALIZED_OFFSET) {
           storeFindToken =
-              new StoreFindToken(new Offset(logSegmentName, offset), sessionIdUUID, null, false, VERSION_0);
+              new StoreFindToken(Type.JournalBased, new Offset(logSegmentName, offset), null, sessionIdUUID, null,
+                  false, VERSION_0);
         } else {
-          storeFindToken = new StoreFindToken(VERSION_0);
+          storeFindToken = new StoreFindToken(Type.Uninitialized, null, null, null, null, true, VERSION_0);
         }
         break;
       case VERSION_1:
@@ -207,17 +176,18 @@ public class StoreFindToken implements FindToken {
         Type type = Type.values()[stream.readShort()];
         switch (type) {
           case Uninitialized:
-            storeFindToken = new StoreFindToken(VERSION_1);
+            storeFindToken = new StoreFindToken(Type.Uninitialized, null, null, null, null, true, VERSION_1);
             break;
           case JournalBased:
             Offset logOffset = Offset.fromBytes(stream);
-            storeFindToken = new StoreFindToken(logOffset, sessionIdUUID, null, false, VERSION_1);
+            storeFindToken =
+                new StoreFindToken(Type.JournalBased, logOffset, null, sessionIdUUID, null, false, VERSION_1);
             break;
           case IndexBased:
             Offset indexSegmentStartOffset = Offset.fromBytes(stream);
             storeFindToken =
-                new StoreFindToken(factory.getStoreKey(stream), indexSegmentStartOffset, sessionIdUUID, null,
-                    VERSION_1);
+                new StoreFindToken(Type.IndexBased, indexSegmentStartOffset, factory.getStoreKey(stream), sessionIdUUID,
+                    null, false, VERSION_1);
             break;
           default:
             throw new IllegalStateException("Unknown store find token type: " + type);
@@ -352,9 +322,6 @@ public class StoreFindToken implements FindToken {
       case VERSION_2:
         offsetBytes = offset != null ? offset.toBytes() : ZERO_LENGTH_ARRAY;
         sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
-        if (type != Type.Uninitialized && incarnationId == null) {
-          throw new IllegalStateException("IncarnationId cannot be null for Journal or Index based token ");
-        }
         byte[] incarnationIdBytes = incarnationId != null ? incarnationId.toString().getBytes() : ZERO_LENGTH_ARRAY;
         storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
         size = VERSION_SIZE + TYPE_SIZE;
