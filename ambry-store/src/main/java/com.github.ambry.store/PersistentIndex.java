@@ -690,9 +690,11 @@ class PersistentIndex {
         // check journal
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, storeToken.getInclusive());
         logger.trace("Journal based token, Time used to get entries: {}", (time.milliseconds() - startTimeInMs));
+        // we deliberately obtain a snapshot of the index segments AFTER fetching from the journal. This ensures that
+        // any and all entries returned from the journal are guaranteed to be in the obtained snapshot of indexSegments.
         ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
 
-        if (entries != null && journal.getFirstOffset().compareTo(offsetToStart) <= 0) {
+        if (entries != null) {
           startTimeInMs = time.milliseconds();
           logger.trace(
               "Index : " + dataDir + " retrieving from journal from offset " + offsetToStart + " total entries "
@@ -963,8 +965,13 @@ class PersistentIndex {
         for (JournalEntry entry : entries) {
           if (entry.getOffset().compareTo(currentSegment.getEndOffset()) > 0) {
             Offset nextSegmentStartOffset = indexSegments.higherKey(currentSegment.getStartOffset());
-            // stop if there are no more index segments in this ref.
+            // since we were given a snapshot of indexSegments, it is not guaranteed that the snapshot contains all of
+            // the entries obtained from journal.getEntriesSince() that was performed after the snapshot was obtained.
+            // Therefore, it is possible that some of the entries obtained from the journal don't exist in the snapshot
+            // Such entries can be detected when a rollover is required and we have no more index segments left to roll
+            // over to.
             if (nextSegmentStartOffset == null) {
+              // stop if there are no more index segments in this ref.
               break;
             }
             currentSegment = indexSegments.get(nextSegmentStartOffset);
@@ -1203,10 +1210,12 @@ class PersistentIndex {
           inclusive = true;
         }
         List<JournalEntry> entries = journal.getEntriesSince(offsetToStart, inclusive);
+        // we deliberately obtain a snapshot of the index segments AFTER fetching from the journal. This ensures that
+        // any and all entries returned from the journal are guaranteed to be in the obtained snapshot of indexSegments.
         ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
 
         Offset offsetEnd = offsetToStart;
-        if (entries != null && journal.getFirstOffset().compareTo(offsetToStart) <= 0) {
+        if (entries != null) {
           // Case 2: offset based, and offset still in journal
           IndexSegment currentSegment = indexSegments.floorEntry(offsetToStart).getValue();
           long currentTotalSizeOfEntries = 0;
