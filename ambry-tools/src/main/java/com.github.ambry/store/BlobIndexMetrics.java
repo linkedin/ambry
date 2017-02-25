@@ -78,7 +78,7 @@ class BlobIndexMetrics extends PersistentIndex {
     }
     totalWrites.incrementAndGet();
     if (totalWrites.get() % 1000 == 0) {
-      System.out.println("number of indexes created " + indexes.size());
+      System.out.println("number of indexes created " + getIndexSegments().size());
     }
   }
 }
