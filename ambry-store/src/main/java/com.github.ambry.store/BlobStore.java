@@ -58,6 +58,20 @@ class BlobStore implements Store {
   private boolean started;
   private FileLock fileLock;
 
+  /**
+   * States representing the different scenarios that can occur when a set of messages are to be written to the store.
+   * Nomenclature:
+   * Absent: a key that is non-existent in the store.
+   * Duplicate: a key that exists in the store and has the same CRC (meaning the message is the same).
+   * Colliding: a key that exists in the store but has a different CRC (meaning the message is different).
+   */
+  private enum MessageWriteSetStateInStore {
+    ALL_ABSENT, // The messages are all absent in the store.
+    COLLIDING, // At least one message in the write set has the same key as another, different message in the store.
+    ALL_DUPLICATE, // The messages are all duplicates - every one of them already exist in the store.
+    SOME_NOT_ALL_DUPLICATE, // At least one of the message is a duplicate, but not all.
+  }
+
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
@@ -152,49 +166,90 @@ class BlobStore implements Store {
     }
   }
 
+  /**
+   * Checks the state of the messages in the given {@link MessageWriteSet} in the given {@link FileSpan}.
+   * @param messageSetToWrite Non-empty set of messages to write to the store.
+   * @param fileSpan The fileSpan on which the check for existence of the messages have to be made.
+   * @return {@link MessageWriteSetStateInStore} representing the outcome of the state check.
+   * @throws StoreException relays those encountered from {@link PersistentIndex#findKey(StoreKey, FileSpan)}.
+   */
+  private MessageWriteSetStateInStore checkWriteSetStateInStore(MessageWriteSet messageSetToWrite, FileSpan fileSpan)
+      throws StoreException {
+    int existingIdenticalEntries = 0;
+    for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
+      if (index.findKey(info.getStoreKey(), fileSpan) != null) {
+        if (index.wasRecentlySeen(info)) {
+          existingIdenticalEntries++;
+          metrics.identicalPutAttemptCount.inc();
+        } else {
+          return MessageWriteSetStateInStore.COLLIDING;
+        }
+      }
+    }
+    if (existingIdenticalEntries == messageSetToWrite.getMessageSetInfo().size()) {
+      return MessageWriteSetStateInStore.ALL_DUPLICATE;
+    } else if (existingIdenticalEntries > 0) {
+      return MessageWriteSetStateInStore.SOME_NOT_ALL_DUPLICATE;
+    } else {
+      return MessageWriteSetStateInStore.ALL_ABSENT;
+    }
+  }
+
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.putResponse.time();
     try {
-      if (messageSetToWrite.getMessageSetInfo().size() == 0) {
+      if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
         throw new IllegalArgumentException("Message write set cannot be empty");
       }
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
-      // if any of the keys already exist in the store, we fail
-      for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-        if (index.findKey(info.getStoreKey()) != null) {
-          throw new StoreException("Key already exists in store", StoreErrorCodes.Already_Exist);
-        }
-      }
+      MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
+      if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
+        synchronized (lock) {
+          // Validate that log end offset was not changed. If changed, check once again for existing
+          // keys in store
+          Offset currentIndexEndOffset = index.getCurrentEndOffset();
+          if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+            FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+            state = checkWriteSetStateInStore(messageSetToWrite, fileSpan);
+          }
 
-      synchronized (lock) {
-        // Validate that log end offset was not changed. If changed, check once again for existing
-        // keys in store
-        Offset currentIndexEndOffset = index.getCurrentEndOffset();
-        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
-          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
-          for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-            if (index.findKey(info.getStoreKey(), fileSpan) != null) {
-              throw new StoreException("Key already exists on filespan check", StoreErrorCodes.Already_Exist);
+          if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
+            Offset endOffsetOfLastMessage = log.getEndOffset();
+            messageSetToWrite.writeTo(log);
+            logger.trace("Store : {} message set written to log", dataDir);
+            List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
+            ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
+            for (MessageInfo info : messageInfo) {
+              FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+              IndexValue value =
+                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs());
+              IndexEntry entry = new IndexEntry(info.getStoreKey(), value, info.getCrc());
+              indexEntries.add(entry);
+              endOffsetOfLastMessage = fileSpan.getEndOffset();
             }
+            FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
+            index.addToIndex(indexEntries, fileSpan);
+            logger.trace("Store : {} message set written to index ", dataDir);
           }
         }
-        Offset endOffsetOfLastMessage = log.getEndOffset();
-        messageSetToWrite.writeTo(log);
-        logger.trace("Store : {} message set written to log", dataDir);
-        List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
-        ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
-        for (MessageInfo info : messageInfo) {
-          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          IndexValue value = new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs());
-          IndexEntry entry = new IndexEntry(info.getStoreKey(), value);
-          indexEntries.add(entry);
-          endOffsetOfLastMessage = fileSpan.getEndOffset();
-        }
-        FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
-        index.addToIndex(indexEntries, fileSpan);
-        logger.trace("Store : {} message set written to index ", dataDir);
+      }
+      switch (state) {
+        case COLLIDING:
+          throw new StoreException(
+              "For at least one message in the write set, another blob with same key exists in store",
+              StoreErrorCodes.Already_Exist);
+        case SOME_NOT_ALL_DUPLICATE:
+          throw new StoreException(
+              "At least one message but not all in the write set is identical to an existing entry",
+              StoreErrorCodes.Already_Exist);
+        case ALL_DUPLICATE:
+          logger.trace("All entries to put already exist in the store, marking operation as successful");
+          break;
+        case ALL_ABSENT:
+          logger.trace("All entries were absent, and were written to the store successfully");
+          break;
       }
     } catch (StoreException e) {
       throw e;

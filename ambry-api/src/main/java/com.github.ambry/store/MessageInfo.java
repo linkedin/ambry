@@ -20,10 +20,11 @@ import com.github.ambry.utils.Utils;
  * A message info class that contains basic info about a message
  */
 public class MessageInfo {
-  private StoreKey key;
-  private long size;
-  private long expirationTimeInMs;
-  private boolean isDeleted;
+  private final StoreKey key;
+  private final long size;
+  private final long expirationTimeInMs;
+  private final boolean isDeleted;
+  private final Long crc;
 
   public MessageInfo(StoreKey key, long size, long expirationTimeInMs) {
     this(key, size, false, expirationTimeInMs);
@@ -34,14 +35,27 @@ public class MessageInfo {
   }
 
   public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs) {
-    this.key = key;
-    this.size = size;
-    this.isDeleted = deleted;
-    this.expirationTimeInMs = expirationTimeInMs;
+    this(key, size, deleted, expirationTimeInMs, null);
   }
 
   public MessageInfo(StoreKey key, long size) {
     this(key, size, Utils.Infinite_Time);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param deleted whethe the message is deleted.
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @param crc the crc associated with this message. If unavailable, pass in null.
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc) {
+    this.key = key;
+    this.size = size;
+    this.isDeleted = deleted;
+    this.expirationTimeInMs = expirationTimeInMs;
+    this.crc = crc;
   }
 
   public StoreKey getStoreKey() {
@@ -64,6 +78,13 @@ public class MessageInfo {
     return getExpirationTimeInMs() != Utils.Infinite_Time && System.currentTimeMillis() > getExpirationTimeInMs();
   }
 
+  /**
+   * @return the crc associated with this message, if there is one; null otherwise.
+   */
+  public Long getCrc() {
+    return crc;
+  }
+
   @Override
   public String toString() {
     StringBuilder stringBuilder = new StringBuilder();
@@ -79,6 +100,9 @@ public class MessageInfo {
         .append(",")
         .append("IsDeleted-")
         .append(isDeleted)
+        .append(",")
+        .append("Crc-")
+        .append(crc)
         .append("]");
     return stringBuilder.toString();
   }

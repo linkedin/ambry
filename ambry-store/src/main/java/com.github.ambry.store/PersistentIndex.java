@@ -287,7 +287,7 @@ class PersistentIndex {
         } else {
           // create a new entry in the index
           IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
-          addToIndex(new IndexEntry(info.getStoreKey(), newValue), new FileSpan(runningOffset, infoEndOffset));
+          addToIndex(new IndexEntry(info.getStoreKey(), newValue, null), new FileSpan(runningOffset, infoEndOffset));
           logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
         }
@@ -337,7 +337,7 @@ class PersistentIndex {
     } else {
       indexes.lastEntry().getValue().addEntry(entry, fileSpan.getEndOffset());
     }
-    journal.addEntry(entry.getValue().getOffset(), entry.getKey());
+    journal.addEntry(entry.getValue().getOffset(), entry.getKey(), entry.getCrc());
   }
 
   /**
@@ -472,6 +472,16 @@ class PersistentIndex {
   }
 
   /**
+   * Returns true if the given message was recently seen by this Index.
+   * @param info the {@link MessageInfo} to check.
+   * @return true if the exact message was recently added to this index; false otherwise.
+   */
+  boolean wasRecentlySeen(MessageInfo info) {
+    Long crcInJournal = journal.getCrcOfKey(info.getStoreKey());
+    return info.getCrc() != null && info.getCrc().equals(crcInJournal);
+  }
+
+  /**
    * Marks the index entry represented by the key for delete
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
@@ -490,7 +500,7 @@ class PersistentIndex {
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset());
-    addToIndex(new IndexEntry(id, newValue), fileSpan);
+    addToIndex(new IndexEntry(id, newValue, null), fileSpan);
   }
 
   /**
@@ -514,7 +524,8 @@ class PersistentIndex {
     } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     } else {
-      readOptions = new BlobReadOptions(log, value.getOffset(), value.getSize(), value.getExpiresAtMs(), id);
+      readOptions = new BlobReadOptions(log, value.getOffset(), value.getSize(), value.getExpiresAtMs(), id,
+          value.isFlagSet(IndexValue.Flags.Delete_Index), journal.getCrcOfKey(id));
     }
     return readOptions;
   }

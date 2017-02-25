@@ -36,7 +36,9 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final Pair<File, FileChannel> segmentView;
   private final Offset offset;
   private final Long size;
+  private final boolean isDeleted;
   private final Long expiresAtMs;
+  private final Long crc;
   private final StoreKey storeKey;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -49,6 +51,10 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private static final short EXPIRES_AT_MS_LENGTH = 8;
 
   BlobReadOptions(Log log, Offset offset, long size, long expiresAtMs, StoreKey storeKey) {
+    this(log, offset, size, expiresAtMs, storeKey, false, null);
+  }
+
+  BlobReadOptions(Log log, Offset offset, long size, long expiresAtMs, StoreKey storeKey, boolean isDeleted, Long crc) {
     segment = log.getSegment(offset.getName());
     if (offset.getOffset() + size > segment.getEndOffset()) {
       throw new IllegalArgumentException(
@@ -60,7 +66,10 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     this.size = size;
     this.expiresAtMs = expiresAtMs;
     this.storeKey = storeKey;
-    logger.trace("BlobReadOption offset {} size {} expiresAtMs {} storeKey {}", offset, size, expiresAtMs, storeKey);
+    this.isDeleted = isDeleted;
+    this.crc = crc;
+    logger.trace("BlobReadOption offset {} size {} expiresAtMs {} storeKey {}", offset, size, expiresAtMs, storeKey,
+        isDeleted, crc);
   }
 
   String getLogSegmentName() {
@@ -84,7 +93,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   MessageInfo getMessageInfo() {
-    return new MessageInfo(storeKey, size, expiresAtMs);
+    return new MessageInfo(storeKey, size, isDeleted, expiresAtMs, crc);
   }
 
   File getFile() {

@@ -26,15 +26,23 @@ import java.util.List;
 /**
  * A serde for serializing and deserializing list of message info
  */
-public class MessageInfoListSerde {
+class MessageInfoListSerde {
 
   private final List<MessageInfo> messageInfoList;
+  static final short MessageInfoListVersion_V1 = 1;
+  static final short MessageInfoListVersion_V2 = 2;
 
-  public MessageInfoListSerde(List<MessageInfo> messageInfoList) {
+  private final short version;
+
+  private static final byte CRC_PRESENT = (byte) 1;
+  private static final byte DELETED = (byte) 1;
+
+  MessageInfoListSerde(List<MessageInfo> messageInfoList, short version) {
     this.messageInfoList = messageInfoList;
+    this.version = version;
   }
 
-  public int getMessageInfoListSize() {
+  int getMessageInfoListSize() {
     int listcountSize = 4;
     if (messageInfoList == null) {
       return listcountSize;
@@ -42,48 +50,66 @@ public class MessageInfoListSerde {
     int size = 0;
     int longfieldSize = 8;
     size += listcountSize;
-    if (messageInfoList != null) {
-      for (MessageInfo messageInfo : messageInfoList) {
-        size += messageInfo.getStoreKey().sizeInBytes();
-        size += longfieldSize;
-        size += longfieldSize;
+    for (MessageInfo messageInfo : messageInfoList) {
+      size += messageInfo.getStoreKey().sizeInBytes();
+      // message size
+      size += longfieldSize;
+      // expiration time
+      size += longfieldSize;
+      // whether deleted
+      size += 1;
+      if (version == MessageInfoListVersion_V2) {
+        // whether crc is present
         size += 1;
+        if (messageInfo.getCrc() != null) {
+          // crc
+          size += longfieldSize;
+        }
       }
     }
     return size;
   }
 
-  public void serializeMessageInfoList(ByteBuffer outputBuffer) {
+  void serializeMessageInfoList(ByteBuffer outputBuffer) {
     outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
     if (messageInfoList != null) {
       for (MessageInfo messageInfo : messageInfoList) {
         outputBuffer.put(messageInfo.getStoreKey().toBytes());
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
-        outputBuffer.put(messageInfo.isDeleted() ? (byte) 1 : 0);
+        outputBuffer.put(messageInfo.isDeleted() ? DELETED : (byte) ~DELETED);
+        if (version == MessageInfoListVersion_V2) {
+          Long crc = messageInfo.getCrc();
+          if (crc != null) {
+            outputBuffer.put(CRC_PRESENT);
+            outputBuffer.putLong(crc);
+          } else {
+            outputBuffer.put((byte) ~CRC_PRESENT);
+          }
+        }
       }
     }
   }
 
-  public static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map)
-      throws IOException {
+  static List<MessageInfo> deserializeMessageInfoList(DataInputStream stream, ClusterMap map,
+      short versionToDeserializeIn) throws IOException {
     int messageInfoListCount = stream.readInt();
     ArrayList<MessageInfo> messageListInfo = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
       BlobId id = new BlobId(stream, map);
       long size = stream.readLong();
       long ttl = stream.readLong();
-      byte b = stream.readByte();
-      boolean isDeleted = false;
-      if (b == 1) {
-        isDeleted = true;
+      boolean isDeleted = stream.readByte() == DELETED;
+      Long crc = null;
+      if (versionToDeserializeIn == MessageInfoListVersion_V2) {
+        crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
       }
-      messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl));
+      messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl, crc));
     }
     return messageListInfo;
   }
 
-  public List<MessageInfo> getMessageInfoList() {
+  List<MessageInfo> getMessageInfoList() {
     return messageInfoList;
   }
 }

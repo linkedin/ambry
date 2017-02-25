@@ -37,19 +37,21 @@ public class PartitionResponseInfo {
 
   private static final int Error_Size_InBytes = 2;
 
-  public PartitionResponseInfo(PartitionId partitionId, List<MessageInfo> messageInfoList) {
-    this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
+  private PartitionResponseInfo(PartitionId partitionId, List<MessageInfo> messageInfoList,
+      ServerErrorCode serverErrorCode, short getResponseVersion) {
+    this.messageInfoListSerDe =
+        new MessageInfoListSerde(messageInfoList, getMessageInfoListVersion(getResponseVersion));
     this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
     this.partitionId = partitionId;
-    this.errorCode = ServerErrorCode.No_Error;
+    this.errorCode = serverErrorCode;
+  }
+
+  public PartitionResponseInfo(PartitionId partitionId, List<MessageInfo> messageInfoList) {
+    this(partitionId, messageInfoList, ServerErrorCode.No_Error, GetResponse.getCurrentVersion());
   }
 
   public PartitionResponseInfo(PartitionId partitionId, ServerErrorCode errorCode) {
-    List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
-    this.messageInfoListSerDe = new MessageInfoListSerde(messageInfoList);
-    this.messageInfoListSize = messageInfoListSerDe.getMessageInfoListSize();
-    this.partitionId = partitionId;
-    this.errorCode = errorCode;
+    this(partitionId, new ArrayList<MessageInfo>(), errorCode, GetResponse.getCurrentVersion());
   }
 
   public PartitionId getPartition() {
@@ -64,14 +66,18 @@ public class PartitionResponseInfo {
     return errorCode;
   }
 
-  public static PartitionResponseInfo readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+  public static PartitionResponseInfo readFrom(DataInputStream stream, ClusterMap map, short getResponseVersion)
+      throws IOException {
     PartitionId partitionId = map.getPartitionIdFromStream(stream);
-    List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, map);
+    List<MessageInfo> messageInfoList =
+        MessageInfoListSerde.deserializeMessageInfoList(stream, map, getMessageInfoListVersion(getResponseVersion));
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     if (error != ServerErrorCode.No_Error) {
-      return new PartitionResponseInfo(partitionId, error);
+      return new PartitionResponseInfo(partitionId, new ArrayList<MessageInfo>(), error,
+          getMessageInfoListVersion(getResponseVersion));
     } else {
-      return new PartitionResponseInfo(partitionId, messageInfoList);
+      return new PartitionResponseInfo(partitionId, messageInfoList, ServerErrorCode.No_Error,
+          getMessageInfoListVersion(getResponseVersion));
     }
   }
 
@@ -94,5 +100,21 @@ public class PartitionResponseInfo {
     sb.append(" MessageInfoListSize=").append(messageInfoListSize);
     sb.append("]");
     return sb.toString();
+  }
+
+  /**
+   * Return the MessageInfoList version to use for the given {@link GetResponse} version
+   * @param getResponseVersion the GetResponse version
+   * @return the MessageInfoList version to use for the given GetResponse version
+   */
+  private static short getMessageInfoListVersion(short getResponseVersion) {
+    switch (getResponseVersion) {
+      case GetResponse.Get_Response_Version_V1:
+        return MessageInfoListSerde.MessageInfoListVersion_V1;
+      case GetResponse.Get_Response_Version_V2:
+        return MessageInfoListSerde.MessageInfoListVersion_V2;
+      default:
+        throw new IllegalArgumentException("Unknown GetResponse version encountered: " + getResponseVersion);
+    }
   }
 }

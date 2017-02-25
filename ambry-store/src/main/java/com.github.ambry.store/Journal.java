@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,6 +48,7 @@ class JournalEntry {
 class Journal {
 
   private final ConcurrentSkipListMap<Offset, StoreKey> journal;
+  private final ConcurrentHashMap<StoreKey, Long> recentCrcs;
   private final int maxEntriesToJournal;
   private final int maxEntriesToReturn;
   private final AtomicInteger currentNumberOfEntries;
@@ -61,6 +63,7 @@ class Journal {
    */
   Journal(String dataDir, int maxEntriesToJournal, int maxEntriesToReturn) {
     journal = new ConcurrentSkipListMap<>();
+    recentCrcs = new ConcurrentHashMap<>();
     this.maxEntriesToJournal = maxEntriesToJournal;
     this.maxEntriesToReturn = maxEntriesToReturn;
     this.currentNumberOfEntries = new AtomicInteger(0);
@@ -68,24 +71,39 @@ class Journal {
   }
 
   /**
-   * The entry that needs to be added to the journal.
+   * Adds an entry into the journal with the given {@link Offset}, {@link StoreKey}, and crc.
    * @param offset The {@link Offset} that the key pertains to.
    * @param key The key that the entry in the journal refers to.
+   * @param crc The crc of the object. This may be null if crc is not available.
    */
-  void addEntry(Offset offset, StoreKey key) {
+  void addEntry(Offset offset, StoreKey key, Long crc) {
     if (key == null || offset == null) {
       throw new IllegalArgumentException("Invalid arguments passed to add to the journal");
     }
     if (maxEntriesToJournal > 0) {
       if (currentNumberOfEntries.get() == maxEntriesToJournal) {
-        journal.remove(journal.firstKey());
+        Map.Entry<Offset, StoreKey> earliestEntry = journal.firstEntry();
+        journal.remove(earliestEntry.getKey());
+        recentCrcs.remove(earliestEntry.getValue());
         currentNumberOfEntries.decrementAndGet();
       }
       journal.put(offset, key);
+      if (crc != null) {
+        recentCrcs.put(key, crc);
+      }
       logger.trace("Journal : " + dataDir + " offset " + offset + " key " + key);
       currentNumberOfEntries.incrementAndGet();
       logger.trace("Journal : " + dataDir + " number of entries " + currentNumberOfEntries.get());
     }
+  }
+
+  /**
+   * Adds an entry into the journal with the given {@link Offset}, {@link StoreKey}, and a null crc.
+   * @param offset The {@link Offset} that the key pertains to.
+   * @param key The key that the entry in the journal refers to.
+   */
+  void addEntry(Offset offset, StoreKey key) {
+    addEntry(offset, key, null);
   }
 
   /**
@@ -149,5 +167,14 @@ class Journal {
   Offset getLastOffset() {
     Map.Entry<Offset, StoreKey> last = journal.lastEntry();
     return last == null ? null : last.getKey();
+  }
+
+  /**
+   * Returns the crc associated with this key in the journal if there is one; else returns null.
+   * @param key the key for which the crc is to be obtained.
+   * @return the crc associated with this key in the journal if there is one; else returns null.
+   */
+  Long getCrcOfKey(StoreKey key) {
+    return recentCrcs.get(key);
   }
 }

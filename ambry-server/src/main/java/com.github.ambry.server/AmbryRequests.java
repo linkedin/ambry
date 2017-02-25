@@ -156,9 +156,9 @@ public class AmbryRequests implements RequestAPI {
             new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobProperties(),
                 receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(), receivedRequest.getBlobSize(),
                 receivedRequest.getBlobType());
-        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(),
+        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), false,
             Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
-                receivedRequest.getBlobProperties().getTimeToLiveInSeconds()));
+                receivedRequest.getBlobProperties().getTimeToLiveInSeconds()), receivedRequest.getCrc());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);

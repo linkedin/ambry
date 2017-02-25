@@ -37,11 +37,15 @@ public class GetResponse extends Response {
   private int partitionResponseInfoSize;
 
   private static int Partition_Response_Info_List_Size = 4;
-  private static final short Get_Response_Version_V1 = 1;
+  static final short Get_Response_Version_V1 = 1;
+  static final short Get_Response_Version_V2 = 2;
+
+  // @todo change this to V2 once all cluster nodes understand V2.
+  private static final short currentVersion = Get_Response_Version_V1;
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       Send send, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, Get_Response_Version_V1, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, currentVersion, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -52,7 +56,7 @@ public class GetResponse extends Response {
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       InputStream stream, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, Get_Response_Version_V1, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, currentVersion, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -62,7 +66,7 @@ public class GetResponse extends Response {
   }
 
   public GetResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, Get_Response_Version_V1, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, currentVersion, correlationId, clientId, error);
     this.partitionResponseInfoList = null;
     this.partitionResponseInfoSize = 0;
   }
@@ -94,7 +98,7 @@ public class GetResponse extends Response {
       ArrayList<PartitionResponseInfo> partitionResponseInfoList =
           new ArrayList<PartitionResponseInfo>(partitionResponseInfoCount);
       for (int i = 0; i < partitionResponseInfoCount; i++) {
-        PartitionResponseInfo partitionResponseInfo = PartitionResponseInfo.readFrom(stream, map);
+        PartitionResponseInfo partitionResponseInfo = PartitionResponseInfo.readFrom(stream, map, versionId);
         partitionResponseInfoList.add(partitionResponseInfo);
       }
       return new GetResponse(correlationId, clientId, partitionResponseInfoList, stream, error);
@@ -149,5 +153,12 @@ public class GetResponse extends Response {
     }
     sb.append("]");
     return sb.toString();
+  }
+
+  /**
+   * @return the current version in which new GetResponse objects are created.
+   */
+  static short getCurrentVersion() {
+    return currentVersion;
   }
 }

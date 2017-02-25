@@ -313,11 +313,11 @@ class MockServer {
     ServerErrorCode retCode = ServerErrorCode.No_Error;
     if (blob == null) {
       retCode = ServerErrorCode.Blob_Not_Found;
-    } else if (blob.isDeleted() && !getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest
-        .getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
+    } else if (blob.isDeleted() && !getRequest.getGetOption().equals(GetOption.Include_All)
+        && !getRequest.getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
       retCode = ServerErrorCode.Blob_Deleted;
-    } else if (blob.hasExpired() && !getRequest.getGetOption().equals(GetOption.Include_All) && !getRequest
-        .getGetOption().equals(GetOption.Include_Expired_Blobs)) {
+    } else if (blob.hasExpired() && !getRequest.getGetOption().equals(GetOption.Include_All)
+        && !getRequest.getGetOption().equals(GetOption.Include_Expired_Blobs)) {
       retCode = ServerErrorCode.Blob_Expired;
     }
     return retCode;

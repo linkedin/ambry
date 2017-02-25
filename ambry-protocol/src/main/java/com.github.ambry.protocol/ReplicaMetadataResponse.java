@@ -35,11 +35,16 @@ public class ReplicaMetadataResponse extends Response {
   private int replicaMetadataResponseInfoListSizeInBytes;
 
   private static int Replica_Metadata_Response_Info_List_Size_In_Bytes = 4;
-  private static final short Replica_Metadata_Response_Version_V1 = 1;
+
+  static final short Replica_Metadata_Response_Version_V1 = 1;
+  static final short Replica_Metadata_Response_Version_V2 = 2;
+
+  // @todo change this to V2 once all cluster nodes understand V2.
+  private static final short currentVersion = Replica_Metadata_Response_Version_V1;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, Replica_Metadata_Response_Version_V1, correlationId, clientId,
+    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId,
         error);
     this.replicaMetadataResponseInfoList = replicaMetadataResponseInfoList;
     this.replicaMetadataResponseInfoListSizeInBytes = 0;
@@ -49,7 +54,7 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, Replica_Metadata_Response_Version_V1, correlationId, clientId,
+    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId,
         error);
     replicaMetadataResponseInfoList = null;
     replicaMetadataResponseInfoListSizeInBytes = 0;
@@ -74,7 +79,7 @@ public class ReplicaMetadataResponse extends Response {
         new ArrayList<ReplicaMetadataResponseInfo>(replicaMetadataResponseInfoListCount);
     for (int i = 0; i < replicaMetadataResponseInfoListCount; i++) {
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
-          ReplicaMetadataResponseInfo.readFrom(stream, factory, clusterMap);
+          ReplicaMetadataResponseInfo.readFrom(stream, factory, clusterMap, versionId);
       replicaMetadataResponseInfoList.add(replicaMetadataResponseInfo);
     }
     if (error != ServerErrorCode.No_Error) {
@@ -127,5 +132,12 @@ public class ReplicaMetadataResponse extends Response {
     }
     sb.append("]");
     return sb.toString();
+  }
+
+  /**
+   * @return the current version in which new ReplicaMetadataResponse objects are created.
+   */
+  public static short getCurrentVersion() {
+    return currentVersion;
   }
 }

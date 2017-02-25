@@ -53,6 +53,7 @@ public class StoreMetrics {
   public final Counter hardDeleteExceptionsCount;
   public final Histogram segmentSizeForExists;
   public final Histogram segmentsAccessedPerBlobCount;
+  public final Counter identicalPutAttemptCount;
 
   private final MetricRegistry registry;
   private final String name;
@@ -98,6 +99,8 @@ public class StoreMetrics {
     segmentSizeForExists = registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentSizeForExists"));
     segmentsAccessedPerBlobCount =
         registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentsAccessedPerBlobCount"));
+    identicalPutAttemptCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IdenticalPutAttemptCount"));
   }
 
   void initializeIndexGauges(final PersistentIndex index, final long capacityInBytes) {
