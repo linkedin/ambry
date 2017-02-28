@@ -124,7 +124,6 @@ class NettyRequest implements RestRequest {
     savedAllocator = channel.config().getRecvByteBufAllocator();
     this.nettyMetrics = nettyMetrics;
 
-    // Get the SSLSession from the SslHandler on this channel's pipeline, if it exists
     SslHandler sslHandler = channel.pipeline().get(SslHandler.class);
     sslSession = sslHandler != null ? sslHandler.engine().getSession() : null;
 

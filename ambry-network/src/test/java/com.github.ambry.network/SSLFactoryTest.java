@@ -43,7 +43,7 @@ public class SSLFactoryTest {
     SSLConfig clientSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
 
-    SSLFactory sslFactory = new SSLFactoryImpl(sslConfig);
+    SSLFactory sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     SSLSocketFactory socketFactory = sslContext.getSocketFactory();
     Assert.assertNotNull(socketFactory);
@@ -53,7 +53,7 @@ public class SSLFactoryTest {
     TestSSLUtils.verifySSLConfig(sslContext, serverSideSSLEngine, false);
 
     //client
-    sslFactory = new SSLFactoryImpl(clientSSLConfig);
+    sslFactory = new SSLFactory(clientSSLConfig);
     sslContext = sslFactory.getSSLContext();
     socketFactory = sslContext.getSocketFactory();
     Assert.assertNotNull(socketFactory);

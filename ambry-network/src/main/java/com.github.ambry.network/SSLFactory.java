@@ -14,7 +14,6 @@
 package com.github.ambry.network;
 
 import com.github.ambry.config.SSLConfig;
-import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -35,8 +34,10 @@ import org.slf4j.LoggerFactory;
 /**
  * Factory to create SSLContext and SSLEngine
  */
-public class SSLFactoryImpl implements SSLFactory {
-  protected Logger logger = LoggerFactory.getLogger(SSLFactoryImpl.class);
+public class SSLFactory {
+  public enum Mode {CLIENT, SERVER}
+
+  protected static final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
 
   private String protocol;
   private String provider;
@@ -53,22 +54,12 @@ public class SSLFactoryImpl implements SSLFactory {
   private boolean wantClientAuth;
 
   /**
-   * Construct an {@link SSLFactoryImpl}.
-   * @param verifiableProperties the {@link VerifiableProperties} to use.
-   * @throws GeneralSecurityException
-   * @throws IOException
-   */
-  public SSLFactoryImpl(VerifiableProperties verifiableProperties) throws GeneralSecurityException, IOException {
-    this(new SSLConfig(verifiableProperties));
-  }
-
-  /**
-   * Construct an {@link SSLFactoryImpl}.
+   * Construct an {@link SSLFactory}.
    * @param sslConfig the {@link SSLConfig} to use.
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  public SSLFactoryImpl(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
+  public SSLFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
 
     this.protocol = sslConfig.sslContextProtocol;
     if (sslConfig.sslContextProvider.length() > 0) {
@@ -113,7 +104,7 @@ public class SSLFactoryImpl implements SSLFactory {
   }
 
   /**
-   * Create SSLContext by loading keystore and trustsotre
+   * Create {@link SSLContext} by loading keystore and trustsotre
    * One factory only has one SSLContext
    * @return SSLContext
    * @throws GeneralSecurityException
@@ -147,13 +138,13 @@ public class SSLFactoryImpl implements SSLFactory {
   }
 
   /**
-   * Create SSLEngine for given host name and port number
+   * Create {@link SSLEngine} for given host name and port number.
+   * This engine manages the handshake process and encryption/decryption with this remote host.
    * @param peerHost The remote host name
    * @param peerPort The remote port number
    * @param mode The local SSL mode, Client or Server
    * @return SSLEngine
    */
-  @Override
   public SSLEngine createSSLEngine(String peerHost, int peerPort, Mode mode) {
     SSLEngine sslEngine = sslContext.createSSLEngine(peerHost, peerPort);
     if (cipherSuites != null) {
@@ -180,10 +171,10 @@ public class SSLFactoryImpl implements SSLFactory {
   }
 
   /**
-   * Returns a configured SSLContext.
+   * Returns a configured {@link SSLContext}. This context supports creating {@link SSLEngine}s and for the loaded
+   * truststore and keystore. An {@link SSLEngine} must be created for each connection.
    * @return SSLContext.
    */
-  @Override
   public SSLContext getSSLContext() {
     return sslContext;
   }

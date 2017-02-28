@@ -18,7 +18,6 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.SSLFactoryImpl;
 import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.utils.SystemTime;
 import java.io.File;
@@ -67,13 +66,13 @@ public class ServerSSLTest {
     sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
-    sslFactory = new SSLFactoryImpl(clientSSLConfig1);
+    sslFactory = new SSLFactory(clientSSLConfig1);
     SSLContext sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory1 = sslContext.getSocketFactory();
-    sslFactory = new SSLFactoryImpl(clientSSLConfig2);
+    sslFactory = new SSLFactory(clientSSLConfig2);
     sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory2 = sslContext.getSocketFactory();
-    sslFactory = new SSLFactoryImpl(clientSSLConfig3);
+    sslFactory = new SSLFactory(clientSSLConfig3);
     sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory3 = sslContext.getSocketFactory();
   }

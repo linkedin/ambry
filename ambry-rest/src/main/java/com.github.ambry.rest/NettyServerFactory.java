@@ -55,20 +55,23 @@ public class NettyServerFactory implements NioServerFactory {
         || restServerState == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyServerFactory");
     }
-    this.nettyConfig = new NettyConfig(verifiableProperties);
-    this.nettyMetrics = new NettyMetrics(metricRegistry);
+    nettyConfig = new NettyConfig(verifiableProperties);
+    if (sslFactory == null && nettyConfig.nettyServerSSLEnabled) {
+      throw new IllegalArgumentException("NettyServer requires SSL, but sslFactory is null");
+    }
+    nettyMetrics = new NettyMetrics(metricRegistry);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
 
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = new HashMap<>();
     initializers.put(nettyConfig.nettyServerPort,
         new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
             publicAccessLogger, restServerState, null));
-    if (sslFactory != null) {
+    if (nettyConfig.nettyServerSSLEnabled) {
       initializers.put(nettyConfig.nettyServerSSLPort,
           new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
               publicAccessLogger, restServerState, sslFactory));
     }
-    this.channelInitializers = Collections.unmodifiableMap(initializers);
+    channelInitializers = Collections.unmodifiableMap(initializers);
   }
 
   /**
@@ -82,7 +85,7 @@ public class NettyServerFactory implements NioServerFactory {
 
   /**
    * Get the {@link ChannelInitializer}s to be used when constructing {@link NettyServer}s.
-   * @return an unmodifiable map that maps port numbers to {@link ChannelInitializer}s.
+   * @return an unmodifiable {@link Map} that maps port numbers to {@link ChannelInitializer}s.
    */
   Map<Integer, ChannelInitializer<SocketChannel>> getChannelInitializers() {
     return channelInitializers;

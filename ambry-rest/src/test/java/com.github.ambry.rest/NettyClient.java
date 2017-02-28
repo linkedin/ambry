@@ -40,7 +40,6 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.Closeable;
-import java.net.InetSocketAddress;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.Future;

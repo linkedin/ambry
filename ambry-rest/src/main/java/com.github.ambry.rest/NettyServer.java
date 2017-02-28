@@ -55,7 +55,7 @@ public class NettyServer implements NioServer {
    * Creates a new instance of NettyServer.
    * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param channelInitializers maps from port numbers to the {@link ChannelInitializer} used to initialize
+   * @param channelInitializers a {@link Map} from port number to the {@link ChannelInitializer} used to initialize
    *                            a new channel on that port.
    */
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
@@ -123,8 +123,6 @@ public class NettyServer implements NioServer {
   private void bindServer(int port, ChannelInitializer<SocketChannel> channelInitializer, EventLoopGroup bossGroup,
       EventLoopGroup workerGroup) throws InterruptedException {
     ServerBootstrap b = new ServerBootstrap();
-    // Netty creates a new instance of every class in the pipeline for every connection
-    // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
     b.group(bossGroup, workerGroup)
         .channel(NioServerSocketChannel.class)
         .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)

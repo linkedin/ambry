@@ -60,23 +60,24 @@ public class NonBlockingRouterFactory implements RouterFactory {
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory) throws GeneralSecurityException {
-    boolean sslRequired = new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    if ((sslRequired && sslFactory == null) || verifiableProperties == null || clusterMap == null
-        || notificationSystem == null) {
+    if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null argument passed in");
+    }
+    if (sslFactory == null && new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0) {
+      throw new IllegalArgumentException("NonBlockingRouter requires SSL, but sslFactory is null");
     }
     routerConfig = new RouterConfig(verifiableProperties);
     if (!clusterMap.hasDatacenter(routerConfig.routerDatacenterName)) {
       throw new IllegalStateException(
           "Router datacenter " + routerConfig.routerDatacenterName + " is not part of the clustermap");
     }
-    MetricRegistry registry = clusterMap.getMetricRegistry();
-    routerMetrics = new NonBlockingRouterMetrics(clusterMap);
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
+    MetricRegistry registry = clusterMap.getMetricRegistry();
+    routerMetrics = new NonBlockingRouterMetrics(clusterMap);
     networkConfig = new NetworkConfig(verifiableProperties);
     networkMetrics = new NetworkMetrics(registry);
-    this.time = SystemTime.getInstance();
+    time = SystemTime.getInstance();
     networkClientFactory = new NetworkClientFactory(networkMetrics, networkConfig, sslFactory,
         routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
         routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);

@@ -16,7 +16,6 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.MockSSLFactory;
 import com.github.ambry.network.SSLFactory;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
@@ -33,6 +32,12 @@ import static org.junit.Assert.*;
  * Tests basic functionality of {@link NettyServer}.
  */
 public class NettyServerTest {
+  private static final NettyMetrics NETTY_METRICS = new NettyMetrics(new MetricRegistry());
+  private static final RestRequestHandler REQUEST_HANDLER = new MockRestRequestResponseHandler();
+  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
+  private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
+  private static final ConnectionStatsHandler CONNECTION_STATS_HANDLER = new ConnectionStatsHandler(NETTY_METRICS);
+  private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
 
   /**
    * Tests {@link NettyServer#start()} and {@link NettyServer#shutdown()} given good input.
@@ -67,22 +72,15 @@ public class NettyServerTest {
    */
   @Test
   public void startWithBadInputTest() throws InstantiationException, IOException {
-    for (int i = 0; i < 2; i++) {
-      Properties properties = new Properties();
-      // Should be > 0. So will throw at start().
-      properties.setProperty(i == 0 ? "netty.server.port" : "netty.server.ssl.port", "-1");
-      NioServer nioServer = getNettyServer(properties);
-      try {
-        nioServer.start();
-        fail("NettyServer start() should have failed because of bad port number value");
-      } catch (IllegalArgumentException e) {
-        // nothing to do. expected.
-      } finally {
-        if (nioServer != null) {
-          nioServer.shutdown();
-        }
-      }
-    }
+    Properties properties = new Properties();
+    // Should be > 0. So will throw at start().
+    properties.setProperty("netty.server.port", "-1");
+    doStartFailureTest(properties);
+
+    properties = new Properties();
+    // Should be > 0. So will throw at start().
+    properties.setProperty("netty.server.ssl.port", "-1");
+    doStartFailureTest(properties);
   }
 
   // helpers
@@ -102,20 +100,32 @@ public class NettyServerTest {
     }
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     final NettyConfig nettyConfig = new NettyConfig(verifiableProperties);
-    final NettyMetrics nettyMetrics = new NettyMetrics(new MetricRegistry());
-    final RestRequestHandler requestHandler = new MockRestRequestResponseHandler();
-    final PublicAccessLogger publicAccessLogger = new PublicAccessLogger(new String[]{}, new String[]{});
-    final RestServerState restServerState = new RestServerState("/healthCheck");
-    final ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
-    final SSLFactory sslFactory = new MockSSLFactory(verifiableProperties);
 
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = new HashMap<>();
     channelInitializers.put(nettyConfig.nettyServerPort,
-        new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
-            publicAccessLogger, restServerState, null));
+        new NettyServerChannelInitializer(nettyConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER, REQUEST_HANDLER,
+            PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null));
     channelInitializers.put(nettyConfig.nettyServerSSLPort,
-        new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
-            publicAccessLogger, restServerState, sslFactory));
-    return new NettyServer(nettyConfig, nettyMetrics, channelInitializers);
+        new NettyServerChannelInitializer(nettyConfig, NETTY_METRICS, CONNECTION_STATS_HANDLER, REQUEST_HANDLER,
+            PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, SSL_FACTORY));
+    return new NettyServer(nettyConfig, NETTY_METRICS, channelInitializers);
+  }
+
+  /**
+   * Test that the {@link NettyServer} fails to start up with the given properties.
+   * @param properties
+   */
+  private void doStartFailureTest(Properties properties) throws IOException, InstantiationException {
+    NioServer nioServer = getNettyServer(properties);
+    try {
+      nioServer.start();
+      fail("NettyServer start() should have failed because of bad port number value");
+    } catch (IllegalArgumentException e) {
+      // nothing to do. expected.
+    } finally {
+      if (nioServer != null) {
+        nioServer.shutdown();
+      }
+    }
   }
 }

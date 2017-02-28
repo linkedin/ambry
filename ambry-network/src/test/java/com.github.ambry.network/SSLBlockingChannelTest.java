@@ -52,12 +52,12 @@ public class SSLBlockingChannelTest {
     clientSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
 
-    sslFactory = new SSLFactoryImpl(sslConfig);
+    sslFactory = new SSLFactory(sslConfig);
     sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();
 
     //client
-    sslFactory = new SSLFactoryImpl(clientSSLConfig);
+    sslFactory = new SSLFactory(clientSSLConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }

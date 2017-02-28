@@ -99,11 +99,11 @@ public class SocketServer implements NetworkServer {
   private void initializeSSLFactory(SSLConfig sslConfig) {
     if (ports.get(PortType.SSL) != null) {
       try {
-        this.sslFactory = new SSLFactoryImpl(sslConfig);
+        this.sslFactory = new SSLFactory(sslConfig);
         metrics.sslFactoryInitializationCount.inc();
       } catch (Exception e) {
         metrics.sslFactoryInitializationErrorCount.inc();
-        throw new IllegalStateException("Exception thrown during initialization of SSLFactoryImpl ", e);
+        throw new IllegalStateException("Exception thrown during initialization of SSLFactory ", e);
       }
     }
   }

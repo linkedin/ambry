@@ -77,7 +77,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -646,10 +648,10 @@ public class NettyRequestTest {
    * @param headers the {@link HttpHeaders} passed with the request that need to be in {@link NettyRequest#getArgs()}.
    * @param params the parameters passed with the request that need to be in {@link NettyRequest#getArgs()}.
    * @param httpCookies Set of {@link Cookie} set in the request
-   * @param channel the {@link Channel} over which the request was received.
+   * @param channel the {@link MockChannel} over which the request was received.
    */
   private void validateRequest(NettyRequest nettyRequest, RestMethod restMethod, String uri, HttpHeaders headers,
-      Map<String, List<String>> params, Set<Cookie> httpCookies, Channel channel) {
+      Map<String, List<String>> params, Set<Cookie> httpCookies, MockChannel channel) {
     long contentLength =
         headers.contains(HttpHeaderNames.CONTENT_LENGTH) ? Long.parseLong(headers.get(HttpHeaderNames.CONTENT_LENGTH))
             : 0;
@@ -660,10 +662,11 @@ public class NettyRequestTest {
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
     assertNotNull("There should have been a RestRequestMetricsTracker", nettyRequest.getMetricsTracker());
     assertFalse("Should not have been a multipart request", nettyRequest.isMultipart());
+    SSLSession sslSession = nettyRequest.getSSLSession();
     if (channel.pipeline().get(SslHandler.class) == null) {
-      assertNull("Non-null SSLSession when pipeline does not contain an SslHandler", nettyRequest.getSSLSession());
+      assertNull("Non-null SSLSession when pipeline does not contain an SslHandler", sslSession);
     } else {
-      assertNotNull("Null SSLSession when pipeline contains an SslHandler", nettyRequest.getSSLSession());
+      assertEquals("SSLSession does not match one from MockChannel", channel.getSSLEngine().getSession(), sslSession);
     }
 
     Set<javax.servlet.http.Cookie> actualCookies =
@@ -1374,6 +1377,7 @@ class MockChannel extends EmbeddedChannel {
   }
 
   private final ChannelConfig config = new DefaultChannelConfig(this);
+  private SSLEngine sslEngine = null;
   private ChannelReadCallback channelReadCallback = null;
   private int queuedOnReads = 0;
 
@@ -1392,9 +1396,18 @@ class MockChannel extends EmbeddedChannel {
     if (pipeline().get(SslHandler.class) == null) {
       SelfSignedCertificate ssc = new SelfSignedCertificate();
       SslContext sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey()).build();
-      pipeline().addFirst(sslCtx.newHandler(alloc()));
+      sslEngine = sslCtx.newEngine(alloc());
+      pipeline().addFirst(new SslHandler(sslEngine));
     }
     return this;
+  }
+
+  /**
+   * @return the {@link SSLEngine} associated with this channel, or {@code null} if no {@link SslHandler} is on this
+   *         pipeline.
+   */
+  SSLEngine getSSLEngine() {
+    return sslEngine;
   }
 
   /**

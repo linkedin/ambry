@@ -21,7 +21,6 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.SSLFactoryImpl;
 import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
@@ -87,19 +86,18 @@ public class FrontendIntegrationTest {
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
   private static final ClusterMap CLUSTER_MAP;
-  private static final File TRUST_STORE_FILE;
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS;
+  private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;
   private static final FrontendConfig FRONTEND_CONFIG;
-  private static final SSLConfig CLIENT_SSL_CONFIG;
 
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
-      TRUST_STORE_FILE = File.createTempFile("truststore", ".jks");
-      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps();
+      File trustStoreFile = File.createTempFile("truststore", ".jks");
+      trustStoreFile.deleteOnExit();
+      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
+      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
       FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
-      CLIENT_SSL_CONFIG =
-          new SSLConfig(TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, TRUST_STORE_FILE, "client"));
     } catch (IOException | GeneralSecurityException e) {
       throw new IllegalStateException(e);
     }
@@ -132,10 +130,12 @@ public class FrontendIntegrationTest {
    */
   @BeforeClass
   public static void setup() throws Exception {
-    ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem());
+    ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
+        new SSLFactory(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     ambryRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
-    sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactoryImpl(CLIENT_SSL_CONFIG));
+    sslNettyClient =
+        new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactory(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
   }
 
   /**
@@ -284,19 +284,21 @@ public class FrontendIntegrationTest {
 
   /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
    * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVProps() throws IOException, GeneralSecurityException {
+  private static VerifiableProperties buildFrontendVProps(File trustStoreFile)
+      throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.blob.storage.service.factory",
         "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
-    properties.put("rest.server.enable.https", "true");
     properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
     properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
+    properties.put("netty.server.enable.ssl", "true");
     // to test that backpressure does not impede correct operation.
     properties.put("netty.server.request.buffer.watermark", "1");
-    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, TRUST_STORE_FILE, "frontend");
+    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     return new VerifiableProperties(properties);
   }
 

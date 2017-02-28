@@ -19,7 +19,6 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.SSLFactory;
@@ -146,10 +145,11 @@ public class RestServer {
    * @param verifiableProperties the properties that define the behavior of the RestServer and its components.
    * @param clusterMap the {@link ClusterMap} instance that needs to be used.
    * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
+   * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem) throws Exception {
+      NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
@@ -159,13 +159,6 @@ public class RestServer {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
-
-    boolean sslRequired = restServerConfig.restServerEnableHTTPS
-        || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    SSLFactory sslFactory = null;
-    if (sslRequired) {
-      sslFactory = Utils.getObj(restServerConfig.restServerSSLFactory, verifiableProperties);
-    }
 
     RouterFactory routerFactory =
         Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem,
@@ -194,7 +187,7 @@ public class RestServer {
     nioServer = nioServerFactory.getNioServer();
 
     if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
-        || nioServer == null || (sslRequired && sslFactory == null)) {
+        || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
     logger.trace("Instantiated RestServer");

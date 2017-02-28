@@ -29,7 +29,7 @@ import java.net.InetSocketAddress;
 /**
  * A {@link ChannelInitializer} to be used with {@link NettyServer}.
  */
-public class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
+class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
   private final ConnectionStatsHandler connectionStatsHandler;
@@ -63,6 +63,9 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
 
   @Override
   protected void initChannel(SocketChannel ch) throws Exception {
+    // If channel handler implementations are not annotated with @Sharable, Netty creates a new instance of every class
+    // in the pipeline for every connection.
+    // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
     ChannelPipeline pipeline = ch.pipeline();
     // if SSL is enabled, add an SslHandler before the HTTP codec
     if (sslFactory != null) {
@@ -73,8 +76,7 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
     pipeline
         // connection stats handler to track connection related metrics
         .addLast("connectionStatsHandler", connectionStatsHandler)
-        // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-        // to go here.
+        // for http encoding/decoding.
         .addLast("codec",
             new HttpServerCodec(nettyConfig.nettyServerMaxInitialLineLength, nettyConfig.nettyServerMaxHeaderSize,
                 nettyConfig.nettyServerMaxChunkSize))

@@ -22,7 +22,6 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.SSLFactoryImpl;
 import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
@@ -54,7 +53,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -81,19 +79,18 @@ public class AdminIntegrationTest {
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
   private static final ClusterMap CLUSTER_MAP;
-  private static final File TRUST_STORE_FILE;
   private static final VerifiableProperties ADMIN_VERIFIABLE_PROPS;
+  private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;
   private static final AdminConfig ADMIN_CONFIG;
-  private static final SSLConfig CLIENT_SSL_CONFIG;
 
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
-      TRUST_STORE_FILE = File.createTempFile("truststore", ".jks");
-      ADMIN_VERIFIABLE_PROPS = buildAdminVProps();
+      File trustStoreFile = File.createTempFile("truststore", ".jks");
+      trustStoreFile.deleteOnExit();
+      ADMIN_VERIFIABLE_PROPS = buildAdminVProps(trustStoreFile);
+      SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
       ADMIN_CONFIG = new AdminConfig(ADMIN_VERIFIABLE_PROPS);
-      CLIENT_SSL_CONFIG =
-          new SSLConfig(TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, TRUST_STORE_FILE, "client"));
     } catch (IOException | GeneralSecurityException e) {
       throw new IllegalStateException(e);
     }
@@ -127,11 +124,13 @@ public class AdminIntegrationTest {
    */
   @BeforeClass
   public static void setup() throws Exception {
-    adminRestServer = new RestServer(ADMIN_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem());
+    adminRestServer = new RestServer(ADMIN_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
+        new SSLFactory(new SSLConfig(ADMIN_VERIFIABLE_PROPS)));
     router = InMemoryRouterFactory.getLatestInstance();
     adminRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
-    sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactoryImpl(CLIENT_SSL_CONFIG));
+    sslNettyClient =
+        new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactory(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
   }
 
   /**
@@ -277,18 +276,20 @@ public class AdminIntegrationTest {
 
   /**
    * Builds properties required to start a {@link RestServer} as an Admin server.
+   * @param trustStoreFile the trust store file to add certificates to for SSL testing.
    * @return a {@link VerifiableProperties} with the parameters for an Admin server.
    */
-  private static VerifiableProperties buildAdminVProps() throws IOException, GeneralSecurityException {
+  private static VerifiableProperties buildAdminVProps(File trustStoreFile)
+      throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.blob.storage.service.factory", "com.github.ambry.admin.AdminBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
-    properties.put("rest.server.enable.https", "true");
     properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
     properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
+    properties.put("netty.server.enable.ssl", "true");
     // to test that backpressure does not impede correct operation.
     properties.put("netty.server.request.buffer.watermark", "1");
-    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, TRUST_STORE_FILE, "frontend");
+    TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     return new VerifiableProperties(properties);
   }
 

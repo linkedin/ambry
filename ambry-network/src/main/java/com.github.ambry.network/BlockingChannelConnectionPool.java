@@ -372,7 +372,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
 
   private void initializeSSLSocketFactory() throws Exception {
     try {
-      SSLFactory sslFactory = new SSLFactoryImpl(sslConfig);
+      SSLFactory sslFactory = new SSLFactory(sslConfig);
       SSLContext sslContext = sslFactory.getSSLContext();
       this.sslSocketFactory = sslContext.getSocketFactory();
       this.sslSocketFactoryClientInitializationCount.inc();
