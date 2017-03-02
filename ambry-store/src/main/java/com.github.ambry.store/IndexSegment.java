@@ -115,7 +115,7 @@ class IndexSegment {
     this.endOffset = new AtomicReference<>(startOffset);
     index = new ConcurrentSkipListMap<>();
     mapped = new AtomicBoolean(false);
-    sizeWritten = new AtomicLong(0);
+    sizeWritten = new AtomicLong(time.seconds());
     this.factory = factory;
     this.keySize = keySize;
     this.valueSize = valueSize;
