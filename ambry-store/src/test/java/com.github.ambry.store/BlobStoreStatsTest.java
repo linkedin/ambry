@@ -59,7 +59,8 @@ public class BlobStoreStatsTest {
   public BlobStoreStatsTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
     tempDir = StoreTestUtils.createTempDirectory("indexDir-" + UtilsTest.getRandomString(10));
     state = new CuratedLogIndexState(isLogSegmented, tempDir);
-    blobStoreStats = new BlobStoreStats(state.index, state.time);
+    DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
+    blobStoreStats = new BlobStoreStats(state.index, state.time, diskIOScheduler);
   }
 
   /**

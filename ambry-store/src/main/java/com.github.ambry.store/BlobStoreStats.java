@@ -31,12 +31,17 @@ import java.util.concurrent.atomic.AtomicLong;
  * and collect data needed to serve stats related requests.
  */
 public class BlobStoreStats implements StoreStats {
+  static final String IO_SCHEDULER_JOB_TYPE = "BlobStoreStats";
+  static final String IO_SCHEDULER_JOB_ID = "indexSegment_read";
+
   private final PersistentIndex index;
   private final Time time;
+  private final DiskIOScheduler diskIOScheduler;
 
-  BlobStoreStats(PersistentIndex index, Time time) {
+  BlobStoreStats(PersistentIndex index, Time time, DiskIOScheduler diskIOScheduler) {
     this.index = index;
     this.time = time;
+    this.diskIOScheduler = diskIOScheduler;
   }
 
   // TODO remove this once #541 is merged
@@ -83,6 +88,7 @@ public class BlobStoreStats implements StoreStats {
     Offset indexStartOffset = index.getStartOffset();
     Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().values()) {
+      diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID, 1);
       List<MessageInfo> messageInfos = new ArrayList<>();
       try {
         indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos, new AtomicLong(0));
@@ -112,6 +118,7 @@ public class BlobStoreStats implements StoreStats {
     Offset indexStartOffset = index.getStartOffset();
     Map<String, Long> logSegmentValidSizeMap = new HashMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().values()) {
+      diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID, 1);
       List<MessageInfo> messageInfos = new ArrayList<>();
       try {
         indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos, new AtomicLong(0));
