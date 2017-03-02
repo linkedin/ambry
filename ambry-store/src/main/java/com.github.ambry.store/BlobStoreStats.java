@@ -23,21 +23,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 /**
- * Exposes stats related to {@link BlobStore} that is useful to different components.
+ * Exposes stats related to a {@link BlobStore} that is useful to different components.
  *
- * Note: This is the v1 implementation of BlobStoreStats. The v1 implementation walks through the
- * entire index and collect data needed to serve stats related requests for a predefined amount of
- * time. Requests that are outside of this time range will trigger a new scan.
+ * Note: This is the v0 implementation of BlobStoreStats. The v0 implementation walks through the entire index
+ * and collect data needed to serve stats related requests.
  */
 public class BlobStoreStats implements StoreStats {
   private final PersistentIndex index;
   private final Time time;
-  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   BlobStoreStats(PersistentIndex index, Time time) {
     this.index = index;
@@ -79,7 +74,7 @@ public class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Go over the entire index and collect valid data size information per container.
+   * Walk through the entire index and collect valid data size information per container.
    * @param referenceTimeInMs the reference time to be used to decide whether or not a blob is valid
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
@@ -108,7 +103,7 @@ public class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Go over the entire index and collect valid data size information per log segment.
+   * Walk through the entire index and collect valid data size information per log segment.
    * @param referenceTimeInMs the reference time to be used to decide whether or not a blob is valid
    * @return a {@link Map} of log segment name to valid data size
    */
