@@ -13,9 +13,9 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
-import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.router.ByteRange;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpContent;

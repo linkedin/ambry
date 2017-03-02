@@ -15,7 +15,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
-import com.github.ambry.network.SSLFactory;
+import com.github.ambry.commons.SSLFactory;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
@@ -27,7 +27,8 @@ import java.net.InetSocketAddress;
 
 
 /**
- * A {@link ChannelInitializer} to be used with {@link NettyServer}.
+ * A {@link ChannelInitializer} to be used with {@link NettyServer}. Calling {@link #initChannel(SocketChannel)} adds
+ * the necessary handlers to a channel's pipeline so that it may handle requests.
  */
 class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final NettyConfig nettyConfig;
@@ -67,6 +68,8 @@ class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
     // in the pipeline for every connection.
     // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
     ChannelPipeline pipeline = ch.pipeline();
+    // connection stats handler to track connection related metrics
+    pipeline.addLast("connectionStatsHandler", connectionStatsHandler);
     // if SSL is enabled, add an SslHandler before the HTTP codec
     if (sslFactory != null) {
       InetSocketAddress peerAddress = ch.remoteAddress();
@@ -74,8 +77,6 @@ class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
           sslFactory.createSSLEngine(peerAddress.getHostName(), peerAddress.getPort(), SSLFactory.Mode.SERVER)));
     }
     pipeline
-        // connection stats handler to track connection related metrics
-        .addLast("connectionStatsHandler", connectionStatsHandler)
         // for http encoding/decoding.
         .addLast("codec",
             new HttpServerCodec(nettyConfig.nettyServerMaxInitialLineLength, nettyConfig.nettyServerMaxHeaderSize,

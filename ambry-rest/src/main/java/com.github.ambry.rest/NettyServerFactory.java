@@ -16,7 +16,7 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.SSLFactory;
+import com.github.ambry.commons.SSLFactory;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import java.util.Collections;
@@ -34,7 +34,7 @@ public class NettyServerFactory implements NioServerFactory {
 
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
+  final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
 
   /**
    * Creates a new instance of NettyServerFactory.
@@ -81,13 +81,5 @@ public class NettyServerFactory implements NioServerFactory {
   @Override
   public NioServer getNioServer() {
     return new NettyServer(nettyConfig, nettyMetrics, channelInitializers);
-  }
-
-  /**
-   * Get the {@link ChannelInitializer}s to be used when constructing {@link NettyServer}s.
-   * @return an unmodifiable {@link Map} that maps port numbers to {@link ChannelInitializer}s.
-   */
-  Map<Integer, ChannelInitializer<SocketChannel>> getChannelInitializers() {
-    return channelInitializers;
   }
 }

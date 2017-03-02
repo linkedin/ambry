@@ -91,21 +91,6 @@ public class RestServerConfig {
   @Default("/healthCheck")
   public final String restServerHealthCheckUri;
 
-  /**
-   * Enable HTTPS support on this frontend.
-   */
-  @Config("rest.server.enable.https")
-  @Default("false")
-  public final boolean restServerEnableHTTPS;
-
-  /**
-   * The {@link com.github.ambry.network.SSLFactory} that needs to be used by the RestServer
-   * to support SSL.
-   */
-  @Config("rest.server.ssl.factory")
-  @Default("com.github.ambry.network.SSLFactoryImpl")
-  public final String restServerSSLFactory;
-
   public RestServerConfig(VerifiableProperties verifiableProperties) {
     restServerBlobStorageServiceFactory = verifiableProperties.getString("rest.server.blob.storage.service.factory");
     restServerNioServerFactory =
@@ -126,8 +111,5 @@ public class RestServerConfig {
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
     restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
-    restServerEnableHTTPS = verifiableProperties.getBoolean("rest.server.enable.https", false);
-    restServerSSLFactory =
-        verifiableProperties.getString("rest.server.ssl.factory", "com.github.ambry.network.SSLFactoryImpl");
   }
 }

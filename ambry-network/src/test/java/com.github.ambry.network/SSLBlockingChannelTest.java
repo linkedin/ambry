@@ -14,6 +14,8 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
 import java.io.DataInputStream;
 import java.io.File;

@@ -17,11 +17,14 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.SSLFactory;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.utils.InvocationOptions;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +46,7 @@ public class RestServerMain {
       final ClusterMap clusterMap =
           new ClusterMapManager(options.hardwareLayoutFilePath, options.partitionLayoutFilePath,
               new ClusterMapConfig(verifiableProperties));
-      final SSLFactory sslFactory = new SSLFactory(new SSLConfig(verifiableProperties));
+      final SSLFactory sslFactory = getSSLFactoryIfRequired(verifiableProperties);
       logger.info("Bootstrapping RestServer");
       restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory);
       // attach shutdown handler to catch control-c
@@ -61,6 +64,20 @@ public class RestServerMain {
     }
     logger.info("Exiting RestServerMain");
     System.exit(exitCode);
+  }
+
+  /**
+   * Instantiate an {@link SSLFactory} if any components require it.
+   * @param verifiableProperties The {@link VerifiableProperties} to check if any components require it.
+   * @return the {@link SSLFactory}, or {@code null} if no components require it.
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
+  private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
+      throws GeneralSecurityException, IOException {
+    boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerSSLEnabled
+        || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
+    return sslRequired ? new SSLFactory(new SSLConfig(verifiableProperties)) : null;
   }
 }
 

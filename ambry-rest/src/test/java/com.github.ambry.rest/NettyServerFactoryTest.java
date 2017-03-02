@@ -16,7 +16,7 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.SSLFactory;
+import com.github.ambry.commons.SSLFactory;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import java.util.Map;
@@ -63,7 +63,7 @@ public class NettyServerFactoryTest {
     assertNotNull("No NioServer returned", nioServer);
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
         nioServer.getClass().getCanonicalName());
-    Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = nettyServerFactory.getChannelInitializers();
+    Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = nettyServerFactory.channelInitializers;
     if (nettyConfig.nettyServerSSLEnabled && sslFactory != null) {
       assertEquals("Expected two ChannelInitializers when SSLFactory is not null", 2, channelInitializers.size());
       assertNotNull("No ChannelInitializer for SSL port", channelInitializers.get(nettyConfig.nettyServerSSLPort));
