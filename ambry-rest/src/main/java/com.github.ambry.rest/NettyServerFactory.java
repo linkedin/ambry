@@ -14,13 +14,14 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.http.HttpServerCodec;
-import io.netty.handler.stream.ChunkedWriteHandler;
-import io.netty.handler.timeout.IdleStateHandler;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 
 /**
@@ -33,7 +34,7 @@ public class NettyServerFactory implements NioServerFactory {
 
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final ChannelInitializer<SocketChannel> channelInitializer;
+  final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
 
   /**
    * Creates a new instance of NettyServerFactory.
@@ -43,42 +44,34 @@ public class NettyServerFactory implements NioServerFactory {
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to health check requests
+   * @param sslFactory the {@link SSLFactory} used to construct the {@link javax.net.ssl.SSLEngine} used for handling
+   *                   SSL requests.
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public NettyServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       final RestRequestHandler requestHandler, final PublicAccessLogger publicAccessLogger,
-      final RestServerState restServerState) {
+      final RestServerState restServerState, SSLFactory sslFactory) {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null || publicAccessLogger == null
         || restServerState == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyServerFactory");
-    } else {
-      nettyConfig = new NettyConfig(verifiableProperties);
-      nettyMetrics = new NettyMetrics(metricRegistry);
-      final ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
-      channelInitializer = new ChannelInitializer<SocketChannel>() {
-        @Override
-        protected void initChannel(SocketChannel ch) {
-          ch.pipeline()
-              // connection stats handler to track connection related metrics
-              .addLast("connectionStatsHandler", connectionStatsHandler)
-              // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-              // to go here.
-              .addLast("codec",
-                  new HttpServerCodec(nettyConfig.nettyServerMaxInitialLineLength, nettyConfig.nettyServerMaxHeaderSize,
-                      nettyConfig.nettyServerMaxChunkSize))
-              // for health check request handling
-              .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
-              // for public access logging
-              .addLast("publicAccessLogHandler", new PublicAccessLogHandler(publicAccessLogger, nettyMetrics))
-              // for detecting connections that have been idle too long - probably because of an error.
-              .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-              // for safe writing of chunks for responses
-              .addLast("chunker", new ChunkedWriteHandler())
-              // custom processing class that interfaces with a BlobStorageService.
-              .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
-        }
-      };
     }
+    nettyConfig = new NettyConfig(verifiableProperties);
+    if (sslFactory == null && nettyConfig.nettyServerSSLEnabled) {
+      throw new IllegalArgumentException("NettyServer requires SSL, but sslFactory is null");
+    }
+    nettyMetrics = new NettyMetrics(metricRegistry);
+    ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
+
+    Map<Integer, ChannelInitializer<SocketChannel>> initializers = new HashMap<>();
+    initializers.put(nettyConfig.nettyServerPort,
+        new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
+            publicAccessLogger, restServerState, null));
+    if (nettyConfig.nettyServerSSLEnabled) {
+      initializers.put(nettyConfig.nettyServerSSLPort,
+          new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
+              publicAccessLogger, restServerState, sslFactory));
+    }
+    channelInitializers = Collections.unmodifiableMap(initializers);
   }
 
   /**
@@ -87,6 +80,6 @@ public class NettyServerFactory implements NioServerFactory {
    */
   @Override
   public NioServer getNioServer() {
-    return new NettyServer(nettyConfig, nettyMetrics, channelInitializer);
+    return new NettyServer(nettyConfig, nettyMetrics, channelInitializers);
   }
 }

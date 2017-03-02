@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -66,6 +67,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -254,8 +256,9 @@ public final class ServerTestUtil {
       // Use router to get the blob
       Properties routerProperties = getRouterProps(routerDatacenter);
       routerProperties.putAll(routerProps);
-      Router router = new NonBlockingRouterFactory(new VerifiableProperties(routerProperties), clusterMap,
-          new MockNotificationSystem(9)).getRouter();
+      VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProperties);
+      Router router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, new MockNotificationSystem(9),
+          getSSLFactoryIfRequired(routerVerifiableProps)).getRouter();
       checkBlobId(router, blobId1, data);
       router.close();
 
@@ -768,8 +771,8 @@ public final class ServerTestUtil {
     props.setProperty("router.put.success.target", "1");
     props.putAll(routerProps);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    Router router =
-        new NonBlockingRouterFactory(verifiableProperties, cluster.getClusterMap(), notificationSystem).getRouter();
+    Router router = new NonBlockingRouterFactory(verifiableProperties, cluster.getClusterMap(), notificationSystem,
+        getSSLFactoryIfRequired(verifiableProperties)).getRouter();
     int numberOfRequestsToSend = 15;
     int numberOfVerifierThreads = 3;
     final LinkedBlockingQueue<Payload> payloadQueue = new LinkedBlockingQueue<Payload>();
@@ -989,8 +992,9 @@ public final class ServerTestUtil {
       // Use router to get the blob
       Properties routerProperties = getRouterProps(routerDatacenter);
       routerProperties.putAll(routerProps);
-      Router router = new NonBlockingRouterFactory(new VerifiableProperties(routerProperties), clusterMap,
-          notificationSystem).getRouter();
+      VerifiableProperties routerVerifiableProperties = new VerifiableProperties(routerProperties);
+      Router router = new NonBlockingRouterFactory(routerVerifiableProperties, clusterMap, notificationSystem,
+          getSSLFactoryIfRequired(routerVerifiableProperties)).getRouter();
       checkBlobId(router, blobId1, data);
       checkBlobId(router, blobId2, data);
       checkBlobId(router, blobId3, data);
@@ -1355,5 +1359,18 @@ public final class ServerTestUtil {
           sslSocketFactory, sslConfig);
     }
     return channel;
+  }
+
+  /**
+   * Create an {@link SSLFactory} if there are SSL enabled datacenters in the properties
+   * @param verifiableProperties the {@link VerifiableProperties} to use.
+   * @return an {@link SSLFactory}, or {@code null}, if no {@link SSLFactory} is required.
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
+  static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
+      throws GeneralSecurityException, IOException {
+    boolean requiresSSL = new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
+    return requiresSSL ? new SSLFactory(new SSLConfig(verifiableProperties)) : null;
   }
 }

@@ -112,16 +112,19 @@ project(':ambry-commons') {
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
 project(':ambry-network') {
     dependencies {
         compile project(':ambry-api'),
-                project(':ambry-utils')
+                project(':ambry-utils'),
+                project(':ambry-commons')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
-        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
@@ -141,6 +144,7 @@ project(':ambry-server') {
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-network').sourceSets.test.output
         testCompile project(':ambry-api').sourceSets.test.output
+        testCompile project(':ambry-commons').sourceSets.test.output
         testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
@@ -214,6 +218,8 @@ project(':ambry-rest') {
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
@@ -229,6 +235,8 @@ project(':ambry-admin') {
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-rest').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 
@@ -261,6 +269,8 @@ project(':ambry-frontend') {
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-rest').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
 

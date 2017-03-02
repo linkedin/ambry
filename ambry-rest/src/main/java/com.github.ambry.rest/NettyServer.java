@@ -23,6 +23,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,7 @@ import org.slf4j.LoggerFactory;
 public class NettyServer implements NioServer {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
-  private final ChannelInitializer<SocketChannel> channelInitializer;
+  private final Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private EventLoopGroup bossGroup;
@@ -54,13 +55,14 @@ public class NettyServer implements NioServer {
    * Creates a new instance of NettyServer.
    * @param nettyConfig the {@link NettyConfig} instance that defines the configuration parameters for the NettyServer.
    * @param nettyMetrics the {@link NettyMetrics} instance to use to record metrics.
-   * @param channelInitializer A {@link ChannelInitializer} that is used to initialize new channels.
+   * @param channelInitializers a {@link Map} from port number to the {@link ChannelInitializer} used to initialize
+   *                            a new channel on that port.
    */
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
-      ChannelInitializer<SocketChannel> channelInitializer) {
+      Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
-    this.channelInitializer = channelInitializer;
+    this.channelInitializers = channelInitializers;
     NettyRequest.bufferWatermark = nettyConfig.nettyServerRequestBufferWatermark;
     logger.trace("Instantiated NettyServer");
   }
@@ -72,16 +74,9 @@ public class NettyServer implements NioServer {
       logger.trace("Starting NettyServer deployment");
       bossGroup = new NioEventLoopGroup(nettyConfig.nettyServerBossThreadCount);
       workerGroup = new NioEventLoopGroup(nettyConfig.nettyServerWorkerThreadCount);
-      ServerBootstrap b = new ServerBootstrap();
-      // Netty creates a new instance of every class in the pipeline for every connection
-      // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
-      b.group(bossGroup, workerGroup)
-          .channel(NioServerSocketChannel.class)
-          .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)
-          .handler(new LoggingHandler(LogLevel.DEBUG))
-          .childHandler(channelInitializer);
-      b.bind(nettyConfig.nettyServerPort).sync();
-      logger.info("NettyServer now listening on port {}", nettyConfig.nettyServerPort);
+      for (Map.Entry<Integer, ChannelInitializer<SocketChannel>> entry : channelInitializers.entrySet()) {
+        bindServer(entry.getKey(), entry.getValue(), bossGroup, workerGroup);
+      }
     } catch (InterruptedException e) {
       logger.error("NettyServer start await was interrupted", e);
       nettyMetrics.nettyServerStartError.inc();
@@ -115,5 +110,25 @@ public class NettyServer implements NioServer {
         nettyMetrics.nettyServerShutdownTimeInMs.update(shutdownTime);
       }
     }
+  }
+
+  /**
+   * Bootstrap a new server with a {@link ChannelInitializer} and bind it to a port.
+   * @param port the port number to bind this server to.
+   * @param channelInitializer the {@link ChannelInitializer} for request handling on this server.
+   * @param bossGroup the pool of boss threads that this server uses.
+   * @param workerGroup the pool of worker threads that this server uses.
+   * @throws InterruptedException if binding to the port failed.
+   */
+  private void bindServer(int port, ChannelInitializer<SocketChannel> channelInitializer, EventLoopGroup bossGroup,
+      EventLoopGroup workerGroup) throws InterruptedException {
+    ServerBootstrap b = new ServerBootstrap();
+    b.group(bossGroup, workerGroup)
+        .channel(NioServerSocketChannel.class)
+        .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)
+        .handler(new LoggingHandler(LogLevel.DEBUG))
+        .childHandler(channelInitializer);
+    b.bind(port).sync();
+    logger.info("NettyServer now listening on port {}", port);
   }
 }

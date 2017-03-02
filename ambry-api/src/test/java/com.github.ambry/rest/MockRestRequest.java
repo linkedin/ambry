@@ -35,6 +35,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.net.ssl.SSLSession;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -161,6 +162,11 @@ public class MockRestRequest implements RestRequest {
   public Map<String, Object> getArgs() {
     onEventComplete(Event.GetArgs);
     return args;
+  }
+
+  @Override
+  public SSLSession getSSLSession() {
+    return null;
   }
 
   @Override

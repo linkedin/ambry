@@ -48,11 +48,16 @@ import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -72,6 +77,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -100,7 +108,7 @@ public class NettyRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void conversionWithGoodInputTest() throws RestServiceException {
+  public void conversionWithGoodInputTest() throws RestServiceException, CertificateException, SSLException {
     // headers
     HttpHeaders headers = new DefaultHttpHeaders(false);
     headers.add(HttpHeaderNames.CONTENT_LENGTH, new Random().nextInt(Integer.MAX_VALUE));
@@ -142,40 +150,41 @@ public class NettyRequestTest {
     httpCookie = new DefaultCookie("CookieKey2", "CookieValue2");
     cookies.add(httpCookie);
     headers.add(RestUtils.Headers.COOKIE, getCookiesHeaderValue(cookies));
-    MockChannel channel = new MockChannel();
 
-    uri = "/GET" + uriAttachment;
-    nettyRequest = createNettyRequest(HttpMethod.GET, uri, headers, channel);
-    validateRequest(nettyRequest, RestMethod.GET, uri, headers, params, cookies, channel);
-    closeRequestAndValidate(nettyRequest, channel);
-
-    RecvByteBufAllocator savedAllocator = channel.config().getRecvByteBufAllocator();
-    int[] bufferWatermarks = {-1, 0, 1, DEFAULT_WATERMARK};
-    for (int bufferWatermark : bufferWatermarks) {
-      NettyRequest.bufferWatermark = bufferWatermark;
-      uri = "/POST" + uriAttachment;
-      nettyRequest = createNettyRequest(HttpMethod.POST, uri, headers, channel);
-      validateRequest(nettyRequest, RestMethod.POST, uri, headers, params, cookies, channel);
-      if (bufferWatermark > 0) {
-        assertTrue("RecvAllocator should have changed",
-            channel.config().getRecvByteBufAllocator() instanceof DefaultMaxBytesRecvByteBufAllocator);
-      } else {
-        assertEquals("RecvAllocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
-      }
+    for (MockChannel channel : Arrays.asList(new MockChannel(), new MockChannel().addSslHandlerToPipeline())) {
+      uri = "/GET" + uriAttachment;
+      nettyRequest = createNettyRequest(HttpMethod.GET, uri, headers, channel);
+      validateRequest(nettyRequest, RestMethod.GET, uri, headers, params, cookies, channel);
       closeRequestAndValidate(nettyRequest, channel);
-      assertEquals("Allocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
+
+      RecvByteBufAllocator savedAllocator = channel.config().getRecvByteBufAllocator();
+      int[] bufferWatermarks = {-1, 0, 1, DEFAULT_WATERMARK};
+      for (int bufferWatermark : bufferWatermarks) {
+        NettyRequest.bufferWatermark = bufferWatermark;
+        uri = "/POST" + uriAttachment;
+        nettyRequest = createNettyRequest(HttpMethod.POST, uri, headers, channel);
+        validateRequest(nettyRequest, RestMethod.POST, uri, headers, params, cookies, channel);
+        if (bufferWatermark > 0) {
+          assertTrue("RecvAllocator should have changed",
+              channel.config().getRecvByteBufAllocator() instanceof DefaultMaxBytesRecvByteBufAllocator);
+        } else {
+          assertEquals("RecvAllocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
+        }
+        closeRequestAndValidate(nettyRequest, channel);
+        assertEquals("Allocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
+      }
+      NettyRequest.bufferWatermark = DEFAULT_WATERMARK;
+
+      uri = "/DELETE" + uriAttachment;
+      nettyRequest = createNettyRequest(HttpMethod.DELETE, uri, headers, channel);
+      validateRequest(nettyRequest, RestMethod.DELETE, uri, headers, params, cookies, channel);
+      closeRequestAndValidate(nettyRequest, channel);
+
+      uri = "/HEAD" + uriAttachment;
+      nettyRequest = createNettyRequest(HttpMethod.HEAD, uri, headers, channel);
+      validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, params, cookies, channel);
+      closeRequestAndValidate(nettyRequest, channel);
     }
-    NettyRequest.bufferWatermark = DEFAULT_WATERMARK;
-
-    uri = "/DELETE" + uriAttachment;
-    nettyRequest = createNettyRequest(HttpMethod.DELETE, uri, headers, channel);
-    validateRequest(nettyRequest, RestMethod.DELETE, uri, headers, params, cookies, channel);
-    closeRequestAndValidate(nettyRequest, channel);
-
-    uri = "/HEAD" + uriAttachment;
-    nettyRequest = createNettyRequest(HttpMethod.HEAD, uri, headers, channel);
-    validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, params, cookies, channel);
-    closeRequestAndValidate(nettyRequest, channel);
   }
 
   /**
@@ -639,10 +648,10 @@ public class NettyRequestTest {
    * @param headers the {@link HttpHeaders} passed with the request that need to be in {@link NettyRequest#getArgs()}.
    * @param params the parameters passed with the request that need to be in {@link NettyRequest#getArgs()}.
    * @param httpCookies Set of {@link Cookie} set in the request
-   * @param channel the {@link Channel} over which the request was received.
+   * @param channel the {@link MockChannel} over which the request was received.
    */
   private void validateRequest(NettyRequest nettyRequest, RestMethod restMethod, String uri, HttpHeaders headers,
-      Map<String, List<String>> params, Set<Cookie> httpCookies, Channel channel) {
+      Map<String, List<String>> params, Set<Cookie> httpCookies, MockChannel channel) {
     long contentLength =
         headers.contains(HttpHeaderNames.CONTENT_LENGTH) ? Long.parseLong(headers.get(HttpHeaderNames.CONTENT_LENGTH))
             : 0;
@@ -653,6 +662,12 @@ public class NettyRequestTest {
     assertEquals("Mismatch in uri", uri, nettyRequest.getUri());
     assertNotNull("There should have been a RestRequestMetricsTracker", nettyRequest.getMetricsTracker());
     assertFalse("Should not have been a multipart request", nettyRequest.isMultipart());
+    SSLSession sslSession = nettyRequest.getSSLSession();
+    if (channel.pipeline().get(SslHandler.class) == null) {
+      assertNull("Non-null SSLSession when pipeline does not contain an SslHandler", sslSession);
+    } else {
+      assertEquals("SSLSession does not match one from MockChannel", channel.getSSLEngine().getSession(), sslSession);
+    }
 
     Set<javax.servlet.http.Cookie> actualCookies =
         (Set<javax.servlet.http.Cookie>) nettyRequest.getArgs().get(RestUtils.Headers.COOKIE);
@@ -1362,6 +1377,7 @@ class MockChannel extends EmbeddedChannel {
   }
 
   private final ChannelConfig config = new DefaultChannelConfig(this);
+  private SSLEngine sslEngine = null;
   private ChannelReadCallback channelReadCallback = null;
   private int queuedOnReads = 0;
 
@@ -1369,6 +1385,29 @@ class MockChannel extends EmbeddedChannel {
     // sending a placeholder handler to avoid NPE. This is of no consequence and saves us from having to implement
     // needless functions.
     super(new ConnectionStatsHandler(new NettyMetrics(new MetricRegistry())));
+  }
+
+  /**
+   * Add an {@link SslHandler} to the pipeline (for testing {@link NettyRequest#getSSLSession()}.
+   * @throws SSLException
+   * @throws CertificateException
+   */
+  MockChannel addSslHandlerToPipeline() throws SSLException, CertificateException {
+    if (pipeline().get(SslHandler.class) == null) {
+      SelfSignedCertificate ssc = new SelfSignedCertificate();
+      SslContext sslCtx = SslContextBuilder.forServer(ssc.certificate(), ssc.privateKey()).build();
+      sslEngine = sslCtx.newEngine(alloc());
+      pipeline().addFirst(new SslHandler(sslEngine));
+    }
+    return this;
+  }
+
+  /**
+   * @return the {@link SSLEngine} associated with this channel, or {@code null} if no {@link SslHandler} is on this
+   *         pipeline.
+   */
+  SSLEngine getSSLEngine() {
+    return sslEngine;
   }
 
   /**

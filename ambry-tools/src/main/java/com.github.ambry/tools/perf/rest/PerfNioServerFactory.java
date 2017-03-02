@@ -17,6 +17,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.NioServer;
 import com.github.ambry.rest.NioServerFactory;
@@ -51,7 +52,8 @@ public class PerfNioServerFactory implements NioServerFactory {
    * @throws IllegalArgumentException if any of the required arguments are null.
    */
   public PerfNioServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState) {
+      RestRequestHandler requestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState,
+      SSLFactory sslFactory) {
     if (verifiableProperties == null || metricRegistry == null || requestHandler == null) {
       throw new IllegalArgumentException("One of the arguments is null");
     } else {

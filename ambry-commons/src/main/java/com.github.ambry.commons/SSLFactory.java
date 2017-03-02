@@ -1,5 +1,5 @@
-/**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.network;
+package com.github.ambry.commons;
 
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
@@ -35,9 +35,9 @@ import org.slf4j.LoggerFactory;
  * Factory to create SSLContext and SSLEngine
  */
 public class SSLFactory {
-  protected Logger logger = LoggerFactory.getLogger(SSLFactory.class);
-
   public enum Mode {CLIENT, SERVER}
+
+  protected static final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
 
   private String protocol;
   private String provider;
@@ -53,6 +53,12 @@ public class SSLFactory {
   private boolean needClientAuth;
   private boolean wantClientAuth;
 
+  /**
+   * Construct an {@link SSLFactory}.
+   * @param sslConfig the {@link SSLConfig} to use.
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
   public SSLFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
 
     this.protocol = sslConfig.sslContextProtocol;
@@ -98,7 +104,7 @@ public class SSLFactory {
   }
 
   /**
-   * Create SSLContext by loading keystore and trustsotre
+   * Create {@link SSLContext} by loading keystore and trustsotre
    * One factory only has one SSLContext
    * @return SSLContext
    * @throws GeneralSecurityException
@@ -132,7 +138,8 @@ public class SSLFactory {
   }
 
   /**
-   * Create SSLEngine for given host name and port number
+   * Create {@link SSLEngine} for given host name and port number.
+   * This engine manages the handshake process and encryption/decryption with this remote host.
    * @param peerHost The remote host name
    * @param peerPort The remote port number
    * @param mode The local SSL mode, Client or Server
@@ -164,7 +171,8 @@ public class SSLFactory {
   }
 
   /**
-   * Returns a configured SSLContext.
+   * Returns a configured {@link SSLContext}. This context supports creating {@link SSLEngine}s and for the loaded
+   * truststore and keystore. An {@link SSLEngine} must be created for each connection.
    * @return SSLContext.
    */
   public SSLContext getSSLContext() {

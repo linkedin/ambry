@@ -296,7 +296,7 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 1 && ctor.getParameterTypes()[0].isAssignableFrom(arg.getClass())) {
+      if (ctor.getParameterTypes().length == 1 && checkAssignable(ctor.getParameterTypes()[0], arg)) {
         return (T) ctor.newInstance(arg);
       }
     }
@@ -320,8 +320,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 2 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass())
-          && ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())) {
+      if (ctor.getParameterTypes().length == 2 && checkAssignable(ctor.getParameterTypes()[0], arg1) && checkAssignable(
+          ctor.getParameterTypes()[1], arg2)) {
         return (T) ctor.newInstance(arg1, arg2);
       }
     }
@@ -346,9 +346,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 3 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass())
-          && ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())
-          && ctor.getParameterTypes()[2].isAssignableFrom(arg3.getClass())) {
+      if (ctor.getParameterTypes().length == 3 && checkAssignable(ctor.getParameterTypes()[0], arg1) && checkAssignable(
+          ctor.getParameterTypes()[1], arg2) && checkAssignable(ctor.getParameterTypes()[2], arg3)) {
         return (T) ctor.newInstance(arg1, arg2, arg3);
       }
     }
@@ -374,7 +373,7 @@ public class Utils {
       if (ctor.getParameterTypes().length == objects.length) {
         int i = 0;
         for (; i < objects.length; i++) {
-          if (!ctor.getParameterTypes()[i].isAssignableFrom(objects[i].getClass())) {
+          if (!checkAssignable(ctor.getParameterTypes()[i], objects[i])) {
             break;
           }
         }
@@ -384,6 +383,16 @@ public class Utils {
       }
     }
     return null;
+  }
+
+  /**
+   * Check if the given constructor parameter type is assignable from the provided argument object.
+   * @param parameterType the {@link Class} of the constructor parameter.
+   * @param arg the argument to test.
+   * @return {@code true} if it is assignable. Note: this will return true if {@code arg} is {@code null}.
+   */
+  private static boolean checkAssignable(Class<?> parameterType, Object arg) {
+    return arg == null || parameterType.isAssignableFrom(arg.getClass());
   }
 
   /**

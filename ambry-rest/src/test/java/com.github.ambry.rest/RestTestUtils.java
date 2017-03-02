@@ -13,6 +13,9 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.TestSSLUtils;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.router.ByteRange;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpContent;
@@ -21,8 +24,10 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 
 
 /**
@@ -69,6 +74,20 @@ public class RestTestUtils {
         return "bytes=" + range.getStartOffset() + "-";
       default:
         return "bytes=" + range.getStartOffset() + "-" + range.getEndOffset();
+    }
+  }
+
+  /**
+   * @return an {@link SSLFactory} for use in rest unit tests.
+   */
+  static SSLFactory getTestSSLFactory() {
+    try {
+      File trustStoreFile = File.createTempFile("truststore", ".jks");
+      trustStoreFile.deleteOnExit();
+      return new SSLFactory(
+          new SSLConfig(TestSSLUtils.createSslProps("", SSLFactory.Mode.SERVER, trustStoreFile, "frontend")));
+    } catch (IOException | GeneralSecurityException e) {
+      throw new IllegalStateException(e);
     }
   }
 }

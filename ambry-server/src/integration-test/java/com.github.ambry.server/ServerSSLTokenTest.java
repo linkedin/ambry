@@ -14,11 +14,11 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.network.SSLFactory;
-import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;

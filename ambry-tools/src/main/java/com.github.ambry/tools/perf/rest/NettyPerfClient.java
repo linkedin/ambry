@@ -19,8 +19,12 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Snapshot;
+import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.SSLConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -45,9 +49,12 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -77,6 +84,7 @@ public class NettyPerfClient {
   private final int concurrency;
   private final long totalSize;
   private final byte[] chunk;
+  private final SSLFactory sslFactory;
   private final Bootstrap b = new Bootstrap();
   private final ChannelConnectListener channelConnectListener = new ChannelConnectListener();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -100,6 +108,7 @@ public class NettyPerfClient {
     final Integer concurrency;
     final Long postBlobTotalSize;
     final Integer postBlobChunkSize;
+    final String sslPropsFilePath;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     /**
@@ -144,6 +153,11 @@ public class NettyPerfClient {
               .withOptionalArg()
               .describedAs("postBlobChunkSize")
               .ofType(Integer.class);
+      ArgumentAcceptingOptionSpec<String> sslPropsFilePath =
+          parser.accepts("sslPropsFilePath", "The path to the properties file with SSL settings")
+              .withOptionalArg()
+              .describedAs("sslPropsFilePath")
+              .ofType(String.class);
 
       OptionSet options = parser.parse(args);
       this.host = options.valueOf(host);
@@ -153,6 +167,7 @@ public class NettyPerfClient {
       this.concurrency = options.valueOf(concurrency);
       this.postBlobTotalSize = options.valueOf(postBlobTotalSize);
       this.postBlobChunkSize = options.valueOf(postBlobChunkSize);
+      this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
       validateArgs();
 
       logger.info("Host: {}", this.host);
@@ -162,6 +177,7 @@ public class NettyPerfClient {
       logger.info("Concurrency: {}", this.concurrency);
       logger.info("Post blob total size: {}", this.postBlobTotalSize);
       logger.info("Post blob chunk size: {}", this.postBlobChunkSize);
+      logger.info("SSL properties file path: {}", this.sslPropsFilePath);
     }
 
     /**
@@ -187,7 +203,7 @@ public class NettyPerfClient {
       ClientArgs clientArgs = new ClientArgs(args);
       final NettyPerfClient nettyPerfClient =
           new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
-              clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize);
+              clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
@@ -210,8 +226,12 @@ public class NettyPerfClient {
    * @param concurrency number of parallel requests.
    * @param totalSize the total size in bytes of a blob to be POSTed ({@code null} if non-POST).
    * @param chunkSize size in bytes of each chunk to be POSTed ({@code null} if non-POST).
+   * @param sslPropsFilePath the path to the SSL properties, or {@code null} to disable SSL.
+   * @throws IOException
+   * @throws GeneralSecurityException
    */
-  private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize) {
+  private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize,
+      String sslPropsFilePath) throws IOException, GeneralSecurityException {
     this.host = host;
     this.port = port;
     this.uri = "http://" + host + ":" + port + path;
@@ -224,6 +244,8 @@ public class NettyPerfClient {
       this.totalSize = 0;
       chunk = null;
     }
+    sslFactory = sslPropsFilePath != null ? new SSLFactory(
+        new SSLConfig(new VerifiableProperties(Utils.loadProps(sslPropsFilePath)))) : null;
     logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, uri {} with concurrency {}",
         this.host, this.port, uri, this.concurrency);
   }
@@ -239,6 +261,10 @@ public class NettyPerfClient {
     b.group(group).channel(NioSocketChannel.class).handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) throws Exception {
+        if (sslFactory != null) {
+          ch.pipeline()
+              .addLast("sslHandler", new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT)));
+        }
         ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(new ResponseHandler());
       }
     });

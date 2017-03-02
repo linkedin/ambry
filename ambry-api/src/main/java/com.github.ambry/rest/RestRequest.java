@@ -19,6 +19,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
+import javax.net.ssl.SSLSession;
 
 
 /**
@@ -62,6 +63,12 @@ public interface RestRequest extends ReadableStreamChannel {
    * @return the arguments and their values (if any) as a map.
    */
   public Map<String, Object> getArgs();
+
+  /**
+   * If this request was over HTTPS, gets the {@link SSLSession} associated with the request.
+   * @return The {@link SSLSession} for the request and response, or {@code null} if SSL was not used.
+   */
+  public SSLSession getSSLSession();
 
   /**
    * Prepares the request for reading.

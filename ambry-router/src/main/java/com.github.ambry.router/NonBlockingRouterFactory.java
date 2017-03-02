@@ -15,14 +15,13 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
-import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -44,7 +43,6 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final ClusterMap clusterMap;
   private final NetworkConfig networkConfig;
   private final NetworkMetrics networkMetrics;
-  private final SSLFactory sslFactory;
   private final NotificationSystem notificationSystem;
   private final Time time;
   private final NetworkClientFactory networkClientFactory;
@@ -56,33 +54,33 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @param verifiableProperties the in-memory properties to use to construct configurations.
    * @param clusterMap the {@link ClusterMap} to use to determine where operations should go.
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
+   * @param sslFactory the {@link SSLFactory} to support SSL transmissions. Required if SSL is enabled for any
+   *                   datacenters.
    * @throws IllegalArgumentException if any of the arguments are null.
-   * @throws IOException if the SSL configs could not be initialized.
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem) throws GeneralSecurityException, IOException {
-    if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
-      routerConfig = new RouterConfig(verifiableProperties);
-      if (!clusterMap.hasDatacenter(routerConfig.routerDatacenterName)) {
-        throw new IllegalStateException(
-            "Router datacenter " + routerConfig.routerDatacenterName + " is not part of the clustermap");
-      }
-      MetricRegistry registry = clusterMap.getMetricRegistry();
-      routerMetrics = new NonBlockingRouterMetrics(clusterMap);
-      this.clusterMap = clusterMap;
-      this.notificationSystem = notificationSystem;
-      networkConfig = new NetworkConfig(verifiableProperties);
-      networkMetrics = new NetworkMetrics(registry);
-      SSLConfig sslConfig = new SSLConfig(verifiableProperties);
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-      sslFactory = clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? new SSLFactory(sslConfig) : null;
-      this.time = SystemTime.getInstance();
-      networkClientFactory = new NetworkClientFactory(networkMetrics, networkConfig, sslFactory,
-          routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
-          routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
-    } else {
+      NotificationSystem notificationSystem, SSLFactory sslFactory) throws GeneralSecurityException {
+    if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null argument passed in");
     }
+    if (sslFactory == null && new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0) {
+      throw new IllegalArgumentException("NonBlockingRouter requires SSL, but sslFactory is null");
+    }
+    routerConfig = new RouterConfig(verifiableProperties);
+    if (!clusterMap.hasDatacenter(routerConfig.routerDatacenterName)) {
+      throw new IllegalStateException(
+          "Router datacenter " + routerConfig.routerDatacenterName + " is not part of the clustermap");
+    }
+    this.clusterMap = clusterMap;
+    this.notificationSystem = notificationSystem;
+    MetricRegistry registry = clusterMap.getMetricRegistry();
+    routerMetrics = new NonBlockingRouterMetrics(clusterMap);
+    networkConfig = new NetworkConfig(verifiableProperties);
+    networkMetrics = new NetworkMetrics(registry);
+    time = SystemTime.getInstance();
+    networkClientFactory = new NetworkClientFactory(networkMetrics, networkConfig, sslFactory,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
+        routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 

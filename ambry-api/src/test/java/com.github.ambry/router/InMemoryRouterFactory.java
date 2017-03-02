@@ -31,7 +31,7 @@ public class InMemoryRouterFactory implements RouterFactory {
   private final NotificationSystem notificationSystem;
 
   public InMemoryRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem) {
+      NotificationSystem notificationSystem, Object sslFactory) {
     this.verifiableProperties = verifiableProperties;
     this.notificationSystem = notificationSystem;
   }

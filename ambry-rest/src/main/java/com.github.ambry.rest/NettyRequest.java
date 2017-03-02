@@ -28,6 +28,7 @@ import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -45,6 +46,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.net.ssl.SSLSession;
 import javax.servlet.http.Cookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,6 +84,7 @@ class NettyRequest implements RestRequest {
   private final AtomicLong bytesBuffered = new AtomicLong(0);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RecvByteBufAllocator recvByteBufAllocator = new DefaultMaxBytesRecvByteBufAllocator();
+  private final SSLSession sslSession;
 
   private MessageDigest digest;
   private byte[] digestBytes;
@@ -120,6 +123,9 @@ class NettyRequest implements RestRequest {
     this.channel = channel;
     savedAllocator = channel.config().getRecvByteBufAllocator();
     this.nettyMetrics = nettyMetrics;
+
+    SslHandler sslHandler = channel.pipeline().get(SslHandler.class);
+    sslSession = sslHandler != null ? sslHandler.engine().getSession() : null;
 
     HttpMethod httpMethod = request.method();
     if (HttpMethod.GET.equals(httpMethod)) {
@@ -224,6 +230,11 @@ class NettyRequest implements RestRequest {
   @Override
   public Map<String, Object> getArgs() {
     return allArgsReadOnly;
+  }
+
+  @Override
+  public SSLSession getSSLSession() {
+    return sslSession;
   }
 
   @Override

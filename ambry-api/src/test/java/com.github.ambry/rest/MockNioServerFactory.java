@@ -29,7 +29,7 @@ public class MockNioServerFactory implements NioServerFactory {
   private final boolean isFaulty;
 
   public MockNioServerFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      Object restRequestHandler, Object publicAccessLogger, Object restServerState) {
+      Object restRequestHandler, Object publicAccessLogger, Object restServerState, Object sslFactory) {
     isFaulty = verifiableProperties.getBoolean(IS_FAULTY_KEY, false);
   }
 
