@@ -14,8 +14,8 @@
 
 package com.github.ambry.rest;
 
-import com.github.ambry.config.NettyConfig;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.NettyConfig;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;

@@ -88,8 +88,8 @@ public class NettyClient implements Closeable {
       public void initChannel(SocketChannel ch) throws Exception {
         ChannelPipeline pipeline = ch.pipeline();
         if (sslFactory != null) {
-          pipeline.addLast("sslHandler", new SslHandler(
-              sslFactory.createSSLEngine(hostname, port, SSLFactory.Mode.CLIENT)));
+          pipeline.addLast("sslHandler",
+              new SslHandler(sslFactory.createSSLEngine(hostname, port, SSLFactory.Mode.CLIENT)));
         }
         pipeline.addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(communicationHandler);
       }

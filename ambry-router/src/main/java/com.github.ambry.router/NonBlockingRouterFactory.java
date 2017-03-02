@@ -15,13 +15,13 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
-import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
