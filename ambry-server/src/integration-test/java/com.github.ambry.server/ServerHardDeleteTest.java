@@ -83,6 +83,7 @@ public class ServerHardDeleteTest {
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", "true");
     props.setProperty("store.deleted.message.retention.days", "1");
+    props.setProperty("clustermap.cluster.name", "test");
     VerifiableProperties propverify = new VerifiableProperties(props);
     server = new AmbryServer(propverify, mockClusterMap, notificationSystem, time);
     server.startup();

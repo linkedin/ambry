@@ -1,5 +1,5 @@
-/**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -155,6 +155,12 @@ public class HelixBootstrapUpgradeTool {
         describedAs("zk_connect_info_path").
         ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> clusterNameOpt =
+        parser.accepts("clusterName", "The name of the cluster in Helix to bootstrap or upgrade")
+            .withRequiredArg()
+            .describedAs("cluster_name")
+            .ofType(String.class);
+
     ArgumentAcceptingOptionSpec<String> localDcOpt =
         parser.accepts("localDc", "(Optional argument) The local datacenter name")
             .withRequiredArg()
@@ -171,12 +177,14 @@ public class HelixBootstrapUpgradeTool {
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
     String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
     String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
+    String clusterName = options.valueOf(clusterNameOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);
     listOpt.add(partitionLayoutPathOpt);
     listOpt.add(zkLayoutPathOpt);
+    listOpt.add(clusterNameOpt);
     ToolUtils.ensureOrExit(listOpt, options, parser);
-    bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, options.valueOf(localDcOpt),
+    bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, options.valueOf(localDcOpt),
         options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
             : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)));
   }
@@ -187,14 +195,16 @@ public class HelixBootstrapUpgradeTool {
    * @param hardwareLayoutPath the path to the hardware layout file.
    * @param partitionLayoutPath the path to the partition layout file.
    * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterName the name of the cluster in Helix to bootstrap or upgrade.
    * @param localDc the name of the local datacenter. This can be null.
+   * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String localDc, int maxPartitionsInOneResource) throws IOException, JSONException {
+      String clusterName, String localDc, int maxPartitionsInOneResource) throws IOException, JSONException {
     HelixBootstrapUpgradeTool clusterMapToHelixMapper =
-        new HelixBootstrapUpgradeTool(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
+        new HelixBootstrapUpgradeTool(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, localDc,
             maxPartitionsInOneResource);
     clusterMapToHelixMapper.updateClusterMapInHelix();
     clusterMapToHelixMapper.validateAndClose();
@@ -210,19 +220,25 @@ public class HelixBootstrapUpgradeTool {
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeTool(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String localDc, int maxPartitionsInOneResource) throws IOException, JSONException {
+      String clusterName, String localDc, int maxPartitionsInOneResource) throws IOException, JSONException {
+    this.clusterName = clusterName;
     this.localDc = localDc;
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     parseZkJsonAndPopulateZkInfo(zkLayoutPath);
 
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    Properties props = new Properties();
+    props.setProperty("clustermap.cluster.name", clusterName);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     if (new File(partitionLayoutPath).exists()) {
       staticClusterMap = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
     } else {
       staticClusterMap = new ClusterMapManager(new PartitionLayout(
           new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig)));
     }
-    clusterName = staticClusterMap.partitionLayout.getClusterName();
+    String clusterNameInStaticClusterMap = staticClusterMap.partitionLayout.getClusterName();
+    System.out.println(
+        "Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
+            + "\" in Helix");
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
       if (!dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
         throw new IllegalArgumentException(
@@ -379,8 +395,7 @@ public class HelixBootstrapUpgradeTool {
           newSealedPartitionsList.remove(partitionName);
         }
         instanceConfig.getRecord().setListField(SEALED_STR, newSealedPartitionsList);
-        // @todo: uncomment when we move to Helix 0.6.7.
-        // dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
       }
     }
   }
@@ -454,8 +469,7 @@ public class HelixBootstrapUpgradeTool {
         newSealedPartitionsList.add(partitionName);
         instanceConfig.getRecord().setListField(SEALED_STR, newSealedPartitionsList);
       }
-      // @todo: uncomment when we move to Helix 0.6.7.
-      // dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+      dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
     }
     return instances;
   }
@@ -507,7 +521,9 @@ public class HelixBootstrapUpgradeTool {
    * @param partitionLayout the {@link PartitionLayout} of the static clustermap.
    */
   private void verifyEquivalencyWithStaticClusterMap(HardwareLayout hardwareLayout, PartitionLayout partitionLayout) {
-    String clusterName = hardwareLayout.getClusterName();
+    String clusterNameInStaticClusterMap = hardwareLayout.getClusterName();
+    System.out.println("Verifying equivalency of static cluster: " + clusterNameInStaticClusterMap + " with the "
+        + "corresponding cluster in Helix: " + clusterName);
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
       HelixAdmin admin = adminForDc.get(dc.getName());
       ensureOrThrow(admin != null, "No ZkInfo for datacenter " + dc.getName());
@@ -516,6 +532,8 @@ public class HelixBootstrapUpgradeTool {
       verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
       verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
     }
+    System.out.println("Successfully verified equivalency of static cluster: " + clusterNameInStaticClusterMap
+        + " with the corresponding cluster in Helix: " + clusterName);
   }
 
   /**

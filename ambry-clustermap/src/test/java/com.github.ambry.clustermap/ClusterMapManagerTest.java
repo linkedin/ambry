@@ -293,6 +293,8 @@ public class ClusterMapManagerTest {
   @Test
   public void persistAndReadBack() throws JSONException, IOException {
     String tmpDir = folder.getRoot().getPath();
+    Properties props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
 
     String hardwareLayoutSer = tmpDir + "/hardwareLayoutSer.json";
     String partitionLayoutSer = tmpDir + "/partitionLayoutSer.json";
@@ -302,7 +304,7 @@ public class ClusterMapManagerTest {
     ClusterMapManager clusterMapManagerSer = TestUtils.getTestClusterMap();
     clusterMapManagerSer.persist(hardwareLayoutSer, partitionLayoutSer);
 
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     ClusterMapManager clusterMapManagerDe =
         new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer, clusterMapConfig);
@@ -316,6 +318,8 @@ public class ClusterMapManagerTest {
 
   @Test
   public void validateSimpleConfig() throws JSONException, IOException {
+    Properties props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
     String configDir = System.getProperty("user.dir");
     // intelliJ and gradle return different values for user.dir: gradle includes the sub-project directory. To handle
     // this, we check the string suffix for the sub-project directory and append ".." to correctly set configDir.
@@ -326,7 +330,7 @@ public class ClusterMapManagerTest {
     String hardwareLayoutSer = configDir + "/HardwareLayout.json";
     String partitionLayoutSer = configDir + "/PartitionLayout.json";
     ClusterMapManager clusterMapManager = new ClusterMapManager(hardwareLayoutSer, partitionLayoutSer,
-        new ClusterMapConfig(new VerifiableProperties(new Properties())));
+        new ClusterMapConfig(new VerifiableProperties(props)));
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 1);
     assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));

@@ -48,6 +48,7 @@ public class RouterFactoryTest {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("clustermap.cluster.name", "test");
     return new VerifiableProperties(properties);
   }
 

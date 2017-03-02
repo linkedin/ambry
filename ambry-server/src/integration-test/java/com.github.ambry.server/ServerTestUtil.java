@@ -769,6 +769,7 @@ public final class ServerTestUtil {
     props.setProperty("router.datacenter.name", sourceDatacenter);
     props.setProperty("router.put.request.parallelism", "1");
     props.setProperty("router.put.success.target", "1");
+    props.setProperty("clustermap.cluster.name", "test");
     props.putAll(routerProps);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Router router = new NonBlockingRouterFactory(verifiableProperties, cluster.getClusterMap(), notificationSystem,
@@ -813,6 +814,7 @@ public final class ServerTestUtil {
     Properties sslProps = new Properties();
     sslProps.putAll(routerProps);
     sslProps.setProperty("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
+    sslProps.setProperty("clustermap.cluster.name", "test");
     VerifiableProperties vProps = new VerifiableProperties(sslProps);
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(new Properties())),
@@ -1323,6 +1325,7 @@ public final class ServerTestUtil {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDatacenter);
+    properties.setProperty("clustermap.cluster.name", "test");
     return properties;
   }
 
