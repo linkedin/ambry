@@ -52,9 +52,8 @@ public class BlobStoreStats implements StoreStats {
   @Override
   public Pair<Long, Long> getValidDataSize(TimeRange timeRange) throws StoreException {
     Pair<Long, Map<String, Long>> logSegmentValidSizeResult = getValidDataSizeByLogSegment(timeRange);
-    Map<String, Long> logSegmentValidSizeMap = logSegmentValidSizeResult.getSecond();
     Long allLogSegmentValidDataSize = 0L;
-    for (Long value : logSegmentValidSizeMap.values()) {
+    for (Long value : logSegmentValidSizeResult.getSecond().values()) {
       allLogSegmentValidDataSize += value;
     }
     return new Pair<>(logSegmentValidSizeResult.getFirst(), allLogSegmentValidDataSize);
@@ -148,7 +147,7 @@ public class BlobStoreStats implements StoreStats {
       IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
       if (putIndexValue != null && !putIndexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !isExpired(
           putIndexValue.getExpiresAtMs(), referenceTimeInMs)) {
-        // correct previously counted value if the put record only if the following conditions are true:
+        // correct previously counted value only if the following conditions are true:
         // 1. the put and delete record are not in the same index segment (putIndexValue != null)
         // 2. the found record is actually a put record (!putIndexValue.isFlagSet)
         // 3. the found put record is not expired
@@ -185,7 +184,7 @@ public class BlobStoreStats implements StoreStats {
         IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
         if (putIndexValue != null && !putIndexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !isExpired(
             putIndexValue.getExpiresAtMs(), referenceTimeInMs)) {
-          // correct previously counted value if the put record only if the following conditions are true:
+          // correct previously counted value only if the following conditions are true:
           // 1. the put and delete record are not in the same index segment (putIndexValue != null)
           // 2. the found record is actually a put record (!putIndexValue.isFlagSet)
           // 3. the found put record is not expired
