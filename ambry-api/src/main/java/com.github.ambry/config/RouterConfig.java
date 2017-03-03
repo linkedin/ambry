@@ -153,16 +153,23 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.scaling.unit.max.connections.per.port.ssl", 2, 1, 20);
     routerConnectionCheckoutTimeoutMs =
         verifiableProperties.getIntInRange("router.connection.checkout.timeout.ms", 1000, 1, 5000);
-    routerRequestTimeoutMs = verifiableProperties.getInt("router.request.timeout.ms", 2000);
-    routerMaxPutChunkSizeBytes = verifiableProperties.getInt("router.max.put.chunk.size.bytes", 4 * 1024 * 1024);
-    routerPutRequestParallelism = verifiableProperties.getInt("router.put.request.parallelism", 3);
-    routerPutSuccessTarget = verifiableProperties.getInt("router.put.success.target", 2);
-    routerMaxSlippedPutAttempts = verifiableProperties.getInt("router.max.slipped.put.attempts", 1);
-    routerDeleteRequestParallelism = verifiableProperties.getInt("router.delete.request.parallelism", 3);
-    routerDeleteSuccessTarget = verifiableProperties.getInt("router.delete.success.target", 2);
-    routerGetRequestParallelism = verifiableProperties.getInt("router.get.request.parallelism", 2);
-    routerGetSuccessTarget = verifiableProperties.getInt("router.get.success.target", 1);
+    routerRequestTimeoutMs = verifiableProperties.getIntInRange("router.request.timeout.ms", 2000, 1, 10000);
+    routerMaxPutChunkSizeBytes =
+        verifiableProperties.getIntInRange("router.max.put.chunk.size.bytes", 4 * 1024 * 1024, 1, Integer.MAX_VALUE);
+    routerPutRequestParallelism =
+        verifiableProperties.getIntInRange("router.put.request.parallelism", 3, 1, Integer.MAX_VALUE);
+    routerPutSuccessTarget = verifiableProperties.getIntInRange("router.put.success.target", 2, 1, Integer.MAX_VALUE);
+    routerMaxSlippedPutAttempts =
+        verifiableProperties.getIntInRange("router.max.slipped.put.attempts", 1, 0, Integer.MAX_VALUE);
+    routerDeleteRequestParallelism =
+        verifiableProperties.getIntInRange("router.delete.request.parallelism", 3, 1, Integer.MAX_VALUE);
+    routerDeleteSuccessTarget =
+        verifiableProperties.getIntInRange("router.delete.success.target", 2, 1, Integer.MAX_VALUE);
+    routerGetRequestParallelism =
+        verifiableProperties.getIntInRange("router.get.request.parallelism", 2, 1, Integer.MAX_VALUE);
+    routerGetSuccessTarget = verifiableProperties.getIntInRange("router.get.success.target", 1, 1, Integer.MAX_VALUE);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
-    routerLatencyToleranceQuantile = verifiableProperties.getDoubleInRange("router.latency.tolerance.quantile", 0.9, 0.0, 1.0);
+    routerLatencyToleranceQuantile =
+        verifiableProperties.getDoubleInRange("router.latency.tolerance.quantile", 0.9, 0.0, 1.0);
   }
 }

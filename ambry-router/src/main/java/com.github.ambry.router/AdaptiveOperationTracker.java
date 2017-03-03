@@ -86,7 +86,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     } else {
       elapsedTime = time.milliseconds() - expiredRequestSendTimes.remove(replicaId);
     }
-    getTracker(replicaId).update(elapsedTime);
+    getLatencyHistogram(replicaId).update(elapsedTime);
   }
 
   @Override
@@ -96,13 +96,13 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   }
 
   /**
-   * Gets the {@link Histogram} that tracks requests to the class of replicas (intra or inter DC) that {@code replicaId}
-   * belongs to.
+   * Gets the {@link Histogram} that tracks request latencies to the class of replicas (intra or inter DC) that
+   * {@code replicaId} belongs to.
    * @param replicaId the {@link ReplicaId} whose request latency is going to be tracked.
    * @return the {@link Histogram} that tracks requests to the class of replicas (intra or inter DC) that
    * {@code replicaId} belongs to.
    */
-  private Histogram getTracker(ReplicaId replicaId) {
+  private Histogram getLatencyHistogram(ReplicaId replicaId) {
     if (replicaId.getDataNodeId().getDatacenterName().equals(datacenterName)) {
       return localColoTracker;
     }
@@ -148,11 +148,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
      * @throws IllegalStateException if no requests have been sent yet.
      */
     private boolean isOldestRequestPastDue() {
-      if (unexpiredRequestSendTimes.size() == 0) {
-        throw new IllegalStateException("There are no unexpired requests");
-      }
       Map.Entry<ReplicaId, Long> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
-      Histogram latencyTracker = getTracker(oldestEntry.getKey());
+      Histogram latencyTracker = getLatencyHistogram(oldestEntry.getKey());
       return (latencyTracker.getCount() >= MIN_DATA_POINTS_REQUIRED) && (time.milliseconds() - oldestEntry.getValue()
           >= latencyTracker.getSnapshot().getValue(quantile));
     }

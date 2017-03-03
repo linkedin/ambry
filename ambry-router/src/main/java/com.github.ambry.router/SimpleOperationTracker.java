@@ -81,6 +81,9 @@ class SimpleOperationTracker implements OperationTracker {
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
       int parallelism, boolean shuffleReplicas) {
+    if (parallelism < 1) {
+      throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
+    }
     this.successTarget = successTarget;
     this.parallelism = parallelism;
     // Order the replicas so that local healthy replicas are ordered and returned first,

@@ -338,6 +338,22 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Tests the case when parallelism < 1
+   */
+  @Test
+  public void incorrectParallelismTest() {
+    initialize();
+    for (int parallelism : Arrays.asList(0, -1)) {
+      try {
+        getOperationTracker(true, 13, 0);
+        fail("Should have failed to construct tracker because parallelism is " + parallelism);
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do.
+      }
+    }
+  }
+
+  /**
    * Initialize 4 DCs, each DC has 1 data node, which has 3 replicas.
    */
   private void initialize() {
