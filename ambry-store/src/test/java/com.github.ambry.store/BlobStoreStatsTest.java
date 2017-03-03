@@ -38,7 +38,7 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class BlobStoreStatsTest {
-  private static final long TEST_TIME_INTERVAL_IN_SEC = CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / 2;
+  private static final long TEST_TIME_INTERVAL_IN_SEC = (CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / Time.MsPerSec) / 2;
   private final CuratedLogIndexState state;
   private final File tempDir;
   private final BlobStoreStats blobStoreStats;
@@ -89,6 +89,9 @@ public class BlobStoreStatsTest {
   @Test
   public void testContainerValidDataSize() throws InterruptedException, StoreException, IOException {
     verifyContainerValidSize();
+    // advance time
+    state.advanceTime(TEST_TIME_INTERVAL_IN_SEC * Time.MsPerSec);
+    verifyContainerValidSize();
   }
 
   /**
@@ -99,7 +102,7 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testLogSegmentValidDataSize() throws InterruptedException, StoreException, IOException {
-    for (int i = 0; i <= state.time.seconds(); i += TEST_TIME_INTERVAL_IN_SEC) {
+    for (int i = 0; i <= state.time.seconds() + TEST_TIME_INTERVAL_IN_SEC; i += TEST_TIME_INTERVAL_IN_SEC) {
       TimeRange timeRange = new TimeRange(i, 0L);
       verifyLogSegmentValidSize(timeRange);
     }
@@ -129,7 +132,7 @@ public class BlobStoreStatsTest {
     state.advanceTime(Time.MsPerSec);
 
     long timeInSecsAfterPuts = state.time.seconds();
-    verifyLogSegmentValidSize(new TimeRange(timeInSecsAfterPuts + 1, 0L));
+    verifyLogSegmentValidSize(new TimeRange(timeInSecsAfterPuts, 0L));
     long totalLogSegmentValidSizeAfterPuts = verifyLogSegmentValidSize(new TimeRange(timeInSecsAfterPuts, 0L));
     long totalContainerValidSizeAfterPuts = verifyContainerValidSize();
     long expectedIncrement = 3 * CuratedLogIndexState.PUT_RECORD_SIZE;
@@ -252,28 +255,33 @@ public class BlobStoreStatsTest {
         timeRange.getStartTimeInSecs() <= actualLogSegmentValidSizeMap.getFirst()
             && timeRange.getEndTimeInSecs() >= actualLogSegmentValidSizeMap.getFirst());
 
-    Map<String, Long> expectedLogSegmentValidSizeMap =
-        state.getValidSizeByLogSegment(timeRange.getStartTimeInSecs() * Time.MsPerSec);
-    assertEquals("Mismatch in number of log segments", expectedLogSegmentValidSizeMap.size(),
-        actualLogSegmentValidSizeMap.getSecond().size());
-    long expectedTotalValidSize = 0L;
+    int expectedNumberOfLogSegments = 0;
+    long expectedTotalLogSegmentValidSize = 0L;
+    LogSegment logSegment = state.log.getFirstSegment();
 
-    for (Map.Entry<String, Long> expectedLogSegmentValidSizeEntry : expectedLogSegmentValidSizeMap.entrySet()) {
-      String logSegmentName = expectedLogSegmentValidSizeEntry.getKey();
+    while (logSegment != null) {
+      String logSegmentName = logSegment.getName();
       assertTrue("Log segment: " + logSegmentName + " not found",
           actualLogSegmentValidSizeMap.getSecond().containsKey(logSegmentName));
-      long expectedSegmentValidSize = expectedLogSegmentValidSizeEntry.getValue();
-      long actualSegmentValidSize = actualLogSegmentValidSizeMap.getSecond().get(logSegmentName);
-      assertEquals("Valid data size mismatch for log segment: " + logSegmentName, expectedSegmentValidSize,
-          actualSegmentValidSize);
-      expectedTotalValidSize += expectedLogSegmentValidSizeEntry.getValue();
+
+      long expectedLogSegmentValidSize = state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInSecs() * Time.MsPerSec);
+      long actualLogSegmentValidSize = actualLogSegmentValidSizeMap.getSecond().get(logSegmentName);
+      assertEquals("Valid data size mismatch for log segment: " + logSegmentName, expectedLogSegmentValidSize,
+          actualLogSegmentValidSize);
+
+      expectedTotalLogSegmentValidSize += expectedLogSegmentValidSize;
+      expectedNumberOfLogSegments++;
+      logSegment = state.log.getNextSegment(logSegment);
     }
+
+    assertEquals("Mismatch in number of log segments", expectedNumberOfLogSegments,
+        actualLogSegmentValidSizeMap.getSecond().size());
 
     Pair<Long, Long> actualTotalValidSize = blobStoreStats.getValidDataSize(timeRange);
     assertTrue("Valid data size collection time should be in the range",
         timeRange.getStartTimeInSecs() <= actualTotalValidSize.getFirst()
             && timeRange.getEndTimeInSecs() >= actualLogSegmentValidSizeMap.getFirst());
-    assertEquals("Total valid data size of all log segments mismatch", expectedTotalValidSize,
+    assertEquals("Total valid data size of all log segments mismatch", expectedTotalLogSegmentValidSize,
         actualTotalValidSize.getSecond().longValue());
 
     return actualTotalValidSize.getSecond();

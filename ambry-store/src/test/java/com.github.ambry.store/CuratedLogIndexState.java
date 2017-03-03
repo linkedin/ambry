@@ -126,7 +126,6 @@ class CuratedLogIndexState {
   // Variables that represent the folder where the data resides
   private final File tempDir;
   private final String tempDirStr;
-  private final long segmentCapacity;
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
   private final Set<MockId> generatedKeys = new HashSet<>();
 
@@ -164,7 +163,7 @@ class CuratedLogIndexState {
       throws InterruptedException, IOException, StoreException {
     this.tempDir = tempDir;
     tempDirStr = tempDir.getAbsolutePath();
-    segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
+    long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
     StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
     log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, segmentCapacity, metrics);
     metricRegistry = new MetricRegistry();
@@ -418,69 +417,6 @@ class CuratedLogIndexState {
     return deleteCandidate;
   }
 
-  List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long referenceTime) {
-    List<IndexEntry> validEntries = new ArrayList<>();
-    for(Map.Entry<MockId, IndexValue> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset).entrySet()) {
-      MockId key = indexSegmentEntry.getKey();
-      IndexValue value = indexSegmentEntry.getValue();
-      if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        // delete record is always valid
-        validEntries.add(new IndexEntry(key, value));
-      } else if (value.getExpiresAtMs() == Utils.Infinite_Time || value.getExpiresAtMs() >= referenceTime) {
-        // unexpired
-        if(!deletedKeys.contains(key)) {
-          // non expired, non deleted PUT
-          validEntries.add(new IndexEntry(key, value));
-        } else {
-          Offset deleteIndexSegmentStartOffset = indexSegmentStartOffsets.get(key).getSecond();
-          if(lastModifiedTimesInSecs.get(deleteIndexSegmentStartOffset) * Time.MsPerSec >= referenceTime) {
-            // delete does not count
-            validEntries.add(new IndexEntry(key, value));
-          }
-        }
-      }
-    }
-    return validEntries;
-  }
-
-  Map<Offset, Long> getValidSizeByIndexSegment(long referenceTime) {
-    Map<Offset, Long> validSizeByIndexSegment = new HashMap<>();
-    for(Offset indexSegmentStartOffset : referenceIndex.keySet()) {
-      List<IndexEntry> validEntries = getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, referenceTime);
-      long size = 0;
-      for (IndexEntry indexEntry : validEntries) {
-        size += indexEntry.getValue().getSize();
-      }
-      validSizeByIndexSegment.put(indexSegmentStartOffset, size);
-    }
-    return validSizeByIndexSegment;
-  }
-
-  List<IndexEntry> getValidIndexEntriesForLogSegment(LogSegment segment, long referenceTime) {
-    List<IndexEntry> validEntries = new ArrayList<>();
-    Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
-    while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
-      validEntries.addAll(getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, referenceTime));
-      indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
-    }
-    return validEntries;
-  }
-
-  Map<String, Long> getValidSizeByLogSegment(long referenceTime) {
-    Map<String, Long> validSizeByLogSegment = new HashMap<>();
-    LogSegment segment = log.getFirstSegment();
-    while (segment != null) {
-      List<IndexEntry> validEntries = getValidIndexEntriesForLogSegment(segment, referenceTime);
-      long size = 0;
-      for (IndexEntry indexEntry : validEntries) {
-        size += indexEntry.getValue().getSize();
-      }
-      validSizeByLogSegment.put(segment.getName(), size);
-      segment = log.getNextSegment(segment);
-    }
-    return validSizeByLogSegment;
-  }
-
   /**
    * Gets the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
    * @param segment the {@link LogSegment} whose valid size is required.
@@ -691,18 +627,6 @@ class CuratedLogIndexState {
     }
   }
 
-  void reloadLog() throws IOException, StoreException {
-    index.close();
-    log.close();
-    metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    sessionId = UUID.randomUUID();
-    log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, metrics);
-    index = new PersistentIndex(tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY, recovery,
-        hardDelete, metrics, time, sessionId, incarnationId);
-  }
-
   /**
    * Closes the index and clears all the index files.
    * @throws StoreException
@@ -794,7 +718,7 @@ class CuratedLogIndexState {
     }
     // make sure all indexes are written to disk and mapped as required (forcing IndexPersistor to run).
     log.flush();
-    //reloadIndex(true, false);
+    reloadIndex(true, false);
     verifyState(isLogSegmented);
     assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
