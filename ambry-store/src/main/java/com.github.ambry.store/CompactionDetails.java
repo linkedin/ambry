@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,35 +25,31 @@ import java.util.List;
  * Contains all the details required for a compaction cycle.
  */
 class CompactionDetails {
-  private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
-
   private static final short VERSION_0 = 0;
   private static final int VERSION_SIZE = 2;
   private static final int REFERENCE_TIME_SIZE = 8;
   private static final int SEGMENT_COUNT_SIZE = 4;
   private static final int SEGMENT_NAME_LENGTH_SIZE = 4;
-  private static final int SWAP_SPACE_COUNT_SIZE = 4;
 
-  private final long referenceTime;
+  private final long referenceTimeMs;
   private final List<String> logSegmentsUnderCompaction;
-  private final String extraSegmentName;
-  private final int swapSpaceCount;
 
   /**
    * Construct a representation of all the details required for a compaction cycle.
-   * @param referenceTime the epoch time to use to get the same results from the {@link BlobStore} as when these details
-   *                      were created.
+   * @param referenceTimeMs the epoch time to use to get the same results from the {@link BlobStore} as when these
+   *                        details were created.
    * @param logSegmentsUnderCompaction the names of the {@link LogSegment} under compaction.
-   * @param extraSegmentName the name of the segment which will provide the "extra" data. Should be {@code null} if no
-   *                         extra data is required.
-   * @param swapSpaceCount the number of swap spaces that will be required for compaction.
+   * @throws IllegalArgumentException if {@code referenceTimeMs} < 0 or if {@code logSegmentsUnderCompaction} has no
+   * elements.
    */
-  CompactionDetails(long referenceTime, List<String> logSegmentsUnderCompaction, String extraSegmentName,
-      int swapSpaceCount) {
-    this.referenceTime = referenceTime;
+  CompactionDetails(long referenceTimeMs, List<String> logSegmentsUnderCompaction) {
+    if (referenceTimeMs < 0 || logSegmentsUnderCompaction.size() == 0) {
+      throw new IllegalArgumentException(
+          "Illegal arguments provided. Ref time: [" + referenceTimeMs + "]. " + "Segments under compaction size: ["
+              + logSegmentsUnderCompaction.size() + "]");
+    }
+    this.referenceTimeMs = referenceTimeMs;
     this.logSegmentsUnderCompaction = logSegmentsUnderCompaction;
-    this.extraSegmentName = extraSegmentName;
-    this.swapSpaceCount = swapSpaceCount;
   }
 
   /**
@@ -73,12 +69,7 @@ class CompactionDetails {
         for (int i = 0; i < segmentCount; i++) {
           logSegmentsUnderCompaction.add(Utils.readIntString(stream));
         }
-        String extraLogSegmentName = Utils.readIntString(stream);
-        if (extraLogSegmentName.isEmpty()) {
-          extraLogSegmentName = null;
-        }
-        int swapSpaceCount = stream.readInt();
-        details = new CompactionDetails(referenceTime, logSegmentsUnderCompaction, extraLogSegmentName, swapSpaceCount);
+        details = new CompactionDetails(referenceTime, logSegmentsUnderCompaction);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized version: " + version);
@@ -87,32 +78,18 @@ class CompactionDetails {
   }
 
   /**
-   * @return the epoch time to use to get the same results from the {@link BlobStore} as when the details were created
+   * @return the epoch time to use to get the same results from the {@link BlobStore} as when the details were created.
+   * Guaranteed to be >= 0.
    */
-  long getReferenceTime() {
-    return referenceTime;
+  long getReferenceTimeMs() {
+    return referenceTimeMs;
   }
 
   /**
-   * @return the names of the segments under compaction.
+   * @return the names of the segments under compaction. Guaranteed to contain at least one element.
    */
   List<String> getLogSegmentsUnderCompaction() {
     return logSegmentsUnderCompaction;
-  }
-
-  /**
-   * @return the name of the segment which will provide the "extra" data. Can be {@code null} or empty if no extra data
-   * is required.
-   */
-  String getExtraSegmentName() {
-    return extraSegmentName;
-  }
-
-  /**
-   * @return the number of swap spaces that will be required for compaction.
-   */
-  int getSwapSpaceCount() {
-    return swapSpaceCount;
   }
 
   /**
@@ -123,13 +100,11 @@ class CompactionDetails {
       Description of format
 
       version
-      referenceTime
+      referenceTimeMs
       size of the logSegmentsUnderCompaction list
       segment_1_name_length segment_1_name
       segment_2_name_length segment_2_name
       ....
-      extra_segment_name_length extra_segment_name
-      swapSpaceCount
      */
 
     List<byte[]> segmentNameBytesList = new ArrayList<>();
@@ -139,15 +114,13 @@ class CompactionDetails {
       segmentNameBytesList.add(segmentNameBytes);
       size += SEGMENT_NAME_LENGTH_SIZE + segmentNameBytes.length;
     }
-    byte[] extraSegmentNameBytes = extraSegmentName == null ? ZERO_LENGTH_ARRAY : extraSegmentName.getBytes();
-    size += SEGMENT_NAME_LENGTH_SIZE + extraSegmentNameBytes.length + SWAP_SPACE_COUNT_SIZE;
 
     byte[] buf = new byte[size];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     // version
     bufWrap.putShort(VERSION_0);
     // reference time
-    bufWrap.putLong(referenceTime);
+    bufWrap.putLong(referenceTimeMs);
     // size of logSegmentsUnderCompaction
     bufWrap.putInt(logSegmentsUnderCompaction.size());
     // log segments under compaction
@@ -155,11 +128,6 @@ class CompactionDetails {
       bufWrap.putInt(segmentNameBytes.length);
       bufWrap.put(segmentNameBytes);
     }
-    // extra log segment name
-    bufWrap.putInt(extraSegmentNameBytes.length);
-    bufWrap.put(extraSegmentNameBytes);
-    // swap space count
-    bufWrap.putInt(swapSpaceCount);
     return buf;
   }
 }

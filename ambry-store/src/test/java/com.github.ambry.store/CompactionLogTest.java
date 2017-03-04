@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,10 @@ import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.After;
 import org.junit.Test;
@@ -48,6 +51,7 @@ public class CompactionLogTest {
   private final String tempDirStr;
   // the time instance that will be used in the index
   private final Time time = new MockTime();
+  private final Set<String> generatedSegmentNames = new HashSet<>();
 
   /**
    * Creates a temporary directory for the compaction log file.
@@ -75,14 +79,18 @@ public class CompactionLogTest {
   @Test
   public void iterationWithoutReloadTest() throws IOException {
     String storeName = "store";
-    List<CompactionDetails> detailsList = getCompactionDetails(5);
+    List<CompactionDetails> detailsList = getCompactionDetailsList(5);
+    CompactionDetails combined = combineListOfDetails(detailsList);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, detailsList);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, combined);
     assertTrue("Compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     int currentIdx = 0;
-    for (CompactionDetails details : detailsList) {
+    Iterator<CompactionDetails> detailsIterator = detailsList.iterator();
+    CompactionDetails currDetails = detailsIterator.next();
+    while (currDetails != null) {
+      detailsIterator.remove();
       assertEquals("CurrentIdx not as expected", currentIdx, cLog.getCurrentIdx());
-      verifyEquality(details, cLog.getCompactionDetails());
+      verifyEquality(combined, cLog.getCompactionDetails());
       assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, cLog.getCompactionPhase());
       cLog.markCopyStart();
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, cLog.getCompactionPhase());
@@ -91,12 +99,21 @@ public class CompactionLogTest {
               new UUID(1, 1), new UUID(1, 1));
       cLog.setSafeToken(safeToken);
       assertEquals("Returned token not the same as the one that was set", safeToken, cLog.getSafeToken());
+      CompactionDetails nextDetails = detailsIterator.hasNext() ? detailsIterator.next() : null;
+      if (nextDetails != null) {
+        cLog.splitCurrentCycle(nextDetails.getLogSegmentsUnderCompaction().get(0));
+        verifyEquality(currDetails, cLog.getCompactionDetails());
+      }
       cLog.markCommitStart();
       assertEquals("Should be in the SWITCH phase", CompactionLog.Phase.COMMIT, cLog.getCompactionPhase());
       cLog.markCleanupStart();
       assertEquals("Should be in the CLEANUP phase", CompactionLog.Phase.CLEANUP, cLog.getCompactionPhase());
       cLog.markCycleComplete();
       currentIdx++;
+      currDetails = nextDetails;
+      if (nextDetails != null) {
+        combined = combineListOfDetails(detailsList);
+      }
     }
     assertEquals("CurrentIdx not as expected", -1, cLog.getCurrentIdx());
     assertEquals("Should be in the DONE phase", CompactionLog.Phase.DONE, cLog.getCompactionPhase());
@@ -111,17 +128,21 @@ public class CompactionLogTest {
   @Test
   public void iterationWithReloadTest() throws IOException {
     String storeName = "store";
-    List<CompactionDetails> detailsList = getCompactionDetails(5);
+    List<CompactionDetails> detailsList = getCompactionDetailsList(5);
+    CompactionDetails combined = combineListOfDetails(detailsList);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, detailsList);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, combined);
     assertTrue("Compaction should should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, storeName));
     int currentIdx = 0;
-    for (CompactionDetails details : detailsList) {
+    Iterator<CompactionDetails> detailsIterator = detailsList.iterator();
+    CompactionDetails currDetails = detailsIterator.next();
+    while (currDetails != null) {
+      detailsIterator.remove();
       assertEquals("CurrentIdx not as expected", currentIdx, cLog.getCurrentIdx());
 
       cLog.close();
       cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
-      verifyEquality(details, cLog.getCompactionDetails());
+      verifyEquality(combined, cLog.getCompactionDetails());
       assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, cLog.getCompactionPhase());
       cLog.markCopyStart();
 
@@ -136,6 +157,14 @@ public class CompactionLogTest {
       cLog.close();
       cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
       assertEquals("Returned token not the same as the one that was set", safeToken, cLog.getSafeToken());
+      CompactionDetails nextDetails = detailsIterator.hasNext() ? detailsIterator.next() : null;
+      if (nextDetails != null) {
+        cLog.splitCurrentCycle(nextDetails.getLogSegmentsUnderCompaction().get(0));
+        verifyEquality(currDetails, cLog.getCompactionDetails());
+        cLog.close();
+        cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+        verifyEquality(currDetails, cLog.getCompactionDetails());
+      }
       cLog.markCommitStart();
 
       cLog.close();
@@ -149,6 +178,10 @@ public class CompactionLogTest {
       cLog.markCycleComplete();
 
       currentIdx++;
+      currDetails = nextDetails;
+      if (nextDetails != null) {
+        combined = combineListOfDetails(detailsList);
+      }
     }
     assertEquals("CurrentIdx not as expected", -1, cLog.getCurrentIdx());
     assertEquals("Should be in the DONE phase", CompactionLog.Phase.DONE, cLog.getCompactionPhase());
@@ -162,8 +195,7 @@ public class CompactionLogTest {
   @Test
   public void phaseTransitionEnforcementTest() throws IOException {
     String storeName = "store";
-    List<CompactionDetails> detailsList = getCompactionDetails(1);
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, detailsList);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, getCompactionDetails());
 
     assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, cLog.getCompactionPhase());
     checkTransitionFailure(cLog, CompactionLog.Phase.COMMIT, CompactionLog.Phase.CLEANUP, CompactionLog.Phase.DONE);
@@ -194,11 +226,11 @@ public class CompactionLogTest {
   @Test
   public void constructionBadArgsTest() throws IOException {
     String storeName = "store";
-    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, getCompactionDetails(1));
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, getCompactionDetails());
     cLog.close();
     // log file already exists
     try {
-      new CompactionLog(tempDirStr, storeName, time, getCompactionDetails(1));
+      new CompactionLog(tempDirStr, storeName, time, getCompactionDetails());
       fail("Construction should have failed because compaction log file already exists");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -226,24 +258,30 @@ public class CompactionLogTest {
   // general
 
   /**
-   * Gets a {@link List<CompactionDetails>} of size {@code size} with random {@link CompactionDetails}.
-   * @param size the number of {@link CompactionDetails} required.
-   * @return a {@link List<CompactionDetails>} of size {@code size} with random {@link CompactionDetails}.
+   * @return a {@link CompactionDetails} with random data.
    */
-  private List<CompactionDetails> getCompactionDetails(int size) {
-    List<CompactionDetails> details = new ArrayList<>(size);
-    for (int i = 0; i < size; i++) {
-      long referenceTime = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-      int segmentCount = TestUtils.RANDOM.nextInt(10) + 1;
-      List<String> segmentsUnderCompaction = new ArrayList<>();
-      for (int j = 0; j < segmentCount; j++) {
-        segmentsUnderCompaction.add(UtilsTest.getRandomString(10));
-      }
-      String extraSegmentName = i % 2 == 0 ? null : UtilsTest.getRandomString(10);
-      int swapSpaceCount = TestUtils.RANDOM.nextInt(10) + 1;
-      details.add(new CompactionDetails(referenceTime, segmentsUnderCompaction, extraSegmentName, swapSpaceCount));
+  private CompactionDetails getCompactionDetails() {
+    long referenceTime = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    return getCompactionDetails(referenceTime);
+  }
+
+  /**
+   * A {@link CompactionDetails} with random data.
+   * @param referenceTime the reference time to use to generate the {@link CompactionDetails}
+   * @return {@link CompactionDetails} with random data.
+   */
+  private CompactionDetails getCompactionDetails(long referenceTime) {
+    int segmentCount = TestUtils.RANDOM.nextInt(10) + 1;
+    List<String> segmentsUnderCompaction = new ArrayList<>();
+    for (int j = 0; j < segmentCount; j++) {
+      String segmentName;
+      do {
+        segmentName = UtilsTest.getRandomString(10);
+      } while (generatedSegmentNames.contains(segmentName));
+      generatedSegmentNames.add(segmentName);
+      segmentsUnderCompaction.add(segmentName);
     }
-    return details;
+    return new CompactionDetails(referenceTime, segmentsUnderCompaction);
   }
 
   /**
@@ -252,11 +290,40 @@ public class CompactionLogTest {
    * @param toCheck the {@link CompactionDetails} that needs to be checked.
    */
   private void verifyEquality(CompactionDetails original, CompactionDetails toCheck) {
-    assertEquals("Reference time does not match", original.getReferenceTime(), toCheck.getReferenceTime());
+    assertEquals("Reference time does not match", original.getReferenceTimeMs(), toCheck.getReferenceTimeMs());
     assertEquals("Segments under compaction don't match", original.getLogSegmentsUnderCompaction(),
         toCheck.getLogSegmentsUnderCompaction());
-    assertEquals("Extra segment name does not match", original.getExtraSegmentName(), toCheck.getExtraSegmentName());
-    assertEquals("Swap space count does not match", original.getSwapSpaceCount(), toCheck.getSwapSpaceCount());
+  }
+
+  // iteration tests helpers
+
+  /**
+   * Gets a {@link List<CompactionDetails>} of size {@code size} with random {@link CompactionDetails}.
+   * @param size the number of {@link CompactionDetails} required.
+   * @return a {@link List<CompactionDetails>} of size {@code size} with random {@link CompactionDetails}.
+   */
+  private List<CompactionDetails> getCompactionDetailsList(int size) {
+    List<CompactionDetails> detailsList = new ArrayList<>();
+    long referenceTime = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    for (int i = 0; i < size; i++) {
+      CompactionDetails details = getCompactionDetails(referenceTime);
+      detailsList.add(details);
+    }
+    return detailsList;
+  }
+
+  /**
+   * Combines a {@link List<CompactionDetails>} into one {@link CompactionDetails} instance. Uses the reference time
+   * of the first entry in the list.
+   * @param detailsList the {@link List<CompactionDetails>} to combine.
+   * @return combines {@code detailsList} into a single {@link CompactionDetails}.
+   */
+  private CompactionDetails combineListOfDetails(List<CompactionDetails> detailsList) {
+    List<String> allSegmentNames = new ArrayList<>();
+    for (CompactionDetails details : detailsList) {
+      allSegmentNames.addAll(details.getLogSegmentsUnderCompaction());
+    }
+    return new CompactionDetails(detailsList.get(0).getReferenceTimeMs(), allSegmentNames);
   }
 
   // phaseTransitionEnforcementTest() helpers
