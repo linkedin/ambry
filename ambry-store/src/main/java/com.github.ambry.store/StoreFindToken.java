@@ -118,7 +118,7 @@ public class StoreFindToken implements FindToken {
       } else if (type.equals(Type.IndexBased) && key == null) {
         throw new IllegalArgumentException("StoreKey cannot be null for an index based token");
       }
-      if (version >= VERSION_2 && incarnationId == null) {
+      if (version == VERSION_2 && incarnationId == null) {
         throw new IllegalArgumentException("IncarnationId cannot be null for StoreFindToken of version 2");
       }
     }
