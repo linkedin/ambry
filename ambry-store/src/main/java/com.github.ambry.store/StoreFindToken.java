@@ -41,6 +41,7 @@ public class StoreFindToken implements FindToken {
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
+  static final short CURRENT_VERSION = VERSION_2;
 
   private static final int VERSION_SIZE = 2;
   private static final int TYPE_SIZE = 2;
@@ -72,7 +73,7 @@ public class StoreFindToken implements FindToken {
    * Uninitialized token. Refers to the starting of the log.
    */
   StoreFindToken() {
-    this(Type.Uninitialized, null, null, null, null, true, VERSION_2);
+    this(Type.Uninitialized, null, null, null, null, true, CURRENT_VERSION);
   }
 
   /**
@@ -83,7 +84,7 @@ public class StoreFindToken implements FindToken {
    * @param incarnationId the incarnationId of the store
    */
   StoreFindToken(StoreKey key, Offset indexSegmentStartOffset, UUID sessionId, UUID incarnationId) {
-    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, VERSION_2);
+    this(Type.IndexBased, indexSegmentStartOffset, key, sessionId, incarnationId, false, CURRENT_VERSION);
   }
 
   /**
@@ -95,15 +96,15 @@ public class StoreFindToken implements FindToken {
    *                  {@code false} otherwise
    */
   StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive) {
-    this(Type.JournalBased, offset, null, sessionId, incarnationId, inclusive, VERSION_2);
+    this(Type.JournalBased, offset, null, sessionId, incarnationId, inclusive, CURRENT_VERSION);
   }
 
   /**
    * Instantiating {@link StoreFindToken}
    * @param type the {@link Type} of the token
    * @param offset the offset that this token refers to
-   * @param key The {@link StoreKey} which the token refers to. Index segments are keyed on store keys and hence
-   * @param sessionId the sessionId of the store that this token referes to
+   * @param key The {@link StoreKey} that the token refers to
+   * @param sessionId the sessionId of the store that this token refers to
    * @param incarnationId the incarnationId of the store that this token refers to
    * @param inclusive {@code true} if the offset is inclusive or in other words the blob at the given offset is inclusive.
    *                  {@code false} otherwise
@@ -117,7 +118,7 @@ public class StoreFindToken implements FindToken {
       } else if (type.equals(Type.IndexBased) && key == null) {
         throw new IllegalArgumentException("StoreKey cannot be null for an index based token");
       }
-      if(version == StoreFindToken.VERSION_2 && incarnationId == null){
+      if (version >= VERSION_2 && incarnationId == null) {
         throw new IllegalArgumentException("IncarnationId cannot be null for StoreFindToken of version 2");
       }
     }
@@ -291,11 +292,9 @@ public class StoreFindToken implements FindToken {
         bufWrap.putInt(sessionIdBytes.length);
         bufWrap.put(sessionIdBytes);
         // add offset for journal based token
-        bufWrap.putLong((type == Type.JournalBased) ? (offset != null ? offset.getOffset() : UNINITIALIZED_OFFSET)
-            : UNINITIALIZED_OFFSET);
+        bufWrap.putLong((type == Type.JournalBased) ? offset.getOffset() : UNINITIALIZED_OFFSET);
         // add index start offset for Index based token
-        bufWrap.putLong((type == Type.IndexBased) ? (offset != null ? offset.getOffset() : UNINITIALIZED_OFFSET)
-            : UNINITIALIZED_OFFSET);
+        bufWrap.putLong((type == Type.IndexBased) ? offset.getOffset() : UNINITIALIZED_OFFSET);
         // add storekey
         bufWrap.put(storeKeyBytes);
         break;

@@ -224,6 +224,8 @@ public class StoreFindTokenTest {
       if (version == StoreFindToken.VERSION_2) {
         assertEquals("IncarnationId mismatch ", token.getIncarnationId(), deSerToken.getIncarnationId());
       }
+      // use StoreFindToken's actual serialize method to verify that token is serialized in the expected
+      // version
       stream = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes())));
       deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
       assertEquals("Stream should have ended ", 0, stream.available());
@@ -305,7 +307,7 @@ public class StoreFindTokenTest {
           bufWrap.put(key.toBytes());
         }
         break;
-      case StoreFindToken.VERSION_2:
+      case StoreFindToken.CURRENT_VERSION:
         bytes = token.toBytes();
         break;
       default:

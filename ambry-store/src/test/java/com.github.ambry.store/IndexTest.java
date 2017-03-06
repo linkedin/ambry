@@ -40,6 +40,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.store.CuratedLogIndexState.*;
 import static org.junit.Assert.*;
 
 
@@ -52,15 +53,6 @@ public class IndexTest {
   private final boolean isLogSegmented;
   private final File tempDir;
   private final CuratedLogIndexState state;
-  private static final StoreKeyFactory STORE_KEY_FACTORY;
-
-  static {
-    try {
-      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
 
   /**
    * Running for both segmented and non-segmented log.
