@@ -20,9 +20,12 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+
 
 /**
  * Exposes stats related to a {@link BlobStore} that is useful to different components.
@@ -45,34 +48,36 @@ public class BlobStoreStats implements StoreStats {
   }
 
   // TODO remove this once #541 is merged
-  public static String getServiceId(StoreKey key) {
+  static String getServiceId(StoreKey key) {
     return key.getID().substring(0, 1);
   }
 
   // TODO remove this once #541 is merged
-  public static String getContainerId(StoreKey key) {
+  static String getContainerId(StoreKey key) {
     return key.getID().substring(key.getID().length() - 1);
   }
 
   @Override
-  public Pair<Long, Long> getValidDataSize(TimeRange timeRange) throws StoreException {
-    Pair<Long, Map<String, Long>> logSegmentValidSizeResult = getValidDataSizeByLogSegment(timeRange);
-    Long allLogSegmentValidDataSize = 0L;
+  public Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException {
+    Pair<Long, Map<String, Long>> logSegmentValidSizeResult = getValidSizeByLogSegment(timeRange);
+    Long totalValidSize = 0L;
     for (Long value : logSegmentValidSizeResult.getSecond().values()) {
-      allLogSegmentValidDataSize += value;
+      totalValidSize += value;
     }
-    return new Pair<>(logSegmentValidSizeResult.getFirst(), allLogSegmentValidDataSize);
+    return new Pair<>(logSegmentValidSizeResult.getFirst(), totalValidSize);
   }
 
   @Override
-  public Pair<Long, Map<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException {
-    long referenceTimeInSecs = timeRange.getEndTimeInSecs();
-    Map<String, Long> logSegmentValidSizeMap = collectValidDataSizeByLogSegment(referenceTimeInSecs * Time.MsPerSec);
-    return new Pair<>(referenceTimeInSecs, logSegmentValidSizeMap);
+  public Pair<Long, Map<String, Long>> getValidSizeByLogSegment(TimeRange timeRange) throws StoreException {
+    long deleteReferenceTimeInSecs = timeRange.getEndTimeInSecs();
+    long expirationReferenceTimeInMs = time.milliseconds();
+    Map<String, Long> validSizePerLogSegment =
+        collectValidSizeByLogSegment(deleteReferenceTimeInSecs * Time.MsPerSec, expirationReferenceTimeInMs);
+    return new Pair<>(deleteReferenceTimeInSecs, validSizePerLogSegment);
   }
 
   @Override
-  public Map<String, Map<String, Long>> getValidDataSize() throws StoreException {
+  public Map<String, Map<String, Long>> getValidDataSizeByContainers() throws StoreException {
     long referenceTimeInMs = time.milliseconds();
     return collectValidDataSizeByContainer(referenceTimeInMs);
   }
@@ -82,125 +87,99 @@ public class BlobStoreStats implements StoreStats {
    * @param referenceTimeInMs the reference time to be used to decide whether or not a blob is valid
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
-  private Map<String, Map<String, Long>> collectValidDataSizeByContainer(long referenceTimeInMs)
-      throws StoreException {
-    Offset previousSegmentEndOffset = null;
-    Offset indexStartOffset = index.getStartOffset();
-    Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
-    for (IndexSegment indexSegment : index.getIndexSegments().values()) {
+  private Map<String, Map<String, Long>> collectValidDataSizeByContainer(long referenceTimeInMs) throws StoreException {
+    Set<String> deleteKeys = new HashSet<>();
+    Map<String, Map<String, Long>> validDataSizePerContainer = new HashMap<>();
+    for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID, 1);
       List<MessageInfo> messageInfos = new ArrayList<>();
       try {
-        indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos, new AtomicLong(0));
+        indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos,
+            new AtomicLong(0));
       } catch (IOException e) {
-        throw new StoreException("I/O error while collecting valid data size information", e, StoreErrorCodes.IOError);
+        throw new StoreException("I/O error while collecting valid data size per container", e, StoreErrorCodes.IOError);
       }
-      Offset backwardSearchEndOffset =
-          previousSegmentEndOffset == null ? indexSegment.getStartOffset() : previousSegmentEndOffset;
-      FileSpan backwardSearchSpan = new FileSpan(indexStartOffset, backwardSearchEndOffset);
-      for (MessageInfo messageInfo : messageInfos) {
-        populateContainerMap(containerValidSizeMap, referenceTimeInMs, messageInfo, backwardSearchSpan);
-      }
-      previousSegmentEndOffset = indexSegment.getStartOffset();
+      populateContainerMap(validDataSizePerContainer, referenceTimeInMs, messageInfos, deleteKeys);
     }
 
-    return containerValidSizeMap;
+    return validDataSizePerContainer;
   }
 
   /**
-   * Walk through the entire index and collect valid data size information per log segment.
-   * @param referenceTimeInMs the reference time to be used to decide whether or not a blob is valid
-   * @return a {@link Map} of log segment name to valid data size
+   * Walk through the entire index and collect valid size information per log segment.
+   * @param deleteReferenceTimeInMs the reference time to be used to decide whether or not a blob is deleted
+   * @param expirationReferenceTimeInMs the reference time to be used to decide whether or not a blob is expired
+   * @return a {@link Map} of log segment name to valid size
    */
-  private Map<String, Long> collectValidDataSizeByLogSegment(long referenceTimeInMs)
+  private Map<String, Long> collectValidSizeByLogSegment(long deleteReferenceTimeInMs, long expirationReferenceTimeInMs)
       throws StoreException {
-    Offset previousSegmentEndOffset = null;
-    Offset indexStartOffset = index.getStartOffset();
-    Map<String, Long> logSegmentValidSizeMap = new HashMap<>();
-    for (IndexSegment indexSegment : index.getIndexSegments().values()) {
+    Set<String> deleteKeys = new HashSet<>();
+    Map<String, Long> validSizePerLogSegment = new HashMap<>();
+    for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID, 1);
       List<MessageInfo> messageInfos = new ArrayList<>();
       try {
-        indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos, new AtomicLong(0));
+        indexSegment.getEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), messageInfos,
+            new AtomicLong(0));
       } catch (IOException e) {
-        throw new StoreException("I/O error while collecting valid data size information", e, StoreErrorCodes.IOError);
+        throw new StoreException("I/O error while collecting valid size per log segment", e, StoreErrorCodes.IOError);
       }
-      Offset backwardSearchEndOffset =
-          previousSegmentEndOffset == null ? indexSegment.getStartOffset() : previousSegmentEndOffset;
-      FileSpan backwardSearchSpan = new FileSpan(indexStartOffset, backwardSearchEndOffset);
-      for (MessageInfo messageInfo : messageInfos) {
-        populateLogSegmentMap(logSegmentValidSizeMap, referenceTimeInMs, messageInfo,
-            indexSegment.getLastModifiedTime() * Time.MsPerSec, indexSegment.getLogSegmentName(), backwardSearchSpan);
-      }
-      previousSegmentEndOffset = indexSegment.getStartOffset();
+      populateLogSegmentMap(validSizePerLogSegment, deleteReferenceTimeInMs, expirationReferenceTimeInMs, messageInfos,
+          indexSegment.getLastModifiedTime() * Time.MsPerSec, indexSegment.getLogSegmentName(), deleteKeys);
     }
-    return logSegmentValidSizeMap;
+    return validSizePerLogSegment;
   }
 
   /**
    * Process a record in the index and populate the valid data size per container map.
-   * @param containerValidSizeMap the valid data size per container map
+   * @param validDataSizePerContainer the valid data size per container map
    * @param referenceTimeInMs the reference time used to decide whether or not a record is valid
-   * @param messageInfo the {@link MessageInfo} to be processed
-   * @param backwardSearchSpan a {@link FileSpan} that spans from the beginning of the index to the beginning of the
-   *                           previous index segment and is used for looking up corresponding put record when applicable
+   * @param messageInfos a list of {@link MessageInfo} to be processed
+   * @param deleteKeys a {@link Set} of collected delete keys
    * @throws StoreException
    */
-  private void populateContainerMap(Map<String, Map<String, Long>> containerValidSizeMap, long referenceTimeInMs,
-      MessageInfo messageInfo, FileSpan backwardSearchSpan) throws StoreException {
-
-    if (messageInfo.isDeleted()) {
-      // delete record
-      IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
-      if (putIndexValue != null && !putIndexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !isExpired(
-          putIndexValue.getExpiresAtMs(), referenceTimeInMs)) {
-        // correct previously counted value only if the following conditions are true:
-        // 1. the put and delete record are not in the same index segment (putIndexValue != null)
-        // 2. the found record is actually a put record (!putIndexValue.isFlagSet)
-        // 3. the found put record is not expired
-        updateNestedMapHelper(containerValidSizeMap, BlobStoreStats.getServiceId(messageInfo.getStoreKey()),
-            BlobStoreStats.getContainerId(messageInfo.getStoreKey()), putIndexValue.getSize() * -1);
+  private void populateContainerMap(Map<String, Map<String, Long>> validDataSizePerContainer, long referenceTimeInMs,
+      List<MessageInfo> messageInfos, Set<String> deleteKeys) throws StoreException {
+    for (MessageInfo messageInfo : messageInfos) {
+      if (messageInfo.isDeleted()) {
+        // delete record
+        deleteKeys.add(messageInfo.getStoreKey().getID());
+      } else if (!isExpired(messageInfo.getExpirationTimeInMs(), referenceTimeInMs) && !deleteKeys.contains(
+          messageInfo.getStoreKey().getID())) {
+        // put record that is not expired and not deleted
+        updateNestedMapHelper(validDataSizePerContainer, BlobStoreStats.getServiceId(messageInfo.getStoreKey()),
+            BlobStoreStats.getContainerId(messageInfo.getStoreKey()), messageInfo.getSize());
       }
-    } else if (!isExpired(messageInfo.getExpirationTimeInMs(), referenceTimeInMs)) {
-      // put record that is not expired
-      updateNestedMapHelper(containerValidSizeMap, BlobStoreStats.getServiceId(messageInfo.getStoreKey()),
-          BlobStoreStats.getContainerId(messageInfo.getStoreKey()), messageInfo.getSize());
     }
   }
 
   /**
-   * Process a record in the index and populate the valid data size per log segment map.
-   * @param logSegmentValidSizeMap the valid data size per log segment map
-   * @param referenceTimeInMs the reference time used to decide whether or not a record is valid
-   * @param messageInfo the {@link MessageInfo} to be processed
+   * Process a record in the index and populate the valid size per log segment map.
+   * @param validSizePerLogSegment the valid size per log segment map
+   * @param deleteReferenceTimeInMs the reference time to be used to decide whether or not a blob is deleted
+   * @param expirationReferenceTimeInMs the reference time to be used to decide whether or not a blob is expired
+   * @param messageInfos a list {@link MessageInfo} to be processed
    * @param lastModifiedTimeInMs the time stamp indicating when the record that is being processed was added
    * @param logSegmentName the log segment name of the record that is being processed
-   * @param backwardSearchSpan a {@link FileSpan} that spans from the beginning of the index to the beginning of the
-   *                           previous index segment and is used for looking up corresponding put record when applicable
+   * @param deleteKeys a {@link Set} of collected delete keys
    * @throws StoreException
    */
-  private void populateLogSegmentMap(Map<String, Long> logSegmentValidSizeMap, long referenceTimeInMs,
-      MessageInfo messageInfo, long lastModifiedTimeInMs, String logSegmentName, FileSpan backwardSearchSpan)
-      throws StoreException {
-
-    if (messageInfo.isDeleted()) {
-      // delete record
-      updateMapHelper(logSegmentValidSizeMap, logSegmentName, messageInfo.getSize());
-      if (lastModifiedTimeInMs < referenceTimeInMs) {
-        // delete that needs to be accounted for
-        IndexValue putIndexValue = index.findKey(messageInfo.getStoreKey(), backwardSearchSpan);
-        if (putIndexValue != null && !putIndexValue.isFlagSet(IndexValue.Flags.Delete_Index) && !isExpired(
-            putIndexValue.getExpiresAtMs(), referenceTimeInMs)) {
-          // correct previously counted value only if the following conditions are true:
-          // 1. the put and delete record are not in the same index segment (putIndexValue != null)
-          // 2. the found record is actually a put record (!putIndexValue.isFlagSet)
-          // 3. the found put record is not expired
-          updateMapHelper(logSegmentValidSizeMap, putIndexValue.getOffset().getName(), putIndexValue.getSize() * -1);
+  private void populateLogSegmentMap(Map<String, Long> validSizePerLogSegment, long deleteReferenceTimeInMs,
+      long expirationReferenceTimeInMs, List<MessageInfo> messageInfos, long lastModifiedTimeInMs, String logSegmentName,
+      Set<String> deleteKeys) throws StoreException {
+    for (MessageInfo messageInfo : messageInfos) {
+      if (messageInfo.isDeleted()) {
+        // delete record, always counted towards valid size
+        updateMapHelper(validSizePerLogSegment, logSegmentName, messageInfo.getSize());
+        if (lastModifiedTimeInMs < deleteReferenceTimeInMs) {
+          // delete that needs to be accounted for
+          deleteKeys.add(messageInfo.getStoreKey().getID());
         }
+      } else if (!isExpired(messageInfo.getExpirationTimeInMs(), expirationReferenceTimeInMs) && !deleteKeys.contains(
+          messageInfo.getStoreKey().getID())) {
+        // put record that is not expired and not deleted according to the deleteReferenceTime
+        updateMapHelper(validSizePerLogSegment, logSegmentName, messageInfo.getSize());
       }
-    } else if (!isExpired(messageInfo.getExpirationTimeInMs(), referenceTimeInMs)) {
-      // put record that is not expired
-      updateMapHelper(logSegmentValidSizeMap, logSegmentName, messageInfo.getSize());
     }
   }
 
@@ -230,12 +209,7 @@ public class BlobStoreStats implements StoreStats {
    * @param value the value to be added at the corresponding entry
    */
   private void updateMapHelper(Map<String, Long> map, String key, Long value) {
-    Long existingValue = map.get(key);
-    if (existingValue == null) {
-      existingValue = value;
-    } else {
-      existingValue += value;
-    }
+    Long existingValue = map.containsKey(key) ? map.get(key) + value: value;
     map.put(key, existingValue);
   }
 }

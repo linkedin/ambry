@@ -26,29 +26,28 @@ import java.util.SortedMap;
  */
 public interface StoreStats {
   /**
-   * Gets the size of valid data at at a particular point in time. The caller specifies a reference time and acceptable resolution
-   * for the stats in the form of a {@code timeRange}. The store will return data for a point in time within the specified range.
-   * @param timeRange the time range for the expected output. Defines both the reference time and the acceptable resolution.
-   * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second element is the valid data
-   * size
+   * Gets the size of valid data at a particular point in time. The caller specifies a reference time and acceptable resolution
+   * for the stats in the form of a {@link TimeRange}. The store will return data for a point in time within the specified range.
+   * @param timeRange the reference {@link TimeRange} at which the data is requested. Defines both the reference time and the acceptable resolution
+   * @return a {@link Pair} whose first element is the time at which stats was collected and whose second element is the valid data size
    */
-  Pair<Long, Long> getValidDataSize(TimeRange timeRange) throws StoreException;
+  Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException;
 
   /**
    * Gets the size of valid data at a particular point in time for all log segments. The caller specifies a reference time and
    * acceptable resolution for the stats in the form of a {@link TimeRange}. The store will return data for a point in time within
    * the specified range.
-   * @param timeRange the time range for the expected output. Defines both the reference time and the acceptable resolution.
-   * @return a {@link Pair} whose first element is the exact time at which the stats are valid and whose second element is the valid data
+   * @param timeRange the reference {@link TimeRange} at which the data is requested. Defines both the reference time and the acceptable resolution.
+   * @return a {@link Pair} whose first element is the time at which stats was collected and whose second element is the valid data
    * size for each segment in the form of a {@link Map} of segment names to valid data sizes.
    */
-  Pair<Long, Map<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException;
+  Pair<Long, Map<String, Long>> getValidSizeByLogSegment(TimeRange timeRange) throws StoreException;
 
   /**
-   * Gets the size of valid data for all containers in the store as of now (the time when the API is called).
+   * Gets the size of valid data for all serviceIds and their respective containerIds in the store as of now (the time when the API is called).
    * @return the valid data size for each container in the form of a nested {@link Map} of serviceIds to another map of
    * containerIds to valid data size.
    */
-  Map<String, Map<String, Long>> getValidDataSize() throws StoreException;
+  Map<String, Map<String, Long>> getValidDataSizeByContainers() throws StoreException;
 
 }
