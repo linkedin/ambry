@@ -75,12 +75,6 @@ public class BlobStoreStatsTest {
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testTimeRange() {
-    // construct a TimeRange with illegal arguments
-    TimeRange timeRange = new TimeRange(-1, -1);
-  }
-
   /**
    * Basic test to verify reported valid size information per container by BlobStoreStats.
    * @throws InterruptedException
