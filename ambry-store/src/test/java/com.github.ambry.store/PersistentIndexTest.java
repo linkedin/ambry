@@ -47,6 +47,7 @@ import static org.junit.Assert.*;
 public class PersistentIndexTest {
   private final File tempDir;
   private final String tempDirStr;
+  private final UUID incarnationId = UUID.randomUUID();
 
   @Rule
   public ExpectedException exception = ExpectedException.none();
@@ -227,7 +228,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -268,7 +269,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       final MockId blobId1 = new MockId("id1");
       final MockId blobId2 = new MockId("id2");
       final MockId blobId3 = new MockId("id3");
@@ -287,7 +288,7 @@ public class PersistentIndexTest {
       index.close();
 
       // create a new index and ensure the index is restored
-      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
 
       IndexValue value1 = indexNew.getValue(blobId1);
       IndexValue value2 = indexNew.getValue(blobId2);
@@ -302,7 +303,7 @@ public class PersistentIndexTest {
       Properties props = new Properties();
       props.put("store.data.flush.delay.seconds", "999999");
       config = new StoreConfig(new VerifiableProperties(props));
-      indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      indexNew = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       indexNew.addToIndex(new IndexEntry(blobId4, new IndexValue(1000, toOffset(5000), 12657)),
           new FileSpan(toOffset(5000), toOffset(6000)));
       indexNew.addToIndex(new IndexEntry(blobId5, new IndexValue(1000, toOffset(6000), 12657)),
@@ -313,7 +314,7 @@ public class PersistentIndexTest {
       } catch (StoreException e) {
         Assert.assertTrue("StoreException thrown as expected ", true);
       }
-      indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      indexNew = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       value1 = indexNew.getValue(blobId1);
       value2 = indexNew.getValue(blobId2);
       value3 = indexNew.getValue(blobId3);
@@ -379,7 +380,7 @@ public class PersistentIndexTest {
       scheduler = Utils.newScheduler(1, false);
 
       try {
-        MockIndex indexFail = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+        MockIndex indexFail = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
         Assert.assertFalse(true);
       } catch (StoreException e) {
         Assert.assertTrue(true);
@@ -390,7 +391,7 @@ public class PersistentIndexTest {
       channelToModify.write(ByteBuffer.wrap(salt));  // write version 1
 
       try {
-        MockIndex indexReadFail = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+        MockIndex indexReadFail = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
         Assert.assertFalse(true);
       } catch (StoreException e) {
         Assert.assertTrue(true);
@@ -402,7 +403,7 @@ public class PersistentIndexTest {
       channelToModify.write(ByteBuffer.wrap(addOnlyVersion));
 
       try {
-        MockIndex indexEmptyLine = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+        MockIndex indexEmptyLine = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
         Assert.assertTrue(false);
       } catch (StoreException e) {
         Assert.assertTrue(true);
@@ -471,7 +472,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -521,7 +522,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -595,7 +596,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       MockId blobId1 = new MockId("id1");
       MockId blobId2 = new MockId("id2");
       MockId blobId3 = new MockId("id3");
@@ -640,7 +641,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       ByteBuffer buffer = ByteBuffer.allocate(6900);
       log.appendFrom(buffer);
       MockId blobId1 = new MockId("id01");
@@ -742,7 +743,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(index.findKey(blobId2).getOffset(), toOffset(100));
 
       index.close();
-      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex indexNew = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       Assert.assertEquals(indexNew.findKey(blobId1).getOffset(), toOffset(0));
       Assert.assertEquals(indexNew.findKey(blobId2).getOffset(), toOffset(100));
     } catch (Exception e) {
@@ -772,7 +773,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       ByteBuffer buffer = ByteBuffer.allocate(2700);
       log.appendFrom(buffer);
       MockId blobId1 = new MockId("id01");
@@ -923,7 +924,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       FindInfo infoempty = index.findEntriesSince(tokenToTest, 1000);
       Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
       MockId blobId1 = new MockId("id1");
@@ -983,7 +984,7 @@ public class PersistentIndexTest {
 
       index.markAsDeleted(blobId1, new FileSpan(toOffset(1500), toOffset(1600)));
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, tokenToTest.getIncarnationId(), config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       FindInfo info = index.findEntriesSince(tokenToTest, 1200);
       List<MessageInfo> messageEntries = info.getMessageEntries();
       Assert.assertEquals(messageEntries.get(0).getStoreKey(), blobId1);
@@ -1003,7 +1004,7 @@ public class PersistentIndexTest {
       index.close();
       props = new Properties();
       config = new StoreConfig(new VerifiableProperties(props));
-      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
 
       StoreFindToken token2 = new StoreFindToken();
       FindInfo info2 = index.findEntriesSince(token2, 300);
@@ -1242,7 +1243,7 @@ public class PersistentIndexTest {
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
       MockIndex index = new MockIndex(tempDirStr, scheduler, log, config, factory,
           new MockJournal(tempDirStr, 2 * config.storeIndexMaxNumberOfInmemElements,
-              config.storeMaxNumberOfEntriesToReturnFromJournal), tokenToTest.getIncarnationId());
+              config.storeMaxNumberOfEntriesToReturnFromJournal), incarnationId);
       MockJournal journal = (MockJournal) index.getJournal();
 
       MockId blobId1 = new MockId("id01");
@@ -1312,8 +1313,7 @@ public class PersistentIndexTest {
       /* Ensure older tokens are reset, and no entries are returned when the store just started.
        * (when the index is created for the first time, it is similar to an unclean shutdown, so
        * this tests token getting reset in the wake of an unclean shutdown case) */
-      StoreFindToken token =
-          new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
+      StoreFindToken token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), incarnationId);
       FindInfo info = index.findEntriesSince(token, 500);
       List<MessageInfo> mEntries = info.getMessageEntries();
       Assert.assertEquals(mEntries.size(), 0);
@@ -1357,7 +1357,7 @@ public class PersistentIndexTest {
       // token before:                    i  // i means index based token
       // token after :          j            // j means offset (journal) based token
 
-      token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), tokenToTest.getIncarnationId());
+      token = new StoreFindToken(blobId1, toOffset(1000), new UUID(0, 0), incarnationId);
       info = index.findEntriesSince(token, 5 * entrySize);
       mEntries = info.getMessageEntries();
       // Ensure that we got all the keys from the beginning and ordered by offset
@@ -1710,7 +1710,7 @@ public class PersistentIndexTest {
       StoreConfig config = new StoreConfig(new VerifiableProperties(props));
       map = new MockClusterMap();
       StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
-      MockIndex index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      MockIndex index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       FindInfo infoempty = index.findDeletedEntriesSince(token, 1000, SystemTime.getInstance().milliseconds() / 1000);
       Assert.assertEquals(infoempty.getMessageEntries().size(), 0);
       MockId blobId1 = new MockId("id01");
@@ -1809,7 +1809,7 @@ public class PersistentIndexTest {
       Assert.assertEquals(value3.getOriginalMessageOffset(), 200);
 
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
 
       //Segment 1: [*1* 2d 3 4 5]
       //Segment 2: [1d 6 7 8 9]
@@ -1898,7 +1898,7 @@ public class PersistentIndexTest {
       //Test end time
 
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
 
       AtomicLong beforeSegment5LastModification = new AtomicLong(index.getLastSegment().getLastModifiedTime());
       // Wait long enough for the current time in seconds to be greater than the above time. In the future we
@@ -1909,7 +1909,7 @@ public class PersistentIndexTest {
       index.markAsDeleted(blobId16, new FileSpan(toOffset(2900), toOffset(3000)));
       index.markAsDeleted(blobId5, new FileSpan(toOffset(3000), toOffset(3100)));
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
       //Segment 1: [1 2d 3 4 5]
       //Segment 2: [1d 6 7 8 9]
       //Segment 3: [6d 10d 11 12 13]
@@ -1930,7 +1930,7 @@ public class PersistentIndexTest {
 
       // just close and open again to execute the shutdown logic once again.
       index.close();
-      index = new MockIndex(tempDirStr, scheduler, log, null, config, factory);
+      index = new MockIndex(tempDirStr, scheduler, log, incarnationId, config, factory);
 
       // close and cleanup for good.
       index.close();

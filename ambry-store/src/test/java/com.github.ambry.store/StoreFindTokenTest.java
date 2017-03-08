@@ -140,17 +140,12 @@ public class StoreFindTokenTest {
       doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
 
       // Journal based token
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, null, false), StoreFindToken.VERSION_0,
-          StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_0,
           StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
       // inclusiveness is present only in VERSION_2
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
 
       // Index based
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, null), StoreFindToken.VERSION_0, StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_0,
           StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
     } else {
@@ -158,16 +153,12 @@ public class StoreFindTokenTest {
       doSerDeTest(new StoreFindToken(), StoreFindToken.VERSION_1, StoreFindToken.VERSION_2);
 
       // Journal based token
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(offset, sessionId, null, false), StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, false), StoreFindToken.VERSION_1,
           StoreFindToken.VERSION_2);
       // inclusiveness is present only in VERSION_2
       doSerDeTest(new StoreFindToken(offset, sessionId, incarnationId, true), StoreFindToken.VERSION_2);
 
       // Index based
-      // incarnationId cannot be null for VERSION_2
-      doSerDeTest(new StoreFindToken(key, offset, sessionId, null), StoreFindToken.VERSION_1);
       doSerDeTest(new StoreFindToken(key, offset, sessionId, incarnationId), StoreFindToken.VERSION_1,
           StoreFindToken.VERSION_2);
     }
@@ -188,8 +179,8 @@ public class StoreFindTokenTest {
     testConstructionFailure(key, sessionId, incarnationId, null);
     // no session id
     testConstructionFailure(key, null, incarnationId, offset);
-    // no incarnation Id. TODO: Uncomment this once incarnationId validation for not null is enabled in StoreFindToken
-    // testConstructionFailure(key, sessionId, null, offset);
+    // no incarnation Id
+    testConstructionFailure(key, sessionId, null, offset);
 
     // no key in IndexBased
     try {
@@ -226,9 +217,24 @@ public class StoreFindTokenTest {
     for (Short version : versions) {
       DataInputStream stream = getSerializedStream(token, version);
       StoreFindToken deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
+      assertEquals("Stream should have ended ", 0, stream.available());
+      assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
       compareTokens(token, deSerToken);
       assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
+      if (version == StoreFindToken.VERSION_2) {
+        assertEquals("IncarnationId mismatch ", token.getIncarnationId(), deSerToken.getIncarnationId());
+      }
+      // use StoreFindToken's actual serialize method to verify that token is serialized in the expected
+      // version
+      stream = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(deSerToken.toBytes())));
+      deSerToken = StoreFindToken.fromBytes(stream, STORE_KEY_FACTORY);
       assertEquals("Stream should have ended ", 0, stream.available());
+      assertEquals("Version mismatch for token ", version.shortValue(), deSerToken.getVersion());
+      compareTokens(token, deSerToken);
+      assertEquals("SessionId does not match", token.getSessionId(), deSerToken.getSessionId());
+      if (version == StoreFindToken.VERSION_2) {
+        assertEquals("IncarnationId mismatch ", token.getIncarnationId(), deSerToken.getIncarnationId());
+      }
     }
   }
 
@@ -238,7 +244,7 @@ public class StoreFindTokenTest {
    * @param version the version to serialize it in.
    * @return a serialized format of {@code token} in the version {@code version}.
    */
-  private DataInputStream getSerializedStream(StoreFindToken token, short version) {
+  static DataInputStream getSerializedStream(StoreFindToken token, short version) {
     byte[] bytes;
     switch (version) {
       case StoreFindToken.VERSION_0:
@@ -301,7 +307,7 @@ public class StoreFindTokenTest {
           bufWrap.put(key.toBytes());
         }
         break;
-      case StoreFindToken.VERSION_2:
+      case StoreFindToken.CURRENT_VERSION:
         bytes = token.toBytes();
         break;
       default:
