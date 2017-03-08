@@ -258,8 +258,16 @@ class IndexSegment {
   }
 
   /**
+   * The time of last modification of this segment in ms
+   * @return The time in ms of the last modification of this segment.
+   */
+  long getLastModifiedTimeMs() {
+    return lastModifiedTimeSec.get() * Time.MsPerSec;
+  }
+
+  /**
    * The time of last modification of this segment in secs
-   * @return The time in seconds of the last modification of this segment.
+   * @return The time in secs of the last modification of this segment.
    */
   long getLastModifiedTimeSecs() {
     return lastModifiedTimeSec.get();
@@ -408,7 +416,7 @@ class IndexSegment {
       endOffset.set(fileEndOffset);
       lastModifiedTimeSec.set(
           entry.getValue().getOperationTimeInMs() != Utils.Infinite_Time ? entry.getValue().getOperationTimeInMs()
-              : time.seconds());
+              / Time.MsPerSec : time.seconds());
       if (keySize == KEY_SIZE_INVALID_VALUE) {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();

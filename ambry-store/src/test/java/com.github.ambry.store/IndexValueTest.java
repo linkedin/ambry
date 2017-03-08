@@ -13,9 +13,7 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -33,9 +31,7 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class IndexValueTest {
-
   private final short version;
-  private final Time time = new MockTime();
 
   /**
    * Running for {@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}
@@ -70,7 +66,6 @@ public class IndexValueTest {
     long expectedOperationTimeV1 = Utils.getTimeInMsToTheNearestSec(operationTimeAtMs);
     short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    time.sleep(Time.MsPerSec + TestUtils.RANDOM.nextInt(Time.MsPerSec));
     IndexValue value =
         getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, operationTimeAtMs, serviceId, containerId,
             version);

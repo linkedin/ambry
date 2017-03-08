@@ -746,7 +746,7 @@ public class Utils {
    * @return the time in ms to the nearest second(floored) for the given time in ms
    */
   public static long getTimeInMsToTheNearestSec(long timeInMs) {
-    int timeInSecs = (int) (timeInMs / Time.MsPerSec);
+    long timeInSecs =  timeInMs / Time.MsPerSec;
     return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
   }
 

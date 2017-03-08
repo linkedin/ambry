@@ -218,8 +218,8 @@ class CuratedLogIndexState {
     index.markAsDeleted(idToDelete, fileSpan);
 
     IndexValue value = getExpectedValue(idToDelete, true);
-    IndexValue newValue =
-        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(), time.seconds());
+    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
+        Utils.Infinite_Time);
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);

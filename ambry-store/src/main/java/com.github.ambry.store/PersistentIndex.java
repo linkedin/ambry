@@ -558,8 +558,8 @@ class PersistentIndex {
       throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
     IndexValue newValue =
-        new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), time.milliseconds(), value.getServiceId(),
-            value.getContainerId());
+        new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), Utils.Infinite_Time,
+            value.getServiceId(), value.getContainerId());
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset());
@@ -990,7 +990,8 @@ class PersistentIndex {
             }
             currentSegment = indexSegments.get(nextSegmentStartOffset);
             // stop if ineligible because of last modified time
-            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTimeSecs())) {
+            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
+                currentSegment.getLastModifiedTimeSecs())) {
               break;
             }
           }
