@@ -363,8 +363,8 @@ public class BlobStoreTest {
   @Test
   public void basicTest() throws InterruptedException, IOException, StoreException {
     // PUT a key that is slated to expire when time advances by 1s
-    MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds()).get(0);
-    time.sleep(Time.MsPerSec);
+    MockId addedId = put(1, PUT_RECORD_SIZE, time.seconds() + 1).get(0);
+    time.sleep(2 * Time.MsPerSec);
     liveKeys.remove(addedId);
     expiredKeys.add(addedId);
 

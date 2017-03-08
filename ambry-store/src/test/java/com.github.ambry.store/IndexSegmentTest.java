@@ -33,7 +33,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.Set;
-import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
@@ -133,11 +132,12 @@ public class IndexSegmentTest {
       }
       long lastEntrySize = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
       long endOffset = offsets.get(offsets.size() - 1) + lastEntrySize;
-      ArrayList<IndexEntry> newEntries = addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex);
-      resetKey = new Pair<>(newEntries.get(0).getKey(),
-          (newEntries.get(0).getValue().isFlagSet(IndexValue.Flags.Delete_Index))
-              ? PersistentIndex.IndexEntryType.DELETE : PersistentIndex.IndexEntryType.PUT);
-      verifyIndexSegmentDetails(indexSegment, startOffset, offsets.size(), false, endOffset, time.seconds(), resetKey);
+      List<IndexEntry> newEntries = addPutEntries(offsets, lastEntrySize, indexSegment, referenceIndex);
+      if (version == PersistentIndex.VERSION_1) {
+        resetKey = new Pair<>(newEntries.get(0).getKey(), PersistentIndex.IndexEntryType.PUT);
+      }
+      verifyIndexSegmentDetails(indexSegment, startOffset, offsets.size(), false, endOffset,
+          time.seconds() * Time.MsPerSec, resetKey);
       verifyFind(referenceIndex, indexSegment);
       verifyGetEntriesSince(referenceIndex, indexSegment);
 
@@ -146,12 +146,13 @@ public class IndexSegmentTest {
       Map<Offset, MockId> extraOffsetsToCheck = addDeleteEntries(idsToDelete, indexSegment, referenceIndex);
       endOffset += idsToDelete.size() * DELETE_FILE_SPAN_SIZE;
       numItems += extraIdsToDelete;
-      verifyIndexSegmentDetails(indexSegment, startOffset, numItems, false, endOffset, time.seconds(), resetKey);
+      verifyIndexSegmentDetails(indexSegment, startOffset, numItems, false, endOffset, time.seconds() * Time.MsPerSec,
+          resetKey);
       verifyFind(referenceIndex, indexSegment);
       verifyGetEntriesSince(referenceIndex, indexSegment);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
-      verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, endOffset, time.seconds(),
-          resetKey, extraOffsetsToCheck);
+      verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, endOffset,
+          time.seconds() * Time.MsPerSec, resetKey, extraOffsetsToCheck);
     }
   }
 
@@ -172,13 +173,13 @@ public class IndexSegmentTest {
     short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     IndexValue value1 =
-        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.seconds(),
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
             serviceId, containerId, version);
     IndexValue value2 =
-        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), Utils.Infinite_Time, time.seconds(),
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), Utils.Infinite_Time, time.milliseconds(),
             serviceId, containerId, version);
     IndexValue value3 =
-        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.seconds(),
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
             serviceId, containerId, version);
     IndexSegment indexSegment = generateIndexSegment(startOffset);
     // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
@@ -261,12 +262,12 @@ public class IndexSegmentTest {
    * @param segment the {@link IndexSegment} to add the entries to.
    * @param referenceIndex the {@link NavigableMap} to add all the entries to. This repreents the source of truth for
    *                       all checks.
-   * @return {@link SortedMap} of MockIds to {@link IndexValue}s that were added to the {@link IndexSegment}
+   * @return {@link List} of {@link IndexEntry}s that were added to the {@link IndexSegment}
    * @throws StoreException
    */
-  private ArrayList<IndexEntry> addPutEntries(List<Long> offsets, long lastEntrySize, IndexSegment segment,
+  private List<IndexEntry> addPutEntries(List<Long> offsets, long lastEntrySize, IndexSegment segment,
       NavigableMap<MockId, IndexValue> referenceIndex) throws StoreException {
-    ArrayList<IndexEntry> addedEntries = new ArrayList<>();
+    List<IndexEntry> addedEntries = new ArrayList<>();
     for (int i = 0; i < offsets.size(); i++) {
       MockId id;
       do {
@@ -275,7 +276,8 @@ public class IndexSegmentTest {
       long offset = offsets.get(i);
       long size = i == offsets.size() - 1 ? lastEntrySize : offsets.get(i + 1) - offset;
       IndexValue value =
-          IndexValueTest.getIndexValue(size, new Offset(segment.getLogSegmentName(), offset), time.seconds(), version);
+          IndexValueTest.getIndexValue(size, new Offset(segment.getLogSegmentName(), offset), time.milliseconds(),
+              version);
       IndexEntry entry = new IndexEntry(id, value);
       segment.addEntry(entry, new Offset(segment.getLogSegmentName(), offset + size));
       addedEntries.add(entry);
@@ -298,23 +300,19 @@ public class IndexSegmentTest {
   private void verifyIndexSegmentDetails(IndexSegment indexSegment, Offset startOffset, int numItems, boolean isMapped,
       long endOffset, long lastModifiedTimeInSecs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) {
     String logSegmentName = startOffset.getName();
-    long indexEntrySize =
-        KEY_SIZE + (version == 0 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0 : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1);
+    long valueSize = version == 0 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0 : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1;
+    long indexEntrySize = KEY_SIZE + valueSize;
     assertEquals("LogSegment name not as expected", logSegmentName, indexSegment.getLogSegmentName());
     assertEquals("Start offset not as expected", startOffset, indexSegment.getStartOffset());
     assertEquals("End offset not as expected", new Offset(logSegmentName, endOffset), indexSegment.getEndOffset());
     assertEquals("Mapped state is incorrect", isMapped, indexSegment.isMapped());
     assertEquals("Key size is incorrect", KEY_SIZE, indexSegment.getKeySize());
-    assertEquals("Value size is incorrect",
-        (version == 0 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0 : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1),
-        indexSegment.getValueSize());
-    if (version == PersistentIndex.VERSION_0) {
-      assertEquals("Reset key mismatch ", null, indexSegment.getResetKey());
-      assertEquals("Last modified time is incorrect", lastModifiedTimeInSecs, indexSegment.getLastModifiedTime());
-    } else if (version == (byte) 1) {
-      assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
-      assertEquals("Last modified time is incorrect", lastModifiedTimeInSecs, indexSegment.getLastModifiedTime());
+    assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
+    assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
+    if (version == PersistentIndex.VERSION_1) {
+      assertEquals("Last modified time is incorrect", lastModifiedTimeInSecs, indexSegment.getLastModifiedTimeSecs());
     }
+    // incase of version 0, last modified time is calculated based on SystemTime and hence cannot verify for equivalency
     if (!isMapped) {
       assertEquals("Size written not as expected", indexEntrySize * numItems, indexSegment.getSizeWritten());
       assertEquals("Number of items not as expected", numItems, indexSegment.getNumberOfItems());
@@ -361,7 +359,7 @@ public class IndexSegmentTest {
   private void verifyGetEntriesSince(NavigableMap<MockId, IndexValue> referenceIndex, IndexSegment segment)
       throws IOException, StoreException {
     // index segment is "too" recent
-    FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE, segment.getLastModifiedTime() - 1);
+    FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE, segment.getLastModifiedTimeSecs() - 1);
     List<MessageInfo> entries = new ArrayList<>();
     assertFalse("Should not have fetched entries since segment is too recent",
         segment.getEntriesSince(null, condition, entries, new AtomicLong(0)));
@@ -489,7 +487,8 @@ public class IndexSegmentTest {
       IndexValue value = segment.find(id);
       if (value == null) {
         // create an index value with a random log segment name
-        value = IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), time.seconds(), version);
+        value =
+            IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), time.milliseconds(), version);
       } else {
         // if in this segment, add to putRecordOffsets so that journal can verify these later
         putRecordOffsets.put(value.getOffset(), id);
@@ -526,8 +525,6 @@ public class IndexSegmentTest {
     // read from file (unmapped) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
-    lastModifiedTimeInSecs =
-        version == PersistentIndex.VERSION_0 ? (file.lastModified() / 1000) : lastModifiedTimeInSecs;
     verifyIndexSegmentDetails(fromDisk, startOffset, numItems, false, endOffset, lastModifiedTimeInSecs, resetKey);
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
@@ -578,5 +575,26 @@ public class IndexSegmentTest {
     if (extraEntriesCheckState != null) {
       assertFalse("One of the extraOffsetsToCheck was not found", extraEntriesCheckState.values().contains(false));
     }
+  }
+}
+
+/**
+ * Mock {@link IndexSegment} that uses version {@link PersistentIndex#VERSION_0}
+ */
+class MockIndexSegmentV0 extends IndexSegment {
+
+  MockIndexSegmentV0(String dataDir, Offset startOffset, StoreKeyFactory factory, int keySize, int valueSize,
+      StoreConfig config, StoreMetrics metrics, Time time) {
+    super(dataDir, startOffset, factory, keySize, valueSize, config, metrics, time);
+  }
+
+  @Override
+  Pair<StoreKey, PersistentIndex.IndexEntryType> getResetKey() {
+    return null;
+  }
+
+  @Override
+  short getVersion() {
+    return PersistentIndex.VERSION_0;
   }
 }

@@ -966,7 +966,7 @@ class PersistentIndex {
       segmentToProcess = indexSegments.get(segmentStartOffset);
     }
 
-    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTime())) {
+    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTimeSecs())) {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
       Offset journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       Offset journalLastOffsetBeforeCheck = journal.getLastOffset();
@@ -990,7 +990,7 @@ class PersistentIndex {
             }
             currentSegment = indexSegments.get(nextSegmentStartOffset);
             // stop if ineligible because of last modified time
-            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
+            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTimeSecs())) {
               break;
             }
           }
@@ -1002,7 +1002,8 @@ class PersistentIndex {
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.getExpiresAtMs()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
-          if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
+              currentSegment.getLastModifiedTimeSecs())) {
             break;
           }
         }
@@ -1238,7 +1239,7 @@ class PersistentIndex {
               Offset nextSegmentStartOffset = indexSegments.higherKey(currentSegment.getStartOffset());
               currentSegment = indexSegments.get(nextSegmentStartOffset);
             }
-            if (endTimeSeconds < currentSegment.getLastModifiedTime()) {
+            if (endTimeSeconds < currentSegment.getLastModifiedTimeSecs()) {
               break;
             }
 

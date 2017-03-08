@@ -17,6 +17,8 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
+import static com.github.ambry.utils.Utils.*;
+
 
 /**
  * Represents the blob value stored in the index for a key.
@@ -192,16 +194,6 @@ class IndexValue {
     this.serviceId = serviceId;
     this.containerId = containerId;
     version = PersistentIndex.CURRENT_VERSION;
-  }
-
-  /**
-   * Get time in ms to the nearest second(floored) for the given time in ms
-   * @param timeInMs the time in ms that needs to be converted
-   * @return the time in ms to the nearest second(floored) for the given time in ms
-   */
-  private long getTimeInMsToTheNearestSec(long timeInMs) {
-    int timeInSecs = (int) (timeInMs / Time.MsPerSec);
-    return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
   }
 
   /**

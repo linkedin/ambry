@@ -21,6 +21,7 @@ import com.github.ambry.utils.FilterFactory;
 import com.github.ambry.utils.IFilter;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -257,10 +258,10 @@ class IndexSegment {
   }
 
   /**
-   * The time of last modification of this segment
+   * The time of last modification of this segment in secs
    * @return The time in seconds of the last modification of this segment.
    */
-  long getLastModifiedTime() {
+  long getLastModifiedTimeSecs() {
     return lastModifiedTimeSec.get();
   }
 
@@ -269,7 +270,7 @@ class IndexSegment {
    * @return the version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
    */
   short getVersion() {
-    return this.version;
+    return version;
   }
 
   /**
@@ -405,7 +406,9 @@ class IndexSegment {
         }
       }
       endOffset.set(fileEndOffset);
-      lastModifiedTimeSec.set(time.seconds());
+      lastModifiedTimeSec.set(
+          entry.getValue().getOperationTimeInMs() != Utils.Infinite_Time ? entry.getValue().getOperationTimeInMs()
+              : time.seconds());
       if (keySize == KEY_SIZE_INVALID_VALUE) {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();
@@ -714,7 +717,7 @@ class IndexSegment {
    */
   boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
       AtomicLong currentTotalSizeOfEntriesInBytes) throws IOException {
-    if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTime())) {
+    if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
       return false;
     }
     int entriesSizeAtStart = entries.size();
@@ -726,7 +729,7 @@ class IndexSegment {
       if (index != -1) {
         ByteBuffer readBuf = mmap.duplicate();
         int totalEntries = numberOfEntries(readBuf);
-        while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTime())
+        while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())
             && index < totalEntries) {
           StoreKey newKey = getKeyAt(readBuf, index);
           byte[] buf = new byte[valueSize];
@@ -756,7 +759,7 @@ class IndexSegment {
               entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getExpiresAtMs());
           entries.add(info);
           currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
-          if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTime())) {
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
             break;
           }
         }
