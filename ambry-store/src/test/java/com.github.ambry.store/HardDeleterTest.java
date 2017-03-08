@@ -363,7 +363,7 @@ class MockIndex extends PersistentIndex {
   }
 
   public void deleteAll() {
-    indexes.clear();
+    getIndexSegments().clear();
   }
 
   public void stopScheduler() throws InterruptedException {
@@ -376,7 +376,7 @@ class MockIndex extends PersistentIndex {
   }
 
   public IndexSegment getLastSegment() {
-    return super.indexes.lastEntry().getValue();
+    return super.getIndexSegments().lastEntry().getValue();
   }
 }
 

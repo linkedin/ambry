@@ -558,7 +558,7 @@ class PersistentIndex {
       throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
     IndexValue newValue =
-        new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), time.seconds(), value.getServiceId(),
+        new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), time.milliseconds(), value.getServiceId(),
             value.getContainerId());
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
