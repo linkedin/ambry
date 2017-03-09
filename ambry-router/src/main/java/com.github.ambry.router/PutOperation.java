@@ -208,7 +208,9 @@ class PutOperation {
     }
     metadataPutChunk.poll(requestRegistrationCallback);
     if (metadataPutChunk.isComplete()) {
-      onChunkOperationComplete(metadataPutChunk);
+      if (getNumDataChunks() > 1) {
+        onChunkOperationComplete(metadataPutChunk);
+      }
     } else if (!metadataPutChunk.isReady()) {
       for (PutChunk chunk : putChunks) {
         if (chunk.isReady()) {
