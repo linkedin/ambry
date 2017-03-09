@@ -38,7 +38,7 @@ public class DumpReplicaTokenTool {
   // Refers to replicatoken file that needs to be dumped
   private final String fileToRead;
 
-  private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
+  private static final Logger logger = LoggerFactory.getLogger(DumpReplicaTokenTool.class);
 
   public DumpReplicaTokenTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
 

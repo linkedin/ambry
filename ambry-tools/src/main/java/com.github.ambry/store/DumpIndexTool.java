@@ -66,7 +66,7 @@ public class DumpIndexTool {
   // True if blob stats needs to be logged, false otherwise
   private final boolean logBlobStats;
 
-  private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
+  private static final Logger logger = LoggerFactory.getLogger(DumpIndexTool.class);
 
   public DumpIndexTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
     fileToRead = verifiableProperties.getString("file.to.read");
@@ -76,8 +76,8 @@ public class DumpIndexTool {
     blobIdList = verifiableProperties.getString("blobId.list", "");
     replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
     activeBlobsCount = verifiableProperties.getInt("active.blobs.count", -1);
-    activeBlobsOnly = verifiableProperties.getBoolean("active.blobs.only");
-    logBlobStats = verifiableProperties.getBoolean("log.blob.stats");
+    activeBlobsOnly = verifiableProperties.getBoolean("active.blobs.only", false);
+    logBlobStats = verifiableProperties.getBoolean("log.blob.stats", false);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
@@ -111,7 +111,7 @@ public class DumpIndexTool {
     }
 
     switch (typeOfOperation) {
-      case "DumpIndexTool":
+      case "DumpIndexFile":
         if (activeBlobsOnly) {
           dumpActiveBlobsFromIndex(new File(fileToRead), blobs);
         } else {
@@ -161,7 +161,7 @@ public class DumpIndexTool {
         logger.trace(blobIdToMessageMapPerIndexFile.get(key).toString());
         IndexValue indexValue = blobIdToMessageMapPerIndexFile.get(key);
         if (blobIdToStatusMap == null) {
-          logger.info(indexValue.toString());
+          logger.info(key + " : " + indexValue.toString());
           if (isDeleted(indexValue) || DumpDataHelper.isExpired(indexValue.getExpiresAtMs())) {
             indexStats.incrementTotalDeleteRecords();
           } else {
