@@ -44,7 +44,7 @@ class IndexValue {
   }
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
-  final static short SERVICE_CONTAINER_ID_DEFAULT_VALUE = 0;
+  final static short SERVICE_CONTAINER_ID_DEFAULT_VALUE = -1;
 
   private final static int BLOB_SIZE_IN_BYTES = 8;
   private final static int OFFSET_SIZE_IN_BYTES = 8;
