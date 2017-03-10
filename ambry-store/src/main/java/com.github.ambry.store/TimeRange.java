@@ -14,38 +14,47 @@
 package com.github.ambry.store;
 
 /**
- * A TimeRange is the range between two times in Ms
+ * A TimeRange is the range between two times in milliseconds
  */
 class TimeRange {
 
-  private final long startTimeInSecs;
-  private final long endTimeInSecs;
+  private final long startTimeInMs;
+  private final long endTimeInMs;
 
   /**
    * Instantiates a {@link TimeRange} referring to a reference time with an allowed error margin
-   * @param referenceTimeInSecs the reference time in Secs that this {@link TimeRange} is referring to
-   * @param errorMarginInSecs the allowable error margin in Secs
+   * @param referenceTimeInMs the reference time in milliseconds that this {@link TimeRange} is referring to
+   * @param errorMarginInMs the allowable error margin in milliseconds
    */
-  TimeRange(long referenceTimeInSecs, long errorMarginInSecs) {
-    if (referenceTimeInSecs < 0 || errorMarginInSecs < 0) {
+  TimeRange(long referenceTimeInMs, long errorMarginInMs) {
+    if (errorMarginInMs < 0 || referenceTimeInMs < 0) {
       throw new IllegalArgumentException(
-          "Reference time " + referenceTimeInSecs + " or Error margin " + errorMarginInSecs + " cannot be negative ");
+          "Reference time: " + referenceTimeInMs + " or Error margin: " + errorMarginInMs + " cannot be negative ");
     }
-    startTimeInSecs = referenceTimeInSecs - errorMarginInSecs;
-    endTimeInSecs = referenceTimeInSecs + errorMarginInSecs;
+    if (referenceTimeInMs - errorMarginInMs < 0) {
+      throw new IllegalArgumentException(
+          "Reference time: " + referenceTimeInMs + " minus error margin: " + errorMarginInMs + " cannot be negative");
+    }
+    if (referenceTimeInMs > Long.MAX_VALUE - errorMarginInMs) {
+      throw new IllegalArgumentException(
+          "Reference time: " + referenceTimeInMs + " plus error margin: " + errorMarginInMs + " should not overflow");
+    }
+
+    startTimeInMs = referenceTimeInMs - errorMarginInMs;
+    endTimeInMs = referenceTimeInMs + errorMarginInMs;
   }
 
   /**
    * @return the start time in Secs that this {@link TimeRange} is referring to
    */
-  long getStartTimeInSecs() {
-    return startTimeInSecs;
+  long getStartTimeInMs() {
+    return startTimeInMs;
   }
 
   /**
    * @return the end time in Secs that this {@link TimeRange} is referring to
    */
-  long getEndTimeInSecs() {
-    return endTimeInSecs;
+  long getEndTimeInMs() {
+    return endTimeInMs;
   }
 }

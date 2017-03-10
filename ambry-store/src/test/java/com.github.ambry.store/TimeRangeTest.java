@@ -14,7 +14,9 @@
 
 package com.github.ambry.store;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import static org.junit.Assert.*;
 
@@ -24,31 +26,55 @@ import static org.junit.Assert.*;
  */
 public class TimeRangeTest {
 
+  @Rule
+  public ExpectedException expectedException = ExpectedException.none();
+
   /**
    * Tests for the constructor and getters of TimeRange.
    */
   @Test
   public void testTimeRange() {
-    long referenceTimeInSecs = 10L;
-    long errorMarginInSecs = 5L;
-    TimeRange timeRangeWithNoErrorMargin = new TimeRange(referenceTimeInSecs, 0L);
-    TimeRange timeRangeWithErrorMargin = new TimeRange(referenceTimeInSecs, errorMarginInSecs);
+    long referenceTimeInMs = 10000L;
+    long errorMarginInMs = 500L;
+    TimeRange timeRangeWithNoErrorMargin = new TimeRange(referenceTimeInMs, 0L);
+    TimeRange timeRangeWithErrorMargin = new TimeRange(referenceTimeInMs, errorMarginInMs);
     assertEquals("Start time and end time should be equal for TimeRange with no error margin",
-        timeRangeWithNoErrorMargin.getStartTimeInSecs(), timeRangeWithNoErrorMargin.getEndTimeInSecs());
-    assertEquals("TimeRange with no error margin is constructed incorrectly", referenceTimeInSecs,
-        timeRangeWithNoErrorMargin.getStartTimeInSecs());
-    assertEquals("Start time of TimeRange with error margin is incorrect", referenceTimeInSecs - errorMarginInSecs,
-        timeRangeWithErrorMargin.getStartTimeInSecs());
-    assertEquals("End time of TimeRange with error margin is incorrect", referenceTimeInSecs + errorMarginInSecs,
-        timeRangeWithErrorMargin.getEndTimeInSecs());
+        timeRangeWithNoErrorMargin.getStartTimeInMs(), timeRangeWithNoErrorMargin.getEndTimeInMs());
+    assertEquals("TimeRange with no error margin is constructed incorrectly", referenceTimeInMs,
+        timeRangeWithNoErrorMargin.getStartTimeInMs());
+    assertEquals("Start time of TimeRange with error margin is incorrect", referenceTimeInMs - errorMarginInMs,
+        timeRangeWithErrorMargin.getStartTimeInMs());
+    assertEquals("End time of TimeRange with error margin is incorrect", referenceTimeInMs + errorMarginInMs,
+        timeRangeWithErrorMargin.getEndTimeInMs());
   }
 
   /**
-   * Tests to ensure IllegalArgumentException is thrown when given illegal arguments.
+   * Tests to ensure IllegalArgumentException is thrown when given negative arguments.
    */
-  @Test(expected = IllegalArgumentException.class)
-  public void testTimeRangeIllegalArguments() {
-    // construct a TimeRange with illegal arguments
+  @Test
+  public void testExceptionIsThrownWithNegativeArguments() {
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("cannot be negative");
     TimeRange timeRange = new TimeRange(-1, -1);
+  }
+
+  /**
+   * Tests to ensure IllegalArgumentException is thrown when given reference time minus error margin is negative.
+   */
+  @Test
+  public void testExceptionIsThrownWithNegativeStartTime() {
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("cannot be negative");
+    TimeRange timeRange = new TimeRange(1000, 10000);
+  }
+
+  /**
+   * Tests to ensure IllegalArgumentException is thrown when given arguments will cause overflow.
+   */
+  @Test
+  public void testExceptionIsThrownWithOverflowArguments() {
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("should not overflow");
+    TimeRange timeRange = new TimeRange(Long.MAX_VALUE, 1000);
   }
 }

@@ -115,7 +115,7 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testValidDataSizeAfterPuts() throws InterruptedException, StoreException, IOException {
-    // advance time by 1 second
+    // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
     long timeInSecsBeforePuts = state.time.seconds();
     long totalLogSegmentValidSizeBeforePuts = verifyLogSegmentValidSize(new TimeRange(timeInSecsBeforePuts, 0L));
@@ -123,7 +123,7 @@ public class BlobStoreStatsTest {
 
     // 3 puts
     state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
-    // advance time by 1 second
+    // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
 
     long timeInSecsAfterPuts = state.time.seconds();
@@ -149,7 +149,7 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testValidDataSizeAfterExpiration() throws InterruptedException, StoreException, IOException {
-    // advance time by 1 second
+    // advance time by 1 second for previous deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
     long timeInSecsBeforeExpiringPuts = state.time.seconds();
     long totalLogSegmentValidSizeBeforePuts =
@@ -158,7 +158,7 @@ public class BlobStoreStatsTest {
 
     // 3 puts that will expire in 20 seconds
     state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, (timeInSecsBeforeExpiringPuts + 20) * Time.MsPerSec);
-    // advance time by 21 seconds
+    // advance time by 21 seconds for expiration to take effect
     state.advanceTime(21 * Time.MsPerSec);
 
     long timeInSecsAfterExpiringPuts = state.time.seconds();
@@ -186,7 +186,7 @@ public class BlobStoreStatsTest {
     // 5 puts to be deleted
     state.addPutEntries(5, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
 
-    // advance time by 1 second
+    // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
     long timeInSecsBeforeDeletes = state.time.seconds();
     long totalLogSegmentValidSizeBeforeDeletes = verifyLogSegmentValidSize(new TimeRange(timeInSecsBeforeDeletes, 0L));
@@ -195,7 +195,7 @@ public class BlobStoreStatsTest {
     // 2 deletes from the last index segment
     state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
     state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
-    // advance time by 1 second
+    // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
 
     long timeInSecsAfterDeletes = state.time.seconds();
@@ -247,8 +247,8 @@ public class BlobStoreStatsTest {
   private long verifyLogSegmentValidSize(TimeRange timeRange) throws StoreException {
     Pair<Long, Map<String, Long>> actualLogSegmentValidSizeMap = blobStoreStats.getValidSizeByLogSegment(timeRange);
     assertTrue("Valid data size collection time should be in the range",
-        timeRange.getStartTimeInSecs() <= actualLogSegmentValidSizeMap.getFirst()
-            && timeRange.getEndTimeInSecs() >= actualLogSegmentValidSizeMap.getFirst());
+        timeRange.getStartTimeInMs() <= actualLogSegmentValidSizeMap.getFirst()
+            && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
 
     int expectedNumberOfLogSegments = 0;
     long expectedTotalLogSegmentValidSize = 0L;
@@ -260,8 +260,7 @@ public class BlobStoreStatsTest {
           actualLogSegmentValidSizeMap.getSecond().containsKey(logSegmentName));
 
       long expectedLogSegmentValidSize =
-          state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInSecs() * Time.MsPerSec,
-              state.time.milliseconds());
+          state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInMs(), state.time.milliseconds());
       long actualLogSegmentValidSize = actualLogSegmentValidSizeMap.getSecond().get(logSegmentName);
       assertEquals("Valid data size mismatch for log segment: " + logSegmentName, expectedLogSegmentValidSize,
           actualLogSegmentValidSize);
@@ -276,8 +275,8 @@ public class BlobStoreStatsTest {
 
     Pair<Long, Long> actualTotalValidSize = blobStoreStats.getValidSize(timeRange);
     assertTrue("Valid data size collection time should be in the range",
-        timeRange.getStartTimeInSecs() <= actualTotalValidSize.getFirst()
-            && timeRange.getEndTimeInSecs() >= actualLogSegmentValidSizeMap.getFirst());
+        timeRange.getStartTimeInMs() <= actualTotalValidSize.getFirst()
+            && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
     assertEquals("Total valid data size of all log segments mismatch", expectedTotalLogSegmentValidSize,
         actualTotalValidSize.getSecond().longValue());
 
