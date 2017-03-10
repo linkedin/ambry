@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.junit.Test;
 
@@ -45,18 +46,37 @@ public class CompactionDetailsTest {
       segmentsUnderCompaction.add(UtilsTest.getRandomString(stringSize));
     }
     long referenceTime = SystemTime.getInstance().milliseconds();
-    int swapSpaceCount = TestUtils.RANDOM.nextInt(10) + 1;
-
-    // without extra segment
-    CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction, null, swapSpaceCount);
+    CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction);
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(details.toBytes()));
     verifyEquality(details, CompactionDetails.fromBytes(stream));
+  }
 
-    // with extra segment
-    String extraSegmentName = UtilsTest.getRandomString(5);
-    details = new CompactionDetails(referenceTime, segmentsUnderCompaction, extraSegmentName, swapSpaceCount);
-    stream = new DataInputStream(new ByteArrayInputStream(details.toBytes()));
-    verifyEquality(details, CompactionDetails.fromBytes(stream));
+  /**
+   * Tests for bad arguments while constructing {@link CompactionDetails}.
+   * @throws Exception
+   */
+  @Test
+  public void badInputTest() throws Exception {
+    List<String> segmentsUnderCompaction = Collections.singletonList(UtilsTest.getRandomString(10));
+
+    // details contains no segments
+    try {
+      new CompactionDetails(1, Collections.EMPTY_LIST);
+      fail("Should have failed because there were no log segments to compact");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // details has a negative ref time.
+    try {
+      new CompactionDetails(-1, segmentsUnderCompaction);
+      fail("Should have failed because reference time is < 0");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // 0 ref time is ok.
+    new CompactionDetails(0, segmentsUnderCompaction);
   }
 
   /**
@@ -65,10 +85,8 @@ public class CompactionDetailsTest {
    * @param toCheck the {@link CompactionDetails} that needs to be checked.
    */
   private void verifyEquality(CompactionDetails original, CompactionDetails toCheck) {
-    assertEquals("Reference time does not match", original.getReferenceTime(), toCheck.getReferenceTime());
+    assertEquals("Reference time does not match", original.getReferenceTimeMs(), toCheck.getReferenceTimeMs());
     assertEquals("Segments under compaction don't match", original.getLogSegmentsUnderCompaction(),
         toCheck.getLogSegmentsUnderCompaction());
-    assertEquals("Extra segment name does not match", original.getExtraSegmentName(), toCheck.getExtraSegmentName());
-    assertEquals("Swap space count does not match", original.getSwapSpaceCount(), toCheck.getSwapSpaceCount());
   }
 }

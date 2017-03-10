@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +35,7 @@ import java.util.List;
 class CompactionLog implements Closeable {
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final long UNINITIALIZED_TIMESTAMP = -1;
-  private static final String COMPACTION_LOG_SUFFIX = "_compaction_log";
+  private static final String COMPACTION_LOG_SUFFIX = "_compactionLog";
   private static final short VERSION_0 = 0;
 
   /**
@@ -67,19 +67,17 @@ class CompactionLog implements Closeable {
    * @param dir the directory at which the compaction log must be created.
    * @param name unique name of the store.
    * @param time the {@link Time} instance to use.
-   * @param compactionDetailsList the details about the compaction.
+   * @param compactionDetails the details about the compaction.
    */
-  CompactionLog(String dir, String name, Time time, List<CompactionDetails> compactionDetailsList) throws IOException {
+  CompactionLog(String dir, String name, Time time, CompactionDetails compactionDetails) throws IOException {
     this.time = time;
     file = new File(dir, name + COMPACTION_LOG_SUFFIX);
-    if (file.exists() || !file.createNewFile()) {
-      throw new IllegalArgumentException(file.getAbsolutePath() + " already exists or could not be created");
+    if (!file.createNewFile()) {
+      throw new IllegalArgumentException(file.getAbsolutePath() + " already exists");
     }
     startTime = time.milliseconds();
-    cycleLogs = new ArrayList<>(compactionDetailsList.size());
-    for (CompactionDetails details : compactionDetailsList) {
-      cycleLogs.add(new CycleLog(details));
-    }
+    cycleLogs = new ArrayList<>();
+    cycleLogs.add(new CycleLog(compactionDetails));
     flush();
   }
 
@@ -142,7 +140,8 @@ class CompactionLog implements Closeable {
   }
 
   /**
-   * @return the {@link StoreFindToken} until which data has been copied and flushed.
+   * @return the {@link StoreFindToken} until which data has been copied and flushed. Returns {@code null} if nothing
+   * has been set yet.
    */
   StoreFindToken getSafeToken() {
     return getCurrentCycleLog().safeToken;
@@ -170,6 +169,33 @@ class CompactionLog implements Closeable {
       throw new IllegalStateException("Should be in PREPARE phase to transition to COPY phase");
     }
     cycleLog.copyStartTime = time.milliseconds();
+    flush();
+  }
+
+  /**
+   * Splits the current cycle at {@code nextCycleStartSegment}. This means that a new next cycle will be created that
+   * starts at {@code nextCycleStartSegment} and ends at the end segment of the current cycle and the new current cycle
+   * starts at the first segment in the current cycle and ends at the segment just before {@code nextCycleStartSegment}.
+   * For e.g if the current cycle is 0_1.log,0_2.log,0_3.log,0_4.log,0_5.log and {@code nextCycleStartSegment} is
+   * 0_4.log, the new next cycle will be 0_4.log,0_5.log and the new current cycle will be 0_1.log,0_2.log,0_3.log.
+   * {@link CompactionLog}
+   * @param nextCycleStartSegment the segment to split the current cycle at.
+   */
+  void splitCurrentCycle(String nextCycleStartSegment) {
+    CompactionDetails currentDetails = getCurrentCycleLog().compactionDetails;
+    List<String> updatedList = new ArrayList<>();
+    List<String> newList = new ArrayList<>();
+    boolean encounteredSplitPoint = false;
+    for (String segmentUnderCompaction : currentDetails.getLogSegmentsUnderCompaction()) {
+      if (!encounteredSplitPoint && !segmentUnderCompaction.equals(nextCycleStartSegment)) {
+        updatedList.add(segmentUnderCompaction);
+      } else {
+        encounteredSplitPoint = true;
+        newList.add(segmentUnderCompaction);
+      }
+    }
+    getCurrentCycleLog().compactionDetails = new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList);
+    cycleLogs.add(new CycleLog(new CompactionDetails(currentDetails.getReferenceTimeMs(), newList)));
     flush();
   }
 
@@ -279,11 +305,11 @@ class CompactionLog implements Closeable {
     private static final int TIMESTAMP_SIZE = 8;
     private static final int STORE_TOKEN_PRESENT_FLAG_SIZE = 1;
 
-    private static final byte STORE_TOKEN_PRESENT = (byte) 1;
-    private static final byte STORE_TOKEN_ABSENT = (byte) 0;
+    private static final byte STORE_TOKEN_PRESENT = 1;
+    private static final byte STORE_TOKEN_ABSENT = 0;
 
     // details about the cycle
-    final CompactionDetails compactionDetails;
+    CompactionDetails compactionDetails;
     // start time of the copy phase
     long copyStartTime = UNINITIALIZED_TIMESTAMP;
     // start time of the commit phase
