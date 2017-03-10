@@ -72,8 +72,8 @@ class CompactionLog implements Closeable {
   CompactionLog(String dir, String name, Time time, CompactionDetails compactionDetails) throws IOException {
     this.time = time;
     file = new File(dir, name + COMPACTION_LOG_SUFFIX);
-    if (file.exists() || !file.createNewFile()) {
-      throw new IllegalArgumentException(file.getAbsolutePath() + " already exists or could not be created");
+    if (!file.createNewFile()) {
+      throw new IllegalArgumentException(file.getAbsolutePath() + " already exists");
     }
     startTime = time.milliseconds();
     cycleLogs = new ArrayList<>();
@@ -305,8 +305,8 @@ class CompactionLog implements Closeable {
     private static final int TIMESTAMP_SIZE = 8;
     private static final int STORE_TOKEN_PRESENT_FLAG_SIZE = 1;
 
-    private static final byte STORE_TOKEN_PRESENT = (byte) 1;
-    private static final byte STORE_TOKEN_ABSENT = (byte) 0;
+    private static final byte STORE_TOKEN_PRESENT = 1;
+    private static final byte STORE_TOKEN_ABSENT = 0;
 
     // details about the cycle
     CompactionDetails compactionDetails;
