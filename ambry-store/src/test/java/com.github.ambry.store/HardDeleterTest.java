@@ -34,7 +34,6 @@ import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,7 +45,7 @@ import org.junit.Test;
  */
 public class HardDeleterTest {
 
-  class HardDeleteTestHelper implements MessageStoreHardDelete {
+  private class HardDeleteTestHelper implements MessageStoreHardDelete {
     private long nextOffset;
     private long sizeOfEntry;
     private MockIndex index;
@@ -306,77 +305,36 @@ public class HardDeleterTest {
       org.junit.Assert.assertEquals(false, true);
     }
   }
-}
 
-class MockIndex extends PersistentIndex {
+  private class MockIndex extends PersistentIndex {
 
-  public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId)
-      throws StoreException {
-    super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
-        new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1), incarnationId);
-  }
+    MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+        MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId) throws StoreException {
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
+          new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1), incarnationId);
+    }
 
-  public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, UUID incarnationId, StoreConfig config,
-      StoreKeyFactory factory) throws StoreException {
-    this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance(),
-        incarnationId);
-  }
+    void setHardDeleteRunningStatus(boolean status) {
+      super.hardDeleter.enabled.set(status);
+    }
 
-  public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, Journal journal, UUID incarnationId) throws StoreException {
-    super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-        new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance(), new UUID(1, 1),
-        incarnationId, PersistentIndex.CLEAN_SHUTDOWN_FILENAME);
-  }
+    boolean hardDelete() throws StoreException {
+      return super.hardDeleter.hardDelete();
+    }
 
-  public void setHardDeleteRunningStatus(boolean status) {
-    super.hardDeleter.enabled.set(status);
-  }
+    void persistAndAdvanceStartTokenSafeToPersist() {
+      super.hardDeleter.preLogFlush();
+      // no flushing to do.
+      super.hardDeleter.postLogFlush();
+    }
 
-  public boolean hardDelete() throws StoreException {
-    return super.hardDeleter.hardDelete();
-  }
+    void pruneHardDeleteRecoveryRange() {
+      super.hardDeleter.pruneHardDeleteRecoveryRange();
+    }
 
-  public void persistAndAdvanceStartTokenSafeToPersist() {
-    super.hardDeleter.preLogFlush();
-    // no flushing to do.
-    super.hardDeleter.postLogFlush();
-  }
-
-  public void pruneHardDeleteRecoveryRange() {
-    super.hardDeleter.pruneHardDeleteRecoveryRange();
-  }
-
-  public void performHardDeleteRecovery() throws StoreException {
-    super.hardDeleter.performRecovery();
-  }
-
-  public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup) throws StoreException {
-    super(datadir, scheduler, log, config, factory, recovery, cleanup, new StoreMetrics(datadir, new MetricRegistry()),
-        SystemTime.getInstance(), new UUID(1, 1), new UUID(1, 1));
-  }
-
-  IndexValue getValue(StoreKey key) throws StoreException {
-    return findKey(key);
-  }
-
-  public void deleteAll() {
-    getIndexSegments().clear();
-  }
-
-  public void stopScheduler() throws InterruptedException {
-    scheduler.shutdown();
-    scheduler.awaitTermination(2, TimeUnit.MINUTES);
-  }
-
-  public Journal getJournal() {
-    return super.journal;
-  }
-
-  public IndexSegment getLastSegment() {
-    return super.getIndexSegments().lastEntry().getValue();
+    void performHardDeleteRecovery() throws StoreException {
+      super.hardDeleter.performRecovery();
+    }
   }
 }
 

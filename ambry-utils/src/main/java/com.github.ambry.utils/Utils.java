@@ -741,7 +741,8 @@ public class Utils {
   }
 
   /**
-   * Get time in ms to the nearest second(floored) for the given time in ms
+   * Convert ms to nearest second(floor) and back to ms to get the approx value in ms if not for
+   * {@link Utils#Infinite_Time}.
    * @param timeInMs the time in ms that needs to be converted
    * @return the time in ms to the nearest second(floored) for the given time in ms
    */

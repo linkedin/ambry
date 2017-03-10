@@ -17,8 +17,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
-import static com.github.ambry.utils.Utils.*;
-
 
 /**
  * Represents the blob value stored in the index for a key.
@@ -188,9 +186,9 @@ class IndexValue {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
-    this.expiresAtMs = getTimeInMsToTheNearestSec(expiresAtMs);
+    this.expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
     this.originalMessageOffset = originalMessageOffset;
-    this.operationTimeInMs = getTimeInMsToTheNearestSec(operationTimeInMs);
+    this.operationTimeInMs = Utils.getTimeInMsToTheNearestSec(operationTimeInMs);
     this.serviceId = serviceId;
     this.containerId = containerId;
     version = PersistentIndex.CURRENT_VERSION;

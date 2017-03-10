@@ -934,60 +934,6 @@ public class IndexTest {
   }
 
   /**
-   * Tests that the index segment rolls over when there is a version change in the index value or index segment
-   * @param rollOverWithPutRecord {@code true} if the entry that causes rollover should be a put record,
-   *                              {@code false} if the entry that causes rollover should be a delete record
-   * @throws StoreException
-   * @throws IOException
-   */
-  private void indexSegmentRollOverTest(boolean rollOverWithPutRecord) throws StoreException, IOException {
-    state.closeAndClearIndex();
-    Offset currentEndOffset = state.index.getCurrentEndOffset();
-    state.index.close();
-
-    List<IndexEntry> indexEntries = new ArrayList<>();
-    // create an index entry in Version_0
-    IndexEntry entry = new IndexEntry(state.getUniqueId(),
-        IndexValueTest.getIndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, currentEndOffset, state.time.milliseconds(),
-            PersistentIndex.VERSION_0));
-    // create Index Segment in PersistentIndex.Version_0
-    IndexSegment indexSegment = generateIndexSegmentV0(entry.getValue().getOffset(), entry.getKey().sizeInBytes(),
-        entry.getValue().getBytes().capacity());
-    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
-    FileSpan fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.PUT_RECORD_SIZE);
-    indexSegment.addEntry(entry, fileSpan.getEndOffset());
-    indexEntries.add(entry);
-    // add more entries to the segment
-    indexEntries.addAll(addPutEntries(fileSpan.getEndOffset(), indexSegment, 2, CuratedLogIndexState.PUT_RECORD_SIZE,
-        Utils.Infinite_Time));
-    // persist the index segment of version 0
-    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
-
-    state.reloadIndex(false, false);
-    int indexCount = state.index.getIndexSegments().size();
-    // add an entry and verify if roll over happened
-    currentEndOffset = state.index.getCurrentEndOffset();
-    if (rollOverWithPutRecord) {
-      indexEntries.addAll(
-          addPutEntries(currentEndOffset, null, 1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
-    } else {
-      IndexEntry entryToDelete = indexEntries.get(TestUtils.RANDOM.nextInt(indexEntries.size()));
-      state.appendToLog(state.DELETE_RECORD_SIZE);
-      fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.DELETE_RECORD_SIZE);
-      state.index.markAsDeleted(entryToDelete.getKey(), fileSpan);
-      // remove entryToDelete from indexEntries as it will be part of latest index segment
-      indexEntries.remove(entryToDelete);
-    }
-    assertEquals("Index roll over should have happened ", indexCount + 1, state.index.getIndexSegments().size());
-    currentEndOffset = state.index.getCurrentEndOffset();
-    indexEntries.addAll(
-        addPutEntries(currentEndOffset, null, 2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
-    assertEquals("Index roll over should not have happened ", indexCount + 1, state.index.getIndexSegments().size());
-    // verify index values
-    verifyIndexValues(indexEntries);
-  }
-
-  /**
    * Tests the Index persistor for all cases
    * @throws InterruptedException
    * @throws IOException
@@ -2079,6 +2025,59 @@ public class IndexTest {
   }
 
   // Index roll over test helpers
+
+  /**
+   * Tests that the index segment rolls over when there is a version change in the index value or index segment
+   * @param rollOverWithPutRecord {@code true} if the entry that causes rollover should be a put record,
+   *                              {@code false} if the entry that causes rollover should be a delete record
+   * @throws StoreException
+   * @throws IOException
+   */
+  private void indexSegmentRollOverTest(boolean rollOverWithPutRecord) throws StoreException, IOException {
+    state.closeAndClearIndex();
+    Offset currentEndOffset = state.index.getCurrentEndOffset();
+
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    // create an index entry in Version_0
+    IndexEntry entry = new IndexEntry(state.getUniqueId(),
+        IndexValueTest.getIndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, currentEndOffset, state.time.milliseconds(),
+            PersistentIndex.VERSION_0));
+    // create Index Segment in PersistentIndex.Version_0
+    IndexSegment indexSegment = generateIndexSegmentV0(entry.getValue().getOffset(), entry.getKey().sizeInBytes(),
+        entry.getValue().getBytes().capacity());
+    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.PUT_RECORD_SIZE);
+    indexSegment.addEntry(entry, fileSpan.getEndOffset());
+    indexEntries.add(entry);
+    // add more entries to the segment
+    indexEntries.addAll(addPutEntries(fileSpan.getEndOffset(), indexSegment, 2, CuratedLogIndexState.PUT_RECORD_SIZE,
+        Utils.Infinite_Time));
+    // persist the index segment of version 0
+    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+
+    state.reloadIndex(false, false);
+    int indexCount = state.index.getIndexSegments().size();
+    // add an entry and verify if roll over happened
+    currentEndOffset = state.index.getCurrentEndOffset();
+    if (rollOverWithPutRecord) {
+      indexEntries.addAll(
+          addPutEntries(currentEndOffset, null, 1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
+    } else {
+      IndexEntry entryToDelete = indexEntries.get(TestUtils.RANDOM.nextInt(indexEntries.size()));
+      state.appendToLog(state.DELETE_RECORD_SIZE);
+      fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.DELETE_RECORD_SIZE);
+      state.index.markAsDeleted(entryToDelete.getKey(), fileSpan);
+      // remove entryToDelete from indexEntries as it will be part of latest index segment
+      indexEntries.remove(entryToDelete);
+    }
+    assertEquals("Index roll over should have happened ", indexCount + 1, state.index.getIndexSegments().size());
+    currentEndOffset = state.index.getCurrentEndOffset();
+    indexEntries.addAll(
+        addPutEntries(currentEndOffset, null, 2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
+    assertEquals("Index roll over should not have happened ", indexCount + 1, state.index.getIndexSegments().size());
+    // verify index values
+    verifyIndexValues(indexEntries);
+  }
 
   /**
    * Generate {@link IndexSegment} of version {@link PersistentIndex#VERSION_0}

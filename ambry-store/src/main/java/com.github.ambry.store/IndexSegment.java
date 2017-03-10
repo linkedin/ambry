@@ -414,9 +414,12 @@ class IndexSegment {
         }
       }
       endOffset.set(fileEndOffset);
-      lastModifiedTimeSec.set(
-          entry.getValue().getOperationTimeInMs() != Utils.Infinite_Time ? entry.getValue().getOperationTimeInMs()
-              / Time.MsPerSec : time.seconds());
+      if (entry.getValue().getOperationTimeInMs() != Utils.Infinite_Time) {
+        lastModifiedTimeSec.set(lastModifiedTimeSec.get() < entry.getValue().getOperationTimeInMs() / Time.MsPerSec ?
+            entry.getValue().getOperationTimeInMs() / Time.MsPerSec : lastModifiedTimeSec.get());
+      } else {
+        lastModifiedTimeSec.set(time.seconds());
+      }
       if (keySize == KEY_SIZE_INVALID_VALUE) {
         StoreKey key = entry.getKey();
         keySize = key.sizeInBytes();

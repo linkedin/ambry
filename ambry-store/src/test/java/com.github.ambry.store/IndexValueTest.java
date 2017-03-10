@@ -221,10 +221,10 @@ public class IndexValueTest {
    * @param logSegmentName the log segment name to be used to construct the {@link IndexValue}
    */
   private void verifyInvalidValueSize(IndexValue value, String logSegmentName) {
+    int capacity = TestUtils.RANDOM.nextInt(value.getBytes().capacity());
+    ByteBuffer invalidValue = ByteBuffer.allocate(capacity);
+    invalidValue.put(value.getBytes().array(), 0, capacity);
     try {
-      int capacity = TestUtils.RANDOM.nextInt(value.getBytes().capacity());
-      ByteBuffer invalidValue = ByteBuffer.allocate(capacity);
-      invalidValue.put(value.getBytes().array(), 0, capacity);
       new IndexValue(logSegmentName, invalidValue, version);
       fail(
           "Contruction of IndexValue expected to fail with invalid byte buffer capacity of " + invalidValue.capacity());
