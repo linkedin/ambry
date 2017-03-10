@@ -184,6 +184,7 @@ class PutOperation {
           chunkFillingCompletedSuccessfully = true;
         }
         chunkFillerChannel.close();
+        routerCallback.onPollReady();
       }
     });
   }
