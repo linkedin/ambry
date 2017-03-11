@@ -381,6 +381,18 @@ public class UtilsTest {
     scheduler.shutdown();
   }
 
+  /**
+   * Test {@link Utils#getTimeInMsToTheNearestSec(long)}
+   */
+  @Test
+  public void getTimeInMsToTheNearestSecTest() {
+    long msValue = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
+    long expectedMsValue = (msValue / Time.MsPerSec) * Time.MsPerSec;
+    assertEquals("Time in Ms to the nearest Sec mismatch ", expectedMsValue, Utils.getTimeInMsToTheNearestSec(msValue));
+    msValue = Utils.Infinite_Time;
+    assertEquals("Time in Ms to the nearest Sec mismatch ", msValue, Utils.getTimeInMsToTheNearestSec(msValue));
+  }
+
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   static Random random = new Random();
 

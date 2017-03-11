@@ -45,7 +45,7 @@ import org.junit.Test;
  */
 public class HardDeleterTest {
 
-  class HardDeleteTestHelper implements MessageStoreHardDelete {
+  private class HardDeleteTestHelper implements MessageStoreHardDelete {
     private long nextOffset;
     private long sizeOfEntry;
     private MockIndex index;
@@ -67,7 +67,9 @@ public class HardDeleterTest {
 
     void add(MockId id) throws IOException, StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
-      index.addToIndex(new IndexEntry(id, new IndexValue(sizeOfEntry, offset, (byte) 0, 12345)),
+      IndexValue indexValue =
+          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, Utils.Infinite_Time);
+      index.addToIndex(new IndexEntry(id, indexValue),
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
       log.appendFrom(byteBuffer);
@@ -189,7 +191,6 @@ public class HardDeleterTest {
     // perform hard deletes upto some point.
     // perform more deletes.
     // do recovery.
-
     try {
       MockId blobId01 = new MockId("id01");
       MockId blobId02 = new MockId("id02");
@@ -304,4 +305,36 @@ public class HardDeleterTest {
       org.junit.Assert.assertEquals(false, true);
     }
   }
+
+  private class MockIndex extends PersistentIndex {
+
+    MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
+        MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId) throws StoreException {
+      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
+          new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1), incarnationId);
+    }
+
+    void setHardDeleteRunningStatus(boolean status) {
+      super.hardDeleter.enabled.set(status);
+    }
+
+    boolean hardDelete() throws StoreException {
+      return super.hardDeleter.hardDelete();
+    }
+
+    void persistAndAdvanceStartTokenSafeToPersist() {
+      super.hardDeleter.preLogFlush();
+      // no flushing to do.
+      super.hardDeleter.postLogFlush();
+    }
+
+    void pruneHardDeleteRecoveryRange() {
+      super.hardDeleter.pruneHardDeleteRecoveryRange();
+    }
+
+    void performHardDeleteRecovery() throws StoreException {
+      super.hardDeleter.performRecovery();
+    }
+  }
 }
+

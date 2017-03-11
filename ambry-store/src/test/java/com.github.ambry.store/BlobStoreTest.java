@@ -362,9 +362,9 @@ public class BlobStoreTest {
    */
   @Test
   public void basicTest() throws InterruptedException, IOException, StoreException {
-    // PUT a key that is slated to expire when time advances by 2ms
-    MockId addedId = put(1, PUT_RECORD_SIZE, time.milliseconds() + 1).get(0);
-    time.sleep(2);
+    // PUT a key that is slated to expire when time advances by 1s
+    MockId addedId = put(1, PUT_RECORD_SIZE, time.seconds() + 1).get(0);
+    time.sleep(2 * Time.MsPerSec);
     liveKeys.remove(addedId);
     expiredKeys.add(addedId);
 
@@ -752,7 +752,9 @@ public class BlobStoreTest {
       MockId id = (MockId) messageInfo.getStoreKey();
       MessageInfo expectedInfo = allKeys.get(id).getFirst();
       assertEquals("Unexpected size in MessageInfo", expectedInfo.getSize(), messageInfo.getSize());
-      assertEquals("Unexpected expiresAtMs in MessageInfo", expectedInfo.getExpirationTimeInMs(),
+      assertEquals("Unexpected expiresAtMs in MessageInfo",
+          (expectedInfo.getExpirationTimeInMs() != Utils.Infinite_Time ?
+              (expectedInfo.getExpirationTimeInMs() / Time.MsPerSec) * Time.MsPerSec : Utils.Infinite_Time),
           messageInfo.getExpirationTimeInMs());
 
       assertEquals("Unexpected key in readSet", id, readSet.getKeyAt(i));
@@ -801,9 +803,9 @@ public class BlobStoreTest {
         new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, tempDirStr, LOG_CAPACITY, STORE_KEY_FACTORY,
             recovery, hardDelete, time);
     store.start();
-    // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
+    // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
-    time.sleep(1);
+    time.sleep(Time.MsPerSec);
     long expectedStoreSize;
     if (!isLogSegmented) {
       // log is filled about ~50%.

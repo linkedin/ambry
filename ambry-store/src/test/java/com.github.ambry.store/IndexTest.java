@@ -13,6 +13,9 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -248,7 +251,9 @@ public class IndexTest {
   public void addEntryBadInputTest() throws StoreException {
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
-    IndexValue value = new IndexValue(1, state.index.getStartOffset());
+    IndexValue value =
+        new IndexValue(1, state.index.getStartOffset(), IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time,
+            Utils.Infinite_Time);
     try {
       state.index.addToIndex(new IndexEntry(state.getUniqueId(), value), fileSpan);
       fail("Should have failed because filespan provided < currentIndexEndOffset");
@@ -391,11 +396,14 @@ public class IndexTest {
    */
   @Test
   public void expirationTest() throws InterruptedException, IOException, StoreException {
-    // add a PUT entry that will expire if time advances by a millisecond
+
+    // add a PUT entry that will expire if time advances by 1 second
+    // advance time so that time moves to whole second with no residual milliseconds
+    state.time.sleep(Time.MsPerSec - state.time.milliseconds());
     state.addPutEntries(1, 1, state.time.milliseconds());
     MockId id = state.logOrder.lastEntry().getValue().getFirst();
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), null);
-    state.advanceTime(1);
+    state.advanceTime(Time.MsPerSec);
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), StoreErrorCodes.TTL_Expired);
   }
 
@@ -554,7 +562,7 @@ public class IndexTest {
       public void run() {
         try {
           FileSpan fileSpan = state.log.getFileSpanForMessage(logEndOffset.get(), 1);
-          IndexValue value = new IndexValue(1, fileSpan.getStartOffset());
+          IndexValue value = new IndexValue(1, fileSpan.getStartOffset(), Utils.Infinite_Time);
           IndexEntry entry = new IndexEntry(state.getUniqueId(), value);
           state.index.addToIndex(entry, fileSpan);
           logEndOffset.set(fileSpan.getEndOffset());
@@ -726,7 +734,8 @@ public class IndexTest {
     final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
     state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
-        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
+        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time),
+        null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -846,7 +855,8 @@ public class IndexTest {
     final MockId newId = state.getUniqueId();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
     state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
-        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset()), null));
+        new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time),
+        null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -909,6 +919,18 @@ public class IndexTest {
     findDeletedEntriesSinceIndexBasedTokenForOffsetInJournalTest();
 
     findEntriesSinceInEmptyIndexTest(true);
+  }
+
+  /**
+   * Tests the index segment roll over when there is a change in IndexValue size. With introduction of
+   * {@link PersistentIndex#VERSION_1} there is a change in IndexValue
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void testIndexSegmentRollOverNewIndexSegmentVersion() throws StoreException, IOException {
+    indexSegmentRollOverTest(true);
+    indexSegmentRollOverTest(false);
   }
 
   /**
@@ -1999,6 +2021,138 @@ public class IndexTest {
         toRemove.put(indexSegmentEntry.getKey(), indexSegmentEntry.getValue());
       }
       i++;
+    }
+  }
+
+  // Index roll over test helpers
+
+  /**
+   * Tests that the index segment rolls over when there is a version change in the index value or index segment
+   * @param rollOverWithPutRecord {@code true} if the entry that causes rollover should be a put record,
+   *                              {@code false} if the entry that causes rollover should be a delete record
+   * @throws StoreException
+   * @throws IOException
+   */
+  private void indexSegmentRollOverTest(boolean rollOverWithPutRecord) throws StoreException, IOException {
+    state.closeAndClearIndex();
+    Offset currentEndOffset = state.index.getCurrentEndOffset();
+
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    // create an index entry in Version_0
+    IndexEntry entry = new IndexEntry(state.getUniqueId(),
+        IndexValueTest.getIndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, currentEndOffset, state.time.milliseconds(),
+            PersistentIndex.VERSION_0));
+    // create Index Segment in PersistentIndex.Version_0
+    IndexSegment indexSegment = generateIndexSegmentV0(entry.getValue().getOffset(), entry.getKey().sizeInBytes(),
+        entry.getValue().getBytes().capacity());
+    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.PUT_RECORD_SIZE);
+    indexSegment.addEntry(entry, fileSpan.getEndOffset());
+    indexEntries.add(entry);
+    // add more entries to the segment
+    indexEntries.addAll(addPutEntries(fileSpan.getEndOffset(), indexSegment, 2, CuratedLogIndexState.PUT_RECORD_SIZE,
+        Utils.Infinite_Time));
+    // persist the index segment of version 0
+    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+
+    state.reloadIndex(false, false);
+    int indexCount = state.index.getIndexSegments().size();
+    // add an entry and verify if roll over happened
+    currentEndOffset = state.index.getCurrentEndOffset();
+    if (rollOverWithPutRecord) {
+      indexEntries.addAll(
+          addPutEntries(currentEndOffset, null, 1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
+    } else {
+      IndexEntry entryToDelete = indexEntries.get(TestUtils.RANDOM.nextInt(indexEntries.size()));
+      state.appendToLog(state.DELETE_RECORD_SIZE);
+      fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.DELETE_RECORD_SIZE);
+      state.index.markAsDeleted(entryToDelete.getKey(), fileSpan);
+      // remove entryToDelete from indexEntries as it will be part of latest index segment
+      indexEntries.remove(entryToDelete);
+    }
+    assertEquals("Index roll over should have happened ", indexCount + 1, state.index.getIndexSegments().size());
+    currentEndOffset = state.index.getCurrentEndOffset();
+    indexEntries.addAll(
+        addPutEntries(currentEndOffset, null, 2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
+    assertEquals("Index roll over should not have happened ", indexCount + 1, state.index.getIndexSegments().size());
+    // verify index values
+    verifyIndexValues(indexEntries);
+  }
+
+  /**
+   * Generate {@link IndexSegment} of version {@link PersistentIndex#VERSION_0}
+   * @param startOffset the start offset of the {@link IndexSegment}
+   * @param keySize The key size that this segment supports
+   * @param valueSize The value size that this segment supports
+   * @return the {@link IndexSegment} created of version {@link PersistentIndex#VERSION_0}
+   */
+  private IndexSegment generateIndexSegmentV0(Offset startOffset, int keySize, int valueSize) {
+    MetricRegistry metricRegistry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(tempDir.getAbsolutePath(), metricRegistry);
+    StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
+    return new MockIndexSegmentV0(tempDir.getAbsolutePath(), startOffset, state.STORE_KEY_FACTORY, keySize, valueSize,
+        config, metrics, state.time);
+  }
+
+  /**
+   * Adds {@link IndexEntry}s to the given {@link IndexSegment} for {@link IndexValue}s of version
+   * {@link PersistentIndex#VERSION_0} or to the actual {@link PersistentIndex} for {@link IndexValue}s of version
+   * {@link PersistentIndex#CURRENT_VERSION}
+   * @param prevEntryEndOffset end offset of last {@link IndexEntry}
+   * @param indexSegment the {@link IndexSegment} to which put entries need to be added. If {@code null},
+   *                     {@link IndexEntry}s will be added to the {@link PersistentIndex}
+   * @param count total count of put entries to be added
+   * @param size size of put entries
+   * @param expiresAtMs expiration value at ms for the put entries
+   * @return a list {@link IndexEntry}s added to the {@link PersistentIndex}
+   * @throws IOException
+   * @throws StoreException
+   */
+  private List<IndexEntry> addPutEntries(Offset prevEntryEndOffset, IndexSegment indexSegment, int count, long size,
+      long expiresAtMs) throws IOException, StoreException {
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    for (int i = 0; i < count; i++) {
+      state.appendToLog(size);
+      FileSpan fileSpan = state.log.getFileSpanForMessage(prevEntryEndOffset, size);
+      IndexEntry entry;
+      if (indexSegment != null) {
+        entry = new IndexEntry(state.getUniqueId(),
+            IndexValueTest.getIndexValue(size, prevEntryEndOffset, expiresAtMs, state.time.milliseconds(),
+                IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE,
+                indexSegment.getVersion()));
+        indexSegment.addEntry(entry, fileSpan.getEndOffset());
+      } else {
+        entry = new IndexEntry(state.getUniqueId(),
+            new IndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, state.time.milliseconds()));
+        state.index.addToIndex(entry, fileSpan);
+      }
+      indexEntries.add(entry);
+      prevEntryEndOffset = fileSpan.getEndOffset();
+    }
+    return indexEntries;
+  }
+
+  /**
+   * Verifies that {@link IndexValue}s matches with those from the {@link PersistentIndex}
+   * @param indexEntries {@link List} of {@link IndexEntry}s to be verified
+   * @throws StoreException
+   */
+  private void verifyIndexValues(List<IndexEntry> indexEntries) throws StoreException {
+    for (IndexEntry entry : indexEntries) {
+      IndexValue value = state.index.findKey(entry.getKey(), null);
+      IndexValue expectedValue = entry.getValue();
+      assertEquals("Offset mismatch for " + entry.getKey(), expectedValue.getOffset(), value.getOffset());
+      assertEquals("Size mismatch for " + entry.getKey(), expectedValue.getSize(), value.getSize());
+      assertEquals("Expiration value mismatch for " + entry.getKey(), expectedValue.getExpiresAtMs(),
+          value.getExpiresAtMs());
+      assertEquals("Flags mismatch for " + entry.getKey(), expectedValue.getFlags(), value.getFlags());
+      assertEquals("OriginalMessageOffset mismatch for " + entry.getKey(), expectedValue.getOriginalMessageOffset(),
+          value.getOriginalMessageOffset());
+      assertEquals("OperationTime mismatch for " + entry.getKey(), expectedValue.getOperationTimeInMs(),
+          value.getOperationTimeInMs());
+      assertEquals("ServiceId mismatch for " + entry.getKey(), expectedValue.getServiceId(), value.getServiceId());
+      assertEquals("ContainerId mismatch for " + entry.getKey(), expectedValue.getContainerId(),
+          value.getContainerId());
     }
   }
 }

@@ -13,114 +13,320 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
 
 /**
  * Represents the blob value stored in the index for a key.
+ *
+ * Version_0
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  |
+ * | (8 bytes) | (8 bytes) | (1 byte)|     in Ms       | offset    |
+ * |           |           |         |   ( 8 bytes)    | (8 bytes) |
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ *
+ * Version_1
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  | OperationTime | ServiceId | ContainerId |
+ * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset    |   in secs     | (2 bytes) | (2 bytes)   |
+ * |           |           |         |   ( 4 bytes)    | (8 bytes) |   (4 bytes)   |           |             |
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ *
  */
-
 class IndexValue {
   enum Flags {
     Delete_Index
   }
 
-  private static int Blob_Size_In_Bytes = 8;
-  private static int Offset_Size_In_Bytes = 8;
-  private static int Flag_Size_In_Bytes = 1;
-  private static int Expires_At_Ms_Size_In_Bytes = 8;
-  private static int Original_Message_Offset_Size_In_Bytes = 8;
+  final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
+  final static short SERVICE_CONTAINER_ID_DEFAULT_VALUE = -1;
 
-  static int Index_Value_Size_In_Bytes =
-      Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes
-          + Original_Message_Offset_Size_In_Bytes;
+  private final static int BLOB_SIZE_IN_BYTES = 8;
+  private final static int OFFSET_SIZE_IN_BYTES = 8;
+  private final static int FLAG_SIZE_IN_BYTES = 1;
+  private final static int EXPIRES_AT_MS_SIZE_IN_BYTES_V0 = 8;
+  private final static int ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES = 8;
 
-  private final ByteBuffer value;
+  private final static int EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 = 4;
+  private final static int OPERATION_TIME_SECS_SIZE_IN_BYTES = 4;
+  private final static int SERVICE_ID_SIZE_IN_BYTES = 2;
+  private final static int CONTAINER_ID_SIZE_IN_BYTES = 2;
+
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V0 =
+      BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES;
+
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V1 =
+      BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES +
+          SERVICE_ID_SIZE_IN_BYTES + CONTAINER_ID_SIZE_IN_BYTES;
+
+  private long size;
   private Offset offset;
+  private byte flags;
+  private final long expiresAtMs;
+  private long originalMessageOffset;
+  private final long operationTimeInMs;
+  private final short serviceId;
+  private final short containerId;
+  private final short version;
 
-  IndexValue(String logSegmentName, ByteBuffer value) {
-    if (value.capacity() != Index_Value_Size_In_Bytes) {
-      throw new IllegalArgumentException("Invalid buffer size");
+  /**
+   * Constructs the {@link IndexValue} with the passed in {@link ByteBuffer} and the given {@code version}
+   * @param logSegmentName the log segment name to be used to construct the offset
+   * @param value the {@link ByteBuffer} representation of the {@link IndexValue}
+   * @param version the version of the {@link PersistentIndex}
+   */
+  IndexValue(String logSegmentName, ByteBuffer value, short version) {
+    this.version = version;
+    switch (version) {
+      case PersistentIndex.VERSION_0:
+        if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V0) {
+          throw new IllegalArgumentException("Invalid buffer size for version 0");
+        }
+        size = value.getLong();
+        offset = new Offset(logSegmentName, value.getLong());
+        flags = value.get();
+        expiresAtMs = value.getLong();
+        originalMessageOffset = value.getLong();
+        operationTimeInMs = (int) Utils.Infinite_Time;
+        serviceId = SERVICE_CONTAINER_ID_DEFAULT_VALUE;
+        containerId = SERVICE_CONTAINER_ID_DEFAULT_VALUE;
+        break;
+      case PersistentIndex.VERSION_1:
+        if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V1) {
+          throw new IllegalArgumentException("Invalid buffer size for version 1");
+        }
+        size = value.getLong();
+        offset = new Offset(logSegmentName, value.getLong());
+        flags = value.get();
+        int expiresAt = value.getInt();
+        expiresAtMs = expiresAt != Utils.Infinite_Time ? (expiresAt * Time.MsPerSec) : Utils.Infinite_Time;
+        originalMessageOffset = value.getLong();
+        int operationTimeInSecs = value.getInt();
+        operationTimeInMs =
+            operationTimeInSecs != Utils.Infinite_Time ? (operationTimeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
+        serviceId = value.getShort();
+        containerId = value.getShort();
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported version " + version + " passed in for IndexValue ");
     }
-    this.value = value;
-    offset = new Offset(logSegmentName, value.getLong(Blob_Size_In_Bytes));
   }
 
-  IndexValue(long size, Offset offset, byte flags, long expiresAtMs) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset());
-  }
-
+  /**
+   * Constructs IndexValue based on the args passed
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param expiresAtMs the expiration time in ms at which the blob expires
+   */
   IndexValue(long size, Offset offset, long expiresAtMs) {
-    this(size, offset, (byte) 0, expiresAtMs);
+    this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), (int) Utils.Infinite_Time,
+        SERVICE_CONTAINER_ID_DEFAULT_VALUE, SERVICE_CONTAINER_ID_DEFAULT_VALUE);
   }
 
-  IndexValue(long size, Offset offset) {
-    this(size, offset, (byte) 0, Utils.Infinite_Time);
+  /**
+   * Constructs IndexValue based on the args passed
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param flags the {@link Flags} that needs to be set for the Index Value
+   * @param expiresAtMs the expiration time in ms at which the blob expires
+   * @param operationTimeInMs operation time ins ms of the entry in secs
+   */
+  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs) {
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, SERVICE_CONTAINER_ID_DEFAULT_VALUE,
+        SERVICE_CONTAINER_ID_DEFAULT_VALUE);
   }
 
-  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset) {
+  /**
+   * Constructs IndexValue based on the args passed
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param expiresAtMs the expiration time in ms at which the blob expires
+   * @param operationTimeInMs operation time in ms of the entry
+   * @param serviceId the serviceId that this blob belongs to
+   * @param containerId the containerId that this blob belongs to
+   */
+  IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInMs, short serviceId, short containerId) {
+    this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), operationTimeInMs, serviceId, containerId);
+  }
+
+  /**
+   * Constructs IndexValue based on the args passed
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param flags the {@link Flags} that needs to be set for the Index Value
+   * @param expiresAtMs the expiration time in ms at which the blob expires
+   * @param operationTimeInMs operation time in ms of the entry
+   * @param serviceId the serviceId that this blob belongs to
+   * @param containerId the containerId that this blob belongs to
+   */
+  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs, short serviceId,
+      short containerId) {
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, serviceId, containerId);
+  }
+
+  /**
+   * Constructs IndexValue based on the args passed
+   * @param size the size of the blob that this index value refers to
+   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   * @param flags the flags that needs to be set for the Index Value
+   * @param expiresAtMs the expiration time in ms at which the blob expires
+   * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
+   *                              in the same log segment. Set to -1 otherwise.
+   * @param operationTimeInMs operation time in ms of the entry in secs
+   * @param serviceId the serviceId that this blob belongs to
+   * @param containerId the containerId that this blob belongs to
+   */
+  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
+      long operationTimeInMs, short serviceId, short containerId) {
+    this.size = size;
     this.offset = offset;
-    value = ByteBuffer.allocate(Index_Value_Size_In_Bytes);
-    value.putLong(size);
-    value.putLong(offset.getOffset());
-    value.put(flags);
-    value.putLong(expiresAtMs);
-    value.putLong(originalMessageOffset);
-    value.position(0);
+    this.flags = flags;
+    this.expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
+    this.originalMessageOffset = originalMessageOffset;
+    this.operationTimeInMs = Utils.getTimeInMsToTheNearestSec(operationTimeInMs);
+    this.serviceId = serviceId;
+    this.containerId = containerId;
+    version = PersistentIndex.CURRENT_VERSION;
   }
 
+  /**
+   * @return the size of the blob that this index value refers to
+   */
   long getSize() {
-    return value.getLong(0);
+    return size;
   }
 
+  /**
+   * @return the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
+   */
   Offset getOffset() {
     return offset;
   }
 
+  /**
+   * @return the {@link Flags} in the Index Value
+   */
   byte getFlags() {
-    return value.get(Blob_Size_In_Bytes + Offset_Size_In_Bytes);
+    return flags;
   }
 
+  /**
+   * Returns whether the passed in {@code flag} is set or not in the {@link IndexValue}
+   * @param flag the {@link Flags} that needs to be checked if set in the {@link IndexValue}
+   * @return {@code true} if the passed in {@link Flags} is set, {@code false} otherwise
+   */
   boolean isFlagSet(Flags flag) {
     return ((getFlags() & (1 << flag.ordinal())) != 0);
   }
 
+  /**
+   * @return the expiration time of the index value in ms
+   */
   long getExpiresAtMs() {
-    return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes);
+    return expiresAtMs;
   }
 
+  /**
+   * @return the original message offset of the {@link IndexValue}
+   */
   long getOriginalMessageOffset() {
-    return value.getLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes);
+    return originalMessageOffset;
   }
 
+  /**
+   * @return the operation time in ms of the index value
+   */
+  long getOperationTimeInMs() {
+    return operationTimeInMs;
+  }
+
+  /**
+   * @return the serviceId of the {@link IndexValue}
+   */
+  short getServiceId() {
+    return serviceId;
+  }
+
+  /**
+   * @return the containerId of the {@link IndexValue}
+   */
+  short getContainerId() {
+    return containerId;
+  }
+
+  /**
+   * Sets the {@link Flags} for the {@link IndexValue}
+   * @param flag the {@link Flags} that needs to be set in the {@link IndexValue}
+   */
   void setFlag(Flags flag) {
-    value.put(Blob_Size_In_Bytes + Offset_Size_In_Bytes, (byte) (getFlags() | (1 << flag.ordinal())));
+    flags = (byte) (flags | (1 << flag.ordinal()));
   }
 
+  /**
+   * Updates the {@link Offset} of the {@link IndexValue}
+   * @param newOffset the new {@link Offset} to be updated for the {@link IndexValue}
+   */
   void setNewOffset(Offset newOffset) {
-    long originalMessageOffset = offset.getName().equals(newOffset.getName()) ? offset.getOffset() : -1;
+    originalMessageOffset = offset.getName().equals(newOffset.getName()) ? offset.getOffset() : -1;
     offset = newOffset;
-    value.putLong(Blob_Size_In_Bytes, offset.getOffset());
-    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes,
-        originalMessageOffset);
   }
 
   void clearOriginalMessageOffset() {
-    value.putLong(Blob_Size_In_Bytes + Offset_Size_In_Bytes + Flag_Size_In_Bytes + Expires_At_Ms_Size_In_Bytes, -1);
+    originalMessageOffset = -1;
   }
 
+  /**
+   * Sets the size of the {@link IndexValue}
+   * @param size the size that needs to be set for the {@link IndexValue}
+   */
   void setNewSize(long size) {
-    value.putLong(0, size);
+    this.size = size;
   }
 
+  /**
+   * @return the {@link ByteBuffer} representation of this {@link IndexValue}
+   */
   ByteBuffer getBytes() {
+    ByteBuffer value;
+    switch (version) {
+      case PersistentIndex.VERSION_0:
+        value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V0);
+        value.putLong(size);
+        value.putLong(offset.getOffset());
+        value.put(flags);
+        value.putLong(expiresAtMs);
+        value.putLong(originalMessageOffset);
+        value.position(0);
+        break;
+      case PersistentIndex.VERSION_1:
+        value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V1);
+        value.putLong(size);
+        value.putLong(offset.getOffset());
+        value.put(flags);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
+        value.putLong(originalMessageOffset);
+        value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / Time.MsPerSec)
+            : (int) operationTimeInMs);
+        value.putShort(serviceId);
+        value.putShort(containerId);
+        value.position(0);
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported version " + version + " for IndexValue ");
+    }
     return value;
   }
 
   @Override
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
-        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset();
+        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
+        version == PersistentIndex.VERSION_1 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", ServiceId "
+            + getServiceId() + ", ContainerId " + getContainerId()) : "");
   }
 }

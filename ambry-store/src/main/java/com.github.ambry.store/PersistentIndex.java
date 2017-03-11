@@ -51,11 +51,13 @@ class PersistentIndex {
   /**
    * Represents the different types of index entries.
    */
-  private enum IndexEntryType {
+  enum IndexEntryType {
     ANY, PUT, DELETE,
   }
 
-  static final short VERSION = 0;
+  static final short VERSION_0 = 0;
+  static final short VERSION_1 = 1;
+  static final short CURRENT_VERSION = VERSION_1;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
   static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
@@ -175,7 +177,7 @@ class PersistentIndex {
         // The recent index segment would go through recovery after they have been
         // read into memory
         boolean map = i < indexFiles.size() - 1;
-        IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal);
+        IndexSegment info = new IndexSegment(indexFiles.get(i), map, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
         validIndexSegments.put(info.getStartOffset(), info);
@@ -350,7 +352,7 @@ class PersistentIndex {
 
     TreeMap<Offset, IndexSegment> segmentsToAdd = new TreeMap<>();
     for (File indexSegmentFile : segmentFilesToAdd) {
-      IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal);
+      IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal, time);
       if (indexSegment.getEndOffset().compareTo(journalFirstOffset) > 0) {
         throw new IllegalArgumentException("One of the index segments has an end offset " + indexSegment.getEndOffset()
             + " that is higher than the first offset in the journal " + journalFirstOffset);
@@ -387,7 +389,7 @@ class PersistentIndex {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
       IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
-          entry.getValue().getBytes().capacity(), config, metrics);
+          entry.getValue().getBytes().capacity(), config, metrics, time);
       info.addEntry(entry, fileSpan.getEndOffset());
       // always add to both valid and in-flux index segment map to account for the fact that changeIndexSegments()
       // might be in the process of updating the reference to validIndexSegments
@@ -555,8 +557,9 @@ class PersistentIndex {
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
-
-    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs());
+    IndexValue newValue =
+        new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), Utils.Infinite_Time,
+            value.getServiceId(), value.getContainerId());
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     newValue.setNewOffset(fileSpan.getStartOffset());
     newValue.setNewSize(fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset());
@@ -963,7 +966,7 @@ class PersistentIndex {
       segmentToProcess = indexSegments.get(segmentStartOffset);
     }
 
-    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTime())) {
+    while (findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), segmentToProcess.getLastModifiedTimeSecs())) {
       // Check in the journal to see if we are already at an offset in the journal, if so get entries from it.
       Offset journalFirstOffsetBeforeCheck = journal.getFirstOffset();
       Offset journalLastOffsetBeforeCheck = journal.getLastOffset();
@@ -987,7 +990,8 @@ class PersistentIndex {
             }
             currentSegment = indexSegments.get(nextSegmentStartOffset);
             // stop if ineligible because of last modified time
-            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
+            if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
+                currentSegment.getLastModifiedTimeSecs())) {
               break;
             }
           }
@@ -999,7 +1003,8 @@ class PersistentIndex {
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.getExpiresAtMs()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
-          if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(), currentSegment.getLastModifiedTime())) {
+          if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
+              currentSegment.getLastModifiedTimeSecs())) {
             break;
           }
         }
@@ -1235,7 +1240,7 @@ class PersistentIndex {
               Offset nextSegmentStartOffset = indexSegments.higherKey(currentSegment.getStartOffset());
               currentSegment = indexSegments.get(nextSegmentStartOffset);
             }
-            if (endTimeSeconds < currentSegment.getLastModifiedTime()) {
+            if (endTimeSeconds < currentSegment.getLastModifiedTimeSecs()) {
               break;
             }
 

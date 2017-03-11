@@ -309,9 +309,10 @@ public class HardDeleteVerifier {
         StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", map);
         while (stream.available() > Crc_Size) {
           BlobId key = (BlobId) storeKeyFactory.getStoreKey(stream);
-          byte[] value = new byte[IndexValue.Index_Value_Size_In_Bytes];
+          byte[] value = new byte[version == PersistentIndex.VERSION_0 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0
+              : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1];
           stream.read(value);
-          IndexValue blobValue = new IndexValue(segmentStartOffset.getName(), ByteBuffer.wrap(value));
+          IndexValue blobValue = new IndexValue(segmentStartOffset.getName(), ByteBuffer.wrap(value), version);
           boolean deleted = blobValue.isFlagSet(IndexValue.Flags.Delete_Index);
           numberOfKeysProcessed++;
           IndexValue oldValue = blobMap.get(key);

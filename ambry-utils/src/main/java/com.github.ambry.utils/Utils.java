@@ -615,6 +615,15 @@ public class Utils {
   }
 
   /**
+   * Returns a random short using the {@code Random} passed as arg
+   * @param random the {@link Random} object that needs to be used to generate the random short
+   * @return a random short
+   */
+  public static short getRandomShort(Random random) {
+    return (short) random.nextInt(Short.MAX_VALUE + 1);
+  }
+
+  /**
    * Adds some number of seconds to an epoch time in ms.
    *
    * @param epochTimeInMs
@@ -729,6 +738,17 @@ public class Utils {
       throwable = throwable.getCause();
     }
     return throwable;
+  }
+
+  /**
+   * Convert ms to nearest second(floor) and back to ms to get the approx value in ms if not for
+   * {@link Utils#Infinite_Time}.
+   * @param timeInMs the time in ms that needs to be converted
+   * @return the time in ms to the nearest second(floored) for the given time in ms
+   */
+  public static long getTimeInMsToTheNearestSec(long timeInMs) {
+    long timeInSecs =  timeInMs / Time.MsPerSec;
+    return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
   }
 
   /**
