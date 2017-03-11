@@ -179,12 +179,12 @@ class PutOperation {
       public void onCompletion(Long result, Exception exception) {
         if (exception != null) {
           setOperationExceptionAndComplete(exception);
+          routerCallback.onPollReady();
         } else {
           blobSize = result;
           chunkFillingCompletedSuccessfully = true;
         }
         chunkFillerChannel.close();
-        routerCallback.onPollReady();
       }
     });
   }
@@ -329,7 +329,9 @@ class PutOperation {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
           lastChunk.onFillComplete(true);
+          updateChunkFillerWaitTimeMetrics();
         }
+        routerCallback.onPollReady();
       }
     } catch (Exception e) {
       RouterException routerException = e instanceof RouterException ? (RouterException) e
