@@ -73,17 +73,18 @@ public interface Router extends Closeable {
    * Requests for a blob to be deleted asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs to be deleted.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
-  public Future<Void> deleteBlob(String blobId);
+  public Future<Void> deleteBlob(String blobId, String serviceId);
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobId The ID of the blob that needs to be deleted.
-   * @param callback The {@link Callback} which will be invoked on the completion of a request.
-   * @return A future that would contain information about whether the deletion succeeded or not, eventually.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+   *@param callback The {@link Callback} which will be invoked on the completion of a request.  @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
-  public Future<Void> deleteBlob(String blobId, Callback<Void> callback);
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback);
 
   /**
    * Closes the router and releases any resources held by the router. If the router is already closed, then this

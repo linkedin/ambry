@@ -601,6 +601,21 @@ public class RestUtilsTest {
     }
   }
 
+  /**
+   * Tests {@link RestUtils#getServiceId(RestRequest)}
+   * @throws Exception
+   */
+  @Test
+  public void getServiceIdTest() throws Exception {
+    String serviceId = "the-service-id";
+    JSONObject headers = new JSONObject();
+    headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
+    RestRequest restRequest = createRestRequest(RestMethod.DELETE, "/", headers);
+    assertEquals("Unexpected service id", serviceId, RestUtils.getServiceId(restRequest));
+    restRequest = createRestRequest(RestMethod.DELETE, "/", new JSONObject());
+    assertNull("Should not have found service ID", RestUtils.getServiceId(restRequest));
+  }
+
   // helpers.
   // general.
 

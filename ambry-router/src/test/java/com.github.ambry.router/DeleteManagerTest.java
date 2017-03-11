@@ -69,7 +69,7 @@ public class DeleteManagerTest {
   private final ErrorCodeChecker deleteErrorCodeChecker = new ErrorCodeChecker() {
     @Override
     public void testAndAssert(RouterErrorCode expectedError) throws Exception {
-      future = router.deleteBlob(blobIdString);
+      future = router.deleteBlob(blobIdString, null);
       if (expectedError == null) {
         future.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
       } else {
@@ -135,7 +135,7 @@ public class DeleteManagerTest {
             List<Future> futures = new ArrayList<>();
             for (int i = 0; i < 5; i++) {
               if (i == 1) {
-                futures.add(router.deleteBlob(blobIdString, new Callback<Void>() {
+                futures.add(router.deleteBlob(blobIdString, null, new Callback<Void>() {
                   @Override
                   public void onCompletion(Void result, Exception exception) {
                     callbackCalled.countDown();
@@ -143,7 +143,7 @@ public class DeleteManagerTest {
                   }
                 }));
               } else {
-                futures.add(router.deleteBlob(blobIdString));
+                futures.add(router.deleteBlob(blobIdString, null));
               }
             }
             for (Future future : futures) {
@@ -159,7 +159,7 @@ public class DeleteManagerTest {
             Assert.assertTrue("Router should not be closed", router.isOpen());
 
             //Test that DeleteManager is still operational
-            router.deleteBlob(blobIdString).get();
+            router.deleteBlob(blobIdString, null).get();
           }
         });
   }
@@ -171,7 +171,7 @@ public class DeleteManagerTest {
   public void testBlobIdNotValid() throws Exception {
     String[] input = {"123", "abcd", "", "/"};
     for (String s : input) {
-      future = router.deleteBlob(s);
+      future = router.deleteBlob(s, null);
       assertFailureAndCheckErrorCode(future, RouterErrorCode.InvalidBlobId);
     }
   }
@@ -322,7 +322,7 @@ public class DeleteManagerTest {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
             CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-            future = router.deleteBlob(blobIdString, new ClientCallback(operationCompleteLatch));
+            future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch));
             do {
               // increment mock time
               mockTime.sleep(1000);
@@ -353,7 +353,7 @@ public class DeleteManagerTest {
       mockSelectorState.set(state);
       setServerErrorCodes(serverErrorCodes, partition, serverLayout);
       CountDownLatch operationCompleteLatch = new CountDownLatch(1);
-      future = router.deleteBlob(blobIdString, new ClientCallback(operationCompleteLatch));
+      future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch));
       do {
         // increment mock time
         mockTime.sleep(1000);
@@ -372,7 +372,7 @@ public class DeleteManagerTest {
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
           @Override
           public void testAndAssert(RouterErrorCode expectedError) throws Exception {
-            future = router.deleteBlob(blobIdString);
+            future = router.deleteBlob(blobIdString, null);
             router.close();
             assertFailureAndCheckErrorCode(future, expectedError);
           }

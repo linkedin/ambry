@@ -111,6 +111,13 @@ public class RouterConfig {
   public final int routerDeleteSuccessTarget;
 
   /**
+   * The service ID used for background delete operations.
+   */
+  @Config("router.background.delete.service.id")
+  @Default("ambry-router-bg-delete")
+  public final String routerBackgroundDeleteServiceId;
+
+  /**
    * The maximum number of parallel requests issued at a time by the get manager for a get operation on a chunk.
    */
   @Config("router.get.request.parallelism")
@@ -152,6 +159,8 @@ public class RouterConfig {
     routerMaxSlippedPutAttempts = verifiableProperties.getInt("router.max.slipped.put.attempts", 1);
     routerDeleteRequestParallelism = verifiableProperties.getInt("router.delete.request.parallelism", 3);
     routerDeleteSuccessTarget = verifiableProperties.getInt("router.delete.success.target", 2);
+    routerBackgroundDeleteServiceId =
+        verifiableProperties.getString("router.background.delete.service.id", "ambry-router-bg-delete");
     routerGetRequestParallelism = verifiableProperties.getInt("router.get.request.parallelism", 2);
     routerGetSuccessTarget = verifiableProperties.getInt("router.get.success.target", 1);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);

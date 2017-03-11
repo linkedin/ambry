@@ -523,6 +523,16 @@ public class RestUtils {
   }
 
   /**
+   * Get the service ID from a {@link RestRequest}.
+   * @param restRequest the representation of the request.
+   * @return the service ID, or {@code null} if no service ID was set in the request.
+   * @throws RestServiceException
+   */
+  public static String getServiceId(RestRequest restRequest) throws RestServiceException {
+    return getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false);
+  }
+
+  /**
    * Gets the value of the header {@code header} in {@code args}.
    * @param args a map of arguments to be used to look for {@code header}.
    * @param header the name of the header.

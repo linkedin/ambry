@@ -194,12 +194,12 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId) {
-    return deleteBlob(blobId, null);
+  public Future<Void> deleteBlob(String blobId, String serviceId) {
+    return deleteBlob(blobId, serviceId, null);
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
     FutureResult<Void> futureResult = new FutureResult<Void>();
     handlePrechecks(futureResult, callback);
     Exception exception = null;
@@ -211,7 +211,7 @@ public class InMemoryRouter implements Router {
         if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
           deletedBlobs.add(blobId);
           if (notificationSystem != null) {
-            notificationSystem.onBlobDeleted(blobId);
+            notificationSystem.onBlobDeleted(blobId, serviceId);
           }
         } else if (!deletedBlobs.contains(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);

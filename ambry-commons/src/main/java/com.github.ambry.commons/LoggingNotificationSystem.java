@@ -34,22 +34,22 @@ public class LoggingNotificationSystem implements NotificationSystem {
 
   @Override
   public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata) {
-    logger.debug("onBlobCreated " + blobId + "," + blobProperties);
+    logger.debug("onBlobCreated " + blobId + ", " + blobProperties);
   }
 
   @Override
-  public void onBlobDeleted(String blobId) {
-    logger.debug("onBlobDeleted " + blobId);
+  public void onBlobDeleted(String blobId, String serviceId) {
+    logger.debug("onBlobDeleted " + blobId, ", " + serviceId);
   }
 
   @Override
   public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
-    logger.debug("onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + "," + sourceType);
+    logger.debug("onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
   }
 
   @Override
   public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
-    logger.debug("onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + "," + sourceType);
+    logger.debug("onBlobReplicaCreated " + sourceHost + ", " + port + ", " + blobId + ", " + sourceType);
   }
 }
 

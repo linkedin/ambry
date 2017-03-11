@@ -44,6 +44,7 @@ class DeleteOperation {
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
   private final BlobId blobId;
+  private final String serviceId;
   private final FutureResult<Void> futureResult;
   private final Callback<Void> callback;
   private final Time time;
@@ -74,17 +75,19 @@ class DeleteOperation {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to record all router-related metrics.
    * @param responsehandler The {@link ResponseHandler} used to notify failures for failure detection.
    * @param blobId The {@link BlobId} that is to be deleted by this {@code DeleteOperation}.
-   * @param futureResult The {@link FutureResult} that is returned to the caller.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
+   * @param futureResult The {@link FutureResult} that is returned to the caller.
    */
   DeleteOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ResponseHandler responsehandler,
-      BlobId blobId, FutureResult<Void> futureResult, Callback<Void> callback, Time time) {
+      BlobId blobId, String serviceId, Callback<Void> callback, Time time, FutureResult<Void> futureResult) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.responseHandler = responsehandler;
     this.blobId = blobId;
+    this.serviceId = serviceId;
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
@@ -330,6 +333,13 @@ class DeleteOperation {
    */
   BlobId getBlobId() {
     return blobId;
+  }
+
+  /**
+   * @return the service ID for the service requesting this delete operation.
+   */
+  String getServiceId() {
+    return serviceId;
   }
 
   /**

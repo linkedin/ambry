@@ -442,7 +442,7 @@ public class NettyMessageProcessorTest {
     }
 
     @Override
-    public void onBlobDeleted(String blobId) {
+    public void onBlobDeleted(String blobId, String serviceId) {
       throw new IllegalStateException("Not implemented");
     }
 

@@ -218,30 +218,31 @@ class NonBlockingRouter implements Router {
    * Requests for a blob to be deleted asynchronously and returns a future that will eventually contain information
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs to be deleted.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
   @Override
-  public Future<Void> deleteBlob(String blobId) {
-    return deleteBlob(blobId, null);
+  public Future<Void> deleteBlob(String blobId, String serviceId) {
+    return deleteBlob(blobId, serviceId, null);
   }
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobId The ID of the blob that needs to be deleted.
-   * @param callback The {@link Callback} which will be invoked on the completion of a request.
-   * @return A future that would contain information about whether the deletion succeeded or not, eventually.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+   *@param callback The {@link Callback} which will be invoked on the completion of a request.  @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
   @Override
-  public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
     if (blobId == null) {
       throw new IllegalArgumentException("blobId must not be null");
     }
     currentOperationsCount.incrementAndGet();
     routerMetrics.deleteBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
-    FutureResult<Void> futureResult = new FutureResult<Void>();
+    FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().deleteBlob(blobId, futureResult, callback);
+      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -260,15 +261,16 @@ class NonBlockingRouter implements Router {
     for (StoreKey key : idsToDelete) {
       currentOperationsCount.incrementAndGet();
       currentBackgroundOperationsCount.incrementAndGet();
-      backgroundDeleter.deleteBlob(key.getID(), new FutureResult<Void>(), new Callback<Void>() {
-        @Override
-        public void onCompletion(Void result, Exception exception) {
-          if (exception != null) {
-            logger.error("Background delete operation failed with exception", exception);
-          }
-          currentBackgroundOperationsCount.decrementAndGet();
-        }
-      });
+      backgroundDeleter.deleteBlob(key.getID(), routerConfig.routerBackgroundDeleteServiceId, new FutureResult<Void>(),
+          new Callback<Void>() {
+            @Override
+            public void onCompletion(Void result, Exception exception) {
+              if (exception != null) {
+                logger.error("Background delete operation failed with exception", exception);
+              }
+              currentBackgroundOperationsCount.decrementAndGet();
+            }
+          });
     }
   }
 
@@ -469,12 +471,14 @@ class NonBlockingRouter implements Router {
     /**
      * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
      * @param blobId The ID of the blob that needs to be deleted.
+     * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
      * @param futureResult A future that would contain information about whether the deletion succeeded or not,
      *                     eventually.
      * @param callback The {@link Callback} which will be invoked on the completion of a request.
      */
-    protected void deleteBlob(final String blobId, FutureResult<Void> futureResult, final Callback<Void> callback) {
-      deleteManager.submitDeleteBlobOperation(blobId, futureResult, new Callback<Void>() {
+    protected void deleteBlob(final String blobId, String serviceId, FutureResult<Void> futureResult,
+        final Callback<Void> callback) {
+      deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, new Callback<Void>() {
         @Override
         public void onCompletion(Void result, Exception exception) {
           if (exception == null) {

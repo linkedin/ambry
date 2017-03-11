@@ -187,7 +187,7 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobDeleted(String blobId) {
+  public void onBlobDeleted(String blobId, String serviceId) {
     // ignore
   }
 
