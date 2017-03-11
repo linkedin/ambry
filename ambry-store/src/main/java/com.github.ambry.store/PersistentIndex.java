@@ -76,6 +76,13 @@ class PersistentIndex {
       return o1Offset.compareTo(IndexSegment.getIndexSegmentStartOffset(o2.getName()));
     }
   };
+  static final Comparator<IndexEntry> INDEX_ENTRIES_COMPARATOR = new Comparator<IndexEntry>() {
+
+    @Override
+    public int compare(IndexEntry e1, IndexEntry e2) {
+      return e1.getValue().getOffset().compareTo(e2.getValue().getOffset());
+    }
+  };
 
   final ScheduledExecutorService scheduler;
   final Journal journal;

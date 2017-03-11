@@ -680,11 +680,12 @@ public class IndexTest {
    * 5. Error case - trying to findEntriesSince() using an index based token that contains the last index segment
    * 6. Using findEntriesSince() in an empty index
    * 7. Token that has the log end offset
+   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void findEntriesSinceTest() throws IOException, StoreException {
+  public void findEntriesSinceTest() throws InterruptedException, IOException, StoreException {
     // add some more entries so that the journal gets entries across segments and doesn't start at the beginning
     // of an index segment.
     state.addPutEntries(7, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -799,11 +800,12 @@ public class IndexTest {
    * token to logEndOffsetOnStartup and returns the same.
    * On the subsequent findEntriesSince() call, the index should start returning entries
    * starting from that offset and should not consider that token as non-inclusive
+   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void findEntriesSinceOnCrashRestartTest() throws IOException, StoreException {
+  public void findEntriesSinceOnCrashRestartTest() throws InterruptedException, IOException, StoreException {
     UUID oldSessionId = state.sessionId;
     state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     state.reloadIndex(true, true);
@@ -1020,9 +1022,12 @@ public class IndexTest {
 
   /**
    * Test that verifies that everything is ok even if {@link MessageStoreHardDelete} instance provided is null.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
    */
   @Test
-  public void hardDeleteNullTest() throws IOException, StoreException {
+  public void hardDeleteNullTest() throws InterruptedException, IOException, StoreException {
     state.hardDelete = null;
     state.reloadIndex(true, false);
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);

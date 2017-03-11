@@ -37,10 +37,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.NavigableSet;
 import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -57,12 +59,13 @@ import static org.junit.Assert.*;
 class CuratedLogIndexState {
   private static final byte[] RECOVERY_INFO = new byte[100];
   // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
-  private static final long LOG_CAPACITY = 10000;
+  private static final long LOG_CAPACITY = 20000;
   private static final long SEGMENT_CAPACITY = 2000;
-  private static final int MAX_IN_MEM_ELEMENTS = 5;
   private static final long HARD_DELETE_START_OFFSET = 11;
   private static final long HARD_DELETE_LAST_PART_SIZE = 13;
 
+  static final int MAX_IN_MEM_ELEMENTS = 5;
+  static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * Time.MsPerSec;
   static final StoreKeyFactory STORE_KEY_FACTORY;
   // deliberately do not divide the capacities perfectly.
   static final long PUT_RECORD_SIZE = 53;
@@ -88,6 +91,8 @@ class CuratedLogIndexState {
   // The first IndexValue represents the value of the PUT entry.
   // The second IndexValue represents the value of the DELETE entry (null if the key has not been deleted).
   final Map<MockId, Pair<IndexValue, IndexValue>> allKeys = new HashMap<>();
+  // map of all index segments to their last modified times
+  final Map<Offset, Long> lastModifiedTimesInSecs = new HashMap<>();
   // Set of all deleted keys
   final Set<MockId> deletedKeys = new HashSet<>();
   // Set of all expired keys
@@ -98,10 +103,8 @@ class CuratedLogIndexState {
   final TreeMap<Offset, Pair<MockId, LogEntry>> logOrder = new TreeMap<>();
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   final Properties properties = new Properties();
-  // The Log which has the data
-  final Log log;
   // the time instance that will be used in the index
-  final Time time = new MockTime();
+  final MockTime time = new MockTime();
   // the scheduler used in the index
   final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
 
@@ -109,20 +112,22 @@ class CuratedLogIndexState {
   MessageStoreRecovery recovery = new DummyMessageStoreRecovery();
   // The MessageStoreHardDelete that is used with the index
   MessageStoreHardDelete hardDelete = new MockMessageStoreHardDelete();
+  // The Log which has the data
+  Log log;
   // The index of the log
   PersistentIndex index;
   // The session ID associated with the index
   UUID sessionId = UUID.randomUUID();
   // the incarnationId associated with the store
   UUID incarnationId = UUID.randomUUID();
+  // The MetricRegistry that is used with the index
+  MetricRegistry metricRegistry = new MetricRegistry();
 
   // Variables that represent the folder where the data resides
   private final File tempDir;
   private final String tempDirStr;
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
   private final Set<MockId> generatedKeys = new HashSet<>();
-  // The MetricRegistry that is used with the index
-  private MetricRegistry metricRegistry = new MetricRegistry();
 
   /**
    * Creates state in order to make sure all cases are represented and log-index tests don't need to do any setup
@@ -137,12 +142,40 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   CuratedLogIndexState(boolean isLogSegmented, File tempDir) throws InterruptedException, IOException, StoreException {
+    this(isLogSegmented, tempDir, false, true);
+  }
+
+  /**
+   * Creates state in order to make sure all cases are represented and log-index tests don't need to do any setup
+   * individually. For understanding the created index, please read the source code which is annotated with comments.
+   * <p/>
+   * Also verifies that the state in {@link #referenceIndex} matches the state in the real index (which implicitly
+   * verifies some functionality of {@link PersistentIndex} and behaviour of the {@link Journal} in the index).
+   * @param isLogSegmented {@code true} if segmented. {@code false} otherwise.
+   * @param tempDir the directory where the log and index files should be created.
+   * @param hardDeleteEnabled if {@code true}, hard delete is enabled.
+   * @param initState sets up a diverse set of entries if {@code true}. Leaves the log and index empty if {@code false}.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  CuratedLogIndexState(boolean isLogSegmented, File tempDir, boolean hardDeleteEnabled, boolean initState)
+      throws InterruptedException, IOException, StoreException {
     this.tempDir = tempDir;
     tempDirStr = tempDir.getAbsolutePath();
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
     StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
     log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, segmentCapacity, metrics);
-    setupTestState(isLogSegmented, segmentCapacity, metrics);
+    metricRegistry = new MetricRegistry();
+    properties.put("store.index.max.number.of.inmem.elements",
+        Integer.toString(CuratedLogIndexState.MAX_IN_MEM_ELEMENTS));
+    properties.put("store.enable.hard.delete", Boolean.toString(hardDeleteEnabled));
+    // not used but set anyway since this is a package private variable.
+    properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
+    initIndex(metricRegistry);
+    if (initState) {
+      setupTestState(isLogSegmented, segmentCapacity);
+    }
   }
 
   /**
@@ -164,15 +197,17 @@ class CuratedLogIndexState {
    * @param count the number of PUT entries to add.
    * @param size the size of each PUT entry.
    * @param expiresAtMs the time at which each of the PUT entries expires.
-   * @return the {@link FileSpan} of the added entries.
+   * @return the list of the added entries.
+   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  FileSpan addPutEntries(int count, long size, long expiresAtMs) throws IOException, StoreException {
+  List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs)
+      throws InterruptedException, IOException, StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
-    ArrayList<IndexEntry> indexEntries = new ArrayList<>(count);
+    List<IndexEntry> indexEntries = new ArrayList<>(count);
     Offset expectedJournalLastOffset = null;
     Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
     for (int i = 0; i < count; i++) {
@@ -180,12 +215,15 @@ class CuratedLogIndexState {
       FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, size);
       IndexValue value = new IndexValue(size, fileSpan.getStartOffset(), expiresAtMs);
       MockId id = getUniqueId();
+      IndexEntry entry = new IndexEntry(id, value);
+      indexEntries.add(entry);
       logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, new LogEntry(dataWritten, value)));
-      indexEntries.add(new IndexEntry(id, value));
       Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
       indexSegmentStartOffsets.put(id, new Pair<Offset, Offset>(indexSegmentStartOffset, null));
       allKeys.put(id, new Pair<IndexValue, IndexValue>(value, null));
       if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
+        // rollover will occur
+        advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
         referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
       }
       referenceIndex.get(indexSegmentStartOffset).put(id, value);
@@ -194,28 +232,28 @@ class CuratedLogIndexState {
       } else {
         liveKeys.add(id);
       }
+      index.addToIndex(entry, fileSpan);
+      lastModifiedTimesInSecs.put(indexSegmentStartOffset, time.seconds());
       expectedJournalLastOffset = fileSpan.getStartOffset();
       endOffsetOfPrevMsg = fileSpan.getEndOffset();
     }
-    FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfPrevMsg);
-    index.addToIndex(indexEntries, fileSpan);
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
     assertEquals("Journal's last offset not as expected", expectedJournalLastOffset, index.journal.getLastOffset());
-    return fileSpan;
+    return indexEntries;
   }
 
   /**
    * Adds a delete entry in the index (real and reference) for {@code idToDelete}.
    * @param idToDelete the id to be deleted.
    * @return the {@link FileSpan} of the added entries.
+   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  FileSpan addDeleteEntry(MockId idToDelete) throws IOException, StoreException {
+  FileSpan addDeleteEntry(MockId idToDelete) throws InterruptedException, IOException, StoreException {
     byte[] dataWritten = appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
     Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
     FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, CuratedLogIndexState.DELETE_RECORD_SIZE);
-    index.markAsDeleted(idToDelete, fileSpan);
 
     IndexValue value = getExpectedValue(idToDelete, true);
     IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
@@ -231,12 +269,19 @@ class CuratedLogIndexState {
     Pair<IndexValue, IndexValue> keyValues = allKeys.get(idToDelete);
     allKeys.put(idToDelete, new Pair<>(keyValues.getFirst(), newValue));
     if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
+      // rollover will occur
+      advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
       referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
     }
     referenceIndex.get(indexSegmentStartOffset).put(idToDelete, newValue);
     endOffsetOfPrevMsg = fileSpan.getEndOffset();
+    index.markAsDeleted(idToDelete, fileSpan);
+    lastModifiedTimesInSecs.put(indexSegmentStartOffset, time.seconds());
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
     assertEquals("Journal's last offset not as expected", fileSpan.getStartOffset(), index.journal.getLastOffset());
+    if (!deletedKeys.contains(idToDelete)) {
+      markAsDeleted(idToDelete);
+    }
     return fileSpan;
   }
 
@@ -267,7 +312,7 @@ class CuratedLogIndexState {
   byte[] appendToLog(long size) throws IOException {
     byte[] bytes = TestUtils.getRandomBytes((int) size);
     if (size > CuratedLogIndexState.HARD_DELETE_START_OFFSET) {
-      // ensure atleast one byte is set to 1 for hard delete verification purposes
+      // ensure at least one byte is set to 1 for hard delete verification purposes
       int randomByte = (int) (CuratedLogIndexState.HARD_DELETE_START_OFFSET + TestUtils.RANDOM.nextInt(
           (int) (size - CuratedLogIndexState.HARD_DELETE_START_OFFSET
               - CuratedLogIndexState.HARD_DELETE_LAST_PART_SIZE)));
@@ -331,7 +376,8 @@ class CuratedLogIndexState {
 
   /**
    * Gets an ID to delete from the index segment with start offset {@code indexSegmentStartOffset}. The returned ID will
-   * have been removed from {@link #liveKeys} and added to {@link #deletedKeys}.
+   * have been removed from {@link #liveKeys} and added to {@link #deletedKeys}. A call to
+   * {@link #addDeleteEntry(MockId)} is expected.
    * @param indexSegmentStartOffset the start offset of the index segment from which an ID is required.
    * @return an ID to delete from the index segment with start offset {@code indexSegmentStartOffset}.
    */
@@ -340,14 +386,13 @@ class CuratedLogIndexState {
     TreeMap<MockId, IndexValue> indexSegment = referenceIndex.get(indexSegmentStartOffset);
     for (Map.Entry<MockId, IndexValue> entry : indexSegment.entrySet()) {
       MockId id = entry.getKey();
-      if (liveKeys.contains(id)) {
+      if (liveKeys.contains(id) && allKeys.get(id).getFirst().getExpiresAtMs() == Utils.Infinite_Time) {
         deleteCandidate = id;
         break;
       }
     }
     if (deleteCandidate != null) {
-      deletedKeys.add(deleteCandidate);
-      liveKeys.remove(deleteCandidate);
+      markAsDeleted(deleteCandidate);
     }
     return deleteCandidate;
   }
@@ -372,6 +417,42 @@ class CuratedLogIndexState {
   }
 
   /**
+   * Gets the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
+   * @param segment the {@link LogSegment} whose valid size is required.
+   * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
+   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @return the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
+   */
+  long getValidDataSizeForLogSegment(LogSegment segment, long deleteReferenceTimeMs, long expiryReferenceTimeMs) {
+    List<IndexEntry> validEntries =
+        getValidIndexEntriesForLogSegment(segment, deleteReferenceTimeMs, expiryReferenceTimeMs);
+    long size = 0;
+    for (IndexEntry indexEntry : validEntries) {
+      size += indexEntry.getValue().getSize();
+    }
+    return size;
+  }
+
+  /**
+   * Gets all the index entries valid at {@code referenceTimeMs} in the {@code segment}.
+   * @param segment the {@link LogSegment} from which valid index entries are required.
+   * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
+   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @return all the index entries valid at {@code referenceTimeMs} in the {@code segment}.
+   */
+  List<IndexEntry> getValidIndexEntriesForLogSegment(LogSegment segment, long deleteReferenceTimeMs,
+      long expiryReferenceTimeMs) {
+    List<IndexEntry> validEntries = new ArrayList<>();
+    Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
+    while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
+      validEntries.addAll(
+          getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, deleteReferenceTimeMs, expiryReferenceTimeMs));
+      indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
+    }
+    return validEntries;
+  }
+
+  /**
    * Verify that deleted entries are hard deleted
    * @param deletedIds the set of {@link MockId}s that are deleted
    * @throws IOException
@@ -393,6 +474,119 @@ class CuratedLogIndexState {
   }
 
   /**
+   * Returns {@code true} if the {@code id} is considered deleted at {@code referenceTimeMs}.
+   * @param id the {@link MockId} to check.
+   * @param referenceTimeMs the reference time in ms at which the check needs to be performed.
+   * @return {@code true} if the {@code id} is considered deleted at {@code referenceTimeMs}. {@code false} otherwise.
+   */
+  boolean isDeletedAt(MockId id, long referenceTimeMs) {
+    Offset deleteIndexSegmentStartOffset = indexSegmentStartOffsets.get(id).getSecond();
+    return deleteIndexSegmentStartOffset != null
+        && lastModifiedTimesInSecs.get(deleteIndexSegmentStartOffset) * Time.MsPerSec < referenceTimeMs;
+  }
+
+  /**
+   * Returns {@code true} if the {@code id} is considered expired at {@code referenceTimeMs}.
+   * @param id the {@link MockId} to check.
+   * @param referenceTimeMs the reference time in ms at which the check needs to be performed.
+   * @return {@code true} if the {@code id} is considered expired at {@code referenceTimeMs}. {@code false} otherwise.
+   */
+  boolean isExpiredAt(MockId id, long referenceTimeMs) {
+    long expiresAtMs = allKeys.get(id).getFirst().getExpiresAtMs();
+    return expiresAtMs != Utils.Infinite_Time && expiresAtMs < referenceTimeMs;
+  }
+
+  /**
+   * Ensures that the {@link PersistentIndex} is sane and correct by checking that
+   * 1. It contains no duplicate entries.
+   * 2. The ordering of PUT and DELETE entries is correct.
+   * 3. There are no offsets in the log not accounted for in the index.
+   * @throws IOException
+   * @throws StoreException
+   */
+  void verifyRealIndexSanity() throws IOException, StoreException {
+    Map<MockId, Boolean> keyToDeleteSeenMap = new HashMap<>();
+    IndexSegment prevIndexSegment = null;
+    for (IndexSegment indexSegment : index.getIndexSegments().values()) {
+      Offset indexSegmentStartOffset = indexSegment.getStartOffset();
+      if (prevIndexSegment == null) {
+        assertEquals("There are offsets in the log not accounted for in index", log.getFirstSegment().getStartOffset(),
+            indexSegmentStartOffset.getOffset());
+      } else if (prevIndexSegment.getLogSegmentName().equals(indexSegment.getLogSegmentName())) {
+        assertEquals("There are offsets in the log not accounted for in index", prevIndexSegment.getEndOffset(),
+            indexSegmentStartOffset);
+      } else {
+        LogSegment segment = log.getSegment(prevIndexSegment.getLogSegmentName());
+        assertEquals("There are offsets in the log not accounted for in index", segment.getEndOffset(),
+            prevIndexSegment.getEndOffset().getOffset());
+        segment = log.getNextSegment(segment);
+        assertEquals("There are offsets in the log not accounted for in index", segment.getStartOffset(),
+            indexSegmentStartOffset.getOffset());
+      }
+      NavigableSet<IndexEntry> indexEntries = new TreeSet<>(PersistentIndex.INDEX_ENTRIES_COMPARATOR);
+      List<MessageInfo> infos = new ArrayList<>();
+      FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE);
+      indexSegment.getEntriesSince(null, condition, infos, new AtomicLong(0));
+
+      for (MessageInfo info : infos) {
+        MockId id = (MockId) info.getStoreKey();
+        IndexValue value = indexSegment.find(id);
+        indexEntries.add(new IndexEntry(id, value));
+        Boolean deleteSeen = keyToDeleteSeenMap.get(id);
+        if (info.isDeleted()) {
+          if (deleteSeen != null) {
+            assertFalse("Duplicated DELETE record for " + id, deleteSeen);
+          }
+          keyToDeleteSeenMap.put(id, true);
+        } else {
+          if (deleteSeen != null) {
+            if (deleteSeen) {
+              fail("PUT record after delete record for " + id);
+            } else {
+              fail("Duplicated PUT record for " + id);
+            }
+          }
+          keyToDeleteSeenMap.put(id, false);
+        }
+      }
+      long expectedOffset = indexSegmentStartOffset.getOffset();
+      for (IndexEntry entry : indexEntries) {
+        IndexValue value = entry.getValue();
+        while (expectedOffset < indexSegment.getEndOffset().getOffset() && expectedOffset != value.getOffset()
+            .getOffset()) {
+          // this might be because a PUT and DELETE entry are in the same segment. Note that this cannot happen with
+          // compaction
+          // find the record that should have been there
+          Offset offset = new Offset(indexSegment.getLogSegmentName(), expectedOffset);
+          IndexValue putValue = logOrder.get(offset).getSecond().indexValue;
+          expectedOffset += putValue.getSize();
+        }
+        assertEquals("There are offsets in the log not accounted for in index", expectedOffset,
+            value.getOffset().getOffset());
+        expectedOffset += value.getSize();
+      }
+      if (prevIndexSegment != null) {
+        assertTrue("Last modified time of an older index segment > newer index segment",
+            prevIndexSegment.getLastModifiedTimeMs() <= indexSegment.getLastModifiedTimeMs());
+      }
+      prevIndexSegment = indexSegment;
+    }
+  }
+
+  /**
+   * Creates the index instance with the provided {@code metricRegistry}.
+   * @param metricRegistry the {@link MetricRegistry} to use to record metrics.
+   * @throws StoreException
+   */
+  void initIndex(MetricRegistry metricRegistry) throws StoreException {
+    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    sessionId = UUID.randomUUID();
+    index = new PersistentIndex(tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY, recovery,
+        hardDelete, metrics, time, sessionId, incarnationId);
+  }
+
+  /**
    * Reloads the index. Uses the class variables as parameters. For e.g, if a particular implementation of
    * {@link MessageStoreRecovery} is desired, it can be set to {@link #recovery} and this function called. The newly
    * created index will use that implementation of {@link MessageStoreRecovery}.
@@ -410,11 +604,27 @@ class CuratedLogIndexState {
       }
     }
     metricRegistry = new MetricRegistry();
+    initIndex(metricRegistry);
+  }
+
+  /**
+   * Reloads the log and index by closing and recreating the class variables.
+   * @param initIndex creates the index instance if {@code true}, if not, sets {@link #index} to {@code null} and it
+   *                  has to be initialized with a call to {@link #initIndex(MetricRegistry)}.
+   * @throws IOException
+   * @throws StoreException
+   */
+  void reloadLog(boolean initIndex) throws IOException, StoreException {
+    long segmentCapacity = log.getSegmentCapacity();
+    index.close();
+    log.close();
+    metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    sessionId = UUID.randomUUID();
-    index = new PersistentIndex(tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY, recovery,
-        hardDelete, metrics, time, sessionId, incarnationId);
+    log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, metrics);
+    index = null;
+    if (initIndex) {
+      initIndex(metricRegistry);
+    }
   }
 
   /**
@@ -451,26 +661,15 @@ class CuratedLogIndexState {
    * Also verifies that the state in {@link #referenceIndex} matches the state in the real index.
    * @param isLogSegmented {@code true} if segmented. {@code false} otherwise.
    * @param segmentCapacity the intended capacity of each segment
-   * @param metrics the {@link StoreMetrics} instance to use.
    * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  private void setupTestState(boolean isLogSegmented, long segmentCapacity, StoreMetrics metrics)
+  private void setupTestState(boolean isLogSegmented, long segmentCapacity)
       throws InterruptedException, IOException, StoreException {
-    metricRegistry = new MetricRegistry();
-    properties.put("store.index.max.number.of.inmem.elements",
-        Integer.toString(CuratedLogIndexState.MAX_IN_MEM_ELEMENTS));
-    properties.put("store.data.flush.delay.seconds", Integer.toString(0));
-    properties.put("store.enable.hard.delete", "false");
-    // the segment capacity property is never used, so it is not set.
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    index = new PersistentIndex(tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY, recovery,
-        hardDelete, metrics, time, sessionId, incarnationId);
     Offset expectedStartOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getStartOffset());
     assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
-
     // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
     time.sleep(1);
@@ -532,15 +731,16 @@ class CuratedLogIndexState {
    * @param sizeToMakeIndexEntriesFor the size to make index entries for.
    * @param expectedLogSegmentCount the number of log segments that are expected to assist after the addition of the
    *                                first entry and at the end of the addition of all entries.
+   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   private void addCuratedIndexEntriesToLogSegment(long sizeToMakeIndexEntriesFor, int expectedLogSegmentCount)
-      throws IOException, StoreException {
+      throws InterruptedException, IOException, StoreException {
     // First Index Segment
     // 1 PUT
     Offset firstJournalEntryAddedNow =
-        addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).getStartOffset();
+        addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getValue().getOffset();
     assertEquals("Incorrect log segment count", expectedLogSegmentCount, index.getLogSegmentCount());
     // 2 more PUT
     addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -608,6 +808,7 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   private void verifyState(boolean isLogSegmented) throws IOException, StoreException {
+    verifyRealIndexSanity();
     assertEquals("Incorrect log segment count", isLogSegmented ? 3 : 1, index.getLogSegmentCount());
     NavigableMap<Offset, IndexSegment> realIndex = index.getIndexSegments();
     assertEquals("Number of index segments does not match expected", referenceIndex.size(), realIndex.size());
@@ -618,14 +819,16 @@ class CuratedLogIndexState {
       TreeMap<MockId, IndexValue> referenceIndexSegment = referenceIndexEntry.getValue();
       IndexSegment realIndexSegment = realIndexEntry.getValue();
       List<MessageInfo> messageInfos = new ArrayList<>();
-      FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE);
       assertTrue("There should have been entries returned from the index segment",
-          realIndexSegment.getEntriesSince(null, condition, messageInfos, new AtomicLong(0)));
+          realIndexSegment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), messageInfos,
+              new AtomicLong(0)));
       assertEquals("Size of index segment differs from expected", referenceIndexSegment.size(), messageInfos.size());
       for (Map.Entry<MockId, IndexValue> referenceIndexSegmentEntry : referenceIndexSegment.entrySet()) {
         IndexValue value = realIndexSegment.find(referenceIndexSegmentEntry.getKey());
         IndexValue referenceValue = referenceIndexSegmentEntry.getValue();
-        assertEquals("Value from IndexSegment does not match expected", referenceValue.getBytes(), value.getBytes());
+        if (index.hardDeleter.enabled.get() && !deletedKeys.contains(referenceIndexSegmentEntry.getKey())) {
+          assertEquals("Value from IndexSegment does not match expected", referenceValue.getBytes(), value.getBytes());
+        }
       }
       realIndexEntry = realIndex.higherEntry(realIndexEntry.getKey());
     }
@@ -642,6 +845,15 @@ class CuratedLogIndexState {
       logEntry = logOrder.higherEntry(logEntry.getKey());
     }
     assertNull("There should be no more entries in the reference log", logEntry);
+  }
+
+  /**
+   * Marks {@code id} as deleted.
+   * @param id the {@link MockId} to mark as deleted.
+   */
+  private void markAsDeleted(MockId id) {
+    deletedKeys.add(id);
+    liveKeys.remove(id);
   }
 
   /**
@@ -663,6 +875,39 @@ class CuratedLogIndexState {
       indexSegmentStartOffset = recordOffset;
     }
     return indexSegmentStartOffset;
+  }
+
+  /**
+   * Gets all the index entries valid at {@code referenceTimeMs} in the index segment with start offset
+   * {@code indexSegmentStartOffset}.
+   * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} from which valid index entries are
+   *                                required.
+   * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
+   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @return all the index entries valid at {@code referenceTimeMs} in the index segment with start offset
+   * {@code indexSegmentStartOffset}.
+   */
+  private List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset,
+      long deleteReferenceTimeMs, long expiryReferenceTimeMs) {
+    List<IndexEntry> validEntries = new ArrayList<>();
+    for (Map.Entry<MockId, IndexValue> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset).entrySet()) {
+      MockId key = indexSegmentEntry.getKey();
+      IndexValue value = indexSegmentEntry.getValue();
+      if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        // delete record is always valid
+        validEntries.add(new IndexEntry(key, value));
+      } else if (!isExpiredAt(key, expiryReferenceTimeMs)) {
+        // unexpired
+        if (!deletedKeys.contains(key)) {
+          // non expired, non deleted PUT
+          validEntries.add(new IndexEntry(key, value));
+        } else if (!isDeletedAt(key, deleteReferenceTimeMs)) {
+          // delete does not count
+          validEntries.add(new IndexEntry(key, value));
+        }
+      }
+    }
+    return validEntries;
   }
 
   /**
