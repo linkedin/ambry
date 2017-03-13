@@ -282,8 +282,8 @@ public class StoreFindToken implements FindToken {
         int startOffsetSize = 8;
         byte[] sessionIdBytes = sessionId != null ? sessionId.toString().getBytes() : ZERO_LENGTH_ARRAY;
         byte[] storeKeyBytes = storeKey != null ? storeKey.toBytes() : ZERO_LENGTH_ARRAY;
-        int size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length +
-            offsetSize + startOffsetSize + storeKeyBytes.length;
+        int size = VERSION_SIZE + SESSION_ID_LENGTH_SIZE + sessionIdBytes.length + offsetSize + startOffsetSize
+            + storeKeyBytes.length;
         buf = new byte[size];
         ByteBuffer bufWrap = ByteBuffer.wrap(buf);
         // add version

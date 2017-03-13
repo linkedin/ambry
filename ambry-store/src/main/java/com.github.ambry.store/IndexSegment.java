@@ -577,8 +577,9 @@ class IndexSegment {
       mmap = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
       mmap.position(0);
       version = mmap.getShort();
-      indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH +
-          LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
+      indexSizeExcludingEntries =
+          VERSION_FIELD_LENGTH + KEY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH + LOG_END_OFFSET_FIELD_LENGTH
+              + CRC_FIELD_LENGTH;
       switch (version) {
         case 0:
           keySize = mmap.getInt();
@@ -595,8 +596,8 @@ class IndexSegment {
           StoreKey storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
           short resetKeyType = mmap.getShort();
           resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
-          indexSizeExcludingEntries += (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() +
-              RESET_KEY_TYPE_FIELD_LENGTH);
+          indexSizeExcludingEntries +=
+              (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH);
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
         default:
@@ -640,8 +641,9 @@ class IndexSegment {
           keySize = stream.readInt();
           valueSize = stream.readInt();
           long logEndOffset = stream.readLong();
-          indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH +
-              LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
+          indexSizeExcludingEntries =
+              VERSION_FIELD_LENGTH + KEY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH + LOG_END_OFFSET_FIELD_LENGTH
+                  + CRC_FIELD_LENGTH;
           if (version == PersistentIndex.VERSION_0) {
             lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
           } else if (version == PersistentIndex.VERSION_1) {
@@ -649,8 +651,8 @@ class IndexSegment {
             StoreKey storeKey = factory.getStoreKey(stream);
             short resetKeyType = stream.readShort();
             resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
-            indexSizeExcludingEntries += (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() +
-                RESET_KEY_TYPE_FIELD_LENGTH);
+            indexSizeExcludingEntries +=
+                (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH);
           }
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           logger.trace("IndexSegment : {} reading log end offset {} from file", indexFile.getAbsolutePath(),
