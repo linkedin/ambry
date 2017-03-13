@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -414,7 +414,7 @@ class PersistentIndex {
    * @param fileSpan The file span that the entries represent in the log
    * @throws StoreException
    */
-  void addToIndex(ArrayList<IndexEntry> entries, FileSpan fileSpan) throws StoreException {
+  void addToIndex(List<IndexEntry> entries, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan, false);
     for (IndexEntry entry : entries) {
       Offset startOffset = entry.getValue().getOffset();
@@ -664,7 +664,7 @@ class PersistentIndex {
     return readOptions;
   }
 
-  private boolean isExpired(IndexValue value) {
+  boolean isExpired(IndexValue value) {
     return value.getExpiresAtMs() != Utils.Infinite_Time && time.milliseconds() > value.getExpiresAtMs();
   }
 

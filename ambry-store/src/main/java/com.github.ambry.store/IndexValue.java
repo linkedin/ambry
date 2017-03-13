@@ -43,6 +43,7 @@ class IndexValue {
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
   final static short SERVICE_CONTAINER_ID_DEFAULT_VALUE = -1;
+  final static long UNKNOWN_ORIGINAL_MESSAGE_OFFSET = -1;
 
   private final static int BLOB_SIZE_IN_BYTES = 8;
   private final static int OFFSET_SIZE_IN_BYTES = 8;
@@ -176,7 +177,7 @@ class IndexValue {
    * @param flags the flags that needs to be set for the Index Value
    * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
-   *                              in the same log segment. Set to -1 otherwise.
+   *                              in the same log segment. Set to {@link #UNKNOWN_ORIGINAL_MESSAGE_OFFSET} otherwise.
    * @param operationTimeInMs operation time in ms of the entry in secs
    * @param serviceId the serviceId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
@@ -272,12 +273,13 @@ class IndexValue {
    * @param newOffset the new {@link Offset} to be updated for the {@link IndexValue}
    */
   void setNewOffset(Offset newOffset) {
-    originalMessageOffset = offset.getName().equals(newOffset.getName()) ? offset.getOffset() : -1;
+    originalMessageOffset =
+        offset.getName().equals(newOffset.getName()) ? offset.getOffset() : UNKNOWN_ORIGINAL_MESSAGE_OFFSET;
     offset = newOffset;
   }
 
   void clearOriginalMessageOffset() {
-    originalMessageOffset = -1;
+    originalMessageOffset = UNKNOWN_ORIGINAL_MESSAGE_OFFSET;
   }
 
   /**

@@ -96,6 +96,8 @@ class LogSegment implements Read, Write {
     if (!file.exists() || !file.isFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist or is not a file");
     }
+    // TODO: just because the file exists, it does not mean the headers have been written into it. LogSegment should
+    // TODO: be able to handle this situation.
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(file));
     try (DataInputStream stream = new DataInputStream(crcStream)) {
       switch (stream.readShort()) {
