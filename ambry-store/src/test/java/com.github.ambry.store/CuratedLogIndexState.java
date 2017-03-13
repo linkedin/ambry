@@ -379,7 +379,8 @@ class CuratedLogIndexState {
    * have been removed from {@link #liveKeys} and added to {@link #deletedKeys}. A call to
    * {@link #addDeleteEntry(MockId)} is expected.
    * @param indexSegmentStartOffset the start offset of the index segment from which an ID is required.
-   * @return an ID to delete from the index segment with start offset {@code indexSegmentStartOffset}.
+   * @return an ID to delete from the index segment with start offset {@code indexSegmentStartOffset}. {@code null} if
+   * there is no such candidate.
    */
   MockId getIdToDeleteFromIndexSegment(Offset indexSegmentStartOffset) {
     MockId deleteCandidate = null;
@@ -400,7 +401,7 @@ class CuratedLogIndexState {
   /**
    * Gets an ID to delete from the given log segment. The returned ID will have been removed from {@link #liveKeys} and
    * added to {@link #deletedKeys}.
-   * @param segment the {@link LogSegment} from which an ID is required.
+   * @param segment the {@link LogSegment} from which an ID is required. {@code null} if there is no such candidate.
    * @return the ID to delete.
    */
   MockId getIdToDeleteFromLogSegment(LogSegment segment) {
@@ -434,11 +435,11 @@ class CuratedLogIndexState {
   }
 
   /**
-   * Gets all the index entries valid at {@code referenceTimeMs} in the {@code segment}.
+   * Gets all the valid index entries (taking into account different reference times) in the {@code segment}.
    * @param segment the {@link LogSegment} from which valid index entries are required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
-   * @return all the index entries valid at {@code referenceTimeMs} in the {@code segment}.
+   * @return all the valid index entries in the {@code segment}.
    */
   List<IndexEntry> getValidIndexEntriesForLogSegment(LogSegment segment, long deleteReferenceTimeMs,
       long expiryReferenceTimeMs) {
@@ -523,10 +524,9 @@ class CuratedLogIndexState {
         assertEquals("There are offsets in the log not accounted for in index", segment.getStartOffset(),
             indexSegmentStartOffset.getOffset());
       }
-      NavigableSet<IndexEntry> indexEntries = new TreeSet<>(PersistentIndex.INDEX_ENTRIES_COMPARATOR);
+      NavigableSet<IndexEntry> indexEntries = new TreeSet<>(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       List<MessageInfo> infos = new ArrayList<>();
-      FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE);
-      indexSegment.getEntriesSince(null, condition, infos, new AtomicLong(0));
+      indexSegment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), infos, new AtomicLong(0));
 
       for (MessageInfo info : infos) {
         MockId id = (MockId) info.getStoreKey();
@@ -826,7 +826,17 @@ class CuratedLogIndexState {
       for (Map.Entry<MockId, IndexValue> referenceIndexSegmentEntry : referenceIndexSegment.entrySet()) {
         IndexValue value = realIndexSegment.find(referenceIndexSegmentEntry.getKey());
         IndexValue referenceValue = referenceIndexSegmentEntry.getValue();
+        assertEquals("Offset does not match", referenceValue.getOffset(), value.getOffset());
+        assertEquals("ExpiresAtMs does not match", referenceValue.getExpiresAtMs(), value.getExpiresAtMs());
+        assertEquals("Size does not match", referenceValue.getSize(), value.getSize());
+        assertEquals("Service ID does not match", referenceValue.getServiceId(), value.getServiceId());
+        assertEquals("Container ID does not match", referenceValue.getContainerId(), value.getContainerId());
+        assertEquals("Original message offset does not match", referenceValue.getOriginalMessageOffset(),
+            value.getOriginalMessageOffset());
+        assertEquals("Flags do not match", referenceValue.getFlags(), value.getFlags());
         if (index.hardDeleter.enabled.get() && !deletedKeys.contains(referenceIndexSegmentEntry.getKey())) {
+          assertEquals("Operation time does not match", referenceValue.getOperationTimeInMs(),
+              value.getOperationTimeInMs());
           assertEquals("Value from IndexSegment does not match expected", referenceValue.getBytes(), value.getBytes());
         }
       }
@@ -878,14 +888,13 @@ class CuratedLogIndexState {
   }
 
   /**
-   * Gets all the index entries valid at {@code referenceTimeMs} in the index segment with start offset
-   * {@code indexSegmentStartOffset}.
+   * Gets all the valid index entries (taking into account different reference times) in the index segment with start
+   * offset {@code indexSegmentStartOffset}.
    * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} from which valid index entries are
    *                                required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
-   * @return all the index entries valid at {@code referenceTimeMs} in the index segment with start offset
-   * {@code indexSegmentStartOffset}.
+   * @return all the valid index entries valid in the index segment with start offset {@code indexSegmentStartOffset}.
    */
   private List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset,
       long deleteReferenceTimeMs, long expiryReferenceTimeMs) {

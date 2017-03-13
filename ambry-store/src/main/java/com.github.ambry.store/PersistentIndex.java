@@ -76,7 +76,7 @@ class PersistentIndex {
       return o1Offset.compareTo(IndexSegment.getIndexSegmentStartOffset(o2.getName()));
     }
   };
-  static final Comparator<IndexEntry> INDEX_ENTRIES_COMPARATOR = new Comparator<IndexEntry>() {
+  static final Comparator<IndexEntry> INDEX_ENTRIES_OFFSET_COMPARATOR = new Comparator<IndexEntry>() {
 
     @Override
     public int compare(IndexEntry e1, IndexEntry e2) {
