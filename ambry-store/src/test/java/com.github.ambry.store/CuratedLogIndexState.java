@@ -905,6 +905,12 @@ class CuratedLogIndexState {
       if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
         // delete record is always valid
         validEntries.add(new IndexEntry(key, value));
+        if (!isDeletedAt(key, deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)
+            && value.getOriginalMessageOffset() != -1
+            && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset()) {
+          // delete is irrelevant but it's in the same index segment as the put and the put is still valid
+          validEntries.add(new IndexEntry(key, allKeys.get(key).getFirst()));
+        }
       } else if (!isExpiredAt(key, expiryReferenceTimeMs)) {
         // unexpired
         if (!deletedKeys.contains(key)) {

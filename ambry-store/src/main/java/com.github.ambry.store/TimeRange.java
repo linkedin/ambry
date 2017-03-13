@@ -27,17 +27,10 @@ class TimeRange {
    * @param errorMarginInMs the allowable error margin in milliseconds
    */
   TimeRange(long referenceTimeInMs, long errorMarginInMs) {
-    if (errorMarginInMs < 0 || referenceTimeInMs < 0) {
+    if (errorMarginInMs < 0 || referenceTimeInMs < 0 || referenceTimeInMs - errorMarginInMs < 0
+        || referenceTimeInMs > Long.MAX_VALUE - errorMarginInMs) {
       throw new IllegalArgumentException(
-          "Reference time: " + referenceTimeInMs + " or Error margin: " + errorMarginInMs + " cannot be negative ");
-    }
-    if (referenceTimeInMs - errorMarginInMs < 0) {
-      throw new IllegalArgumentException(
-          "Reference time: " + referenceTimeInMs + " minus error margin: " + errorMarginInMs + " cannot be negative");
-    }
-    if (referenceTimeInMs > Long.MAX_VALUE - errorMarginInMs) {
-      throw new IllegalArgumentException(
-          "Reference time: " + referenceTimeInMs + " plus error margin: " + errorMarginInMs + " should not overflow");
+          "Illegal reference time: " + referenceTimeInMs + " and/or error margin: " + errorMarginInMs);
     }
 
     startTimeInMs = referenceTimeInMs - errorMarginInMs;

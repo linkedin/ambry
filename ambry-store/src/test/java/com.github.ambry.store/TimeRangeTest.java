@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import java.util.Random;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -26,17 +27,18 @@ import static org.junit.Assert.*;
  */
 public class TimeRangeTest {
 
-  @Rule
-  public ExpectedException expectedException = ExpectedException.none();
+  private final long[][] illegalArgs =
+      new long[][]{{0, -1}, {0, 1}, {-1, 0}, {-1, -1}, {Long.MAX_VALUE, 1}, {1, Long.MAX_VALUE}};
 
   /**
-   * Tests for the constructor and getters of TimeRange.
+   * Tests the constructor and getters of TimeRange when provided with legal arguments.
    */
   @Test
   public void testTimeRange() {
-    long referenceTimeInMs = 10000L;
-    long errorMarginInMs = 500L;
+    Random rand = new Random();
+    long referenceTimeInMs = rand.nextInt(10000) + 10000;
     TimeRange timeRangeWithNoErrorMargin = new TimeRange(referenceTimeInMs, 0L);
+    long errorMarginInMs = rand.nextInt(10000);
     TimeRange timeRangeWithErrorMargin = new TimeRange(referenceTimeInMs, errorMarginInMs);
     assertEquals("Start time and end time should be equal for TimeRange with no error margin",
         timeRangeWithNoErrorMargin.getStartTimeInMs(), timeRangeWithNoErrorMargin.getEndTimeInMs());
@@ -49,32 +51,17 @@ public class TimeRangeTest {
   }
 
   /**
-   * Tests to ensure IllegalArgumentException is thrown when given negative arguments.
+   * Tests to ensure IllegalArgumentException is thrown when given illegal arguments.
    */
   @Test
-  public void testExceptionIsThrownWithNegativeArguments() {
-    expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage("cannot be negative");
-    TimeRange timeRange = new TimeRange(-1, -1);
-  }
-
-  /**
-   * Tests to ensure IllegalArgumentException is thrown when given reference time minus error margin is negative.
-   */
-  @Test
-  public void testExceptionIsThrownWithNegativeStartTime() {
-    expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage("cannot be negative");
-    TimeRange timeRange = new TimeRange(1000, 10000);
-  }
-
-  /**
-   * Tests to ensure IllegalArgumentException is thrown when given arguments will cause overflow.
-   */
-  @Test
-  public void testExceptionIsThrownWithOverflowArguments() {
-    expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage("should not overflow");
-    TimeRange timeRange = new TimeRange(Long.MAX_VALUE, 1000);
+  public void testIllegalConstructionForTimeRange() {
+    for (int i = 0; i < illegalArgs.length; i++) {
+      try {
+        new TimeRange(illegalArgs[i][0], illegalArgs[i][1]);
+        fail("Expected IllegalArgumentException not thrown when constructing TimeRange with illegal arguments");
+      } catch (IllegalArgumentException e) {
+        // Expected exception thrown
+      }
+    }
   }
 }

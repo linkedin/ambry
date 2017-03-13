@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.TreeMap;
 import org.junit.After;
 import org.junit.Test;
@@ -38,8 +39,7 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class BlobStoreStatsTest {
-  private static final long TEST_TIME_INTERVAL_IN_SEC =
-      (CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / Time.MsPerSec) / 2;
+  private static final long TEST_TIME_INTERVAL_IN_MS = CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / 2;
   private final CuratedLogIndexState state;
   private final File tempDir;
   private final BlobStoreStats blobStoreStats;
@@ -85,7 +85,7 @@ public class BlobStoreStatsTest {
   public void testContainerValidDataSize() throws InterruptedException, StoreException, IOException {
     verifyContainerValidSize();
     // advance time
-    state.advanceTime(TEST_TIME_INTERVAL_IN_SEC * Time.MsPerSec);
+    state.advanceTime(TEST_TIME_INTERVAL_IN_MS);
     verifyContainerValidSize();
   }
 
@@ -97,7 +97,7 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testLogSegmentValidDataSize() throws InterruptedException, StoreException, IOException {
-    for (int i = 0; i <= state.time.seconds() + TEST_TIME_INTERVAL_IN_SEC; i += TEST_TIME_INTERVAL_IN_SEC) {
+    for (long i = 0; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS; i += TEST_TIME_INTERVAL_IN_MS) {
       TimeRange timeRange = new TimeRange(i, 0L);
       verifyLogSegmentValidSize(timeRange);
     }
@@ -117,8 +117,8 @@ public class BlobStoreStatsTest {
   public void testValidDataSizeAfterPuts() throws InterruptedException, StoreException, IOException {
     // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
-    long timeInSecsBeforePuts = state.time.seconds();
-    long totalLogSegmentValidSizeBeforePuts = verifyLogSegmentValidSize(new TimeRange(timeInSecsBeforePuts, 0L));
+    long timeInMsBeforePuts = state.time.milliseconds();
+    long totalLogSegmentValidSizeBeforePuts = verifyLogSegmentValidSize(new TimeRange(timeInMsBeforePuts, 0L));
     long totalContainerValidSizeBeforePuts = verifyContainerValidSize();
 
     // 3 puts
@@ -126,9 +126,9 @@ public class BlobStoreStatsTest {
     // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
 
-    long timeInSecsAfterPuts = state.time.seconds();
-    verifyLogSegmentValidSize(new TimeRange(timeInSecsAfterPuts, 0L));
-    long totalLogSegmentValidSizeAfterPuts = verifyLogSegmentValidSize(new TimeRange(timeInSecsAfterPuts, 0L));
+    long timeInMsAfterPuts = state.time.milliseconds();
+    verifyLogSegmentValidSize(new TimeRange(timeInMsAfterPuts, 0L));
+    long totalLogSegmentValidSizeAfterPuts = verifyLogSegmentValidSize(new TimeRange(timeInMsAfterPuts, 0L));
     long totalContainerValidSizeAfterPuts = verifyContainerValidSize();
     long expectedIncrement = 3 * CuratedLogIndexState.PUT_RECORD_SIZE;
     assertEquals("Put entries are not properly counted for log segment valid size", totalLogSegmentValidSizeAfterPuts,
@@ -151,18 +151,18 @@ public class BlobStoreStatsTest {
   public void testValidDataSizeAfterExpiration() throws InterruptedException, StoreException, IOException {
     // advance time by 1 second for previous deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
-    long timeInSecsBeforeExpiringPuts = state.time.seconds();
+    long timeInMsBeforeExpiringPuts = state.time.milliseconds();
     long totalLogSegmentValidSizeBeforePuts =
-        verifyLogSegmentValidSize(new TimeRange(timeInSecsBeforeExpiringPuts, 0L));
+        verifyLogSegmentValidSize(new TimeRange(timeInMsBeforeExpiringPuts, 0L));
     long totalContainerValidSizeBeforePuts = verifyContainerValidSize();
 
     // 3 puts that will expire in 20 seconds
-    state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, (timeInSecsBeforeExpiringPuts + 20) * Time.MsPerSec);
+    state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, timeInMsBeforeExpiringPuts + 20 * Time.MsPerSec);
     // advance time by 21 seconds for expiration to take effect
     state.advanceTime(21 * Time.MsPerSec);
 
-    long timeInSecsAfterExpiringPuts = state.time.seconds();
-    long totalLogSegmentValidSizeAfterPuts = verifyLogSegmentValidSize(new TimeRange(timeInSecsAfterExpiringPuts, 0L));
+    long timeInMsAfterExpiringPuts = state.time.milliseconds();
+    long totalLogSegmentValidSizeAfterPuts = verifyLogSegmentValidSize(new TimeRange(timeInMsAfterExpiringPuts, 0L));
     long totalContainerValidSizeAfterPuts = verifyContainerValidSize();
     assertEquals("Expired put entries are not properly counted for log segment valid size",
         totalLogSegmentValidSizeBeforePuts, totalLogSegmentValidSizeAfterPuts);
@@ -188,8 +188,8 @@ public class BlobStoreStatsTest {
 
     // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
-    long timeInSecsBeforeDeletes = state.time.seconds();
-    long totalLogSegmentValidSizeBeforeDeletes = verifyLogSegmentValidSize(new TimeRange(timeInSecsBeforeDeletes, 0L));
+    long timeInMsBeforeDeletes = state.time.milliseconds();
+    long totalLogSegmentValidSizeBeforeDeletes = verifyLogSegmentValidSize(new TimeRange(timeInMsBeforeDeletes, 0L));
     long totalContainerValidSizeBeforeDeletes = verifyContainerValidSize();
 
     // 2 deletes from the last index segment
@@ -198,8 +198,8 @@ public class BlobStoreStatsTest {
     // advance time by 1 second for deletes/expiration to take effect
     state.advanceTime(Time.MsPerSec);
 
-    long timeInSecsAfterDeletes = state.time.seconds();
-    long totalLogSegmentValidSizeAfterDeletes = verifyLogSegmentValidSize(new TimeRange(timeInSecsAfterDeletes, 0L));
+    long timeInMsAfterDeletes = state.time.milliseconds();
+    long totalLogSegmentValidSizeAfterDeletes = verifyLogSegmentValidSize(new TimeRange(timeInMsAfterDeletes, 0L));
     long totalContainerValidSizeAfterDeletes = verifyContainerValidSize();
     long expectedLogSegmentDecrement =
         2 * (CuratedLogIndexState.PUT_RECORD_SIZE - CuratedLogIndexState.DELETE_RECORD_SIZE);
@@ -216,7 +216,7 @@ public class BlobStoreStatsTest {
    */
   private long verifyContainerValidSize() throws StoreException {
     long referenceTimeInMs = state.time.milliseconds();
-    Map<String, Map<String, Long>> actualContainerValidSizeMap = blobStoreStats.getValidDataSizeByContainers();
+    Map<String, Map<String, Long>> actualContainerValidSizeMap = blobStoreStats.getValidDataSizeByContainer();
     Map<String, Map<String, Long>> expectedContainerValidSizeMap = getValidSizeByContainer(referenceTimeInMs);
     long totalValidSize = 0L;
 
@@ -245,7 +245,7 @@ public class BlobStoreStatsTest {
    * @return the total valid data size of all log segments
    */
   private long verifyLogSegmentValidSize(TimeRange timeRange) throws StoreException {
-    Pair<Long, Map<String, Long>> actualLogSegmentValidSizeMap = blobStoreStats.getValidSizeByLogSegment(timeRange);
+    Pair<Long, NavigableMap<String, Long>> actualLogSegmentValidSizeMap = blobStoreStats.getValidDataSizeByLogSegment(timeRange);
     assertTrue("Valid data size collection time should be in the range",
         timeRange.getStartTimeInMs() <= actualLogSegmentValidSizeMap.getFirst()
             && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
@@ -284,22 +284,27 @@ public class BlobStoreStatsTest {
   }
 
   /**
-   * Go over the entire referenceIndex to collect valid data size information per container. The result is used for
+   * Go over the referenceIndex to collect valid data size information per container. The result is used for
    * verification purposes.
-   * @param referenceTimeInMs the reference time to be used to decide whether or not a blob is valid
+   * @param deleteAndExpirationRefTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
-  private Map<String, Map<String, Long>> getValidSizeByContainer(long referenceTimeInMs) {
+  private Map<String, Map<String, Long>> getValidSizeByContainer(long deleteAndExpirationRefTimeInMs) {
     Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
     for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> segmentEntry : state.referenceIndex.entrySet()) {
       for (Map.Entry<MockId, IndexValue> indexEntry : segmentEntry.getValue().entrySet()) {
         MockId key = indexEntry.getKey();
         IndexValue value = indexEntry.getValue();
-        if (!value.isFlagSet(IndexValue.Flags.Delete_Index) && (value.getExpiresAtMs() == Utils.Infinite_Time
-            || value.getExpiresAtMs() >= referenceTimeInMs) && !state.deletedKeys.contains(key)) {
-          // non expired, non deleted PUT
-          updateNestedMapHelper(containerValidSizeMap, BlobStoreStats.getServiceId(key),
-              BlobStoreStats.getContainerId(key), value.getSize());
+        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          if (!state.isDeletedAt(key, deleteAndExpirationRefTimeInMs) && !state.isExpiredAt(key, deleteAndExpirationRefTimeInMs)
+              && value.getOriginalMessageOffset() != -1
+              && value.getOriginalMessageOffset() >= segmentEntry.getKey().getOffset()) {
+            // delete is irrelevant but it's in the same index segment as the put and the put is still valid
+            updateNestedMapHelper(containerValidSizeMap, String.valueOf(value.getServiceId()), String.valueOf(value.getContainerId()), state.allKeys.get(key).getFirst().getSize());
+          }
+        } else if (!state.isExpiredAt(key, deleteAndExpirationRefTimeInMs) && !state.isDeletedAt(key, deleteAndExpirationRefTimeInMs)) {
+          // non expired, non deleted put
+          updateNestedMapHelper(containerValidSizeMap, String.valueOf(value.getServiceId()), String.valueOf(value.getContainerId()), value.getSize());
         }
       }
     }

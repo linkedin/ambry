@@ -27,7 +27,12 @@ import java.util.SortedMap;
 public interface StoreStats {
   /**
    * Gets the size of valid data at a particular point in time. The caller specifies a reference time and acceptable resolution
-   * for the stats in the form of a {@link TimeRange}. The store will return data for a point in time within the specified range.
+   * for the stats in the form of a {@link TimeRange}. The store will return valid data size for a point in time within the specified range.
+   * The following data are considered as valid data for this API:
+   * 1. PUT with no expiry and no corresponding DELETE
+   * 2. PUT expiring at t_exp but t_ref < t_exp
+   * 3. PUT with DELETE at time t_delete but t_ref < t_delete
+   * 4. DELETE record
    * @param timeRange the reference {@link TimeRange} at which the data is requested. Defines both the reference time and the acceptable resolution
    * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second element is the valid data size
    */
