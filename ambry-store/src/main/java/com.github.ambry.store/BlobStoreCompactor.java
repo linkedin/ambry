@@ -564,6 +564,7 @@ class BlobStoreCompactor {
             Offset offset = new Offset(indexSegmentStartOffset.getName(), putRecordOffset);
             IndexValue putValue = new IndexValue(options.getSize(), offset, value.getExpiresAtMs());
             validEntries.add(new IndexEntry(indexEntry.getKey(), putValue));
+            options.close();
           }
         }
       } else if (!srcIndex.isExpired(value)) {

@@ -411,8 +411,148 @@ public class BlobStoreCompactorTest {
     for (MockId id : idsToExamine) {
       // should not throw exception since they should be untouched.
       // Data has already been verified if this is true (by the verifiers).
-      state.index.getBlobReadInfo(id, EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+      state.index.getBlobReadInfo(id, EnumSet.of(StoreGetOptions.Store_Include_Deleted)).close();
     }
+  }
+
+  /**
+   * Tests the case where deletes and expired blobs are interspersed and the expired blobs are eligible for cleanup
+   * but deleted blobs (also includes blobs that have been put and deleted in the same index segment).
+   * @throws Exception
+   */
+  @Test
+  public void interspersedDeletedAndExpiredBlobsTest() throws Exception {
+    refreshState(false, false);
+    state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
+    state.initIndex(new MetricRegistry());
+
+    int numFinalSegmentsCount = 3;
+    long expiryTimeMs = getInvalidationTime(numFinalSegmentsCount + 1);
+    // fill up one segment.
+    writeDataToMeetRequiredSegmentCount(1, null);
+
+    // 1. Put entry that contains a delete entry in the same index segment and is not counted as deleted.
+    // won't be cleaned up.
+    IndexEntry entry = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    MockId delUnexpPutSameIdxSegId = (MockId) entry.getKey();
+    String logSegmentName = entry.getValue().getOffset().getName();
+    state.addDeleteEntry(delUnexpPutSameIdxSegId);
+
+    // 2. Put entry that has expired and contains a delete entry in the same index segment. Does not count as deleted
+    // but is expired.
+    // will be cleaned up, but delete record remains
+    MockId delExpPutSameIdxSegId =
+        (MockId) state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, 0).get(0).getKey();
+    state.addDeleteEntry(delExpPutSameIdxSegId);
+
+    // 3. Put entry that has expired.
+    // will be cleaned up.
+    state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, 0).get(0).getKey();
+
+    // 4. Put entry that will expire (but is valid right now).
+    // won't be cleaned up.
+    MockId willExpPut =
+        (MockId) state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, expiryTimeMs).get(0).getKey();
+
+    // 5. Put entry that will be deleted.
+    // won't be cleaned up.
+    MockId willBeDelPut =
+        (MockId) state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getKey();
+
+    // rollover
+    // 6. Put entry with an expiry time  that is not expired and has a delete entry in the same index segment and is not
+    // counted as deleted or expired. In the compacted log, the put entry will be the one index segment and the delete
+    // in another won't be cleaned up.
+    MockId delUnexpPutDiffIdxSegId =
+        (MockId) state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, expiryTimeMs).get(0).getKey();
+    state.addDeleteEntry(delUnexpPutDiffIdxSegId);
+
+    // 7. Delete entry for an id that is in another index segment
+    // won't be cleaned up.
+    state.addDeleteEntry(willBeDelPut);
+
+    // 8. Delete entry for an id that is in another log segment
+    // won't be cleaned up.
+    MockId idFromAnotherSegment = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
+    state.addDeleteEntry(idFromAnotherSegment);
+
+    // fill up the rest of the segment + one more
+    writeDataToMeetRequiredSegmentCount(numFinalSegmentsCount, null);
+    // reload index to keep the journal only in the last log segment
+    state.reloadIndex(true, false);
+
+    long deleteReferenceTimeMs = 0;
+    List<String> segmentsUnderCompaction = Collections.singletonList(logSegmentName);
+    long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
+    CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
+    compactor.start(state.index);
+    try {
+      compactor.compact(details);
+    } finally {
+      compactor.shutdown(0);
+    }
+
+    String compactedLogSegmentName = LogSegmentNameHelper.getNextGenerationName(logSegmentName);
+    LogSegment compactedLogSegment = state.log.getSegment(compactedLogSegmentName);
+    long cleanedUpSize = 2 * CuratedLogIndexState.PUT_RECORD_SIZE;
+    assertEquals("End offset of log segment not as expected after compaction",
+        endOffsetOfSegmentBeforeCompaction - cleanedUpSize,
+        state.log.getSegment(compactedLogSegmentName).getEndOffset());
+
+    FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE);
+    // get the first index segment that refers to the compacted segment
+    IndexSegment indexSegment =
+        state.index.getIndexSegments().get(new Offset(compactedLogSegmentName, compactedLogSegment.getStartOffset()));
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    assertTrue("Should have got some index entries",
+        indexSegment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0)));
+    assertEquals("There should be 5 index entries returned", 5, indexEntries.size());
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+
+    long logSegmentStartOffset = compactedLogSegment.getStartOffset();
+    long currentExpectedOffset = logSegmentStartOffset + CuratedLogIndexState.PUT_RECORD_SIZE;
+    // first index entry should be a delete and it should have an original message offset
+    verifyIndexEntry(indexEntries.get(0), delUnexpPutSameIdxSegId, currentExpectedOffset,
+        CuratedLogIndexState.DELETE_RECORD_SIZE, Utils.Infinite_Time, true, logSegmentStartOffset);
+    currentExpectedOffset += CuratedLogIndexState.DELETE_RECORD_SIZE;
+    verifyIndexEntry(indexEntries.get(1), delExpPutSameIdxSegId, currentExpectedOffset,
+        CuratedLogIndexState.DELETE_RECORD_SIZE, 0, true, IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET);
+    currentExpectedOffset += CuratedLogIndexState.DELETE_RECORD_SIZE;
+    verifyIndexEntry(indexEntries.get(2), willExpPut, currentExpectedOffset, CuratedLogIndexState.PUT_RECORD_SIZE,
+        expiryTimeMs, false, currentExpectedOffset);
+    currentExpectedOffset += CuratedLogIndexState.PUT_RECORD_SIZE;
+    verifyIndexEntry(indexEntries.get(3), willBeDelPut, currentExpectedOffset, CuratedLogIndexState.PUT_RECORD_SIZE,
+        Utils.Infinite_Time, false, currentExpectedOffset);
+    long willBeDelOffset = currentExpectedOffset;
+    currentExpectedOffset += CuratedLogIndexState.PUT_RECORD_SIZE;
+    verifyIndexEntry(indexEntries.get(4), delUnexpPutDiffIdxSegId, currentExpectedOffset,
+        CuratedLogIndexState.PUT_RECORD_SIZE, expiryTimeMs, false, currentExpectedOffset);
+    currentExpectedOffset += CuratedLogIndexState.PUT_RECORD_SIZE;
+
+    // get the second index segment
+    indexSegment = state.index.getIndexSegments().higherEntry(indexSegment.getStartOffset()).getValue();
+    indexEntries.clear();
+    assertTrue("Should have got some index entries",
+        indexSegment.getIndexEntriesSince(null, condition, indexEntries, new AtomicLong(0)));
+    assertEquals("There should be 5 index entries returned", 5, indexEntries.size());
+    Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    verifyIndexEntry(indexEntries.get(0), delUnexpPutDiffIdxSegId, currentExpectedOffset,
+        CuratedLogIndexState.DELETE_RECORD_SIZE, expiryTimeMs, true,
+        currentExpectedOffset - CuratedLogIndexState.PUT_RECORD_SIZE);
+    currentExpectedOffset += CuratedLogIndexState.DELETE_RECORD_SIZE;
+    verifyIndexEntry(indexEntries.get(1), willBeDelPut, currentExpectedOffset, CuratedLogIndexState.DELETE_RECORD_SIZE,
+        Utils.Infinite_Time, true, willBeDelOffset);
+    currentExpectedOffset += CuratedLogIndexState.DELETE_RECORD_SIZE;
+    verifyIndexEntry(indexEntries.get(2), idFromAnotherSegment, currentExpectedOffset,
+        CuratedLogIndexState.DELETE_RECORD_SIZE, Utils.Infinite_Time, true, IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET);
+
+    // no clean shutdown file should exist
+    assertFalse("Clean shutdown file not deleted",
+        new File(tempDirStr, BlobStoreCompactor.TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME).exists());
+    // there should be no temp files
+    assertEquals("There are some temp log segments", 0,
+        tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
   }
 
   /**
@@ -486,7 +626,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   @Test
-  public void interruptDuringRecordCopyTest() throws Exception {
+  public void interruptionDuringRecordCopyTest() throws Exception {
     // shutdown testing
     doInterruptionDuringRecordCopyTest();
     // crash testing
@@ -948,6 +1088,7 @@ public class BlobStoreCompactorTest {
       if (state.liveKeys.contains(id)) {
         BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
         checkRecord(id, options);
+        options.close();
       } else if (state.deletedKeys.contains(id)) {
         boolean shouldBeCompacted =
             idsInCompactedLogSegments.contains(id) && state.isDeletedAt(id, deleteReferenceTimeMs);
@@ -964,6 +1105,7 @@ public class BlobStoreCompactorTest {
             fail("Should not be able to GET " + id);
           } else {
             checkRecord(id, options);
+            options.close();
           }
         } catch (StoreException e) {
           assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
@@ -987,6 +1129,7 @@ public class BlobStoreCompactorTest {
             fail("Should not be able to GET " + id);
           } else {
             checkRecord(id, options);
+            options.close();
           }
         } catch (StoreException e) {
           assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
@@ -1215,6 +1358,29 @@ public class BlobStoreCompactorTest {
     }
   }
 
+  // interspersedDeletedAndExpiredBlobsTest() helpers.
+
+  /**
+   * Verifies the given {@code entry} has the values for fields equal to the ones provided.
+   * @param entry the {@link IndexEntry} to check.
+   * @param id the expected {@link MockId}.
+   * @param offset the expected offset.
+   * @param size the expected size.
+   * @param expiresAtMs the expected expiry time in ms.
+   * @param isDeleted the expected delete state.
+   * @param origMsgOffset the expected original message offset.
+   */
+  private void verifyIndexEntry(IndexEntry entry, MockId id, long offset, long size, long expiresAtMs,
+      boolean isDeleted, long origMsgOffset) {
+    assertEquals("Key not as expected", id, entry.getKey());
+    IndexValue value = entry.getValue();
+    assertEquals("Offset not as expected", offset, value.getOffset().getOffset());
+    assertEquals("Size not as expected", size, value.getSize());
+    assertEquals("ExpiresAtMs not as expected", expiresAtMs, value.getExpiresAtMs());
+    assertEquals("Entry type not as expected", isDeleted, value.isFlagSet(IndexValue.Flags.Delete_Index));
+    assertEquals("Original message offset not as expected", origMsgOffset, value.getOriginalMessageOffset());
+  }
+
   // interruptionDuringLogCommitAndCleanupTest() helpers.
 
   /**
@@ -1324,7 +1490,7 @@ public class BlobStoreCompactorTest {
     return offsets;
   }
 
-  // interruptDuringRecordCopyTest() helpers
+  // interruptionDuringRecordCopyTest() helpers
 
   /**
    * Does compaction tests where compaction is interrupted (and recovered) after copying a few records from an index
@@ -1464,9 +1630,6 @@ public class BlobStoreCompactorTest {
 
     @Override
     long getSlice(String jobType, String jobId, long usedSinceLastCall) {
-      if (shutdownOrExceptionInduced) {
-        throw new IllegalStateException("Should not be receiving a getSlice() call after shutdown has been induced");
-      }
       if (jobType.equals(BlobStoreCompactor.INDEX_SEGMENT_READ_JOB_NAME)) {
         indexSegmentsCopied += usedSinceLastCall;
       } else if (jobType.equals(BlobStoreCompactor.LOG_SEGMENT_COPY_JOB_NAME)) {
