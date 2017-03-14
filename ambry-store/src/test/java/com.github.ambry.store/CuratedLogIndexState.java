@@ -554,9 +554,11 @@ class CuratedLogIndexState {
         IndexValue value = entry.getValue();
         while (expectedOffset < indexSegment.getEndOffset().getOffset() && expectedOffset != value.getOffset()
             .getOffset()) {
-          // this might be because a PUT and DELETE entry are in the same segment. Note that this cannot happen with
-          // compaction
+          // this might be because a PUT and DELETE entry are in the same segment.
           // find the record that should have been there
+          // NOTE: This is NOT built to work after compaction (like the rest of this class). It will fail on a very
+          // NOTE: specific corner case - where the PUT and DELETE entry for a blob ended up in the same index
+          // NOTE: segment after compaction (the DELETE wasn't eligible to be "counted").
           Offset offset = new Offset(indexSegment.getLogSegmentName(), expectedOffset);
           IndexValue putValue = logOrder.get(offset).getSecond().indexValue;
           expectedOffset += putValue.getSize();

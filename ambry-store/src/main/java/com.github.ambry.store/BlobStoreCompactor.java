@@ -419,7 +419,7 @@ class BlobStoreCompactor {
   private Offset getCutoffOffsetForDelete() {
     // TODO: move this to BlobStoreStats
     long referenceTimeMs = compactionLog.getCompactionDetails().getReferenceTimeMs();
-    Offset cutoffOffset = srcIndex.getIndexSegments().lastKey();
+    Offset cutoffOffset = srcIndex.getStartOffset();
     for (IndexSegment indexSegment : srcIndex.getIndexSegments().descendingMap().values()) {
       if (indexSegment.getLastModifiedTimeMs() < referenceTimeMs) {
         cutoffOffset = indexSegment.getEndOffset();
@@ -627,10 +627,20 @@ class BlobStoreCompactor {
         diskIOScheduler.getSlice(LOG_SEGMENT_COPY_JOB_NAME, LOG_SEGMENT_COPY_JOB_NAME, writtenLastTime);
         tgtLog.appendFrom(fileChannel, srcValue.getSize());
         FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
-        IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs());
+        IndexValue tgtValue;
         if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
+          if (putValue != null && putValue.getOffset().getName().equals(fileSpan.getStartOffset().getName())) {
+            tgtValue = new IndexValue(putValue.getSize(), putValue.getOffset(), putValue.getExpiresAtMs());
+            tgtValue.setNewOffset(fileSpan.getStartOffset());
+            tgtValue.setNewSize(srcValue.getSize());
+          } else {
+            tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs());
+            tgtValue.clearOriginalMessageOffset();
+          }
           tgtValue.setFlag(IndexValue.Flags.Delete_Index);
-          tgtValue.clearOriginalMessageOffset();
+        } else {
+          tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs());
         }
         IndexEntry entry = new IndexEntry(srcIndexEntry.getKey(), tgtValue);
         tgtIndex.addToIndex(entry, fileSpan);

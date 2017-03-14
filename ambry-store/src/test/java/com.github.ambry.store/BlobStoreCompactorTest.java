@@ -241,6 +241,51 @@ public class BlobStoreCompactorTest {
   }
 
   /**
+   * Compacts the whole log multiple times with some data compacted each time.
+   * @throws Exception
+   */
+  @Test
+  public void compactWholeLogMultipleTimesTest() throws Exception {
+    refreshState(false, true);
+    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 3;
+    long expiryTimeMs = getInvalidationTime(requiredCount);
+    List<Long> expiryTimesMs = Arrays.asList(state.time.milliseconds() / 2, expiryTimeMs, expiryTimeMs * 2);
+    writeDataToMeetRequiredSegmentCount(requiredCount, expiryTimesMs);
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    Set<MockId> idsInCompactedLogSegments = getIdsInSegments(segmentsUnderCompaction);
+
+    for (long setTimeMs : expiryTimesMs) {
+      if (state.time.milliseconds() < setTimeMs + Time.MsPerSec) {
+        state.advanceTime(setTimeMs + Time.MsPerSec - state.time.milliseconds());
+      }
+      long deleteReferenceTimeMs = state.time.milliseconds();
+      long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
+      CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
+
+      compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
+      compactor.start(state.index);
+      try {
+        compactor.compact(details);
+      } finally {
+        compactor.shutdown(0);
+      }
+      assertFalse("Sum of size of log segments did not change after compaction",
+          logSegmentSizeSumBeforeCompaction == getSumOfLogSegmentEndOffsets());
+      verifyDataPostCompaction(idsInCompactedLogSegments, deleteReferenceTimeMs);
+      state.reloadLog(true);
+      verifyDataPostCompaction(idsInCompactedLogSegments, deleteReferenceTimeMs);
+      segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+      state.verifyRealIndexSanity();
+      // no clean shutdown file should exist
+      assertFalse("Clean shutdown file not deleted",
+          new File(tempDirStr, BlobStoreCompactor.TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME).exists());
+      // there should be no temp files
+      assertEquals("There are some temp log segments", 0,
+          tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
+    }
+  }
+
+  /**
    * Compacts the whole log (except the last log segment) and a changed size is expected i.e. there is some invalid
    * data. All this is done with hard delete enabled (compactor is expected to pause it).
    * @throws Exception
@@ -308,6 +353,33 @@ public class BlobStoreCompactorTest {
   }
 
   /**
+   * Tests the case where deletion time is enforced i.e. data is considered valid before reference time and is copied
+   * over and data is considered invalid after reference time and is not copied over.
+   * @throws Exception
+   */
+  @Test
+  public void deletionTimeEnforcementTest() throws Exception {
+    // no change before delete time
+    Pair<Long, List<String>> deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
+    long deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst() - Time.MsPerSec;
+    Map<String, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
+    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
+    verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
+
+    // no change at delete time.
+    deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
+    deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst();
+    oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
+    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
+    verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
+
+    // there will be changes past delete time
+    deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
+    state.advanceTime(Time.MsPerSec);
+    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true);
+  }
+
+  /**
    * Tests the case where the segments being compacted have keys that are deleted and expired but the deleted keys
    * don't count as deleted at the provided reference time (but the expired keys need to be cleaned up).
    * @throws Exception
@@ -341,78 +413,6 @@ public class BlobStoreCompactorTest {
       // Data has already been verified if this is true (by the verifiers).
       state.index.getBlobReadInfo(id, EnumSet.of(StoreGetOptions.Store_Include_Deleted));
     }
-  }
-
-  /**
-   * Compacts the whole log repeatedly with some data compacted each time.
-   * @throws Exception
-   */
-  @Test
-  public void compactWholeLogRepeatedlyTest() throws Exception {
-    refreshState(false, true);
-    long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 3;
-    long expiryTimeMs = getInvalidationTime(requiredCount);
-    List<Long> expiryTimesMs = Arrays.asList(state.time.milliseconds() / 2, expiryTimeMs, expiryTimeMs * 2);
-    writeDataToMeetRequiredSegmentCount(requiredCount, expiryTimesMs);
-    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    Set<MockId> idsInCompactedLogSegments = getIdsInSegments(segmentsUnderCompaction);
-
-    for (long setTimeMs : expiryTimesMs) {
-      if (state.time.milliseconds() < setTimeMs + Time.MsPerSec) {
-        state.advanceTime(setTimeMs + Time.MsPerSec - state.time.milliseconds());
-      }
-      long deleteReferenceTimeMs = state.time.milliseconds();
-      long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
-      CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
-
-      compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-      compactor.start(state.index);
-      try {
-        compactor.compact(details);
-      } finally {
-        compactor.shutdown(0);
-      }
-      assertFalse("Sum of size of log segments did not change after compaction",
-          logSegmentSizeSumBeforeCompaction == getSumOfLogSegmentEndOffsets());
-      verifyDataPostCompaction(idsInCompactedLogSegments, deleteReferenceTimeMs);
-      state.reloadLog(true);
-      verifyDataPostCompaction(idsInCompactedLogSegments, deleteReferenceTimeMs);
-      segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-      state.verifyRealIndexSanity();
-      // no clean shutdown file should exist
-      assertFalse("Clean shutdown file not deleted",
-          new File(tempDirStr, BlobStoreCompactor.TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME).exists());
-      // there should be no temp files
-      assertEquals("There are some temp log segments", 0,
-          tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
-    }
-  }
-
-  /**
-   * Tests the case where deletion time is enforced i.e. data is considered valid before reference time and is copied
-   * over and data is considered invalid after reference time and is not copied over.
-   * @throws Exception
-   */
-  @Test
-  public void deletionTimeEnforcementTest() throws Exception {
-    // no change before delete time
-    Pair<Long, List<String>> deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
-    long deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst() - Time.MsPerSec;
-    Map<String, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
-    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
-    verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
-
-    // no change at delete time.
-    deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
-    deleteReferenceTimeMs = deleteTimeAndSegmentsUnderCompaction.getFirst();
-    oldSegmentNamesAndEndOffsets = getEndOffsets(deleteTimeAndSegmentsUnderCompaction.getSecond());
-    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), deleteReferenceTimeMs, false);
-    verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
-
-    // there will be changes past delete time
-    deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
-    state.advanceTime(Time.MsPerSec);
-    compactAndVerify(deleteTimeAndSegmentsUnderCompaction.getSecond(), state.time.milliseconds(), true);
   }
 
   /**
@@ -749,7 +749,6 @@ public class BlobStoreCompactorTest {
       compactor.shutdown(0);
     }
 
-    // TODO: verify before reload also.
     // have to reload log since the instance changed by the old compactor compactor is different.
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
@@ -967,7 +966,7 @@ public class BlobStoreCompactorTest {
             checkRecord(id, options);
           }
         } catch (StoreException e) {
-          assertTrue("Blob should have been retrieved", shouldBeCompacted);
+          assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
           assertEquals(id + " failed with error code " + e.getErrorCode(), StoreErrorCodes.ID_Deleted,
               e.getErrorCode());
         }
@@ -990,7 +989,7 @@ public class BlobStoreCompactorTest {
             checkRecord(id, options);
           }
         } catch (StoreException e) {
-          assertTrue("Blob should have been retrieved", shouldBeCompacted);
+          assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
           assertEquals(id + " failed with error code " + e.getErrorCode(), StoreErrorCodes.ID_Not_Found,
               e.getErrorCode());
         }
@@ -1025,6 +1024,9 @@ public class BlobStoreCompactorTest {
    */
   private List<LogEntry> getLogEntriesInOrder(List<String> logSegmentsUnderConsideration)
       throws IOException, StoreException {
+    // NOTE: This function fails on a corner case where the PUT and DELETE entry for a blob ended up in the same index
+    // segment after compaction (the DELETE wasn't eligible to be "counted"). The tests that exercise this path will
+    // need to find alternate ways of checking.
     List<LogEntry> logEntriesInOrder = new ArrayList<>();
     NavigableMap<Offset, IndexSegment> indexSegments = state.index.getIndexSegments();
     for (String logSegmentName : logSegmentsUnderConsideration) {
@@ -1118,7 +1120,6 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private Pair<Long, List<String>> setupStateWithExpiredBlobsAtSpecificTime() throws Exception {
-    // TODO: can this be simplified to not calculate the "good" time? The caller can just reset?
     refreshState(false, true);
     // we want at least 3 log segments that are outside the journal and with no invalid records
     long extraSegmentCountRequired = 4;
