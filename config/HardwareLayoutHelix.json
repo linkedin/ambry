@@ -1,0 +1,154 @@
+{
+  "clusterName": "Ambry_Proto",
+  "datacenters": [
+    {
+      "dataNodes": [
+        {
+          "disks": [
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/a/0"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/a/1"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/a/2"
+            },
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 15088,
+          "rackId": 1611
+        },
+        {
+          "disks": [
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/b/0"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/b/1"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/b/2"
+            },
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 16088,
+          "rackId": 1611
+        },
+        {
+          "disks": [
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/c/0"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/c/1"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/c/2"
+            },
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 17088,
+          "rackId": 1611
+        },
+      ],
+      "name": "dc1"
+    },
+    {
+      "dataNodes": [
+        {
+          "disks": [
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/d/0"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/d/1"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/d/2"
+            },
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 18088,
+          "rackId": 315
+        },
+        {
+          "disks": [
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/e/0"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/e/1"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/e/2"
+            },
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 19088,
+          "rackId": 316
+        },
+        {
+          "disks": [
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/f/0"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/f/1"
+            },
+            {
+              "capacityInBytes": 912680550400,
+              "hardwareState": "AVAILABLE",
+              "mountPath": "/tmp/f/2"
+            },
+          ],
+          "hardwareState": "AVAILABLE",
+          "hostname": "localhost",
+          "port": 20088,
+          "rackId": 316
+        },
+      ],
+      "name": "dc2"
+    }
+  ],
+  "version": 4
+}

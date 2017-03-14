@@ -84,7 +84,7 @@ class SimpleOperationTracker implements OperationTracker {
     this.parallelism = parallelism;
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
-    List<ReplicaId> replicas = partitionId.getReplicaIds();
+    List<? extends ReplicaId> replicas = partitionId.getReplicaIds();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
       Collections.shuffle(replicas);

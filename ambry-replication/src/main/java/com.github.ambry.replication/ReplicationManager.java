@@ -290,7 +290,7 @@ public final class ReplicationManager {
       this.persistor = new ReplicaTokenPersistor();
       this.correlationIdGenerator = new AtomicInteger(0);
       this.dataNodeId = dataNode;
-      List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
+      List<? extends ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
       this.connectionPool = connectionPool;
       this.notification = requestNotification;
       this.metricRegistry = metricRegistry;
@@ -303,7 +303,7 @@ public final class ReplicationManager {
         PartitionId partition = replicaId.getPartitionId();
         Store store = storageManager.getStore(partition);
         if (store != null) {
-          List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+          List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
           if (peerReplicas != null) {
             List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>(peerReplicas.size());
             for (ReplicaId remoteReplica : peerReplicas) {

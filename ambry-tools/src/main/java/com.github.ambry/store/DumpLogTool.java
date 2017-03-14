@@ -13,13 +13,14 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.ClusterManagerFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
@@ -30,7 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +58,7 @@ public class DumpLogTool {
 
   private static final Logger logger = LoggerFactory.getLogger(DumpLogTool.class);
 
-  public DumpLogTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
+  public DumpLogTool(VerifiableProperties verifiableProperties) throws Exception {
     fileToRead = verifiableProperties.getString("file.to.read");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
@@ -69,8 +69,10 @@ public class DumpLogTool {
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
-    clusterMap = new ClusterMapManager(hardwareLayoutFilePath, partitionLayoutFilePath,
-        new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    this.clusterMap =
+        ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
+            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterManager();
     if (bytesPerSec > 0) {
       this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
     } else if (bytesPerSec < 0) {
@@ -78,7 +80,7 @@ public class DumpLogTool {
     }
   }
 
-  public static void main(String args[]) throws IOException, JSONException {
+  public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
     DumpLogTool dumpLogTool = new DumpLogTool(verifiableProperties);
     dumpLogTool.doOperation();

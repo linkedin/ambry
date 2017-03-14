@@ -56,7 +56,7 @@ public interface ReplicaId {
    *
    * @return list of the peers of this ReplicaId.
    */
-  public List<ReplicaId> getPeerReplicaIds();
+  public List<? extends ReplicaId> getPeerReplicaIds();
 
   /**
    * Gets the capacity in bytes for this ReplicaId.

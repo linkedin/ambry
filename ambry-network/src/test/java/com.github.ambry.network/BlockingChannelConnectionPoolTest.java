@@ -72,7 +72,11 @@ public class BlockingChannelConnectionPoolTest {
         TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
     sslConfig = new SSLConfig(sslClientProps);
     sslEnabledClusterMapConfig = new ClusterMapConfig(sslClientProps);
-    plainTextClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    Properties props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
+    plainTextClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
@@ -81,6 +85,9 @@ public class BlockingChannelConnectionPoolTest {
   public BlockingChannelConnectionPoolTest() throws Exception {
     Properties props = new Properties();
     props.setProperty("port", "6667");
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
     ArrayList<Port> ports = new ArrayList<Port>();
@@ -172,8 +179,12 @@ public class BlockingChannelConnectionPoolTest {
     int port = 6680;
     String host = "127.0.0.1";
     SocketServer server = startServer(port);
+    Properties props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
     BlockingChannelInfo channelInfo =
-        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(new Properties())), host,
+        new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host,
             new Port(port, PortType.PLAINTEXT), new MetricRegistry(), sslSocketFactory, sslConfig);
     // ask for N no of connections
     Assert.assertEquals(channelInfo.getNumberOfConnections(), 0);
@@ -216,6 +227,9 @@ public class BlockingChannelConnectionPoolTest {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.port.plain.text", "" + maxConnectionsPerPortPlainText);
     props.put("connectionpool.max.connections.per.port.ssl", "" + maxConnectionsPerPortSSL);
+    props.put("clustermap.cluster.name", "test");
+    props.put("clustermap.datacenter.name", "dc1");
+    props.put("clustermap.host.name", "localhost");
     int maxConnectionsPerHost =
         (port.getPortType() == PortType.PLAINTEXT) ? maxConnectionsPerPortPlainText : maxConnectionsPerPortSSL;
     createAndReleaseSingleChannelTest(props, host, port);
@@ -311,6 +325,9 @@ public class BlockingChannelConnectionPoolTest {
   private SocketServer startServer(int port) throws IOException, InterruptedException {
     Properties props = new Properties();
     props.setProperty("port", "" + port);
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties propverify = new VerifiableProperties(props);
     NetworkConfig config = new NetworkConfig(propverify);
     ArrayList<Port> ports = new ArrayList<Port>();
@@ -378,6 +395,9 @@ public class BlockingChannelConnectionPoolTest {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.port.plain.text", "5");
     props.put("connectionpool.max.connections.per.port.ssl", "5");
+    props.put("clustermap.cluster.name", "test");
+    props.put("clustermap.datacenter.name", "dc1");
+    props.put("clustermap.host.name", "localhost");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
             plainTextClusterMapConfig, new MetricRegistry());
@@ -422,6 +442,9 @@ public class BlockingChannelConnectionPoolTest {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.port.plain.text", "5");
     props.put("connectionpool.max.connections.per.port.ssl", "5");
+    props.put("clustermap.cluster.name", "test");
+    props.put("clustermap.datacenter.name", "dc1");
+    props.put("clustermap.host.name", "localhost");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
             sslEnabledClusterMapConfig, new MetricRegistry());

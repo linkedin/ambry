@@ -949,7 +949,7 @@ class PutOperation {
      */
     protected PartitionId getPartitionForPut(List<PartitionId> partitionIdsToExclude) throws RouterException {
       // getWritablePartitions creates and returns a new list, so it is safe to manipulate it.
-      List<PartitionId> partitions = clusterMap.getWritablePartitionIds();
+      List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds();
       partitions.removeAll(partitionIdsToExclude);
       if (partitions.isEmpty()) {
         throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);

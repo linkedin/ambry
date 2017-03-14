@@ -188,7 +188,7 @@ public class MockClusterMap implements ClusterMap {
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
     ArrayList<ReplicaId> replicaIdsToReturn = new ArrayList<ReplicaId>();
     for (PartitionId partitionId : partitions.values()) {
-      List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+      List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
         if (replicaId.getDataNodeId().getHostname().compareTo(dataNodeId.getHostname()) == 0
             && replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {

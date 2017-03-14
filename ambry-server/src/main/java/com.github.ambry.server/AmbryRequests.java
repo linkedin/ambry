@@ -603,7 +603,7 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     // 2. ensure the disk for the partition/replica is available
-    List<ReplicaId> replicaIds = partition.getReplicaIds();
+    List<? extends ReplicaId> replicaIds = partition.getReplicaIds();
     for (ReplicaId replica : replicaIds) {
       if (replica.getDataNodeId().getHostname() == currentNode.getHostname()
           && replica.getDataNodeId().getPort() == currentNode.getPort()) {

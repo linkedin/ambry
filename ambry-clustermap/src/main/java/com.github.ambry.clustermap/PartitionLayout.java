@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 /**
  * PartitionLayout of {@link Partition}s and {@link Replica}s on an Ambry cluster (see {@link HardwareLayout}).
  */
-public class PartitionLayout {
+class PartitionLayout {
   private static final long MinPartitionId = 0;
 
   private final HardwareLayout hardwareLayout;

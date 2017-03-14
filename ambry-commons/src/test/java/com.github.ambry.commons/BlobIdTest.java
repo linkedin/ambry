@@ -15,9 +15,7 @@ package com.github.ambry.commons;
 
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
-import com.github.ambry.clustermap.Partition;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
 import java.nio.ByteBuffer;
@@ -35,8 +33,7 @@ public class BlobIdTest {
   @Test
   public void basicTest() throws Exception {
     final long id = 99;
-    final long replicaCapacityInBytes = 1024 * 1024 * 1024;
-    PartitionId partitionId = new Partition(id, PartitionState.READ_WRITE, replicaCapacityInBytes);
+    PartitionId partitionId = new MockPartitionId(id, Collections.EMPTY_LIST, 0);
     BlobId blobId = new BlobId(partitionId);
 
     assertEquals(blobId.getPartition(), partitionId);

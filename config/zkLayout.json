@@ -1,0 +1,12 @@
+{
+  "zkInfo" : [
+     {
+       "datacenter":"dc1",
+       "zkConnectStr":"localhost:2199",
+     },
+     {
+       "datacenter":"dc2",
+       "zkConnectStr":"localhost:2300",
+     }
+  ]
+}

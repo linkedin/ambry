@@ -24,19 +24,19 @@ public interface DiskId extends Resource {
    *
    * @return absolute mount path.
    */
-  public String getMountPath();
+  String getMountPath();
 
   /**
    * Gets the state of the DiskId.
    *
    * @return state of the DiskId.
    */
-  public HardwareState getState();
+  HardwareState getState();
 
   /**
    * Gets the raw capacity in bytes for this DiskId.
    *
    * @return the raw capacity in bytes
    */
-  public long getRawCapacityInBytes();
+  long getRawCapacityInBytes();
 }

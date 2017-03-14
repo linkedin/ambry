@@ -20,7 +20,7 @@ import java.util.List;
 
 
 /**
- * Metrics for ClusterMap (HardwareLayout & PartitionLayout)
+ * Metrics for the {@link StaticClusterManager}.
  */
 class ClusterMapMetrics {
   private MetricRegistry registry;
@@ -54,6 +54,12 @@ class ClusterMapMetrics {
   public final Gauge<Long> allocatedRawCapacityInBytes;
   public final Gauge<Long> allocatedUsableCapacityInBytes;
 
+  /**
+   * Metrics for the {@link StaticClusterManager}
+   * @param hardwareLayout The {@link HardwareLayout} associated with the {@link StaticClusterManager}
+   * @param partitionLayout The {@link PartitionLayout} associated with the {@link StaticClusterManager}
+   * @param registry The {@link MetricRegistry} associated with the {@link StaticClusterManager}
+   */
   public ClusterMapMetrics(HardwareLayout hardwareLayout, PartitionLayout partitionLayout, MetricRegistry registry) {
     this.registry = registry;
     this.hardwareLayout = hardwareLayout;
@@ -239,7 +245,7 @@ class ClusterMapMetrics {
   private boolean isMajorityOfReplicasDown() {
     boolean isMajorityReplicasDown = false;
     for (PartitionId partition : partitionLayout.getPartitions()) {
-      List<ReplicaId> replicas = partition.getReplicaIds();
+      List<? extends ReplicaId> replicas = partition.getReplicaIds();
       int replicaCount = replicas.size();
       int downReplicas = 0;
       for (ReplicaId replicaId : replicas) {

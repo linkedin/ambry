@@ -36,6 +36,14 @@ public class HardwareLayoutTest {
   private static final int datacenterCount = 3;
   private static final int basePort = 6666;
   private static final int baseSslPort = 7666;
+  private Properties props;
+
+  public HardwareLayoutTest() {
+    props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
+  }
 
   private JSONArray getDisks() throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
@@ -125,7 +133,7 @@ public class HardwareLayoutTest {
     JSONObject jsonObject = TestUtils.getJsonHardwareLayout("Alpha", getDatacenters());
 
     HardwareLayout hardwareLayout =
-        new HardwareLayout(jsonObject, new ClusterMapConfig(new VerifiableProperties(new Properties())));
+        new HardwareLayout(jsonObject, new ClusterMapConfig(new VerifiableProperties(props)));
 
     assertEquals(hardwareLayout.getVersion(), TestUtils.defaultHardwareLayoutVersion);
     assertEquals(hardwareLayout.getClusterName(), "Alpha");
@@ -145,7 +153,7 @@ public class HardwareLayoutTest {
 
   public void failValidation(JSONObject jsonObject) throws JSONException {
     try {
-      new HardwareLayout(jsonObject, new ClusterMapConfig(new VerifiableProperties(new Properties())));
+      new HardwareLayout(jsonObject, new ClusterMapConfig(new VerifiableProperties(props)));
       fail("Should have failed validation: " + jsonObject.toString(2));
     } catch (IllegalStateException e) {
       // Expected.

@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.config.ClusterMapConfig;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -26,7 +25,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import org.json.JSONException;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,10 +32,10 @@ import static com.github.ambry.utils.Utils.*;
 
 
 /**
- * ClusterMapManager allows components in Ambry to query the topology. This covers the {@link HardwareLayout} and the
+ * StaticClusterManager allows components in Ambry to query the topology. This covers the {@link HardwareLayout} and the
  * {@link PartitionLayout}.
  */
-public class ClusterMapManager implements ClusterMap {
+class StaticClusterManager implements ClusterMap {
   protected final HardwareLayout hardwareLayout;
   protected final PartitionLayout partitionLayout;
   private final MetricRegistry metricRegistry;
@@ -52,9 +50,9 @@ public class ClusterMapManager implements ClusterMap {
    */
   private static final int NUM_CHOICES = 2;
 
-  public ClusterMapManager(PartitionLayout partitionLayout) {
+  StaticClusterManager(PartitionLayout partitionLayout) {
     if (logger.isTraceEnabled()) {
-      logger.trace("ClusterMapManager " + partitionLayout);
+      logger.trace("StaticClusterManager " + partitionLayout);
     }
     this.hardwareLayout = partitionLayout.getHardwareLayout();
     this.partitionLayout = partitionLayout;
@@ -62,22 +60,13 @@ public class ClusterMapManager implements ClusterMap {
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
-  public ClusterMapManager(String hardwareLayoutPath, String partitionLayoutPath, ClusterMapConfig clusterMapConfig)
-      throws IOException, JSONException {
-    logger.trace("ClusterMapManager " + hardwareLayoutPath + ", " + partitionLayoutPath);
-    this.hardwareLayout = new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutPath)), clusterMapConfig);
-    this.partitionLayout = new PartitionLayout(hardwareLayout, new JSONObject(readStringFromFile(partitionLayoutPath)));
-    this.metricRegistry = new MetricRegistry();
-    this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
-  }
-
-  public void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
+  void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
     logger.trace("persist " + hardwareLayoutPath + ", " + partitionLayoutPath);
     writeJsonToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }
 
-  public List<PartitionId> getAllPartitions() {
+  List<PartitionId> getAllPartitions() {
     return partitionLayout.getPartitions();
   }
 
@@ -114,7 +103,7 @@ public class ClusterMapManager implements ClusterMap {
     return new ArrayList<ReplicaId>(replicas);
   }
 
-  public List<Replica> getReplicas(DataNodeId dataNodeId) {
+  List<Replica> getReplicas(DataNodeId dataNodeId) {
     List<Replica> replicas = new ArrayList<Replica>();
     for (PartitionId partition : partitionLayout.getPartitions()) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
@@ -143,19 +132,19 @@ public class ClusterMapManager implements ClusterMap {
   // Administrative API
   // -----------------------
 
-  public long getRawCapacityInBytes() {
+  long getRawCapacityInBytes() {
     return hardwareLayout.getRawCapacityInBytes();
   }
 
-  public long getAllocatedRawCapacityInBytes() {
+  long getAllocatedRawCapacityInBytes() {
     return partitionLayout.getAllocatedRawCapacityInBytes();
   }
 
-  public long getAllocatedUsableCapacityInBytes() {
+  long getAllocatedUsableCapacityInBytes() {
     return partitionLayout.getAllocatedUsableCapacityInBytes();
   }
 
-  public long getAllocatedRawCapacityInBytes(Datacenter datacenter) {
+  long getAllocatedRawCapacityInBytes(Datacenter datacenter) {
     long allocatedRawCapacityInBytes = 0;
     for (PartitionId partition : partitionLayout.getPartitions()) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
@@ -168,7 +157,7 @@ public class ClusterMapManager implements ClusterMap {
     return allocatedRawCapacityInBytes;
   }
 
-  public long getAllocatedRawCapacityInBytes(DataNodeId dataNode) {
+  long getAllocatedRawCapacityInBytes(DataNodeId dataNode) {
     long allocatedRawCapacityInBytes = 0;
     for (PartitionId partition : partitionLayout.getPartitions()) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
@@ -181,7 +170,7 @@ public class ClusterMapManager implements ClusterMap {
     return allocatedRawCapacityInBytes;
   }
 
-  public long getAllocatedRawCapacityInBytes(Disk disk) {
+  long getAllocatedRawCapacityInBytes(Disk disk) {
     long allocatedRawCapacityInBytes = 0;
     for (PartitionId partition : partitionLayout.getPartitions()) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
@@ -194,23 +183,23 @@ public class ClusterMapManager implements ClusterMap {
     return allocatedRawCapacityInBytes;
   }
 
-  public long getUnallocatedRawCapacityInBytes() {
+  long getUnallocatedRawCapacityInBytes() {
     return getRawCapacityInBytes() - getAllocatedRawCapacityInBytes();
   }
 
-  public long getUnallocatedRawCapacityInBytes(Datacenter datacenter) {
+  long getUnallocatedRawCapacityInBytes(Datacenter datacenter) {
     return datacenter.getRawCapacityInBytes() - getAllocatedRawCapacityInBytes(datacenter);
   }
 
-  public long getUnallocatedRawCapacityInBytes(DataNode dataNode) {
+  long getUnallocatedRawCapacityInBytes(DataNode dataNode) {
     return dataNode.getRawCapacityInBytes() - getAllocatedRawCapacityInBytes(dataNode);
   }
 
-  public long getUnallocatedRawCapacityInBytes(Disk disk) {
+  long getUnallocatedRawCapacityInBytes(Disk disk) {
     return disk.getRawCapacityInBytes() - getAllocatedRawCapacityInBytes(disk);
   }
 
-  public DataNode getDataNodeWithMostUnallocatedRawCapacity(Datacenter dc, Set nodesToExclude) {
+  DataNode getDataNodeWithMostUnallocatedRawCapacity(Datacenter dc, Set nodesToExclude) {
     DataNode maxCapacityNode = null;
     List<DataNode> dataNodes = dc.getDataNodes();
     for (DataNode dataNode : dataNodes) {
@@ -222,7 +211,7 @@ public class ClusterMapManager implements ClusterMap {
     return maxCapacityNode;
   }
 
-  public Disk getDiskWithMostUnallocatedRawCapacity(DataNode node, long minCapacity) {
+  Disk getDiskWithMostUnallocatedRawCapacity(DataNode node, long minCapacity) {
     Disk maxCapacityDisk = null;
     List<Disk> disks = node.getDisks();
     for (Disk disk : disks) {
@@ -234,7 +223,7 @@ public class ClusterMapManager implements ClusterMap {
     return maxCapacityDisk;
   }
 
-  public PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes) {
+  PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes) {
     return partitionLayout.addNewPartition(disks, replicaCapacityInBytes);
   }
 
@@ -387,8 +376,8 @@ public class ClusterMapManager implements ClusterMap {
    *                                     one is not possible.
    * @return A list of the new {@link PartitionId}s.
    */
-  public List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter,
-      long replicaCapacityInBytes, boolean attemptNonRackAwareOnFailure) {
+  List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter, long replicaCapacityInBytes,
+      boolean attemptNonRackAwareOnFailure) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
     int partitionsAllocated = 0;
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes)
@@ -415,8 +404,8 @@ public class ClusterMapManager implements ClusterMap {
    * @param attemptNonRackAwareOnFailure {@code true} if a non rack-aware allocation should be attempted if a rack-aware one
    *                            is not possible.
    */
-  public void addReplicas(PartitionId partitionId, String dataCenterName, boolean attemptNonRackAwareOnFailure) {
-    List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+  void addReplicas(PartitionId partitionId, String dataCenterName, boolean attemptNonRackAwareOnFailure) {
+    List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
     Map<String, Integer> replicaCountByDatacenter = new HashMap<String, Integer>();
     long capacityOfReplicasInBytes = 0;
     // we ensure that the datacenter provided does not have any replicas
@@ -465,7 +454,7 @@ public class ClusterMapManager implements ClusterMap {
       return false;
     }
 
-    ClusterMapManager that = (ClusterMapManager) o;
+    StaticClusterManager that = (StaticClusterManager) o;
 
     if (hardwareLayout != null ? !hardwareLayout.equals(that.hardwareLayout) : that.hardwareLayout != null) {
       return false;
@@ -473,6 +462,7 @@ public class ClusterMapManager implements ClusterMap {
     return !(partitionLayout != null ? !partitionLayout.equals(that.partitionLayout) : that.partitionLayout != null);
   }
 
+  @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
     switch (event) {
       case Disk_Error:

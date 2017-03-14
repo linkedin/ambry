@@ -135,7 +135,7 @@ class RouterTestHelpers {
    */
   static void setServerErrorCodes(ServerErrorCode[] serverErrorCodesInOrder, PartitionId partition,
       MockServerLayout serverLayout) {
-    List<ReplicaId> replicas = partition.getReplicaIds();
+    List<? extends ReplicaId> replicas = partition.getReplicaIds();
     if (serverErrorCodesInOrder.length > replicas.size()) {
       throw new IllegalArgumentException("More server error codes provided than replicas in partition");
     }

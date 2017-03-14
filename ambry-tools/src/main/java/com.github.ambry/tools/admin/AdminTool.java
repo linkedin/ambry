@@ -14,8 +14,8 @@
 package com.github.ambry.tools.admin;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterManagerFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
@@ -38,6 +38,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -183,7 +184,9 @@ public class AdminTool {
           new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
+      ClusterMap map =
+          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterManager();
 
       String blobIdStr = options.valueOf(ambryBlobIdOpt);
       AdminTool adminTool = new AdminTool(connectionPool);
@@ -191,7 +194,7 @@ public class AdminTool {
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       boolean includeExpiredBlobs = Boolean.parseBoolean(options.valueOf(includeExpiredBlobsOpt));
       if (typeOfOperation.equalsIgnoreCase("LIST_REPLICAS")) {
-        List<ReplicaId> replicaIdList = adminTool.getReplicas(blobId);
+        List<? extends ReplicaId> replicaIdList = adminTool.getReplicas(blobId);
         for (ReplicaId replicaId : replicaIdList) {
           System.out.println(replicaId);
         }
@@ -214,12 +217,12 @@ public class AdminTool {
     }
   }
 
-  public List<ReplicaId> getReplicas(BlobId blobId) {
+  public List<? extends ReplicaId> getReplicas(BlobId blobId) {
     return blobId.getPartition().getReplicaIds();
   }
 
   public BlobProperties getBlobProperties(BlobId blobId, ClusterMap map, boolean expiredBlobs) {
-    List<ReplicaId> replicas = blobId.getPartition().getReplicaIds();
+    List<? extends ReplicaId> replicas = blobId.getPartition().getReplicaIds();
     BlobProperties blobProperties = null;
     for (ReplicaId replicaId : replicas) {
       try {
@@ -303,7 +306,7 @@ public class AdminTool {
 
   public BlobData getBlob(BlobId blobId, ClusterMap map, boolean expiredBlobs)
       throws MessageFormatException, IOException {
-    List<ReplicaId> replicas = blobId.getPartition().getReplicaIds();
+    List<? extends ReplicaId> replicas = blobId.getPartition().getReplicaIds();
     BlobData blobData = null;
     for (ReplicaId replicaId : replicas) {
       try {
@@ -380,7 +383,7 @@ public class AdminTool {
 
   public ByteBuffer getUserMetadata(BlobId blobId, ClusterMap map, boolean expiredBlobs)
       throws MessageFormatException, IOException {
-    List<ReplicaId> replicas = blobId.getPartition().getReplicaIds();
+    List<? extends ReplicaId> replicas = blobId.getPartition().getReplicaIds();
     ByteBuffer userMetadata = null;
     for (ReplicaId replicaId : replicas) {
       try {

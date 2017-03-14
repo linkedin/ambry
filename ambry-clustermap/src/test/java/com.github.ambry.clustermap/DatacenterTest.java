@@ -61,6 +61,14 @@ public class DatacenterTest {
   private static final long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
 
   private static final int dataNodeCount = 6;
+  private Properties props;
+
+  public DatacenterTest() {
+    props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
+  }
 
   JSONArray getDisks() throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
@@ -84,7 +92,7 @@ public class DatacenterTest {
   @Test
   public void basics() throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     Datacenter datacenter = new TestDatacenter(jsonObject, clusterMapConfig);
 
@@ -114,7 +122,7 @@ public class DatacenterTest {
   @Test
   public void validation() throws JSONException {
     JSONObject jsonObject;
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     try {
       // Null HardwareLayout

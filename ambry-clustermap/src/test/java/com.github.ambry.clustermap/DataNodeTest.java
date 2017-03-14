@@ -71,6 +71,14 @@ class TestDataNode extends DataNode {
 public class DataNodeTest {
   private static final int diskCount = 10;
   private static final long diskCapacityInBytes = 1000 * 1024 * 1024 * 1024L;
+  private Properties props;
+
+  public DataNodeTest() {
+    props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
+  }
 
   JSONArray getDisks() throws JSONException {
     return TestUtils.getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
@@ -81,7 +89,7 @@ public class DataNodeTest {
 
     JSONObject jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     DataNode dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
 
@@ -119,7 +127,7 @@ public class DataNodeTest {
   @Test
   public void validation() throws JSONException {
     JSONObject jsonObject;
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     try {
       // Null DataNode
@@ -172,6 +180,9 @@ public class DataNodeTest {
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, HardwareState.AVAILABLE, getDisks());
     Properties props = new Properties();
     props.setProperty("clustermap.fixedtimeout.datanode.retry.backoff.ms", Integer.toString(2000));
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     int threshold = clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold;
     long retryBackoffMs = clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs;
@@ -207,6 +218,9 @@ public class DataNodeTest {
     ClusterMapConfig clusterMapConfig;
     Properties props = new Properties();
     props.setProperty("clustermap.ssl.enabled.datacenters", "datacenter1,datacenter2,datacenter3");
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     System.out.println(clusterMapConfig.clusterMapSslEnabledDatacenters);
     JSONObject jsonObject =

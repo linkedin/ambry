@@ -17,8 +17,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,16 +29,14 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * DataNode is uniquely identified by its hostname and port. A DataNode is in a {@link Datacenter}. A DataNode has zero
  * or more {@link Disk}s.
  */
-public class DataNode extends DataNodeId {
-  private static final int MinPort = 1025;
-  private static final int MaxPort = 65535;
-  private static final int MissingRackId = -1;
-
+class DataNode extends DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int portNum;
@@ -53,8 +49,7 @@ public class DataNode extends DataNodeId {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public DataNode(Datacenter datacenter, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
-      throws JSONException {
+  DataNode(Datacenter datacenter, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("DataNode " + jsonObject.toString());
     }
@@ -99,27 +94,6 @@ public class DataNode extends DataNodeId {
     if (jsonObject.has("sslport")) {
       int sslPortNum = jsonObject.getInt("sslport");
       this.ports.put(PortType.SSL, new Port(sslPortNum, PortType.SSL));
-    }
-  }
-
-  /**
-   * Converts a hostname into a canonical hostname.
-   *
-   * @param unqualifiedHostname hostname to be fully qualified
-   * @return canonical hostname that can be compared with DataNode.getHostname()
-   */
-  public static String getFullyQualifiedDomainName(String unqualifiedHostname) {
-    if (unqualifiedHostname == null) {
-      throw new IllegalStateException("Hostname cannot be null.");
-    } else if (unqualifiedHostname.length() == 0) {
-      throw new IllegalStateException("Hostname cannot be zero length.");
-    }
-
-    try {
-      return InetAddress.getByName(unqualifiedHostname).getCanonicalHostName().toLowerCase();
-    } catch (UnknownHostException e) {
-      throw new IllegalStateException(
-          "Host (" + unqualifiedHostname + ") is unknown so cannot determine fully qualified domain name.");
     }
   }
 
@@ -177,15 +151,15 @@ public class DataNode extends DataNodeId {
     return dataNodeStatePolicy.isDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 
-  public void onNodeTimeout() {
+  void onNodeTimeout() {
     dataNodeStatePolicy.onError();
   }
 
-  public void onNodeResponse() {
+  void onNodeResponse() {
     dataNodeStatePolicy.onSuccess();
   }
 
-  public boolean isDown() {
+  boolean isDown() {
     return dataNodeStatePolicy.isDown();
   }
 
@@ -194,11 +168,11 @@ public class DataNode extends DataNodeId {
     return getDatacenter().getName();
   }
 
-  public Datacenter getDatacenter() {
+  Datacenter getDatacenter() {
     return datacenter;
   }
 
-  public long getRawCapacityInBytes() {
+  long getRawCapacityInBytes() {
     return rawCapacityInBytes;
   }
 
@@ -210,7 +184,7 @@ public class DataNode extends DataNodeId {
     return capacityInBytes;
   }
 
-  public List<Disk> getDisks() {
+  List<Disk> getDisks() {
     return disks;
   }
 
@@ -260,7 +234,7 @@ public class DataNode extends DataNodeId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
+  JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", portNum);
     addSSLPortToJson(jsonObject);
     if (rackId >= 0) {

@@ -116,7 +116,7 @@ public class ReplicationMetrics {
   private Map<String, Counter> localStoreErrorMap;
   private Map<PartitionId, Counter> partitionIdToInvalidMessageStreamErrorCounter;
 
-  public ReplicationMetrics(MetricRegistry registry, List<ReplicaId> replicaIds) {
+  public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
     metadataRequestErrorMap = new HashMap<String, Counter>();
     getRequestErrorMap = new HashMap<String, Counter>();
     localStoreErrorMap = new HashMap<String, Counter>();
@@ -361,7 +361,7 @@ public class ReplicationMetrics {
     replicaLagInBytes.add(replicaLag);
   }
 
-  public void populateInvalidMessageMetricForReplicas(List<ReplicaId> replicaIds) {
+  public void populateInvalidMessageMetricForReplicas(List<? extends ReplicaId> replicaIds) {
     for (ReplicaId replicaId : replicaIds) {
       PartitionId partitionId = replicaId.getPartitionId();
       if (!partitionIdToInvalidMessageStreamErrorCounter.containsKey(partitionId)) {

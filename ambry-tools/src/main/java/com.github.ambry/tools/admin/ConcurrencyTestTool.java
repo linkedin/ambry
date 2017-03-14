@@ -13,8 +13,8 @@
  */
 package com.github.ambry.tools.admin;
 
+import com.github.ambry.clustermap.ClusterManagerFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -99,9 +99,10 @@ public class ConcurrencyTestTool {
   public static void main(String args[]) throws Exception {
     InvocationOptions options = new InvocationOptions(args);
     Properties properties = Utils.loadProps(options.routerPropsFilePath);
-    ClusterMap clusterMap = new ClusterMapManager(options.hardwareLayoutFilePath, options.partitionLayoutFilePath,
-        new ClusterMapConfig(new VerifiableProperties(properties)));
-
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    ClusterMap clusterMap =
+        ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
+            options.hardwareLayoutFilePath, options.partitionLayoutFilePath)).getClusterManager();
     PutGetHelperFactory putGetHelperFactory = null;
     if (options.putGetHelperFactoryStr.equals(ROUTER_PUT_GET_HELPER)) {
       putGetHelperFactory =

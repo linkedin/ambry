@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
-public class Disk implements DiskId {
+class Disk implements DiskId {
   // Hard-code disk capacity limits in bytes for validation
   private static final long MinCapacityInBytes = 10L * 1024 * 1024 * 1024;
   private static final long MaxCapacityInBytes = 10L * 1024 * 1024 * 1024 * 1024; // 10 TB
@@ -38,7 +38,7 @@ public class Disk implements DiskId {
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
+  Disk(DataNode dataNode, JSONObject jsonObject, ClusterMapConfig clusterMapConfig) throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Disk " + jsonObject.toString());
     }
@@ -70,12 +70,8 @@ public class Disk implements DiskId {
         : HardwareState.UNAVAILABLE;
   }
 
-  public boolean isDown() {
+  boolean isDown() {
     return diskStatePolicy.isDown();
-  }
-
-  public boolean isHardDown() {
-    return diskStatePolicy.isHardDown();
   }
 
   @Override
@@ -83,11 +79,11 @@ public class Disk implements DiskId {
     return capacityInBytes;
   }
 
-  public DataNode getDataNode() {
+  DataNode getDataNode() {
     return dataNode;
   }
 
-  public HardwareState getHardState() {
+  HardwareState getHardState() {
     return diskStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE;
   }
 
@@ -97,7 +93,7 @@ public class Disk implements DiskId {
     }
   }
 
-  protected void validateMountPath() {
+  private void validateMountPath() {
     if (mountPath == null) {
       throw new IllegalStateException("Mount path cannot be null.");
     }
@@ -110,7 +106,7 @@ public class Disk implements DiskId {
     }
   }
 
-  protected void validateCapacity() {
+  private void validateCapacity() {
     if (capacityInBytes < MinCapacityInBytes) {
       throw new IllegalStateException(
           "Invalid disk capacity: " + capacityInBytes + " is less than " + MinCapacityInBytes);
@@ -128,7 +124,7 @@ public class Disk implements DiskId {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
+  JSONObject toJSONObject() throws JSONException {
     return new JSONObject().put("mountPath", mountPath)
         .put("hardwareState", getHardState())
         .put("capacityInBytes", capacityInBytes);
@@ -164,11 +160,11 @@ public class Disk implements DiskId {
     return result;
   }
 
-  public void onDiskError() {
+  void onDiskError() {
     diskStatePolicy.onError();
   }
 
-  public void onDiskOk() {
+  void onDiskOk() {
     diskStatePolicy.onSuccess();
   }
 }

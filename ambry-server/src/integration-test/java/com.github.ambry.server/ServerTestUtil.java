@@ -769,6 +769,9 @@ public final class ServerTestUtil {
     props.setProperty("router.datacenter.name", sourceDatacenter);
     props.setProperty("router.put.request.parallelism", "1");
     props.setProperty("router.put.success.target", "1");
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", sourceDatacenter);
+    props.setProperty("clustermap.host.name", "localhost");
     props.putAll(routerProps);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     Router router = new NonBlockingRouterFactory(verifiableProperties, cluster.getClusterMap(), notificationSystem,
@@ -813,6 +816,9 @@ public final class ServerTestUtil {
     Properties sslProps = new Properties();
     sslProps.putAll(routerProps);
     sslProps.setProperty("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
+    sslProps.setProperty("clustermap.cluster.name", "test");
+    sslProps.setProperty("clustermap.datacenter.name", sourceDatacenter);
+    sslProps.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties vProps = new VerifiableProperties(sslProps);
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(new Properties())),
@@ -1207,7 +1213,7 @@ public final class ServerTestUtil {
     List<ReplicaId> replicaIds = clusterMap.getReplicaIds(dataNodeId);
     int numRemoteNodes = 0;
     for (ReplicaId replicaId : replicaIds) {
-      List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+      List<? extends ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
       if (replicaId.getPartitionId().isEqual(targetPartition)) {
         numRemoteNodes = peerReplicas.size();
       }
@@ -1323,6 +1329,9 @@ public final class ServerTestUtil {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDatacenter);
+    properties.setProperty("clustermap.cluster.name", "test");
+    properties.setProperty("clustermap.datacenter.name", routerDatacenter);
+    properties.setProperty("clustermap.host.name", "localhost");
     return properties;
   }
 

@@ -27,13 +27,13 @@ import org.slf4j.LoggerFactory;
  * its {@link Disk}. Note that this induces a constraint that a Partition can never have more than one Replica on a
  * given Disk. This ensures that a Partition does not have Replicas that share fates.
  */
-public class Replica implements ReplicaId {
+class Replica implements ReplicaId {
   private final Partition partition;
   private Disk disk;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Replica(Partition partition, Disk disk) {
+  Replica(Partition partition, Disk disk) {
     if (logger.isTraceEnabled()) {
       logger.trace("Replica " + partition + ", " + disk);
     }
@@ -43,7 +43,7 @@ public class Replica implements ReplicaId {
     validate();
   }
 
-  public Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject) throws JSONException {
+  Replica(HardwareLayout hardwareLayout, Partition partition, JSONObject jsonObject) throws JSONException {
     this.partition = partition;
     this.disk = hardwareLayout.findDisk(jsonObject.getString("hostname"), jsonObject.getInt("port"),
         jsonObject.getString("mountPath"));
@@ -92,11 +92,11 @@ public class Replica implements ReplicaId {
         || getDiskId().getState() == HardwareState.UNAVAILABLE;
   }
 
-  public Partition getPartition() {
+  Partition getPartition() {
     return partition;
   }
 
-  public List<Replica> getPeerReplicas() {
+  List<Replica> getPeerReplicas() {
     List<Replica> peers = new ArrayList<Replica>(partition.getReplicas().size());
     for (Replica peer : partition.getReplicas()) {
       if (!peer.equals(this)) {
@@ -112,20 +112,20 @@ public class Replica implements ReplicaId {
     }
   }
 
-  protected void validateDisk() {
+  private void validateDisk() {
     if (disk == null) {
       throw new IllegalStateException("Disk cannot be null.");
     }
   }
 
-  protected void validate() {
+  private void validate() {
     logger.trace("begin validate.");
     validatePartition();
     validateDisk();
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
+  JSONObject toJSONObject() throws JSONException {
     // Effectively serializes the "foreign key" into hardwareLayout to find Disk.
     return new JSONObject().put("hostname", disk.getDataNode().getHostname())
         .put("port", disk.getDataNode().getPort())
