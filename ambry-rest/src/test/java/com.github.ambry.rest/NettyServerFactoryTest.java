@@ -32,7 +32,8 @@ import static org.junit.Assert.*;
 public class NettyServerFactoryTest {
   // dud properties. server should pick up defaults
   private static final RestRequestHandler REST_REQUEST_HANDLER = new MockRestRequestResponseHandler();
-  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
+  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER =
+      new PublicAccessLogger(new String[]{}, new String[]{}, false);
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
 
@@ -64,7 +65,7 @@ public class NettyServerFactoryTest {
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
         nioServer.getClass().getCanonicalName());
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = nettyServerFactory.channelInitializers;
-    if (nettyConfig.nettyServerSSLEnabled && sslFactory != null) {
+    if (nettyConfig.nettyServerEnableSSL && sslFactory != null) {
       assertEquals("Expected two ChannelInitializers when SSLFactory is not null", 2, channelInitializers.size());
       assertNotNull("No ChannelInitializer for SSL port", channelInitializers.get(nettyConfig.nettyServerSSLPort));
     } else {

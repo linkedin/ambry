@@ -29,10 +29,13 @@ public class PublicAccessLoggerTest {
   public void testPublicAccessLoggerHeaders() {
     String[] requestHeaders = new String[]{REQUEST_HEADER_PREFIX + "1", REQUEST_HEADER_PREFIX + "2"};
     String[] responseHeaders = new String[]{RESPONSE_HEADER_PREFIX + "1", RESPONSE_HEADER_PREFIX + "2"};
-    PublicAccessLogger publicAccessLogger = new PublicAccessLogger(requestHeaders, responseHeaders);
+    PublicAccessLogger publicAccessLogger = new PublicAccessLogger(requestHeaders, responseHeaders, true);
     Assert.assertTrue("Request Headers mismatch ",
         Arrays.deepEquals(publicAccessLogger.getRequestHeaders(), requestHeaders));
     Assert.assertTrue("Response Headers mismatch ",
         Arrays.deepEquals(publicAccessLogger.getResponseHeaders(), responseHeaders));
+    Assert.assertTrue("Wrong cert log mode", publicAccessLogger.isCertLoggingEnabled());
+    publicAccessLogger = new PublicAccessLogger(requestHeaders, responseHeaders, false);
+    Assert.assertFalse("Wrong cert log mode", publicAccessLogger.isCertLoggingEnabled());
   }
 }

@@ -18,8 +18,8 @@ public class MockPublicAccessLogger extends PublicAccessLogger {
   private StringBuilder publicAccessLogger = new StringBuilder();
   private String lastPublicAccessLogEntry = new String();
 
-  public MockPublicAccessLogger(String[] requestHeaders, String[] responseHeaders) {
-    super(requestHeaders, responseHeaders);
+  public MockPublicAccessLogger(String[] requestHeaders, String[] responseHeaders, boolean enableCertLogging) {
+    super(requestHeaders, responseHeaders, enableCertLogging);
   }
 
   @Override

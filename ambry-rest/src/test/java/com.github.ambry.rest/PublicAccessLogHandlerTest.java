@@ -23,12 +23,19 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
-import java.io.IOException;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -37,37 +44,62 @@ import org.junit.Test;
  * Unit tests for {@link PublicAccessLogHandler}
  */
 public class PublicAccessLogHandlerTest {
-  private final MockPublicAccessLogger publicAccessLogger;
+  private MockPublicAccessLogger publicAccessLogger;
   private static final String REQUEST_HEADERS =
       HttpHeaderNames.HOST + "," + HttpHeaderNames.CONTENT_LENGTH + ",x-ambry-content-type";
   private static final String RESPONSE_HEADERS =
       EchoMethodHandler.RESPONSE_HEADER_KEY_1 + "," + EchoMethodHandler.RESPONSE_HEADER_KEY_2;
   private static final String NOT_LOGGED_HEADER_KEY = "headerKey";
+  private static final X509Certificate PEER_CERT;
+  private static final SslContext SSL_CONTEXT;
+
+  static {
+    try {
+      PEER_CERT = new SelfSignedCertificate().cert();
+      SelfSignedCertificate localCert = new SelfSignedCertificate();
+      SSL_CONTEXT = SslContextBuilder.forServer(localCert.certificate(), localCert.privateKey()).build();
+    } catch (CertificateException | SSLException e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   /**
    * Sets up the mock public access logger that {@link PublicAccessLogHandler} can use.
    */
   public PublicAccessLogHandlerTest() {
-    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","));
+    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","), false);
   }
 
   /**
    * Tests for the common case request handling flow.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void requestHandleWithGoodInputTest() throws IOException {
-    doRequestHandleTest(HttpMethod.POST, "POST", false);
-    doRequestHandleTest(HttpMethod.GET, "GET", false);
-    doRequestHandleTest(HttpMethod.DELETE, "DELETE", false);
+  public void requestHandleWithGoodInputTest() throws Exception {
+    doRequestHandleTest(HttpMethod.POST, "POST", false, false);
+    doRequestHandleTest(HttpMethod.GET, "GET", false, false);
+    doRequestHandleTest(HttpMethod.DELETE, "DELETE", false, false);
+    // SSL enabled, but no cert logging
+    doRequestHandleTest(HttpMethod.GET, "GET", false, true);
+  }
+
+  /**
+   * Tests with cert logging enabled.
+   * @throws Exception
+   */
+  @Test
+  public void certLoggingTest() throws Exception {
+    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","), true);
+    doRequestHandleTest(HttpMethod.GET, "GET", false, false);
+    doRequestHandleTest(HttpMethod.GET, "GET", false, true);
   }
 
   /**
    * Tests for multiple requests with keep alive.
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void requestHandleWithGoodInputTestWithKeepAlive() throws IOException {
+  public void requestHandleWithGoodInputTestWithKeepAlive() throws Exception {
     doRequestHandleWithKeepAliveTest(HttpMethod.POST, "POST");
     doRequestHandleWithKeepAliveTest(HttpMethod.GET, "GET");
     doRequestHandleWithKeepAliveTest(HttpMethod.DELETE, "DELETE");
@@ -75,10 +107,10 @@ public class PublicAccessLogHandlerTest {
 
   /**
    * Tests two successive request without completing first request
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void requestHandleWithTwoSuccessiveRequest() throws IOException {
+  public void requestHandleWithTwoSuccessiveRequest() throws Exception {
     doRequestHandleWithMultipleRequest(HttpMethod.POST, "POST");
     doRequestHandleWithMultipleRequest(HttpMethod.GET, "GET");
     doRequestHandleWithMultipleRequest(HttpMethod.DELETE, "DELETE");
@@ -86,32 +118,32 @@ public class PublicAccessLogHandlerTest {
 
   /**
    * Tests for the request handling flow for close
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void requestHandleOnCloseTest() throws IOException {
-    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.CLOSE_URI, true);
-    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.CLOSE_URI, true);
-    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.CLOSE_URI, true);
+  public void requestHandleOnCloseTest() throws Exception {
+    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.CLOSE_URI, true, false);
+    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.CLOSE_URI, true, false);
+    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.CLOSE_URI, true, false);
   }
 
   /**
    * Tests for the request handling flow on disconnect
-   * @throws IOException
+   * @throws Exception
    */
   @Test
-  public void requestHandleOnDisconnectTest() throws IOException {
+  public void requestHandleOnDisconnectTest() throws Exception {
     // disonnecting the embedded channel, calls close of PubliAccessLogRequestHandler
-    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.DISCONNECT_URI, true);
-    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.DISCONNECT_URI, true);
-    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.DISCONNECT_URI, true);
+    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.DISCONNECT_URI, true, false);
+    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.DISCONNECT_URI, true, false);
+    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.DISCONNECT_URI, true, false);
   }
 
   /**
    * Tests for the request handling flow with transfer encoding chunked
    */
   @Test
-  public void doRequestHandleWithChunkedResponse() throws IOException {
+  public void doRequestHandleWithChunkedResponse() throws Exception {
     EmbeddedChannel channel = createChannel();
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(EchoMethodHandler.IS_CHUNKED, "true");
@@ -129,10 +161,17 @@ public class PublicAccessLogHandlerTest {
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
    * @param testErrorCase true if error case has to be tested, false otherwise
-   * @throws IOException
+   * @param useSSL {@code true} to test SSL logging.
+   * @throws Exception
    */
-  private void doRequestHandleTest(HttpMethod httpMethod, String uri, boolean testErrorCase) throws IOException {
+  private void doRequestHandleTest(HttpMethod httpMethod, String uri, boolean testErrorCase, boolean useSSL)
+      throws Exception {
     EmbeddedChannel channel = createChannel();
+    if (useSSL) {
+      SSLEngine sslEngine = SSL_CONTEXT.newEngine(channel.alloc());
+      SSLEngine mockSSLEngine = new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), PEER_CERT));
+      channel.pipeline().addFirst(new SslHandler(mockSSLEngine));
+    }
     List<HttpHeaders> httpHeadersList = getHeadersList();
     for (HttpHeaders headers : httpHeadersList) {
       HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
@@ -153,9 +192,9 @@ public class PublicAccessLogHandlerTest {
    * with keep alive
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
-   * @throws IOException
+   * @throws Exception
    */
-  private void doRequestHandleWithKeepAliveTest(HttpMethod httpMethod, String uri) throws IOException {
+  private void doRequestHandleWithKeepAliveTest(HttpMethod httpMethod, String uri) throws Exception {
     EmbeddedChannel channel = createChannel();
     // contains one logged request header
     HttpHeaders headers = new DefaultHttpHeaders();
@@ -182,9 +221,9 @@ public class PublicAccessLogHandlerTest {
    * Does a test to see that two consecutive requests without sending last http content for first request fails
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
-   * @throws IOException
+   * @throws Exception
    */
-  private void doRequestHandleWithMultipleRequest(HttpMethod httpMethod, String uri) throws IOException {
+  private void doRequestHandleWithMultipleRequest(HttpMethod httpMethod, String uri) throws Exception {
     EmbeddedChannel channel = createChannel();
     // contains one logged request header
     HttpHeaders headers1 = new DefaultHttpHeaders();
@@ -221,7 +260,7 @@ public class PublicAccessLogHandlerTest {
    * @param testErrorCase true if error case has to be tested, false otherwise
    */
   private void sendRequestCheckResponse(EmbeddedChannel channel, HttpRequest httpRequest, String uri,
-      HttpHeaders headers, boolean testErrorCase, boolean chunkedResponse) {
+      HttpHeaders headers, boolean testErrorCase, boolean chunkedResponse) throws Exception {
     channel.writeInbound(httpRequest);
     if (uri.equals(EchoMethodHandler.DISCONNECT_URI)) {
       channel.disconnect();
@@ -229,11 +268,20 @@ public class PublicAccessLogHandlerTest {
       channel.writeInbound(new DefaultLastHttpContent());
     }
     String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
-
+    System.out.println(lastLogEntry);
     // verify remote host, http method and uri
     String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpRequest.method() + " " + uri;
     Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
         lastLogEntry.startsWith(subString));
+    // verify SSL-related info
+    boolean sslUsed = channel.pipeline().get(SslHandler.class) != null;
+    subString = "SSL ([used=" + sslUsed + "]";
+    if (sslUsed && publicAccessLogger.isCertLoggingEnabled()) {
+      subString += ", [principal=" + PEER_CERT.getSubjectX500Principal() + "]";
+      subString += ", [san=" + PEER_CERT.getSubjectAlternativeNames() + "]";
+    }
+    subString += ")";
+    Assert.assertTrue("Public Access log entry doesn't have SSL info set correctly", lastLogEntry.contains(subString));
     // verify request headers
     verifyPublicAccessLogEntryForRequestHeaders(lastLogEntry, headers, httpRequest.method(), true);
 

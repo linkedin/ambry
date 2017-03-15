@@ -34,7 +34,8 @@ import static org.junit.Assert.*;
 public class NettyServerTest {
   private static final NettyMetrics NETTY_METRICS = new NettyMetrics(new MetricRegistry());
   private static final RestRequestHandler REQUEST_HANDLER = new MockRestRequestResponseHandler();
-  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
+  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER =
+      new PublicAccessLogger(new String[]{}, new String[]{}, false);
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final ConnectionStatsHandler CONNECTION_STATS_HANDLER = new ConnectionStatsHandler(NETTY_METRICS);
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();

@@ -263,7 +263,7 @@ class NettyRequest implements RestRequest {
       } finally {
         contentLock.unlock();
         restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
-        restRequestMetricsTracker.recordMetrics();
+        restRequestMetricsTracker.recordMetrics(getSSLSession() != null);
         if (digestCalculationTimeInMs >= 0) {
           nettyMetrics.digestCalculationTimeInMs.update(digestCalculationTimeInMs);
         }

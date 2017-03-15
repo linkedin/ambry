@@ -62,7 +62,7 @@ public class RestRequestMetricsTracker {
    * These are usually updated in classes implemented by the {@link NioServer} framework (e.g. Implementations of
    * {@link RestRequest}, {@link RestResponseChannel} or any other classes that form a part of the framework).
    */
-  public class NioMetricsTracker {
+  public static class NioMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
 
@@ -111,7 +111,7 @@ public class RestRequestMetricsTracker {
    * Helper for updating scaling related metrics. These metrics are updated in the classes that provide scaling
    * capabilities when transferring control from {@link NioServer} to {@link BlobStorageService}.
    */
-  public class ScalingMetricsTracker {
+  public static class ScalingMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
     private final AtomicLong requestProcessingWaitTimeInMs = new AtomicLong(0);
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
@@ -200,22 +200,34 @@ public class RestRequestMetricsTracker {
   /**
    * Records the metrics.
    * </p>
-   * This method is expected to called when the {@link RestRequest}, that this instance of {@link RestRequestMetricsTracker} is
-   * attached to, finishes.
+   * This method is expected to called when the {@link RestRequest}, that this instance of
+   * {@link RestRequestMetricsTracker} is attached to, finishes.
+   * @param sslUsedForRequest {@code true} if SSL was used for this request.
    */
-  public void recordMetrics() {
+  public void recordMetrics(boolean sslUsedForRequest) {
     if (metrics != null) {
       if (metricsRecorded.compareAndSet(false, true)) {
         metrics.operationRate.mark();
+        if (sslUsedForRequest) {
+          metrics.sslOperationRate.mark();
+        }
+
         metrics.nioRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
+
+        if (sslUsedForRequest) {
+          metrics.nioSslRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
+          metrics.nioSslResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
+          metrics.nioSslRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
+        }
 
         metrics.scRequestProcessingTimeInMs.update(scalingMetricsTracker.requestProcessingTimeInMs.get());
         metrics.scRequestProcessingWaitTimeInMs.update(scalingMetricsTracker.requestProcessingWaitTimeInMs.get());
         metrics.scResponseProcessingTimeInMs.update(scalingMetricsTracker.responseProcessingTimeInMs.get());
         metrics.scResponseProcessingWaitTimeInMs.update(scalingMetricsTracker.responseProcessingWaitTimeInMs.get());
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
+
         if (failed) {
           metrics.operationError.inc();
         }

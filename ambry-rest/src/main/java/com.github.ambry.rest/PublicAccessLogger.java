@@ -26,11 +26,18 @@ public class PublicAccessLogger {
 
   private final String[] requestHeaders;
   private final String[] responseHeaders;
+  private final boolean enableCertLogging;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public PublicAccessLogger(String[] requestHeaders, String[] responseHeaders) {
+  /**
+   * @param requestHeaders the request headers to log.
+   * @param responseHeaders the response headers to log.
+   * @param enableCertLogging {@code true} to log SSL certificate related info.
+   */
+  public PublicAccessLogger(String[] requestHeaders, String[] responseHeaders, boolean enableCertLogging) {
     this.requestHeaders = requestHeaders;
     this.responseHeaders = responseHeaders;
+    this.enableCertLogging = enableCertLogging;
     logger.trace("Created PublicAccessLogger for log " + publicAccessLogger.getName());
   }
 
@@ -40,6 +47,10 @@ public class PublicAccessLogger {
 
   public String[] getResponseHeaders() {
     return responseHeaders;
+  }
+
+  public boolean isCertLoggingEnabled() {
+    return enableCertLogging;
   }
 
   public void logError(String message) {
