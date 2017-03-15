@@ -52,7 +52,7 @@ public class TimeRangeTest {
    */
   @Test
   public void testIllegalConstructionForTimeRange() {
-    final long[][] illegalArgs =
+    long[][] illegalArgs =
         new long[][]{{0, -1}, {0, 1}, {-1, 0}, {-1, -1}, {Long.MAX_VALUE, 1}, {1, Long.MAX_VALUE}};
     for (int i = 0; i < illegalArgs.length; i++) {
       try {

@@ -26,9 +26,9 @@ public interface StoreStats {
    * in time within the specified range.
    * The following data are considered as valid data for this API:
    * 1. PUT with no expiry and no corresponding DELETE
-   * 2. PUT with no delete expiring at t_exp but t_exp_ref < t_exp
-   * 3. PUT with no expiry but has corresponding DELETE at time t_delete but t_del_ref < t_delete
-   * 5. DELETE record
+   * 2. PUT expiring at t_exp but t_exp_ref < t_exp
+   * 3. PUT with corresponding DELETE at time t_delete but t_del_ref < t_delete
+   * 4. DELETE record
    * For this API, t_del_ref is based on the given {@link TimeRange} and t_exp_ref is the time when the API is called.
    * @param timeRange the reference {@link TimeRange} at which the data is requested. Defines both the reference time
    *                  and the acceptable resolution
