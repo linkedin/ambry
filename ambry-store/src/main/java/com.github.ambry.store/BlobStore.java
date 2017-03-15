@@ -360,6 +360,25 @@ class BlobStore implements Store {
     return index.getLogUsedCapacity();
   }
 
+  /**
+   * Return total capacity of the {@link BlobStore} in bytes
+   * @return the total capacity of the {@link BlobStore} in bytes
+   */
+  long getCapacityInBytes() {
+    return capacityInBytes;
+  }
+
+  /**
+   * Fetches a list of {@link LogSegment} names whose entries don't over lap with {@link Journal}. Returns {@code null}
+   * if there aren't any
+   * @return list of {@link LogSegment} names whose entries don't over lap with {@link Journal}. {@code null}
+   * if there aren't any
+   */
+  List<String> getLogSegmentsNotInJournal() throws StoreException {
+    checkStarted();
+    return index.getLogSegmentsNotInJournal();
+  }
+
   @Override
   public void shutdown() throws StoreException {
     synchronized (lock) {

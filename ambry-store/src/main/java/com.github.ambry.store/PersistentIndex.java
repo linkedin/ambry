@@ -912,6 +912,27 @@ class PersistentIndex {
   }
 
   /**
+   * Fetches {@link LogSegment} names whose entries don't over lap with {@link Journal}. Returns {@code null}
+   * if there aren't any
+   * @return a {@link List<String>} of {@link LogSegment} names whose entries don't overlap with {@link Journal}.
+   * {@code null} if there aren't any
+   */
+  List<String> getLogSegmentsNotInJournal() {
+    LogSegment logSegment = log.getFirstSegment();
+    Offset firstOffsetInJournal = journal.getFirstOffset();
+    List<String> logSegmentNamesToReturn = new ArrayList<>();
+    while (logSegment != null) {
+      if (!logSegment.getName().equals(firstOffsetInJournal.getName())) {
+        logSegmentNamesToReturn.add(logSegment.getName());
+      } else {
+        break;
+      }
+      logSegment = log.getNextSegment(logSegment);
+    }
+    return logSegmentNamesToReturn.size() > 0 ? logSegmentNamesToReturn : null;
+  }
+
+  /**
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
    * @return mapping from log segment names to {@link IndexSegment} instances that refer to them.
    */
