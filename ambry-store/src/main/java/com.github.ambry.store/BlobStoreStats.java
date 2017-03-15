@@ -61,17 +61,20 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Gets the size of valid data at a particular point in time for all log segments. The caller specifies a reference time and
-   * acceptable resolution for the stats in the form of a {@link TimeRange}. The store will return data for a point in time within
-   * the specified range.
+   * Gets the size of valid data at a particular point in time for all log segments. The caller specifies a reference
+   * time and acceptable resolution for the stats in the form of a {@link TimeRange}. The store will return data
+   * for a point in time within the specified range.
    * The following data are considered as valid data for this API:
    * 1. PUT with no expiry and no corresponding DELETE
-   * 2. PUT expiring at t_exp but t_ref < t_exp
-   * 3. PUT with DELETE at time t_delete but t_ref < t_delete
+   * 2. PUT with no delete expiring at t_exp but t_exp_ref < t_exp
+   * 3. PUT with no expiry but has corresponding DELETE at time t_delete but t_del_ref < t_delete
    * 4. DELETE record
-   * @param timeRange the reference {@link TimeRange} at which the data is requested. Defines both the reference time and the acceptable resolution.
-   * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second element is the valid data
-   * size for each segment in the form of a {@link NavigableMap} of segment names to valid data sizes.
+   * For this API, t_del_ref is based on the given {@link TimeRange} and t_exp_ref is the time when the API is called.
+   * @param timeRange the reference {@link TimeRange} at which the data is requested. Defines both the reference time
+   *                  and the acceptable resolution.
+   * @return a {@link Pair} whose first element is the time at which stats was collected (in ms) and whose second
+   * element is the valid data size for each segment in the form of a {@link NavigableMap} of segment names to
+   * valid data sizes.
    */
   Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException {
     long deleteReferenceTimeInMs = timeRange.getEndTimeInMs();
@@ -85,8 +88,9 @@ class BlobStoreStats implements StoreStats {
    * Gets the size of valid data for all serviceIds and their containerIds as of now (the time when the API is called).
    * The following data are considered as valid data for this API:
    * 1. PUT with no expiry and no corresponding DELETE
-   * 2. PUT expiring at t_exp but t_ref < t_exp
-   * 3. PUT with DELETE at time t_delete but t_ref < t_delete
+   * 2. PUT with no delete expiring at t_exp but t_exp_ref < t_exp
+   * 3. PUT with no expiry but has corresponding DELETE at time t_delete but t_del_ref < t_delete
+   * For this API, t_del_ref and t_exp_ref are the same and its value is when the API is called.
    * @return the valid data size for each container in the form of a nested {@link Map} of serviceIds to another map of
    * containerIds to valid data size.
    */
@@ -96,13 +100,13 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Walk through the entire index and collect valid data size information per container (size of delete records not included).
+   * Walk through the entire index and collect valid data size information per container (delete records not included).
    * @param deleteAndExpirationRefTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
   private Map<String, Map<String, Long>> collectValidDataSizeByContainer(long deleteAndExpirationRefTimeInMs)
       throws StoreException {
-    Set<String> deletedKeys = new HashSet<>();
+    Set<StoreKey> deletedKeys = new HashSet<>();
     Map<String, Map<String, Long>> validDataSizePerContainer = new HashMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       List<IndexValue> validIndexValues =
@@ -127,7 +131,7 @@ class BlobStoreStats implements StoreStats {
    */
   private NavigableMap<String, Long> collectValidDataSizeByLogSegment(long deleteReferenceTimeInMs,
       long expirationReferenceTimeInMs) throws StoreException {
-    Set<String> deletedKeys = new HashSet<>();
+    Set<StoreKey> deletedKeys = new HashSet<>();
     NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       List<IndexValue> validIndexValues =
@@ -149,7 +153,7 @@ class BlobStoreStats implements StoreStats {
    * @throws StoreException
    */
   private List<IndexValue> getValidIndexValues(IndexSegment indexSegment, long deleteReferenceTimeInMs,
-      long expirationReferenceTimeInMs, Set<String> deletedKeys) throws StoreException {
+      long expirationReferenceTimeInMs, Set<StoreKey> deletedKeys) throws StoreException {
     diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID, 1);
     List<IndexEntry> indexEntries = new ArrayList<>();
     List<IndexValue> validIndexValues = new ArrayList<>();
@@ -169,7 +173,7 @@ class BlobStoreStats implements StoreStats {
                 : indexValue.getOperationTimeInMs();
         if (operationTimeInMs < deleteReferenceTimeInMs) {
           // delete is relevant
-          deletedKeys.add(indexEntry.getKey().getID());
+          deletedKeys.add(indexEntry.getKey());
         } else if (!isExpired(indexValue.getExpiresAtMs(), expirationReferenceTimeInMs)
             && indexValue.getOriginalMessageOffset() != -1
             && indexValue.getOriginalMessageOffset() >= indexSegment.getStartOffset().getOffset()) {
@@ -181,12 +185,11 @@ class BlobStoreStats implements StoreStats {
               Utils.Infinite_Time, indexValue.getServiceId(), indexValue.getContainerId()));
         }
       } else if (!isExpired(indexValue.getExpiresAtMs(), expirationReferenceTimeInMs) && !deletedKeys.contains(
-          indexEntry.getKey().getID())) {
+          indexEntry.getKey())) {
         // put record that is not deleted and not expired according to deleteReferenceTimeInMs and expirationReferenceTimeInMs
         validIndexValues.add(indexValue);
       }
     }
-
     return validIndexValues;
   }
 
@@ -222,7 +225,7 @@ class BlobStoreStats implements StoreStats {
    * @param value the value to be added at the corresponding entry
    */
   private void updateMapHelper(Map<String, Long> map, String key, Long value) {
-    Long existingValue = map.containsKey(key) ? map.get(key) + value : value;
-    map.put(key, existingValue);
+    Long newValue = map.containsKey(key) ? map.get(key) + value : value;
+    map.put(key, newValue);
   }
 }

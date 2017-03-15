@@ -776,8 +776,7 @@ class IndexSegment {
           // we include the key in the final list if it is not the initial key or if the initial key was null
           if (key == null || newKey.compareTo(key) != 0) {
             IndexValue newValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion());
-            IndexEntry newEntry = new IndexEntry(newKey, newValue);
-            entries.add(newEntry);
+            entries.add(new IndexEntry(newKey, newValue));
             currentTotalSizeOfEntriesInBytes.addAndGet(newValue.getSize());
           }
           index++;
@@ -793,8 +792,7 @@ class IndexSegment {
       for (Map.Entry<StoreKey, IndexValue> entry : tempMap.entrySet()) {
         if (key == null || entry.getKey().compareTo(key) != 0) {
           IndexValue newValue = new IndexValue(startOffset.getName(), entry.getValue().getBytes(), getVersion());
-          IndexEntry newEntry = new IndexEntry(entry.getKey(), newValue);
-          entries.add(newEntry);
+          entries.add(new IndexEntry(entry.getKey(), newValue));
           currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
             break;

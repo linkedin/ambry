@@ -32,7 +32,6 @@ class TimeRange {
       throw new IllegalArgumentException(
           "Illegal reference time: " + referenceTimeInMs + " and/or error margin: " + errorMarginInMs);
     }
-
     startTimeInMs = referenceTimeInMs - errorMarginInMs;
     endTimeInMs = referenceTimeInMs + errorMarginInMs;
   }

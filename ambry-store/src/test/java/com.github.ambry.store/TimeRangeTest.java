@@ -27,9 +27,6 @@ import static org.junit.Assert.*;
  */
 public class TimeRangeTest {
 
-  private final long[][] illegalArgs =
-      new long[][]{{0, -1}, {0, 1}, {-1, 0}, {-1, -1}, {Long.MAX_VALUE, 1}, {1, Long.MAX_VALUE}};
-
   /**
    * Tests the constructor and getters of TimeRange when provided with legal arguments.
    */
@@ -55,6 +52,8 @@ public class TimeRangeTest {
    */
   @Test
   public void testIllegalConstructionForTimeRange() {
+    final long[][] illegalArgs =
+        new long[][]{{0, -1}, {0, 1}, {-1, 0}, {-1, -1}, {Long.MAX_VALUE, 1}, {1, Long.MAX_VALUE}};
     for (int i = 0; i < illegalArgs.length; i++) {
       try {
         new TimeRange(illegalArgs[i][0], illegalArgs[i][1]);
