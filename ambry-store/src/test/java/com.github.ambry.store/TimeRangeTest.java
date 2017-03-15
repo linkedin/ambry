@@ -15,9 +15,7 @@
 package com.github.ambry.store;
 
 import java.util.Random;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 import static org.junit.Assert.*;
 

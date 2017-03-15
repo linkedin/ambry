@@ -670,9 +670,9 @@ class CuratedLogIndexState {
     Offset expectedStartOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getStartOffset());
     assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
-    // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
+    // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
-    time.sleep(1);
+    advanceTime(Time.MsPerSec);
     assertEquals("Incorrect log segment count", 0, index.getLogSegmentCount());
     long expectedUsedCapacity;
     if (!isLogSegmented) {
