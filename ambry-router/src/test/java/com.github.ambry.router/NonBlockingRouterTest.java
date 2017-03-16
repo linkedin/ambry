@@ -319,8 +319,11 @@ public class NonBlockingRouterTest {
     mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
     future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
 
-    // Now wait till the thread dies
-    TestUtils.getThreadByThisName("RequestResponseHandlerThread").join();
+    Thread requestResponseHandlerThread = TestUtils.getThreadByThisName("RequestResponseHandlerThread");
+    // If the thread is still running, wait until it dies
+    if (requestResponseHandlerThread != null) {
+      requestResponseHandlerThread.join();
+    }
 
     try {
       future.get();

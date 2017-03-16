@@ -368,6 +368,7 @@ public class DeleteManagerTest {
    */
   @Test
   public void testRouterClosedDuringOperation() throws Exception {
+    setServerResponse(false);
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.RouterClosed, new ErrorCodeChecker() {
           @Override
