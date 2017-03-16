@@ -896,8 +896,8 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
    * @return all the valid index entries valid in the index segment with start offset {@code indexSegmentStartOffset}.
    */
-  List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset,
-      long deleteReferenceTimeMs, long expiryReferenceTimeMs) {
+  List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
+      long expiryReferenceTimeMs) {
     List<IndexEntry> validEntries = new ArrayList<>();
     for (Map.Entry<MockId, IndexValue> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset).entrySet()) {
       MockId key = indexSegmentEntry.getKey();

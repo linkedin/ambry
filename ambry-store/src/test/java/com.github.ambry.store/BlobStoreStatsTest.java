@@ -226,7 +226,8 @@ public class BlobStoreStatsTest {
     advanceTimeToNextSecond();
 
     long timeInMsAfterDeletes = state.time.milliseconds();
-    long totalLogSegmentValidSizeAfterDeletes = verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsAfterDeletes, 0L));
+    long totalLogSegmentValidSizeAfterDeletes =
+        verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsAfterDeletes, 0L));
     long totalContainerValidSizeAfterDeletes = verifyAndGetContainerValidSize();
     long expectedLogSegmentDecrement =
         2 * (CuratedLogIndexState.PUT_RECORD_SIZE - CuratedLogIndexState.DELETE_RECORD_SIZE);

@@ -732,7 +732,8 @@ class IndexSegment {
   boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
       AtomicLong currentTotalSizeOfEntriesInBytes) throws IOException {
     List<IndexEntry> indexEntries = new ArrayList<>();
-    boolean isNewEntriesAdded = getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes);
+    boolean isNewEntriesAdded =
+        getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes);
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue value = indexEntry.getValue();
       MessageInfo info =
