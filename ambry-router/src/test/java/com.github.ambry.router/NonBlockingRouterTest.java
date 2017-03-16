@@ -405,7 +405,8 @@ public class NonBlockingRouterTest {
   }
 
   /**
-   * Test that if a composite blob is deleted, the data chunks are eventually deleted.
+   * Test that if a composite blob is deleted, the data chunks are eventually deleted. Also check the service IDs used
+   * for delete operations.
    */
   @Test
   public void testCompositeBlobDataChunksDelete() throws Exception {

@@ -168,7 +168,8 @@ class PerfRouter implements Router {
    * Does nothing. Simply indicates success immediately.
    * @param blobId (ignored).
    * @param serviceId (ignored).
-   *@param callback the {@link Callback} to invoke on operation completion.  @return a {@link FutureResult} that will eventually contain the result of the operation.
+   * @param callback the {@link Callback} to invoke on operation completion.
+   * @return a {@link FutureResult} that will eventually contain the result of the operation.
    */
   @Override
   public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
