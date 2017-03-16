@@ -271,7 +271,7 @@ class BlobStoreCompactor {
   private void copy() throws InterruptedException, IOException, StoreException {
     setupState();
     List<String> logSegmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
-    Offset cutoffOffsetForDelete = getCutoffOffsetForDelete();
+    Offset startOffsetOfLastIndexSegmentForDelete = getStartOffsetOfLastIndexSegmentForDelete();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
       LogSegment logSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
@@ -288,7 +288,7 @@ class BlobStoreCompactor {
       LogSegment srcLogSegment = srcLog.getSegment(logSegmentName);
       Offset logSegmentEndOffset = new Offset(srcLogSegment.getName(), srcLogSegment.getEndOffset());
       if (needsCopying(logSegmentEndOffset) && !copyLogSegmentData(srcLogSegment, duplicateSearchSpan,
-          cutoffOffsetForDelete)) {
+          startOffsetOfLastIndexSegmentForDelete)) {
         if (isActive) {
           compactionLog.splitCurrentCycle(logSegmentName);
         }
@@ -413,16 +413,20 @@ class BlobStoreCompactor {
   }
 
   /**
-   * @return the {@link Offset} up until which delete records are considered applicable. Any delete records of blobs
-   * after this offset does not count and the blob is considered as not deleted.
+   * @return the start {@link Offset} of the index segment up until which delete records are considered applicable. Any
+   * delete records of blobs in subsequent index segments do not count and the blob is considered as not deleted.
+   * <p/>
+   * Returns {@code null} if none of the delete records are considered applicable.
    */
-  private Offset getCutoffOffsetForDelete() {
+  private Offset getStartOffsetOfLastIndexSegmentForDelete() {
     // TODO: move this to BlobStoreStats
     long referenceTimeMs = compactionLog.getCompactionDetails().getReferenceTimeMs();
-    Offset cutoffOffset = srcIndex.getStartOffset();
+    Offset cutoffOffset = null;
     for (IndexSegment indexSegment : srcIndex.getIndexSegments().descendingMap().values()) {
       if (indexSegment.getLastModifiedTimeMs() < referenceTimeMs) {
-        cutoffOffset = indexSegment.getEndOffset();
+        // NOTE: using start offset here because of the way FileSpan is treated in PersistentIndex.findKey().
+        // using this as the end offset for delete includes the whole index segment in the search.
+        cutoffOffset = indexSegment.getStartOffset();
         break;
       }
     }
@@ -433,19 +437,20 @@ class BlobStoreCompactor {
    * Copies data from the provided log segment into the target log (swap spaces).
    * @param from the {@link LogSegment} to copy from.
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates.
-   * @param cutoffOffsetForDelete the {@link Offset} up until which delete records are considered applicable.
+   * @param startOffsetOfLastIndexSegmentForDelete  the start {@link Offset} of the index segment up until which delete
+   *                                                records are considered applicable.
    * @return {@code true} if all the records in the log segment were copied. {@code false} if some records were not
    * copied either because there was no more capacity or because a shutdown was initiated.
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there are any problems reading or writing to store components.
    */
-  private boolean copyLogSegmentData(LogSegment from, FileSpan duplicateSearchSpan, Offset cutoffOffsetForDelete)
-      throws IOException, StoreException {
+  private boolean copyLogSegmentData(LogSegment from, FileSpan duplicateSearchSpan,
+      Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
     boolean allCopied = true;
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(from.getName()).keySet()) {
       IndexSegment toCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
       if (needsCopying(toCopy.getEndOffset()) && !copyIndexSegmentData(from, toCopy, duplicateSearchSpan,
-          cutoffOffsetForDelete)) {
+          startOffsetOfLastIndexSegmentForDelete)) {
         // there is a shutdown in progress or there was no space to copy all entries.
         allCopied = false;
         break;
@@ -459,14 +464,15 @@ class BlobStoreCompactor {
    * @param from the {@link LogSegment} to copy from.
    * @param indexSegmentToCopy the {@link IndexSegment} that contains the entries that need to be copied.
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates.
-   * @param cutoffOffsetForDelete the {@link Offset} up until which delete records are considered applicable.
+   * @param startOffsetOfLastIndexSegmentForDelete  the start {@link Offset} of the index segment up until which delete
+   *                                                records are considered applicable.
    * @return {@code true} if all the records in the index segment were copied. {@code false} if some records were not
    * copied either because there was no more capacity or because a shutdown was initiated.
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there are any problems reading or writing to store components.
    */
   private boolean copyIndexSegmentData(LogSegment from, IndexSegment indexSegmentToCopy, FileSpan duplicateSearchSpan,
-      Offset cutoffOffsetForDelete) throws IOException, StoreException {
+      Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
     List<IndexEntry> allIndexEntries = new ArrayList<>();
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
@@ -486,7 +492,7 @@ class BlobStoreCompactor {
     // filter deleted/expired entries and get index entries for all the PUT and DELETE records
     List<IndexEntry> indexEntriesToCopy =
         getIndexEntriesToCopy(allIndexEntries, duplicateSearchSpan, indexSegmentToCopy.getStartOffset(),
-            cutoffOffsetForDelete, checkAlreadyCopied);
+            startOffsetOfLastIndexSegmentForDelete, checkAlreadyCopied);
 
     // Copy these over
     boolean copiedAll = copyRecords(from, indexEntriesToCopy, indexSegmentToCopy.getLastModifiedTimeSecs());
@@ -504,7 +510,8 @@ class BlobStoreCompactor {
    * @param allIndexEntries the {@link MessageInfo} of all the entries in the index segment.
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates
    * @param indexSegmentStartOffset the start {@link Offset} of the index segment under consideration.
-   * @param cutoffOffsetForDelete the {@link Offset} up until which delete records are considered applicable.
+   * @param startOffsetOfLastIndexSegmentForDelete  the start {@link Offset} of the index segment up until which delete
+   *                                                records are considered applicable.
    * @param checkAlreadyCopied {@code true} if a check for existence in the swap spaces has to be executed (due to
    *                                       crash/shutdown), {@code false} otherwise.
    * @return the list of valid {@link IndexEntry} sorted by their offset.
@@ -512,10 +519,11 @@ class BlobStoreCompactor {
    * @throws StoreException if there is any problem with using the index.
    */
   private List<IndexEntry> getIndexEntriesToCopy(List<IndexEntry> allIndexEntries, FileSpan duplicateSearchSpan,
-      Offset indexSegmentStartOffset, Offset cutoffOffsetForDelete, boolean checkAlreadyCopied) throws StoreException {
+      Offset indexSegmentStartOffset, Offset startOffsetOfLastIndexSegmentForDelete, boolean checkAlreadyCopied)
+      throws StoreException {
     List<IndexEntry> indexEntriesToCopy = new ArrayList<>();
     List<IndexEntry> copyCandidates =
-        getValidIndexEntries(indexSegmentStartOffset, allIndexEntries, cutoffOffsetForDelete);
+        getValidIndexEntries(indexSegmentStartOffset, allIndexEntries, startOffsetOfLastIndexSegmentForDelete);
     for (IndexEntry copyCandidate : copyCandidates) {
       IndexValue copyCandidateValue = copyCandidate.getValue();
       // search for duplicates in srcIndex if required
@@ -544,9 +552,10 @@ class BlobStoreCompactor {
   }
 
   private List<IndexEntry> getValidIndexEntries(Offset indexSegmentStartOffset, List<IndexEntry> allIndexEntries,
-      Offset cutoffOffsetForDelete) throws StoreException {
+      Offset startOffsetOfLastIndexSegmentForDelete) throws StoreException {
     // TODO: move this blob store stats
-    boolean deletesInEffect = indexSegmentStartOffset.compareTo(cutoffOffsetForDelete) < 0;
+    boolean deletesInEffect = startOffsetOfLastIndexSegmentForDelete != null
+        && indexSegmentStartOffset.compareTo(startOffsetOfLastIndexSegmentForDelete) <= 0;
     List<IndexEntry> validEntries = new ArrayList<>();
     for (IndexEntry indexEntry : allIndexEntries) {
       IndexValue value = indexEntry.getValue();
@@ -570,7 +579,7 @@ class BlobStoreCompactor {
       } else if (!srcIndex.isExpired(value)) {
         // unexpired PUT entry.
         if (deletesInEffect) {
-          FileSpan deleteSearchSpan = new FileSpan(indexSegmentStartOffset, cutoffOffsetForDelete);
+          FileSpan deleteSearchSpan = new FileSpan(indexSegmentStartOffset, startOffsetOfLastIndexSegmentForDelete);
           IndexValue searchedValue = srcIndex.findKey(indexEntry.getKey(), deleteSearchSpan);
           if (!searchedValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
             // PUT entry that has not expired and is not considered deleted.
