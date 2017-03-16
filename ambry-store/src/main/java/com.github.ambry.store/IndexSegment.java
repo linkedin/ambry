@@ -32,6 +32,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -334,7 +335,7 @@ class IndexSegment {
             if (result == 0) {
               byte[] buf = new byte[valueSize];
               duplicate.get(buf);
-              toReturn = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), version);
+              toReturn = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion());
               break;
             } else if (result < 0) {
               low = mid + 1;
@@ -730,6 +731,32 @@ class IndexSegment {
    */
   boolean getEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<MessageInfo> entries,
       AtomicLong currentTotalSizeOfEntriesInBytes) throws IOException {
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    boolean isNewEntriesAdded =
+        getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes);
+    for (IndexEntry indexEntry : indexEntries) {
+      IndexValue value = indexEntry.getValue();
+      MessageInfo info =
+          new MessageInfo(indexEntry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+              value.getExpiresAtMs());
+      entries.add(info);
+    }
+    return isNewEntriesAdded;
+  }
+
+  /**
+   * Gets all the index entries upto maxEntries from the start of a given key (exclusive) or all entries if key is null,
+   * till maxTotalSizeOfEntriesInBytes
+   * @param key The key from where to start retrieving entries.
+   *            If the key is null, all entries are retrieved upto maxentries
+   * @param findEntriesCondition The condition that determines when to stop fetching entries.
+   * @param entries The input entries list that needs to be filled. The entries list can have existing entries
+   * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+   * @return true if any entries were added.
+   * @throws IOException
+   */
+  boolean getIndexEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<IndexEntry> entries,
+      AtomicLong currentTotalSizeOfEntriesInBytes) throws IOException {
     if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
       return false;
     }
@@ -749,11 +776,8 @@ class IndexSegment {
           readBuf.get(buf);
           // we include the key in the final list if it is not the initial key or if the initial key was null
           if (key == null || newKey.compareTo(key) != 0) {
-            IndexValue newValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), version);
-            MessageInfo info =
-                new MessageInfo(newKey, newValue.getSize(), newValue.isFlagSet(IndexValue.Flags.Delete_Index),
-                    newValue.getExpiresAtMs());
-            entries.add(info);
+            IndexValue newValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion());
+            entries.add(new IndexEntry(newKey, newValue));
             currentTotalSizeOfEntriesInBytes.addAndGet(newValue.getSize());
           }
           index++;
@@ -768,9 +792,8 @@ class IndexSegment {
       }
       for (Map.Entry<StoreKey, IndexValue> entry : tempMap.entrySet()) {
         if (key == null || entry.getKey().compareTo(key) != 0) {
-          MessageInfo info = new MessageInfo(entry.getKey(), entry.getValue().getSize(),
-              entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index), entry.getValue().getExpiresAtMs());
-          entries.add(info);
+          IndexValue newValue = new IndexValue(startOffset.getName(), entry.getValue().getBytes(), getVersion());
+          entries.add(new IndexEntry(entry.getKey(), newValue));
           currentTotalSizeOfEntriesInBytes.addAndGet(entry.getValue().getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
             break;

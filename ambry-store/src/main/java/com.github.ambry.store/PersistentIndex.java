@@ -1404,4 +1404,3 @@ class PersistentIndex {
     }
   }
 }
-

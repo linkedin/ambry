@@ -670,9 +670,9 @@ class CuratedLogIndexState {
     Offset expectedStartOffset = new Offset(log.getFirstSegment().getName(), log.getFirstSegment().getStartOffset());
     assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
-    // advance time by a millisecond in order to be able to add expired keys and to avoid keys that are expired from
+    // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
-    time.sleep(1);
+    advanceTime(Time.MsPerSec);
     assertEquals("Incorrect log segment count", 0, index.getLogSegmentCount());
     long expectedUsedCapacity;
     if (!isLogSegmented) {
@@ -896,8 +896,8 @@ class CuratedLogIndexState {
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
    * @return all the valid index entries valid in the index segment with start offset {@code indexSegmentStartOffset}.
    */
-  private List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset,
-      long deleteReferenceTimeMs, long expiryReferenceTimeMs) {
+  List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
+      long expiryReferenceTimeMs) {
     List<IndexEntry> validEntries = new ArrayList<>();
     for (Map.Entry<MockId, IndexValue> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset).entrySet()) {
       MockId key = indexSegmentEntry.getKey();
@@ -905,6 +905,12 @@ class CuratedLogIndexState {
       if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
         // delete record is always valid
         validEntries.add(new IndexEntry(key, value));
+        if (!isDeletedAt(key, deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)
+            && value.getOriginalMessageOffset() != -1
+            && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset()) {
+          // delete is irrelevant but it's in the same index segment as the put and the put is still valid
+          validEntries.add(new IndexEntry(key, allKeys.get(key).getFirst()));
+        }
       } else if (!isExpiredAt(key, expiryReferenceTimeMs)) {
         // unexpired
         if (!deletedKeys.contains(key)) {
