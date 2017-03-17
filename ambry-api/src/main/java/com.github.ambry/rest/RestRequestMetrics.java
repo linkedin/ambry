@@ -30,10 +30,6 @@ public class RestRequestMetrics {
   static final String NIO_RESPONSE_PROCESSING_TIME_SUFFIX = "NioResponseProcessingTimeInMs";
   static final String NIO_ROUND_TRIP_TIME_SUFFIX = "NioRoundTripTimeInMs";
 
-  static final String NIO_SSL_REQUEST_PROCESSING_TIME_SUFFIX = "NioSslRequestProcessingTimeInMs";
-  static final String NIO_SSL_RESPONSE_PROCESSING_TIME_SUFFIX = "NioSslResponseProcessingTimeInMs";
-  static final String NIO_SSL_ROUND_TRIP_TIME_SUFFIX = "NioSslRoundTripTimeInMs";
-
   static final String SC_REQUEST_PROCESSING_TIME_SUFFIX = "ScRequestProcessingTimeInMs";
   static final String SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX = "ScRequestProcessingWaitTimeInMs";
   static final String SC_RESPONSE_PROCESSING_TIME_SUFFIX = "ScResponseProcessingTimeInMs";
@@ -41,16 +37,11 @@ public class RestRequestMetrics {
   static final String SC_ROUND_TRIP_TIME_SUFFIX = "ScRoundTripTimeInMs";
 
   static final String OPERATION_RATE_SUFFIX = "Rate";
-  static final String SSL_OPERATION_RATE_SUFFIX = "SslRate";
   static final String OPERATION_ERROR_SUFFIX = "Error";
 
   final Histogram nioRequestProcessingTimeInMs;
   final Histogram nioResponseProcessingTimeInMs;
   final Histogram nioRoundTripTimeInMs;
-
-  final Histogram nioSslRequestProcessingTimeInMs;
-  final Histogram nioSslResponseProcessingTimeInMs;
-  final Histogram nioSslRoundTripTimeInMs;
 
   final Histogram scRequestProcessingTimeInMs;
   final Histogram scRequestProcessingWaitTimeInMs;
@@ -59,7 +50,6 @@ public class RestRequestMetrics {
   final Histogram scRoundTripTimeInMs;
 
   final Meter operationRate;
-  final Meter sslOperationRate;
   final Counter operationError;
 
   /**
@@ -83,13 +73,6 @@ public class RestRequestMetrics {
     nioRoundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_ROUND_TRIP_TIME_SUFFIX));
 
-    nioSslRequestProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_SSL_REQUEST_PROCESSING_TIME_SUFFIX));
-    nioSslResponseProcessingTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(ownerClass, requestType + NIO_SSL_RESPONSE_PROCESSING_TIME_SUFFIX));
-    nioSslRoundTripTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_SSL_ROUND_TRIP_TIME_SUFFIX));
-
     scRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_TIME_SUFFIX));
     scRequestProcessingWaitTimeInMs =
@@ -102,7 +85,6 @@ public class RestRequestMetrics {
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_ROUND_TRIP_TIME_SUFFIX));
 
     operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
-    sslOperationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + SSL_OPERATION_RATE_SUFFIX));
     operationError = metricRegistry.counter(MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX));
   }
 }

@@ -141,7 +141,8 @@ class AdminBlobStorageService implements BlobStorageService {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       checkAvailable();
       RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-      RestRequestMetrics requestMetrics = adminMetrics.getBlobMetrics;
+      RestRequestMetrics requestMetrics =
+          restRequest.getSSLSession() != null ? adminMetrics.getBlobSSLMetrics : adminMetrics.getBlobMetrics;
       GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource);
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
@@ -149,13 +150,16 @@ class AdminBlobStorageService implements BlobStorageService {
         logger.trace("Sub-resource requested: {}", subresource);
         switch (subresource) {
           case BlobInfo:
-            requestMetrics = adminMetrics.getBlobInfoMetrics;
+            requestMetrics =
+                restRequest.getSSLSession() != null ? adminMetrics.getBlobInfoMetrics : adminMetrics.getBlobInfoMetrics;
             break;
           case UserMetadata:
-            requestMetrics = adminMetrics.getUserMetadataMetrics;
+            requestMetrics = restRequest.getSSLSession() != null ? adminMetrics.getUserMetadataSSLMetrics
+                : adminMetrics.getUserMetadataMetrics;
             break;
           case Replicas:
-            requestMetrics = adminMetrics.getReplicasMetrics;
+            requestMetrics =
+                restRequest.getSSLSession() != null ? adminMetrics.getReplicasMetrics : adminMetrics.getReplicasMetrics;
             securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
             break;
         }
@@ -180,7 +184,9 @@ class AdminBlobStorageService implements BlobStorageService {
   @Override
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(adminMetrics.postBlobMetrics);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? adminMetrics.postBlobSSLMetrics : adminMetrics.postBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     Exception exception =
         isUp ? new RestServiceException("POST is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
             : new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
@@ -192,7 +198,9 @@ class AdminBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(adminMetrics.deleteBlobMetrics);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? adminMetrics.deleteBlobSSLMetrics : adminMetrics.deleteBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     try {
       logger.trace("Handling DELETE request - {}", restRequest.getUri());
       checkAvailable();
@@ -213,7 +221,9 @@ class AdminBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(adminMetrics.headBlobMetrics);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? adminMetrics.headBlobSSLMetrics : adminMetrics.headBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     try {
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
       checkAvailable();

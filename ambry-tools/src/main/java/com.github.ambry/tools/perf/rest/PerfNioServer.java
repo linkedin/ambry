@@ -274,7 +274,7 @@ class PerfNioServer implements NioServer {
     public void close() throws IOException {
       readableStreamChannel.close();
       restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
-      restRequestMetricsTracker.recordMetrics(getSSLSession() != null);
+      restRequestMetricsTracker.recordMetrics();
     }
 
     @Override

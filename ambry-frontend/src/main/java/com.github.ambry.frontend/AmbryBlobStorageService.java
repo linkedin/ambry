@@ -141,15 +141,18 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       checkAvailable();
       RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-      RestRequestMetrics requestMetrics = frontendMetrics.getBlobMetrics;
+      RestRequestMetrics requestMetrics =
+          restRequest.getSSLSession() != null ? frontendMetrics.getBlobSSLMetrics : frontendMetrics.getBlobMetrics;
       if (subresource != null) {
         logger.trace("Sub-resource requested: {}", subresource);
         switch (subresource) {
           case BlobInfo:
-            requestMetrics = frontendMetrics.getBlobInfoMetrics;
+            requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getBlobInfoMetrics
+                : frontendMetrics.getBlobInfoMetrics;
             break;
           case UserMetadata:
-            requestMetrics = frontendMetrics.getUserMetadataMetrics;
+            requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getUserMetadataSSLMetrics
+                : frontendMetrics.getUserMetadataMetrics;
             break;
         }
       }
@@ -173,6 +176,9 @@ class AmbryBlobStorageService implements BlobStorageService {
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
     restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobMetrics);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? frontendMetrics.postBlobSSLMetrics : frontendMetrics.postBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     try {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
@@ -200,7 +206,9 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(frontendMetrics.deleteBlobMetrics);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? frontendMetrics.deleteBlobSSLMetrics : frontendMetrics.deleteBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     try {
       logger.trace("Handling DELETE request - {}", restRequest.getUri());
       checkAvailable();
@@ -221,7 +229,9 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(frontendMetrics.headBlobMetrics);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? frontendMetrics.headBlobSSLMetrics : frontendMetrics.headBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     try {
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
       checkAvailable();

@@ -26,19 +26,27 @@ import com.github.ambry.rest.RestRequestMetrics;
  * Exports metrics that are triggered by the Admin to the provided {@link MetricRegistry}.
  */
 class AdminMetrics {
+  private static final String SSL_SUFFIX = "Ssl";
 
   // RestRequestMetrics instances
   // DELETE
   public final RestRequestMetrics deleteBlobMetrics;
+  public final RestRequestMetrics deleteBlobSSLMetrics;
   // HEAD
   public final RestRequestMetrics headBlobMetrics;
+  public final RestRequestMetrics headBlobSSLMetrics;
   // GET
   public final RestRequestMetrics getBlobInfoMetrics;
+  public final RestRequestMetrics getBlobInfoSSLMetrics;
   public final RestRequestMetrics getBlobMetrics;
+  public final RestRequestMetrics getBlobSSLMetrics;
   public final RestRequestMetrics getUserMetadataMetrics;
+  public final RestRequestMetrics getUserMetadataSSLMetrics;
   public final RestRequestMetrics getReplicasMetrics;
+  public final RestRequestMetrics getReplicasSSLMetrics;
   // POST
   public final RestRequestMetrics postBlobMetrics;
+  public final RestRequestMetrics postBlobSSLMetrics;
 
   // Rates
   // AdminSecurityService
@@ -115,15 +123,26 @@ class AdminMetrics {
     // RestRequestMetrics instances
     // DELETE
     deleteBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "DeleteBlob", metricRegistry);
+    deleteBlobSSLMetrics =
+        new RestRequestMetrics(AdminBlobStorageService.class, "DeleteBlob" + SSL_SUFFIX, metricRegistry);
     // HEAD
     headBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "HeadBlob", metricRegistry);
+    headBlobSSLMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "HeadBlob" + SSL_SUFFIX, metricRegistry);
     // GET
     getBlobInfoMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetBlobInfo", metricRegistry);
+    getBlobInfoSSLMetrics =
+        new RestRequestMetrics(AdminBlobStorageService.class, "GetBlobInfo" + SSL_SUFFIX, metricRegistry);
     getBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetBlob", metricRegistry);
+    getBlobSSLMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetBlob" + SSL_SUFFIX, metricRegistry);
     getUserMetadataMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetUserMetadata", metricRegistry);
+    getUserMetadataSSLMetrics =
+        new RestRequestMetrics(AdminBlobStorageService.class, "GetUserMetadata" + SSL_SUFFIX, metricRegistry);
     getReplicasMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "GetReplicas", metricRegistry);
+    getReplicasSSLMetrics =
+        new RestRequestMetrics(AdminBlobStorageService.class, "GetReplicas" + SSL_SUFFIX, metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PostBlob", metricRegistry);
+    postBlobSSLMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PostBlob" + SSL_SUFFIX, metricRegistry);
 
     // Rates
     // AdminSecurityService

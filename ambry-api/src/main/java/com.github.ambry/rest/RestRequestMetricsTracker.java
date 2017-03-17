@@ -200,34 +200,22 @@ public class RestRequestMetricsTracker {
   /**
    * Records the metrics.
    * </p>
-   * This method is expected to called when the {@link RestRequest}, that this instance of
-   * {@link RestRequestMetricsTracker} is attached to, finishes.
-   * @param sslUsedForRequest {@code true} if SSL was used for this request.
+   * This method is expected to called when the {@link RestRequest}, that this instance of {@link RestRequestMetricsTracker} is
+   * attached to, finishes.
    */
-  public void recordMetrics(boolean sslUsedForRequest) {
+  public void recordMetrics() {
     if (metrics != null) {
       if (metricsRecorded.compareAndSet(false, true)) {
         metrics.operationRate.mark();
-        if (sslUsedForRequest) {
-          metrics.sslOperationRate.mark();
-        }
-
         metrics.nioRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
-
-        if (sslUsedForRequest) {
-          metrics.nioSslRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
-          metrics.nioSslResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
-          metrics.nioSslRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
-        }
 
         metrics.scRequestProcessingTimeInMs.update(scalingMetricsTracker.requestProcessingTimeInMs.get());
         metrics.scRequestProcessingWaitTimeInMs.update(scalingMetricsTracker.requestProcessingWaitTimeInMs.get());
         metrics.scResponseProcessingTimeInMs.update(scalingMetricsTracker.responseProcessingTimeInMs.get());
         metrics.scResponseProcessingWaitTimeInMs.update(scalingMetricsTracker.responseProcessingWaitTimeInMs.get());
         metrics.scRoundTripTimeInMs.update(scalingMetricsTracker.roundTripTimeInMs);
-
         if (failed) {
           metrics.operationError.inc();
         }

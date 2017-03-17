@@ -33,14 +33,10 @@ public class RestRequestMetricsTrackerTest {
    */
   @Test
   public void commonCaseTest() {
-    withDefaultsTest(false, false);
-    withDefaultsTest(false, true);
-    withDefaultsTest(true, false);
-    withDefaultsTest(true, true);
-    withInjectedMetricsTest(false, false);
-    withInjectedMetricsTest(false, true);
-    withInjectedMetricsTest(true, false);
-    withInjectedMetricsTest(true, true);
+    withDefaultsTest(false);
+    withDefaultsTest(true);
+    withInjectedMetricsTest(false);
+    withInjectedMetricsTest(true);
   }
 
   /**
@@ -84,25 +80,23 @@ public class RestRequestMetricsTrackerTest {
   /**
    * Tests recording of metrics without setting a custom {@link RestRequestMetrics}.
    * @param induceFailure if {@code true}, the request is marked as failed.
-   * @param sslUsed {@code true} if SSL metrics should be recorded.
    */
-  private void withDefaultsTest(boolean induceFailure, boolean sslUsed) {
+  private void withDefaultsTest(boolean induceFailure) {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
     TestMetrics testMetrics = new TestMetrics(requestMetrics, induceFailure);
-    requestMetrics.recordMetrics(sslUsed);
+    requestMetrics.recordMetrics();
     String metricPrefix =
         RestRequestMetricsTracker.class.getCanonicalName() + "." + RestRequestMetricsTracker.DEFAULT_REQUEST_TYPE;
-    testMetrics.compareMetrics(metricPrefix, metricRegistry, sslUsed);
+    testMetrics.compareMetrics(metricPrefix, metricRegistry);
   }
 
   /**
    * Tests recording of metrics after setting a custom {@link RestRequestMetrics}.
    * @param induceFailure if {@code true}, the request is marked as failed.
-   * @param sslUsed {@code true} if SSL metrics should be recorded.
    */
-  private void withInjectedMetricsTest(boolean induceFailure, boolean sslUsed) {
+  private void withInjectedMetricsTest(boolean induceFailure) {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     String testRequestType = "Test";
@@ -110,9 +104,9 @@ public class RestRequestMetricsTrackerTest {
     RestRequestMetrics restRequestMetrics = new RestRequestMetrics(getClass(), testRequestType, metricRegistry);
     TestMetrics testMetrics = new TestMetrics(requestMetrics, induceFailure);
     requestMetrics.injectMetrics(restRequestMetrics);
-    requestMetrics.recordMetrics(sslUsed);
+    requestMetrics.recordMetrics();
     String metricPrefix = getClass().getCanonicalName() + "." + testRequestType;
-    testMetrics.compareMetrics(metricPrefix, metricRegistry, sslUsed);
+    testMetrics.compareMetrics(metricPrefix, metricRegistry);
   }
 }
 
@@ -145,9 +139,8 @@ class TestMetrics {
    * Compares metrics generated inside this instance with what was recorded in the given {@code metricRegistry}.
    * @param metricPrefix the prefix of the metrics to look for.
    * @param metricRegistry the {@link MetricRegistry} where metrics were recorded.
-   * @param sslUsed {@code true} if SSL metrics should have been recorded.
    */
-  protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry, boolean sslUsed) {
+  protected void compareMetrics(String metricPrefix, MetricRegistry metricRegistry) {
     Map<String, Histogram> histograms = metricRegistry.getHistograms();
     assertEquals("NIO request processing time unequal", nioLayerRequestProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.NIO_REQUEST_PROCESSING_TIME_SUFFIX)
@@ -157,24 +150,6 @@ class TestMetrics {
         histograms.get(metricPrefix + RestRequestMetrics.NIO_RESPONSE_PROCESSING_TIME_SUFFIX)
             .getSnapshot()
             .getValues()[0]);
-
-    long[] nioSslRequestProcessingTimeValues =
-        histograms.get(metricPrefix + RestRequestMetrics.NIO_SSL_REQUEST_PROCESSING_TIME_SUFFIX)
-            .getSnapshot()
-            .getValues();
-    long[] nioSslResponseProcessingTimeValues =
-        histograms.get(metricPrefix + RestRequestMetrics.NIO_SSL_RESPONSE_PROCESSING_TIME_SUFFIX)
-            .getSnapshot()
-            .getValues();
-    if (sslUsed) {
-      assertEquals("NIO SSL request processing time unequal", nioLayerRequestProcessingTime,
-          nioSslRequestProcessingTimeValues[0]);
-      assertEquals("NIO SSL response processing time unequal", nioLayerResponseProcessingTime,
-          nioSslResponseProcessingTimeValues[0]);
-    } else {
-      assertEquals("NIO SSL request processing time should not be set", 0, nioSslRequestProcessingTimeValues.length);
-      assertEquals("NIO SSL response processing time should not be set", 0, nioSslResponseProcessingTimeValues.length);
-    }
 
     assertEquals("SC request processing time unequal", scRequestProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_TIME_SUFFIX)
@@ -195,10 +170,6 @@ class TestMetrics {
 
     assertEquals("Rate metric has not fired", 1,
         metricRegistry.getMeters().get(metricPrefix + RestRequestMetrics.OPERATION_RATE_SUFFIX).getCount());
-    if (sslUsed) {
-      assertEquals("SSL Rate metric has not fired", 1,
-          metricRegistry.getMeters().get(metricPrefix + RestRequestMetrics.SSL_OPERATION_RATE_SUFFIX).getCount());
-    }
     assertEquals("Error metric value is not as expected", operationErrorCount,
         metricRegistry.getCounters().get(metricPrefix + RestRequestMetrics.OPERATION_ERROR_SUFFIX).getCount());
   }
