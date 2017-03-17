@@ -13,8 +13,7 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.ClusterManagerFactory;
-import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.InvocationOptions;
@@ -39,11 +38,11 @@ public class AmbryMain {
       Properties properties = Utils.loadProps(options.serverPropsFilePath);
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-      ClusterMap clusterMap =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              options.hardwareLayoutFilePath, options.partitionLayoutFilePath)).getClusterManager();
+      ClusterAgentsFactory clusterAgentsFactory =
+          Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping AmbryServer");
-      ambryServer = new AmbryServer(verifiableProperties, clusterMap, SystemTime.getInstance());
+      ambryServer = new AmbryServer(verifiableProperties, clusterAgentsFactory, SystemTime.getInstance());
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {

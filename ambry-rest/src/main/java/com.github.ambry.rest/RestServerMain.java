@@ -13,8 +13,7 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.clustermap.ClusterManagerFactory;
-import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -44,12 +43,14 @@ public class RestServerMain {
       Properties properties = Utils.loadProps(options.serverPropsFilePath);
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-      ClusterMap clusterMap =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              options.hardwareLayoutFilePath, options.partitionLayoutFilePath)).getClusterManager();
+      ClusterAgentsFactory clusterAgentsFactory =
+          Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       SSLFactory sslFactory = getSSLFactoryIfRequired(verifiableProperties);
       logger.info("Bootstrapping RestServer");
-      restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory);
+      restServer =
+          new RestServer(verifiableProperties, clusterAgentsFactory.getClusterMap(), new LoggingNotificationSystem(),
+              sslFactory);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {

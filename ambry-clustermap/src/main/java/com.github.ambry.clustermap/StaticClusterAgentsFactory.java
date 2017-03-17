@@ -22,10 +22,14 @@ import static com.github.ambry.utils.Utils.*;
 
 
 /**
- * A class used to create the {@link StaticClusterManager}
+ * A class used to create the {@link StaticClusterManager} and {@link ClusterParticipant}. Only one instance of each
+ * type of objects will ever be created by this factory.
  */
-public class StaticClusterManagerFactory implements ClusterManagerFactory {
+public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
   private final PartitionLayout partitionLayout;
+  private final ClusterMapConfig clusterMapConfig;
+  private StaticClusterManager staticClusterManager;
+  private ClusterParticipant clusterParticipant;
 
   /**
    * Instantiate an instance of this factory.
@@ -35,9 +39,9 @@ public class StaticClusterManagerFactory implements ClusterManagerFactory {
    * @throws JSONException if a JSON error is encountered while parsing the layout files.
    * @throws IOException if an I/O error is encountered accessing or reading the layout files.
    */
-  public StaticClusterManagerFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
+  public StaticClusterAgentsFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
       String partitionLayoutFilePath) throws JSONException, IOException {
-    this(new PartitionLayout(
+    this(clusterMapConfig, new PartitionLayout(
         new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutFilePath)), clusterMapConfig),
         new JSONObject(readStringFromFile(partitionLayoutFilePath))));
   }
@@ -46,13 +50,39 @@ public class StaticClusterManagerFactory implements ClusterManagerFactory {
    * Instantiate an instance of this factory.
    * @param partitionLayout the {@link PartitionLayout} to use.
    */
-  StaticClusterManagerFactory(PartitionLayout partitionLayout) {
+  StaticClusterAgentsFactory(ClusterMapConfig clusterMapConfig, PartitionLayout partitionLayout) {
+    this.clusterMapConfig = clusterMapConfig;
     this.partitionLayout = partitionLayout;
   }
 
   @Override
-  public StaticClusterManager getClusterManager() throws Exception {
-    return new StaticClusterManager(partitionLayout);
+  public StaticClusterManager getClusterMap() {
+    if (staticClusterManager == null) {
+      staticClusterManager = new StaticClusterManager(partitionLayout);
+    }
+    return staticClusterManager;
+  }
+
+  @Override
+  public ClusterParticipant getClusterParticipant() throws IOException {
+    if (clusterMapConfig == null) {
+      throw new IllegalArgumentException(
+          "Cluster participant creation requires the factory to be initialized with a non-null ClusterMapConfig");
+    }
+    if (clusterParticipant == null) {
+      clusterParticipant = new ClusterParticipant() {
+        @Override
+        public void initialize(String hostname, int port) throws Exception {
+
+        }
+
+        @Override
+        public void terminate() {
+
+        }
+      };
+    }
+    return clusterParticipant;
   }
 }
 

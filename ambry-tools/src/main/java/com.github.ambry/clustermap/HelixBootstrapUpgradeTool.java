@@ -221,12 +221,12 @@ public class HelixBootstrapUpgradeTool {
     props.setProperty("clustermap.datacenter.name", localDc == null ? "none" : localDc);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     if (new File(partitionLayoutPath).exists()) {
-      staticClusterMap = (new StaticClusterManagerFactory(clusterMapConfig, hardwareLayoutPath,
-          partitionLayoutPath)).getClusterManager();
+      staticClusterMap =
+          (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
     } else {
-      staticClusterMap = (new StaticClusterManagerFactory(new PartitionLayout(
+      staticClusterMap = (new StaticClusterAgentsFactory(clusterMapConfig, new PartitionLayout(
           new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)),
-              clusterMapConfig)))).getClusterManager();
+              clusterMapConfig)))).getClusterMap();
     }
     String clusterNameInStaticClusterMap = staticClusterMap.partitionLayout.getClusterName();
     System.out.println(
@@ -529,7 +529,7 @@ public class HelixBootstrapUpgradeTool {
    */
   private void verifyDataNodeAndDiskEquivalencyInDc(Datacenter dc, String clusterName, PartitionLayout partitionLayout)
       throws Exception {
-    StaticClusterManager staticClusterMap = (new StaticClusterManagerFactory(partitionLayout)).getClusterManager();
+    StaticClusterManager staticClusterMap = (new StaticClusterAgentsFactory(null, partitionLayout)).getClusterMap();
     HelixAdmin admin = adminForDc.get(dc.getName());
     List<String> allInstancesInHelix = admin.getInstancesInCluster(clusterName);
     for (DataNodeId dataNodeId : dc.getDataNodes()) {

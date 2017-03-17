@@ -64,18 +64,11 @@ public class ClusterMapConfig {
   public final String clusterMapSslEnabledDatacenters;
 
   /**
-   * The clustermap participant factory to use if registering as a participant.
+   * The clustermap agent factory to use for instantiating the Cluster Map and the Cluster Participant.
    */
-  @Config("clustermap.participant.factory")
-  @Default("com.github.ambry.clustermap.StaticParticipantFactory")
-  public final String clusterMapParticipantFactory;
-
-  /**
-   * The clustermap clustermanager factory to use for instantiating the Cluster Manager.
-   */
-  @Config("clustermap.clustermanager.factory")
-  @Default("com.github.ambry.clustermap.StaticClusterManager")
-  public final String clusterMapClusterManagerFactory;
+  @Config("clustermap.clusteragents.factory")
+  @Default("com.github.ambry.clustermap.StaticClusterAgentsFactory")
+  public final String clusterMapClusterAgentsFactory;
 
   /**
    * Serialized json containing the information about all the zk hosts that the Helix based cluster manager should
@@ -138,10 +131,8 @@ public class ClusterMapConfig {
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.retry.backoff.ms", 10 * 60 * 1000, 1,
             30 * 60 * 1000);
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
-    clusterMapParticipantFactory = verifiableProperties.getString("clustermap.participant.factory",
-        "com.github.ambry.clustermap.StaticParticipantFactory");
-    clusterMapClusterManagerFactory = verifiableProperties.getString("clustermap.clustermanager.factory",
-        "com.github.ambry.clustermap.StaticClusterManagerFactory");
+    clusterMapClusterAgentsFactory = verifiableProperties.getString("clustermap.clusteragents.factory",
+        "com.github.ambry.clustermap.StaticClusterAgentsFactory");
     clusterMapDcsZkConnectStrings = verifiableProperties.getString("clustermap.dcs.zk.connect.strings", "");
     clusterMapClusterName = verifiableProperties.getString("clustermap.cluster.name");
     clusterMapDatacenterName = verifiableProperties.getString("clustermap.datacenter.name");

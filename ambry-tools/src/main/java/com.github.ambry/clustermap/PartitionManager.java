@@ -116,12 +116,12 @@ public class PartitionManager {
       StaticClusterManager manager = null;
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
       if (fileString == null) {
-        manager = (new StaticClusterManagerFactory(new PartitionLayout(
+        manager = (new StaticClusterAgentsFactory(clusterMapConfig, new PartitionLayout(
             new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)),
-                clusterMapConfig)))).getClusterManager();
+                clusterMapConfig)))).getClusterMap();
       } else {
-        manager = (new StaticClusterManagerFactory(clusterMapConfig, hardwareLayoutPath,
-            partitionLayoutPath)).getClusterManager();
+        manager =
+            (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       }
       if (operationType.compareToIgnoreCase("AddPartition") == 0) {
         listOpt.add(numberOfPartitionsOpt);

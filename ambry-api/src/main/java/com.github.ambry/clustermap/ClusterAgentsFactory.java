@@ -14,13 +14,21 @@
 
 package com.github.ambry.clustermap;
 
+import java.io.IOException;
+
+
 /**
- * A factory interface to get a {@link ClusterMap}
+ * A factory interface to get cluster agents such as {@link ClusterMap} and {@link ClusterParticipant}
  */
-public interface ClusterManagerFactory {
+public interface ClusterAgentsFactory {
   /**
    * Get a reference to a {@link ClusterMap}
    */
-  ClusterMap getClusterManager() throws Exception;
+  ClusterMap getClusterMap() throws IOException;
+
+  /**
+   * Get a reference to a {@link ClusterParticipant}
+   */
+  ClusterParticipant getClusterParticipant() throws IOException;
 }
 

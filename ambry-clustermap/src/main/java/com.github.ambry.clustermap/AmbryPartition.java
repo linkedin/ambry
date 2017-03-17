@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 
@@ -28,9 +29,9 @@ class AmbryPartition extends PartitionId {
   private final HelixClusterManager.HelixClusterManagerCallback clusterManagerCallback;
   private volatile PartitionState state;
 
-  private static final short Version_Field_Size_In_Bytes = 2;
-  private static final short Current_Version = 1;
-  private static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
+  private static final short VERSION_FIELD_SIZE_IN_BYTES = 2;
+  private static final short CURRENT_VERSION = 1;
+  private static final int PARTITION_SIZE_IN_BYTES = VERSION_FIELD_SIZE_IN_BYTES + 8;
 
   /**
    * Instantiate an AmbryParitition instance.
@@ -47,8 +48,8 @@ class AmbryPartition extends PartitionId {
 
   @Override
   public byte[] getBytes() {
-    ByteBuffer buffer = ByteBuffer.allocate(Partition_Size_In_Bytes);
-    buffer.putShort(Current_Version);
+    ByteBuffer buffer = ByteBuffer.allocate(PARTITION_SIZE_IN_BYTES);
+    buffer.putShort(CURRENT_VERSION);
     buffer.putLong(id);
     return buffer.array();
   }
@@ -85,8 +86,8 @@ class AmbryPartition extends PartitionId {
    * @return the byte representation fo the partition id.
    * @throws IOException if the read from the stream encounters an IOException.
    */
-  static byte[] readPartitionBytesFromStream(DataInputStream stream) throws IOException {
-    return Utils.readBytesFromStream(stream, Partition_Size_In_Bytes);
+  static byte[] readPartitionBytesFromStream(InputStream stream) throws IOException {
+    return Utils.readBytesFromStream(stream, PARTITION_SIZE_IN_BYTES);
   }
 
   /**

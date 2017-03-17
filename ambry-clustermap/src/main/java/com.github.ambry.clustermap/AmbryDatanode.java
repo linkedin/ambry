@@ -54,7 +54,7 @@ class AmbryDataNode extends DataNodeId implements Resource {
     this.plainTextPort = new Port(Integer.valueOf(portStr), PortType.PLAINTEXT);
     this.sslPort = sslPortStr != null ? new Port(Integer.valueOf(sslPortStr), PortType.SSL) : null;
     this.dataCenterName = dataCenterName;
-    this.rackId = rackIdStr != null ? Long.valueOf(rackIdStr) : MissingRackId;
+    this.rackId = rackIdStr != null ? Long.valueOf(rackIdStr) : UNKNOWN_RACK_ID;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
@@ -83,8 +83,8 @@ class AmbryDataNode extends DataNodeId implements Resource {
       }
       ports.add(sslPort.getPort());
     }
-    if (ports.first() < MinPort || ports.last() > MaxPort) {
-      throw new IllegalStateException("Ports " + ports + " not in valid range [" + MinPort + " - " + MaxPort + "]");
+    if (ports.first() < MIN_PORT || ports.last() > MAX_PORT) {
+      throw new IllegalStateException("Ports " + ports + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
     }
   }
 

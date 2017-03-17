@@ -14,7 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -82,8 +82,8 @@ public class DumpIndexTool {
     }
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.clusterMap =
-        ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterManager();
+        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
   }
 
   public static void main(String args[]) throws Exception {

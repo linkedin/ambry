@@ -84,7 +84,7 @@ class DataNode extends DataNodeId {
         throw new IllegalStateException("Invalid rackId : " + this.rackId + " is less than 0");
       }
     } else {
-      this.rackId = MissingRackId;
+      this.rackId = UNKNOWN_RACK_ID;
     }
 
     validate();
@@ -214,10 +214,10 @@ class DataNode extends DataNodeId {
       if (portNumbers.contains(portNo)) {
         throw new IllegalStateException("Same port number " + portNo + " found for two port types");
       }
-      if (portNo < MinPort) {
-        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is less than " + MinPort);
-      } else if (portNo > MaxPort) {
-        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is greater than " + MaxPort);
+      if (portNo < MIN_PORT) {
+        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is less than " + MIN_PORT);
+      } else if (portNo > MAX_PORT) {
+        throw new IllegalStateException("Invalid " + portType + " port : " + portNo + " is greater than " + MAX_PORT);
       }
       portNumbers.add(portNo);
     }

@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -66,6 +67,7 @@ public class ServerHardDeleteTest {
   private MockNotificationSystem notificationSystem;
   private MockTime time;
   private AmbryServer server;
+  private MockClusterAgentsFactory mockClusterAgentsFactory;
   private MockClusterMap mockClusterMap;
   private ArrayList<BlobProperties> properties;
   private ArrayList<byte[]> usermetadata;
@@ -75,7 +77,8 @@ public class ServerHardDeleteTest {
   @Before
   public void initialize() throws Exception {
     notificationSystem = new MockNotificationSystem(1);
-    mockClusterMap = new MockClusterMap(false, 1, 1, 1);
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, 1);
+    mockClusterMap = mockClusterAgentsFactory.getClusterMap();
     time = new MockTime(SystemTime.getInstance().milliseconds());
     Properties props = new Properties();
     props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
@@ -87,7 +90,7 @@ public class ServerHardDeleteTest {
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
     VerifiableProperties propverify = new VerifiableProperties(props);
-    server = new AmbryServer(propverify, mockClusterMap, notificationSystem, time);
+    server = new AmbryServer(propverify, mockClusterAgentsFactory, notificationSystem, time);
     server.startup();
   }
 

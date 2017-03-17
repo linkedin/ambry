@@ -14,6 +14,7 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.VerifiableProperties;
@@ -45,6 +46,7 @@ import static org.junit.Assert.*;
  * On shutdown we ensure the servers are shutdown.
  */
 public class MockCluster {
+  private final MockClusterAgentsFactory mockClusterAgentsFactory;
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
   private NotificationSystem notificationSystem;
@@ -63,7 +65,8 @@ public class MockCluster {
         sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<String>();
 
     this.notificationSystem = notificationSystem;
-    clusterMap = new MockClusterMap(sslEnabledDataCentersStr != null, 9, 3, 3);
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(sslEnabledDataCentersStr != null, 9, 3, 3);
+    clusterMap = mockClusterAgentsFactory.getClusterMap();
 
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
@@ -105,7 +108,7 @@ public class MockCluster {
     props.setProperty("clustermap.host.name", "localhost");
     props.putAll(sslProperties);
     VerifiableProperties propverify = new VerifiableProperties(props);
-    AmbryServer server = new AmbryServer(propverify, clusterMap, notificationSystem, time);
+    AmbryServer server = new AmbryServer(propverify, mockClusterAgentsFactory, notificationSystem, time);
     serverList.add(server);
   }
 

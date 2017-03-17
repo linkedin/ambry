@@ -14,7 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -132,8 +132,8 @@ public class IndexReadPerformance {
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
       ClusterMap map =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              hardwareLayoutPath, partitionLayoutPath)).getClusterManager();
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       StoreKeyFactory factory = new BlobIdFactory(map);
 
       // Read the log and get the index directories and create the indexes

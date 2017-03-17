@@ -13,8 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -250,7 +250,7 @@ class PartitionLayout {
    * @param stream byte-serialized partition ID
    * @return requested Partition else null.
    */
-  public Partition getPartition(DataInputStream stream) throws IOException {
+  public Partition getPartition(InputStream stream) throws IOException {
     byte[] partitionBytes = Partition.readPartitionBytesFromStream(stream);
     return partitionMap.get(ByteBuffer.wrap(partitionBytes));
   }

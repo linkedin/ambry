@@ -14,7 +14,7 @@
 package com.github.ambry.tools.admin;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -390,8 +390,8 @@ public class ServerTool {
       VerifiableProperties vprops = new VerifiableProperties((new Properties()));
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vprops);
       ClusterMap map =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              hardwareLayoutPath, partitionLayoutPath)).getClusterManager();
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       File logFile = new File(outFile);
       writer = new FileWriter(logFile);
       ServerTool serverTool = new ServerTool();

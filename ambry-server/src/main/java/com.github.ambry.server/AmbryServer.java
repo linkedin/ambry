@@ -15,9 +15,9 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.ClusterParticipantFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -71,10 +71,11 @@ class AmbryServer {
   private StorageManager storageManager = null;
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
-  private ClusterParticipant clusterParticipant;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
-  private final ClusterMap clusterMap;
+  private final ClusterAgentsFactory clusterAgentsFactory;
+  private ClusterMap clusterMap;
+  private ClusterParticipant clusterParticipant;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
@@ -82,20 +83,23 @@ class AmbryServer {
   private ServerMetrics metrics = null;
   private Time time;
 
-  AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, Time time) throws IOException {
-    this(properties, clusterMap, new LoggingNotificationSystem(), time);
+  AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
+      throws IOException {
+    this(properties, clusterAgentsFactory, new LoggingNotificationSystem(), time);
   }
 
-  AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem, Time time)
-      throws IOException {
+  AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+      NotificationSystem notificationSystem, Time time) throws IOException {
     this.properties = properties;
-    this.clusterMap = clusterMap;
+    this.clusterAgentsFactory = clusterAgentsFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
   }
 
   void startup() throws InstantiationException {
     try {
+      clusterMap = clusterAgentsFactory.getClusterMap();
+      clusterParticipant = clusterAgentsFactory.getClusterParticipant();
       logger.info("starting");
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
@@ -161,9 +165,6 @@ class AmbryServer {
         statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
         statsManager.start();
       }
-      ClusterParticipantFactory participantFactory =
-          Utils.getObj(clusterMapConfig.clusterMapParticipantFactory, clusterMapConfig);
-      clusterParticipant = participantFactory.getClusterParticipant();
       clusterParticipant.initialize(networkConfig.hostName, networkConfig.port);
 
       logger.info("started");

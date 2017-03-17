@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import java.io.IOException;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
@@ -35,13 +36,17 @@ class HelixParticipant implements ClusterParticipant {
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
    * @throws JSONException if there is an error in parsing the JSON serialized ZK connect string config.
    */
-  HelixParticipant(ClusterMapConfig clusterMapConfig) throws JSONException {
+  HelixParticipant(ClusterMapConfig clusterMapConfig) throws IOException {
     clusterName = clusterMapConfig.clusterMapClusterName;
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Clustername is empty in clusterMapConfig");
     }
-    zkConnectStr = ClusterMapUtils.parseZkJsonAndPopulateZkInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
-        .get(clusterMapConfig.clusterMapDatacenterName);
+    try {
+      zkConnectStr = ClusterMapUtils.parseZkJsonAndPopulateZkInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
+          .get(clusterMapConfig.clusterMapDatacenterName);
+    } catch (JSONException e) {
+      throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
+    }
   }
 
   /**
@@ -65,7 +70,9 @@ class HelixParticipant implements ClusterParticipant {
    */
   @Override
   public void terminate() {
-    manager.disconnect();
+    if (manager != null) {
+      manager.disconnect();
+    }
   }
 }
 

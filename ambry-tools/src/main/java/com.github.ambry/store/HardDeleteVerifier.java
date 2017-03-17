@@ -13,7 +13,7 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
@@ -150,8 +150,8 @@ public class HardDeleteVerifier {
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
       ClusterMap map =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              hardwareLayoutPath, partitionLayoutPath)).getClusterManager();
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       String dataDir = options.valueOf(dataDirOpt);
       String oldDataDir = options.has(oldDataDirOpt) ? options.valueOf(oldDataDirOpt) : null;
       String outFile = options.valueOf(outFileOpt);

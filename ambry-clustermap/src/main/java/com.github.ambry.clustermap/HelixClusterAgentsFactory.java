@@ -14,14 +14,18 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import java.io.IOException;
 
 
 /**
- * A factory class to construct {@link HelixClusterManager}
+ * A factory class to construct {@link HelixClusterManager} and {@link HelixParticipant}. Only one instance of each
+ * type of objects will ever be created by this factory.
  */
-public class HelixClusterManagerFactory implements ClusterManagerFactory {
+public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   private final ClusterMapConfig clusterMapConfig;
   private final String instanceName;
+  private HelixClusterManager helixClusterManager;
+  private HelixParticipant helixParticipant;
 
   /**
    * Construct an object of this factory.
@@ -29,7 +33,7 @@ public class HelixClusterManagerFactory implements ClusterManagerFactory {
    * @param hardwareLayoutFilePath unused.
    * @param partitionLayoutFilePath unused.
    */
-  public HelixClusterManagerFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
+  public HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
       String partitionLayoutFilePath) {
     this.clusterMapConfig = clusterMapConfig;
     this.instanceName =
@@ -37,8 +41,19 @@ public class HelixClusterManagerFactory implements ClusterManagerFactory {
   }
 
   @Override
-  public HelixClusterManager getClusterManager() throws Exception {
-    return new HelixClusterManager(clusterMapConfig, instanceName);
+  public HelixClusterManager getClusterMap() throws IOException {
+    if (helixClusterManager == null) {
+      helixClusterManager = new HelixClusterManager(clusterMapConfig, instanceName);
+    }
+    return helixClusterManager;
+  }
+
+  @Override
+  public HelixParticipant getClusterParticipant() throws IOException {
+    if (helixParticipant == null) {
+      helixParticipant = new HelixParticipant(clusterMapConfig);
+    }
+    return helixParticipant;
   }
 }
 

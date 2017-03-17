@@ -14,8 +14,8 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -79,7 +79,7 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
+  public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
     PartitionId partitionId = partitionLayout.getPartition(stream);
     if (partitionId == null) {
       throw new IOException("Partition id from stream is null");

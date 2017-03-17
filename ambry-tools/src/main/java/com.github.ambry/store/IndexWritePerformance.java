@@ -14,7 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -113,8 +113,8 @@ public class IndexWritePerformance {
 
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
       ClusterMap map =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              hardwareLayoutPath, partitionLayoutPath)).getClusterManager();
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       StoreKeyFactory factory = new BlobIdFactory(map);
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");

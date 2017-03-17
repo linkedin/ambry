@@ -14,7 +14,7 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -199,8 +199,8 @@ public class ServerReadPerformance {
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(sslProperties));
       ClusterMap map =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              hardwareLayoutPath, partitionLayoutPath)).getClusterManager();
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);

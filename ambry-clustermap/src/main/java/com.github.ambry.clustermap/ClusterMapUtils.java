@@ -41,11 +41,11 @@ public class ClusterMapUtils {
   static final String ZKCONNECTSTR_STR = "zkConnectStr";
   static final String ZKINFO_STR = "zkInfo";
   static final String DATACENTER_STR = "datacenter";
-  static final int MissingRackId = -1;
-  static final int MinPort = 1025;
-  static final int MaxPort = 65535;
-  static final long Min_Replica_Capacity_In_Bytes = 1024 * 1024 * 1024L;
-  static final long Max_Replica_Capacity_In_Bytes = 10995116277760L; // 10 TB
+  static final int UNKNOWN_RACK_ID = -1;
+  static final int MIN_PORT = 1025;
+  static final int MAX_PORT = 65535;
+  static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
+  static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10995116277760L; // 10 TB
 
   /**
    * Construct and return the instance name given the host and port.
@@ -126,12 +126,12 @@ public class ClusterMapUtils {
    * @param replicaCapacityInBytes the replica capacity to validate.
    */
   static void validateReplicaCapacityInBytes(long replicaCapacityInBytes) {
-    if (replicaCapacityInBytes < Min_Replica_Capacity_In_Bytes) {
+    if (replicaCapacityInBytes < MIN_REPLICA_CAPACITY_IN_BYTES) {
       throw new IllegalStateException(
-          "Invalid disk capacity: " + replicaCapacityInBytes + " is less than " + Min_Replica_Capacity_In_Bytes);
-    } else if (replicaCapacityInBytes > Max_Replica_Capacity_In_Bytes) {
+          "Invalid disk capacity: " + replicaCapacityInBytes + " is less than " + MIN_REPLICA_CAPACITY_IN_BYTES);
+    } else if (replicaCapacityInBytes > MAX_REPLICA_CAPACITY_IN_BYTES) {
       throw new IllegalStateException(
-          "Invalid disk capacity: " + replicaCapacityInBytes + " is more than " + Max_Replica_Capacity_In_Bytes);
+          "Invalid disk capacity: " + replicaCapacityInBytes + " is more than " + MAX_REPLICA_CAPACITY_IN_BYTES);
     }
   }
 }

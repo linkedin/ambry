@@ -13,7 +13,7 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
@@ -48,8 +48,8 @@ public class DumpReplicaTokenTool {
     }
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
     this.clusterMap =
-        ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterManager();
+        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
   }
 
   public static void main(String args[]) throws Exception {

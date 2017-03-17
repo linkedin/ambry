@@ -14,8 +14,8 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -37,8 +37,8 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 class Partition extends PartitionId {
 
   private static final short Version_Field_Size_In_Bytes = 2;
-  private static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
   private static final short Current_Version = 1;
+  static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
 
   private Long id;
   PartitionState partitionState;
@@ -77,7 +77,7 @@ class Partition extends PartitionId {
     validate();
   }
 
-  static byte[] readPartitionBytesFromStream(DataInputStream stream) throws IOException {
+  static byte[] readPartitionBytesFromStream(InputStream stream) throws IOException {
     byte[] partitionBytes = Utils.readBytesFromStream(stream, Partition_Size_In_Bytes);
     return partitionBytes;
   }

@@ -80,7 +80,7 @@ public class ClusterMapManagerTest {
     TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(testHardwareLayout);
 
     ClusterMap clusterMapManager =
-        (new StaticClusterManagerFactory(testPartitionLayout.getPartitionLayout())).getClusterManager();
+        (new StaticClusterAgentsFactory(null, testPartitionLayout.getPartitionLayout())).getClusterMap();
     for (String metricName : clusterMapManager.getMetricRegistry().getNames()) {
       System.out.println(metricName);
     }
@@ -119,7 +119,7 @@ public class ClusterMapManagerTest {
     TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(testHardwareLayout);
 
     StaticClusterManager clusterMapManager =
-        (new StaticClusterManagerFactory(testPartitionLayout.getPartitionLayout())).getClusterManager();
+        (new StaticClusterAgentsFactory(null, testPartitionLayout.getPartitionLayout())).getClusterMap();
 
     for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
       assertTrue(clusterMapManager.hasDatacenter(datacenter.getName()));
@@ -132,7 +132,7 @@ public class ClusterMapManagerTest {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
-    StaticClusterManager clusterMapManager = (new StaticClusterManagerFactory(partitionLayout)).getClusterManager();
+    StaticClusterManager clusterMapManager = (new StaticClusterAgentsFactory(null, partitionLayout)).getClusterMap();
     int dcCount = testHardwareLayout.getDatacenterCount();
 
     List<PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
@@ -152,7 +152,7 @@ public class ClusterMapManagerTest {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
-    StaticClusterManager clusterMapManager = (new StaticClusterManagerFactory(partitionLayout)).getClusterManager();
+    StaticClusterManager clusterMapManager = (new StaticClusterAgentsFactory(null, partitionLayout)).getClusterMap();
     List<PartitionId> allocatedPartitions;
 
     try {
@@ -190,7 +190,7 @@ public class ClusterMapManagerTest {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha", true);
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
-    StaticClusterManager clusterMapManager = (new StaticClusterManagerFactory(partitionLayout)).getClusterManager();
+    StaticClusterManager clusterMapManager = (new StaticClusterAgentsFactory(null, partitionLayout)).getClusterMap();
     List<PartitionId> allocatedPartitions;
 
     // Allocate five partitions that fit within cluster's capacity
@@ -223,7 +223,7 @@ public class ClusterMapManagerTest {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha", true);
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
-    StaticClusterManager clusterMapManager = (new StaticClusterManagerFactory(partitionLayout)).getClusterManager();
+    StaticClusterManager clusterMapManager = (new StaticClusterAgentsFactory(null, partitionLayout)).getClusterMap();
     List<PartitionId> allocatedPartitions;
     // Require more replicas than there are racks
     allocatedPartitions =
@@ -245,7 +245,7 @@ public class ClusterMapManagerTest {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
-    StaticClusterManager clusterMapManager = (new StaticClusterManagerFactory(partitionLayout)).getClusterManager();
+    StaticClusterManager clusterMapManager = (new StaticClusterAgentsFactory(null, partitionLayout)).getClusterMap();
 
     // Confirm initial capacity is available for use
     long raw = clusterMapManager.getRawCapacityInBytes();
@@ -310,12 +310,12 @@ public class ClusterMapManagerTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     StaticClusterManager clusterMapManagerDe =
-        (new StaticClusterManagerFactory(clusterMapConfig, hardwareLayoutSer, partitionLayoutSer)).getClusterManager();
+        (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutSer, partitionLayoutSer)).getClusterMap();
     assertEquals(clusterMapManagerSer, clusterMapManagerDe);
 
     clusterMapManagerDe.persist(hardwareLayoutDe, partitionLayoutDe);
     StaticClusterManager clusterMapManagerDeDe =
-        (new StaticClusterManagerFactory(clusterMapConfig, hardwareLayoutDe, partitionLayoutDe)).getClusterManager();
+        (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutDe, partitionLayoutDe)).getClusterMap();
     assertEquals(clusterMapManagerDe, clusterMapManagerDeDe);
   }
 
@@ -335,8 +335,8 @@ public class ClusterMapManagerTest {
     String hardwareLayoutSer = configDir + "/HardwareLayout.json";
     String partitionLayoutSer = configDir + "/PartitionLayout.json";
     StaticClusterManager clusterMapManager =
-        (new StaticClusterManagerFactory(new ClusterMapConfig(new VerifiableProperties(props)), hardwareLayoutSer,
-            partitionLayoutSer)).getClusterManager();
+        (new StaticClusterAgentsFactory(new ClusterMapConfig(new VerifiableProperties(props)), hardwareLayoutSer,
+            partitionLayoutSer)).getClusterMap();
     assertEquals(clusterMapManager.getWritablePartitionIds().size(), 1);
     assertEquals(clusterMapManager.getUnallocatedRawCapacityInBytes(), 10737418240L);
     assertNotNull(clusterMapManager.getDataNodeId("localhost", 6667));

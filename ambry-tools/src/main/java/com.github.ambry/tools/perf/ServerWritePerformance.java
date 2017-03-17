@@ -14,7 +14,7 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -212,8 +212,8 @@ public class ServerWritePerformance {
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(sslProperties));
       ClusterMap map =
-          ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-              hardwareLayoutPath, partitionLayoutPath)).getClusterManager();
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       blobIdsWriter = new FileWriter(logFile);
       File performanceFile = new File(System.getProperty("user.dir"), "writeperfresult");

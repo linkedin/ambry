@@ -16,8 +16,8 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.google.common.collect.Sets;
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -72,36 +72,47 @@ class HelixClusterManager implements ClusterMap {
    * Instantiate a HelixClusterManager.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this manager.
    * @param instanceName the String representation of the instance associated with this manager.
-   * @throws Exception if there is an error in parsing the clusterMapConfig or in connecting with the associated remote
-   * Zookeeper services.
+   * @throws IOException if there is an error in parsing the clusterMapConfig or in connecting with the associated
+   *                     remote Zookeeper services.
    */
-  HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName) throws Exception {
+  HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
-    this.clusterName = clusterMapConfig.clusterMapClusterName;
-    this.metricRegistry = new MetricRegistry();
-    this.helixClusterManagerCallback = new HelixClusterManagerCallback();
-    this.helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
-    Map<String, String> dataCenterToZkAddress =
-        parseZkJsonAndPopulateZkInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
-    for (Map.Entry<String, String> entry : dataCenterToZkAddress.entrySet()) {
-      String dcName = entry.getKey();
-      String zkConnectStr = entry.getValue();
-      HelixManager manager =
-          HelixManagerFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
-      manager.connect();
-      ClusterChangeListener clusterChangeListener = new ClusterChangeListener();
-      DcZkInfo dcZkInfo = new DcZkInfo(dcName, zkConnectStr, manager, clusterChangeListener);
-      dcToDcZkInfo.put(dcName, dcZkInfo);
+    clusterName = clusterMapConfig.clusterMapClusterName;
+    metricRegistry = new MetricRegistry();
+    helixClusterManagerCallback = new HelixClusterManagerCallback();
+    helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
+    try {
+      Map<String, String> dataCenterToZkAddress =
+          parseZkJsonAndPopulateZkInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
+      for (Map.Entry<String, String> entry : dataCenterToZkAddress.entrySet()) {
+        String dcName = entry.getKey();
+        String zkConnectStr = entry.getValue();
+        HelixManager manager =
+            HelixManagerFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+        manager.connect();
+        ClusterChangeListener clusterChangeListener = new ClusterChangeListener();
+        DcZkInfo dcZkInfo = new DcZkInfo(dcName, zkConnectStr, manager, clusterChangeListener);
+        dcToDcZkInfo.put(dcName, dcZkInfo);
+      }
+      // Now initialize by pulling information from Helix.
+      initialize();
+      // Now register listeners to get notified on change.
+      for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
+        dcZkInfo.helixManager.addExternalViewChangeListener(dcZkInfo.clusterChangeListener);
+        dcZkInfo.helixManager.addConfigChangeListener(dcZkInfo.clusterChangeListener);
+        dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeListener);
+        dcZkInfo.clusterChangeListener.waitForInitialization();
+      }
+    } catch (Exception e) {
+      helixClusterManagerMetrics.initializeInstantiationMetric(false);
+      throw new IOException("Encountered exception parsing json or connecting to Helix", e);
     }
-    // Now initialize by pulling information from Helix.
-    initialize();
-    // Now register listeners to get notified on change.
-    for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
-      dcZkInfo.helixManager.addExternalViewChangeListener(dcZkInfo.clusterChangeListener);
-      dcZkInfo.helixManager.addConfigChangeListener(dcZkInfo.clusterChangeListener);
-      dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeListener);
-      dcZkInfo.clusterChangeListener.waitForInitialization();
-    }
+    helixClusterManagerMetrics.initializeInstantiationMetric(true);
+    helixClusterManagerMetrics.initializeDatacenterMetrics();
+    helixClusterManagerMetrics.initializeDataNodeMetrics();
+    helixClusterManagerMetrics.initializeDiskMetrics();
+    helixClusterManagerMetrics.initializePartitionMetrics();
+    helixClusterManagerMetrics.initializeCapacityMetrics();
   }
 
   /**
@@ -254,7 +265,7 @@ class HelixClusterManager implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
+  public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
     byte[] partitionBytes = AmbryPartition.readPartitionBytesFromStream(stream);
     AmbryPartition partition = partitionMap.get(ByteBuffer.wrap(partitionBytes));
     if (partition == null) {

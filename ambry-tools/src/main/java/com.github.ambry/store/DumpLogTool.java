@@ -13,7 +13,7 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.clustermap.ClusterManagerFactory;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -71,8 +71,8 @@ public class DumpLogTool {
     }
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
     this.clusterMap =
-        ((ClusterManagerFactory) Utils.getObj(clusterMapConfig.clusterMapClusterManagerFactory, clusterMapConfig,
-            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterManager();
+        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
     if (bytesPerSec > 0) {
       this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
     } else if (bytesPerSec < 0) {

@@ -26,14 +26,17 @@ class HelixClusterManagerMetrics {
   private final HelixClusterManager.HelixClusterManagerCallback clusterMapCallback;
   private final MetricRegistry registry;
 
-  public Counter liveInstanceChangeTriggerCount;
-  public Counter externalViewChangeTriggerCount;
-  public Counter instanceConfigChangeTriggerCount;
-  public Counter getWritablePartitionIdsMismatchCount;
-  public Counter hasDatacenterMismatchCount;
-  public Counter getDataNodeIdMismatchCount;
-  public Counter getReplicaIdsMismatchCount;
-  public Counter getDataNodeIdsMismatchCount;
+  public final Counter liveInstanceChangeTriggerCount;
+  public final Counter externalViewChangeTriggerCount;
+  public final Counter instanceConfigChangeTriggerCount;
+  public final Counter getPartitionIdFromStreamMismatchCount;
+  public final Counter getWritablePartitionIdsMismatchCount;
+  public final Counter hasDatacenterMismatchCount;
+  public final Counter getDataNodeIdMismatchCount;
+  public final Counter getReplicaIdsMismatchCount;
+  public final Counter getDataNodeIdsMismatchCount;
+
+  public Gauge<Long> helixClusterManagerInstantiationFailed;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -45,19 +48,16 @@ class HelixClusterManagerMetrics {
       final HelixClusterManager.HelixClusterManagerCallback clusterMapCallback) {
     this.clusterMapCallback = clusterMapCallback;
     this.registry = registry;
-    initializeDatacenterMetrics();
-    initializeDataNodeMetrics();
-    initializeDiskMetrics();
-    initializePartitionMetrics();
-    initializeCapacityMetrics();
     liveInstanceChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "liveInstanceChangeTriggerCount"));
     externalViewChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "externalViewChangeTriggerCount"));
     instanceConfigChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeTriggerCount"));
+    getPartitionIdFromStreamMismatchCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "getPartitionIdFromStreamMismatchCount"));
     getWritablePartitionIdsMismatchCount =
-        registry.counter(MetricRegistry.name(HelixClusterManager.class, "getWritablePartitionsMismatchCount"));
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "getWritablePartitionIdsMismatchCount"));
     hasDatacenterMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "hasDatacenterMismatchCount"));
     getDataNodeIdMismatchCount =
@@ -68,10 +68,21 @@ class HelixClusterManagerMetrics {
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getDataNodeIdsMismatchCount"));
   }
 
+  void initializeInstantiationMetric(final boolean instantiated) {
+    helixClusterManagerInstantiationFailed = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return instantiated ? 0L : 1L;
+      }
+    };
+    registry.register(MetricRegistry.name(HelixClusterManager.class, "helixClusterManagerInstantiationFailed"),
+        helixClusterManagerInstantiationFailed);
+  }
+
   /**
    * Initialize datacenter related metrics.
    */
-  private void initializeDatacenterMetrics() {
+  void initializeDatacenterMetrics() {
     Gauge<Long> datacenterCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -84,7 +95,7 @@ class HelixClusterManagerMetrics {
   /**
    * Initialize datanode related metrics.
    */
-  private void initializeDataNodeMetrics() {
+  void initializeDataNodeMetrics() {
     Gauge<Long> dataNodeCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -116,7 +127,7 @@ class HelixClusterManagerMetrics {
   /**
    * Initialize disk related metrics.
    */
-  private void initializeDiskMetrics() {
+  void initializeDiskMetrics() {
     Gauge<Long> diskCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -150,7 +161,7 @@ class HelixClusterManagerMetrics {
   /**
    * Initialize partition related metrics.
    */
-  private void initializePartitionMetrics() {
+  void initializePartitionMetrics() {
     Gauge<Long> partitionCount = new Gauge<Long>() {
       @Override
       public Long getValue() {
@@ -202,7 +213,7 @@ class HelixClusterManagerMetrics {
   /**
    * Initialize capacity related metrics.
    */
-  private void initializeCapacityMetrics() {
+  void initializeCapacityMetrics() {
     Gauge<Long> rawTotalCapacityInBytes = new Gauge<Long>() {
       @Override
       public Long getValue() {

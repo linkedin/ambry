@@ -14,8 +14,8 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 
@@ -26,10 +26,10 @@ public interface ClusterMap {
 
   /**
    * Gets PartitionId based on serialized bytes.
-   * @param stream data input stream that contains the serialized partition bytes
+   * @param stream {@link InputStream} that contains the serialized partition bytes
    * @return deserialized PartitionId
    */
-  PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException;
+  PartitionId getPartitionIdFromStream(InputStream stream) throws IOException;
 
   /**
    * Gets a list of partitions that are available for writes.
