@@ -48,7 +48,7 @@ public class HardDeleter implements Runnable {
   public static final short Cleanup_Token_Version_V1 = 1;
   private static final String Cleanup_Token_Filename = "cleanuptoken";
   //how long to sleep if token does not advance.
-  static final long HARD_DELETE_SLEEP_TIME_MS_ON_CAUGHT_UP = 10 * Time.MsPerSec;
+  static final long HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS = 10 * Time.MsPerSec;
 
   final AtomicBoolean enabled = new AtomicBoolean(true);
 
@@ -123,8 +123,8 @@ public class HardDeleter implements Runnable {
           if (enabled.get()) {
             if (!hardDelete()) {
               isCaughtUp = true;
-              logger.trace("Waiting for {} ms after caught up for {}", HARD_DELETE_SLEEP_TIME_MS_ON_CAUGHT_UP, dataDir);
-              time.await(pauseCondition, HARD_DELETE_SLEEP_TIME_MS_ON_CAUGHT_UP);
+              logger.trace("Waiting for {} ms after caught up for {}", HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS, dataDir);
+              time.await(pauseCondition, HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS);
             } else if (isCaughtUp) {
               isCaughtUp = false;
               logger.info("Resumed hard deletes for {} after having caught up", dataDir);

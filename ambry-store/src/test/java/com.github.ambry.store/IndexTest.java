@@ -1221,7 +1221,7 @@ public class IndexTest {
     // pause hard delete
     state.index.hardDeleter.pause();
     assertTrue("Hard deletes should have been paused ", state.index.hardDeleter.isPaused());
-    waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_MS_ON_CAUGHT_UP + 1, 10);
+    waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1, 10);
 
     // delete two entries
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1236,7 +1236,7 @@ public class IndexTest {
 
     if (reloadIndex) {
       state.reloadIndex(true, true);
-      waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_MS_ON_CAUGHT_UP + 1, 10);
+      waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1, 10);
       idsToDelete.clear();
       state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
       idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
