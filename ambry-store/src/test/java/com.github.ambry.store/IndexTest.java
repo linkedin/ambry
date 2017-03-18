@@ -371,7 +371,7 @@ public class IndexTest {
    * @throws IOException
    * @throws StoreException
    */
-  // @Test
+  @Test
   public void hardDeletePauseResumeTest() throws InterruptedException, IOException, StoreException {
     testHardDeletePauseResume(false);
   }
@@ -383,7 +383,7 @@ public class IndexTest {
    * @throws IOException
    * @throws StoreException
    */
-  // @Test
+  @Test
   public void hardDeletePauseResumeRestartTest() throws InterruptedException, IOException, StoreException {
     testHardDeletePauseResume(true);
   }
@@ -1202,12 +1202,11 @@ public class IndexTest {
     state.reloadIndex(true, false);
     assertTrue("Hard delete is not enabled", state.index.hardDeleter.isRunning());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
-    state.advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    state.advanceTime(2 * Time.MsPerSec * Time.SecsPerDay);
     long expectedProgress = state.index.getAbsolutePositionInLogForOffset(state.logOrder.lastKey());
     // give it some time so that hard delete completes one cycle
     waitUntilExpectedProgress(expectedProgress, 5000);
     state.verifyEntriesForHardDeletes(state.deletedKeys);
-
     Set<MockId> idsDeleted = new HashSet<>();
     // delete two entries
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1222,7 +1221,7 @@ public class IndexTest {
     // pause hard delete
     state.index.hardDeleter.pause();
     assertTrue("Hard deletes should have been paused ", state.index.hardDeleter.isPaused());
-    waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
+    waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1, 10);
 
     // delete two entries
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1237,7 +1236,7 @@ public class IndexTest {
 
     if (reloadIndex) {
       state.reloadIndex(true, true);
-      waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP + 1, 10);
+      waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1, 10);
       idsToDelete.clear();
       state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
       idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
@@ -1250,7 +1249,7 @@ public class IndexTest {
     }
 
     // advance time so that deleted entries becomes eligible to be hard deleted
-    state.advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    state.advanceTime(2 * Time.MsPerSec * Time.SecsPerDay);
     // resume and verify new entries have been hard deleted
     state.index.hardDeleter.resume();
     assertFalse("Hard deletes should have been resumed ", state.index.hardDeleter.isPaused());
@@ -1981,7 +1980,8 @@ public class IndexTest {
       sleptSoFar += 5;
       Thread.sleep(5);
       if (sleptSoFar >= maxTimeToCheck) {
-        fail("HardDelete failed to catch up in " + maxTimeToCheck);
+        fail("HardDelete failed to catch up in " + maxTimeToCheck + ". Expected " + expectedProgress + ", actual "
+            + state.index.hardDeleter.getProgress());
       }
       state.index.hardDeleter.preLogFlush();
       state.index.hardDeleter.postLogFlush();
