@@ -44,11 +44,10 @@ class CompactionManager {
     long usedCapacity = blobStore.getSizeInBytes();
     long totalCapacity = blobStore.getCapacityInBytes();
     CompactionDetails details = null;
-    if (usedCapacity > (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage * totalCapacity / 100)) {
+    if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       List<String> potentialLogSegments = blobStore.getLogSegmentsNotInJournal();
       if (potentialLogSegments != null) {
-        details =
-            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, potentialLogSegments);
+        details = new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, potentialLogSegments);
       }
     }
     return details;

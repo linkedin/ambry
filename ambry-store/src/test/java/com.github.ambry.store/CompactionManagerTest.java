@@ -21,7 +21,6 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.junit.Test;
@@ -100,8 +99,8 @@ public class CompactionManagerTest {
         CAPACITY_IN_BYTES * 7 / 10, CAPACITY_IN_BYTES * 9 / 10};
     for (Long usedCapacity : usedCapacities) {
       blobStore.usedCapacity = usedCapacity;
-      if (blobStore.usedCapacity <= (
-          config.storeMinUsedCapacityToTriggerCompactionInPercentage * blobStore.capacityInBytes / 100)) {
+      if (blobStore.usedCapacity < (config.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0
+          * blobStore.capacityInBytes)) {
         verifyCompactionDetails(null);
       } else {
         verifyCompactionDetails(
@@ -127,8 +126,8 @@ public class CompactionManagerTest {
       blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
       compactionManager = new CompactionManager(config, time);
       blobStore.validLogSegments = generateRandomStrings(2);
-      if (blobStore.usedCapacity <= (
-          config.storeMinUsedCapacityToTriggerCompactionInPercentage * blobStore.capacityInBytes / 100)) {
+      if (blobStore.usedCapacity < (config.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0
+          * blobStore.capacityInBytes)) {
         verifyCompactionDetails(null);
       } else {
         verifyCompactionDetails(
@@ -156,20 +155,6 @@ public class CompactionManagerTest {
       verifyCompactionDetails(
           new CompactionDetails(time.milliseconds() - messageRetentionDays * Time.SecsPerDay * Time.MsPerSec,
               blobStore.validLogSegments));
-    }
-  }
-
-  /**
-   * Test {@link CompactionManager#getCompactionDetails(BlobStore)} for failure cases
-   * @throws StoreException
-   */
-  @Test
-  public void testConstructionFailureTest() throws StoreException {
-    blobStore.validLogSegments = Collections.EMPTY_LIST;
-    try {
-      compactionManager.getCompactionDetails(blobStore);
-      fail("Empty list for log segments to compact should have IllegalArgumentException");
-    } catch (IllegalArgumentException e) {
     }
   }
 
