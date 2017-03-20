@@ -96,6 +96,14 @@ public class StoreConfig {
   @Default("9223372036854775807")
   public final long storeSegmentSizeInBytes;
 
+  /**
+   * The minimum capacity that has to be used (as a percentage of the total capacity) for the store to trigger
+   * compaction
+   */
+  @Config("store.min.used.capacity.to.trigger.compaction.in.percentage")
+  @Default("50")
+  public final int storeMinUsedCapacityToTriggerCompactionInPercentage;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -112,6 +120,8 @@ public class StoreConfig {
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =
         verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
+    storeMinUsedCapacityToTriggerCompactionInPercentage =
+        verifiableProperties.getInt("store.min.used.capacity.to.trigger.compaction.in.percentage", 50);
   }
 }
 
