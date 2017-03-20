@@ -33,7 +33,6 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.router.RouterTestHelpers.*;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
@@ -162,7 +161,7 @@ public class GetBlobOperationTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
         new LoggingNotificationSystem(), mockClusterMap, time);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
-    routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<StoreKey>());
+    routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>());
   }
 
   /**

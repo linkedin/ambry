@@ -24,15 +24,15 @@ import java.util.List;
  */
 class RouterCallback {
   private final NetworkClient networkClient;
-  private final List<StoreKey> idsToDelete;
+  private final List<BackgroundDeleteRequest> backgroundDeleteRequests;
 
   /**
    * Construct a RouterCallback object
    * @param networkClient the {@link NetworkClient} associated with this callback.
    */
-  RouterCallback(NetworkClient networkClient, List<StoreKey> idsToDelete) {
+  RouterCallback(NetworkClient networkClient, List<BackgroundDeleteRequest> backgroundDeleteRequests) {
     this.networkClient = networkClient;
-    this.idsToDelete = idsToDelete;
+    this.backgroundDeleteRequests = backgroundDeleteRequests;
   }
 
   /**
@@ -53,9 +53,12 @@ class RouterCallback {
   /**
    * Schedule the deletes of ids in the given list.
    * @param idsToDelete the list of ids that need to be deleted.
+   * @param serviceIdSuffix the suffix to append to the service ID when deleting these blobs.
    */
-  void scheduleDeletes(List<StoreKey> idsToDelete) {
-    this.idsToDelete.addAll(idsToDelete);
+  void scheduleDeletes(List<StoreKey> idsToDelete, String serviceIdSuffix) {
+    for (StoreKey storeKey : idsToDelete) {
+      backgroundDeleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceIdSuffix));
+    }
   }
 }
 

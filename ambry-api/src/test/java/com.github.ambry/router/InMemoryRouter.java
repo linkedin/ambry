@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.notification.CreatedBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import java.io.IOException;
@@ -334,7 +335,8 @@ class InMemoryBlobPoster implements Runnable {
           new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
       blobs.put(blobId, blob);
       if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), postData.getUsermetadata());
+        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), postData.getUsermetadata(),
+            CreatedBlobType.Simple);
       }
       operationResult = blobId;
     } catch (Exception e) {

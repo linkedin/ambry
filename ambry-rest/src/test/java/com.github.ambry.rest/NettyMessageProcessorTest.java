@@ -18,6 +18,7 @@ import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
+import com.github.ambry.notification.CreatedBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.utils.TestUtils;
@@ -436,7 +437,8 @@ public class NettyMessageProcessorTest {
     protected volatile CountDownLatch operationCompleted = new CountDownLatch(1);
 
     @Override
-    public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata) {
+    public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
+        CreatedBlobType createdBlobType) {
       blobIdOperatedOn = blobId;
       operationCompleted.countDown();
     }

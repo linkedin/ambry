@@ -15,6 +15,7 @@ package com.github.ambry.commons;
 
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
+import com.github.ambry.notification.CreatedBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import java.io.IOException;
 import org.slf4j.Logger;
@@ -33,8 +34,9 @@ public class LoggingNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata) {
-    logger.debug("onBlobCreated " + blobId + ", " + blobProperties);
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
+      CreatedBlobType createdBlobType) {
+    logger.debug("onBlobCreated " + blobId + ", " + blobProperties + ", " + createdBlobType);
   }
 
   @Override

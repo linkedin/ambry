@@ -532,8 +532,14 @@ class PutOperation {
   }
 
   /**
+   * @return the service ID for this put operation.
+   */
+  String getServiceId() {
+    return passedInBlobProperties.getServiceId();
+  }
+  /**
    * if this is a composite object, fill the list with successfully put chunk ids.
-   * @return the list of successfully put chunk ids if this is a composite object.
+   * @return the list of successfully put chunk ids if this is a composite object, empty list otherwise.
    */
   List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
     return metadataPutChunk.getSuccessfullyPutChunkIdsIfComposite();
