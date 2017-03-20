@@ -789,15 +789,11 @@ public class IndexTest {
    */
   @Test
   public void getLogSegmentsNotInJournalTest() throws InterruptedException, IOException, StoreException {
-    if(isLogSegmented) {
-      testGetLogSegmentsNotInJournal(2, false, 2 * MAX_IN_MEM_ELEMENTS);
-      state.closeAndClearIndex();
-      state.properties.setProperty("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS * 3));
-      state.reloadIndex(false, false);
-      testGetLogSegmentsNotInJournal(3, false, 2 * 3 * MAX_IN_MEM_ELEMENTS);
-    } else{
-      assertEquals("LogSegments mismatch for non segmented log ", null,
-          state.index.getLogSegmentsNotInJournal());
+    if (isLogSegmented) {
+      testGetLogSegmentsNotInJournal(2, 2 * MAX_IN_MEM_ELEMENTS, false);
+      testGetLogSegmentsNotInJournal(3, 2 * MAX_IN_MEM_ELEMENTS, false);
+    } else {
+      assertEquals("LogSegments mismatch for non segmented log ", null, state.index.getLogSegmentsNotInJournal());
     }
   }
 
@@ -809,7 +805,10 @@ public class IndexTest {
    */
   @Test
   public void getLogSegmentsNotInJournalTestWithReload() throws InterruptedException, IOException, StoreException {
-    testGetLogSegmentsNotInJournal(2, true, 2 * MAX_IN_MEM_ELEMENTS);
+    if (isLogSegmented) {
+      testGetLogSegmentsNotInJournal(2, 2 * MAX_IN_MEM_ELEMENTS, true);
+      testGetLogSegmentsNotInJournal(3, 2 * MAX_IN_MEM_ELEMENTS, true);
+    }
   }
 
   /**
@@ -1294,37 +1293,53 @@ public class IndexTest {
 
   /**
    * Tests {@link PersistentIndex#getLogSegmentsNotInJournal()}
+   * @param maxLogSegmentsToBeIgnored number of log segments not to be returned via {@link PersistentIndex#getLogSegmentsNotInJournal()}
+   * @param maxEntriesInJournal max number of entries in {@link Journal}
    * @param reloadIndex {@code true} if index needs to be reloaded and tested for {@link PersistentIndex#getLogSegmentsNotInJournal()}
    *                    @@code false} otherwise
    * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
-  private void testGetLogSegmentsNotInJournal(int maxLogSegmentsToBeIgnored, boolean reloadIndex, int maxEntriesInJournal)
-      throws InterruptedException, StoreException, IOException {
-      // fill last log segment to capacity
-      fillLastLogSegmentToCapacity(1, false);
+  private void testGetLogSegmentsNotInJournal(int maxLogSegmentsToBeIgnored, int maxEntriesInJournal,
+      boolean reloadIndex) throws InterruptedException, StoreException, IOException {
+    // fill current log segment to its capacity
+    fillLastLogSegmentToCapacity(1, false);
 
-      // test every log segment except the last one is returned
-      fillLastLogSegmentToCapacity(maxEntriesInJournal, true);
+    // test every log segment except the last one is returned
+    fillLastLogSegmentToCapacity(maxEntriesInJournal, true);
+    assertEquals("LogSegments mismatch ", getExpectedLogSegmentNames(1), state.index.getLogSegmentsNotInJournal());
+
+    // create maxLogSegmentsToBeIgnored
+    int logSegmentCount = maxLogSegmentsToBeIgnored;
+    if (maxEntriesInJournal % maxLogSegmentsToBeIgnored > 0) {
+      logSegmentCount--;
+    }
+    for (int i = 0; i < logSegmentCount; i++) {
+      fillLastLogSegmentToCapacity(maxEntriesInJournal / maxLogSegmentsToBeIgnored, true);
+    }
+    if (maxEntriesInJournal % maxLogSegmentsToBeIgnored > 0) {
+      fillLastLogSegmentToCapacity(
+          maxEntriesInJournal - (logSegmentCount * (maxEntriesInJournal / maxLogSegmentsToBeIgnored)), true);
+    }
+    // every log segment except the last "maxLogSegmentsToBeIgnored" number of log segments should be returned
+    assertEquals("LogSegments mismatch ", getExpectedLogSegmentNames(maxLogSegmentsToBeIgnored),
+        state.index.getLogSegmentsNotInJournal());
+
+    if (reloadIndex) {
+      state.reloadIndex(true, false);
       // every log segment except the last one should be returned
       assertEquals("LogSegments mismatch ", getExpectedLogSegmentNames(1), state.index.getLogSegmentsNotInJournal());
-
-      // create maxLogSegmentsToBeIgnored
-      for(int i=0;i < maxLogSegmentsToBeIgnored; i++){
-        fillLastLogSegmentToCapacity( (maxEntriesInJournal)/maxLogSegmentsToBeIgnored, true);
-      }
-      // every log segment except the last two should be returned
-      assertEquals("LogSegments mismatch ", getExpectedLogSegmentNames(maxLogSegmentsToBeIgnored),
-          state.index.getLogSegmentsNotInJournal());
-
-      if (reloadIndex) {
-        // every log segment except the last one should be returned
-        assertEquals("LogSegments mismatch ", getExpectedLogSegmentNames(1), state.index.getLogSegmentsNotInJournal());
-      }
+    }
   }
 
-  private List<String> getExpectedLogSegmentNames(int segmentsToIgnoreFromLast){
+  /**
+   * Fetch expected log segment names ignoring the last {@code segmentsToIgnoreFromLast} from the list
+   * of actual log segments in the log
+   * @param segmentsToIgnoreFromLast number of log segments to be ignored from the last
+   * @return a {@link List} of log segments
+   */
+  private List<String> getExpectedLogSegmentNames(int segmentsToIgnoreFromLast) {
     List<String> expectedLogSegments = new ArrayList<>();
     LogSegment logSegment = state.log.getFirstSegment();
     while (logSegment != null) {
@@ -1334,16 +1349,25 @@ public class IndexTest {
     return expectedLogSegments.subList(0, expectedLogSegments.size() - segmentsToIgnoreFromLast);
   }
 
+  /**
+   * Fill the current log segment to it capacity
+   * @param numberOfEntries number of entries to be added to fill the log segment to its capacity
+   * @param newLogSegment {@code true} if this is a new log segment. {@code false} otherwise
+   * @throws InterruptedException
+   * @throws StoreException
+   * @throws IOException
+   */
   private void fillLastLogSegmentToCapacity(int numberOfEntries, boolean newLogSegment)
       throws InterruptedException, StoreException, IOException {
-    if(newLogSegment){
+    if (newLogSegment) {
+      // to ensure a new log segment is created. If not, find the remaining size below will fail
       state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
       numberOfEntries--;
     }
     // 1 PUT entry that spans the rest of the data in the last segment
     long remainingSize = state.log.getSegmentCapacity() - state.index.getCurrentEndOffset().getOffset();
     long sizePerPutRecord = remainingSize / numberOfEntries;
-    for(int i=0;i< numberOfEntries; i++) {
+    for (int i = 0; i < numberOfEntries; i++) {
       state.addPutEntries(1, sizePerPutRecord, Utils.Infinite_Time);
     }
   }

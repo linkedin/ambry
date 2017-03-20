@@ -21,6 +21,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.junit.Test;
@@ -69,21 +70,17 @@ public class CompactionManagerTest {
     blobStore.validLogSegments = null;
     verifyCompactionDetails(null);
 
-    // 0 valid LogSegment
-    blobStore.validLogSegments = new ArrayList<>();
-    verifyCompactionDetails(null);
-
     // 1 valid LogSegment
     blobStore.validLogSegments = generateRandomStrings(1);
-    verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs,
-        blobStore.validLogSegments));
+    verifyCompactionDetails(
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.validLogSegments));
 
     // random no of valid logSegments
     for (int i = 0; i < 3; i++) {
       int logSegmentCount = TestUtils.RANDOM.nextInt(10) + 1;
       blobStore.validLogSegments = generateRandomStrings(logSegmentCount);
-      verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs,
-          blobStore.validLogSegments));
+      verifyCompactionDetails(
+          new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.validLogSegments));
     }
   }
 
@@ -96,18 +93,19 @@ public class CompactionManagerTest {
   public void testDifferentUsedCapacities() throws StoreException {
     blobStore.validLogSegments = generateRandomStrings(2);
     // if used capacity is <= 60%, compaction details will be null. If not, validLogSegments needs to be returned.
-    Long[] usedCapacities =
-        new Long[]{CAPACITY_IN_BYTES * 2 / 10, (CAPACITY_IN_BYTES * 4 / 10), CAPACITY_IN_BYTES * 5 / 10,
-            CAPACITY_IN_BYTES * 51 / 100, (CAPACITY_IN_BYTES * 6 / 10),
-            CAPACITY_IN_BYTES * 7 / 10, CAPACITY_IN_BYTES * 9 / 10};
+    Long[] usedCapacities = new Long[]{
+        CAPACITY_IN_BYTES * 2 / 10, (CAPACITY_IN_BYTES * 4 / 10),
+        CAPACITY_IN_BYTES * 5 / 10,
+        CAPACITY_IN_BYTES * 51 / 100, (CAPACITY_IN_BYTES * 6 / 10),
+        CAPACITY_IN_BYTES * 7 / 10, CAPACITY_IN_BYTES * 9 / 10};
     for (Long usedCapacity : usedCapacities) {
       blobStore.usedCapacity = usedCapacity;
-      if(blobStore.usedCapacity <= (config.storeMinUsedCapacityToTriggerCompactionInPercentage * blobStore.capacityInBytes / 100))
-      {
+      if (blobStore.usedCapacity <= (
+          config.storeMinUsedCapacityToTriggerCompactionInPercentage * blobStore.capacityInBytes / 100)) {
         verifyCompactionDetails(null);
-      } else{
-        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs,
-            blobStore.validLogSegments));
+      } else {
+        verifyCompactionDetails(
+            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.validLogSegments));
       }
     }
   }
@@ -129,11 +127,12 @@ public class CompactionManagerTest {
       blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
       compactionManager = new CompactionManager(config, time);
       blobStore.validLogSegments = generateRandomStrings(2);
-      if(blobStore.usedCapacity > (config.storeMinUsedCapacityToTriggerCompactionInPercentage * blobStore.capacityInBytes / 100)) {
+      if (blobStore.usedCapacity <= (
+          config.storeMinUsedCapacityToTriggerCompactionInPercentage * blobStore.capacityInBytes / 100)) {
         verifyCompactionDetails(null);
-      } else{
-        verifyCompactionDetails(new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs,
-          blobStore.validLogSegments));
+      } else {
+        verifyCompactionDetails(
+            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.validLogSegments));
       }
     }
   }
@@ -154,9 +153,23 @@ public class CompactionManagerTest {
       blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
       compactionManager = new CompactionManager(config, time);
       blobStore.validLogSegments = generateRandomStrings(2);
-      verifyCompactionDetails(new CompactionDetails(
-          time.milliseconds() - messageRetentionDays * Time.SecsPerDay * Time.MsPerSec,
-          blobStore.validLogSegments));
+      verifyCompactionDetails(
+          new CompactionDetails(time.milliseconds() - messageRetentionDays * Time.SecsPerDay * Time.MsPerSec,
+              blobStore.validLogSegments));
+    }
+  }
+
+  /**
+   * Test {@link CompactionManager#getCompactionDetails(BlobStore)} for failure cases
+   * @throws StoreException
+   */
+  @Test
+  public void testConstructionFailureTest() throws StoreException {
+    blobStore.validLogSegments = Collections.EMPTY_LIST;
+    try {
+      compactionManager.getCompactionDetails(blobStore);
+      fail("Empty list for log segments to compact should have IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
     }
   }
 
@@ -202,7 +215,8 @@ public class CompactionManagerTest {
     private long capacityInBytes;
     List<String> validLogSegments = null;
 
-    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes, long usedCapacity) {
+    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes,
+        long usedCapacity) {
       super("", config, null, null, metrics, null, 0, null, null, null, time);
       this.capacityInBytes = capacityInBytes;
       this.usedCapacity = usedCapacity;
@@ -230,6 +244,5 @@ public class CompactionManagerTest {
     List<String> getLogSegmentsNotInJournal() throws StoreException {
       return validLogSegments;
     }
-
   }
 }
