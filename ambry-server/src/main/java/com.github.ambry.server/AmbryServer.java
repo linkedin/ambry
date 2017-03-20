@@ -24,6 +24,7 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
+import com.github.ambry.config.StatsConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
@@ -37,6 +38,7 @@ import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.StatsManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -62,6 +64,7 @@ public class AmbryServer {
   private RequestHandlerPool requestHandlerPool = null;
   private ScheduledExecutorService scheduler = null;
   private StorageManager storageManager = null;
+  private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
@@ -103,6 +106,7 @@ public class AmbryServer {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+      StatsConfig statsConfig = new StatsConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -142,6 +146,9 @@ public class AmbryServer {
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
+
+      statsManager = new StatsManager(storageManager, statsConfig);
+      statsManager.start();
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
@@ -189,6 +196,9 @@ public class AmbryServer {
         } catch (IOException e) {
           logger.error("Error while closing notification system.", e);
         }
+      }
+      if (statsManager != null) {
+        statsManager.shutdown();
       }
       logger.info("shutdown completed");
     } catch (Exception e) {

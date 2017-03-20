@@ -1,0 +1,9 @@
+{
+  "namespace": "com.github.ambry.store",
+  "type": "record",
+  "name": "StatsDirectory",
+  "fields": [
+    {"name": "value", "type": "long"},
+    {"name": "subDirectory", "type": ["null", {"type": "map", "values": "StatsDirectory"}]}
+  ]
+}

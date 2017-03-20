@@ -71,6 +71,13 @@ public interface Store {
   Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
 
   /**
+   * Get stats related information about the store as a {@link StatsDirectory}.
+   * @return a {@link StatsDirectory} containing stats related information
+   * @throws StoreException
+   */
+  StatsDirectory getStoreStats() throws StoreException;
+
+  /**
    * Checks if the key is deleted. Returns true is the key is deleted. Returns false if the
    * key is present, not available, ttl expired.
    * @param key The key that needs to be checked for deletion state

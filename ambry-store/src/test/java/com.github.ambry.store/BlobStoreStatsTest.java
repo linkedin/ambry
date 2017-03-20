@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Random;
 import java.util.TreeMap;
 import org.junit.After;
 import org.junit.Test;
@@ -236,6 +237,36 @@ public class BlobStoreStatsTest {
         totalLogSegmentValidSizeAfterDeletes, totalLogSegmentValidSizeBeforeDeletes - expectedLogSegmentDecrement);
     assertEquals("Delete entries are not properly counted for container valid size",
         totalContainerValidSizeAfterDeletes, totalContainerValidSizeBeforeDeletes - expectedContainerDecrement);
+  }
+
+  /**
+   * Tests the static method that converts the quota stats stored in a nested Map to an avro generated
+   * {@link StatsDirectory} object.
+   */
+  @Test
+  public void testConvertQuotaMapToStatsDirectory() {
+    Random random = new Random();
+    Map<String, Map<String, Long>> quotaMap = new HashMap<>();
+    Map<String, StatsDirectory> firstDirectoryMap = new HashMap<>();
+    long total = 0;
+    for (int i = 0; i < 10; i++) {
+      Map<String, StatsDirectory> secondDirectoryMap = new HashMap<>();
+      Map<String, Long> innerQuotaMap = new HashMap<>();
+      long subTotal = 0;
+      for (int j = 0; j < 3; j++) {
+        long randValue = random.nextInt(10000);
+        subTotal += randValue;
+        innerQuotaMap.put(String.valueOf(j), randValue);
+        secondDirectoryMap.put(String.valueOf(j), new StatsDirectory(randValue, null));
+      }
+      total += subTotal;
+      quotaMap.put(String.valueOf(i), innerQuotaMap);
+      firstDirectoryMap.put(String.valueOf(i), new StatsDirectory(subTotal, secondDirectoryMap));
+    }
+    StatsDirectory statsDirectory = new StatsDirectory(total, firstDirectoryMap);
+    StatsDirectory convertedStatsDirectory = BlobStoreStats.convertQuotaMapToStatsDirectory(quotaMap);
+    assertTrue("Mismatch between the converted StatsDirectory and expected StatsDirectory",
+        statsDirectory.equals(convertedStatsDirectory));
   }
 
   /**

@@ -44,6 +44,28 @@ class BlobStoreStats implements StoreStats {
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
 
+  /**
+   * Convert a given nested {@link Map} that stores quota related stats to its corresponding
+   * {@link StatsDirectory} object.
+   * @param quotaMap the nested {@link Map} to be converted
+   * @return the corresponding {@link StatsDirectory} object.
+   */
+  static StatsDirectory convertQuotaMapToStatsDirectory(Map<String, Map<String, Long>> quotaMap) {
+    Map<String, StatsDirectory> firstDirectoryMap = new HashMap<>();
+    long totalSize = 0;
+    for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
+      long subTotalSize = 0;
+      Map<String, StatsDirectory> secondDirectoryMap = new HashMap<>();
+      for (Map.Entry<String, Long> innerEntry : entry.getValue().entrySet()) {
+        subTotalSize += innerEntry.getValue();
+        secondDirectoryMap.put(innerEntry.getKey(), new StatsDirectory(innerEntry.getValue(), null));
+      }
+      totalSize += subTotalSize;
+      firstDirectoryMap.put(entry.getKey(), new StatsDirectory(subTotalSize, secondDirectoryMap));
+    }
+    return new StatsDirectory(totalSize, firstDirectoryMap);
+  }
+
   BlobStoreStats(PersistentIndex index, Time time, DiskIOScheduler diskIOScheduler) {
     this.index = index;
     this.time = time;
