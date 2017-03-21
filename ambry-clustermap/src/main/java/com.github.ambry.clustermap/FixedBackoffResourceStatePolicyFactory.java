@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.SystemTime;
 
 
 public class FixedBackoffResourceStatePolicyFactory implements ResourceStatePolicyFactory {
@@ -25,11 +26,11 @@ public class FixedBackoffResourceStatePolicyFactory implements ResourceStatePoli
     if (resource instanceof DataNodeId) {
       resourceStatePolicy = new FixedBackoffResourceStatePolicy(resource, initialState == HardwareState.UNAVAILABLE,
           clusterMapConfig.clusterMapFixedTimeoutDatanodeErrorThreshold,
-          clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs);
+          clusterMapConfig.clusterMapFixedTimeoutDataNodeRetryBackoffMs, SystemTime.getInstance());
     } else if (resource instanceof DiskId) {
       resourceStatePolicy = new FixedBackoffResourceStatePolicy(resource, initialState == HardwareState.UNAVAILABLE,
           clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold,
-          clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs);
+          clusterMapConfig.clusterMapFixedTimeoutDiskRetryBackoffMs, SystemTime.getInstance());
     }
 
     if (resourceStatePolicy == null) {
