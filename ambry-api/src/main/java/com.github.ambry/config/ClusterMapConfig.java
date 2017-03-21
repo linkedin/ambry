@@ -114,8 +114,8 @@ public class ClusterMapConfig {
    * The port number associated with this node.
    */
   @Config("clustermap.port")
-  @Default("-1")
-  public final int clusterMapPort;
+  @Default("null")
+  public final Integer clusterMapPort;
 
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
@@ -137,6 +137,6 @@ public class ClusterMapConfig {
     clusterMapClusterName = verifiableProperties.getString("clustermap.cluster.name");
     clusterMapDatacenterName = verifiableProperties.getString("clustermap.datacenter.name");
     clusterMapHostName = verifiableProperties.getString("clustermap.host.name");
-    clusterMapPort = verifiableProperties.getInt("clustermap.port", -1);
+    clusterMapPort = verifiableProperties.getInteger("clustermap.port", null);
   }
 }

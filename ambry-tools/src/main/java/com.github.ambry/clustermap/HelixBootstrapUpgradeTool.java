@@ -327,7 +327,7 @@ public class HelixBootstrapUpgradeTool {
           for (Disk disk : node.getDisks()) {
             Map<String, String> diskInfo = new HashMap<>();
             diskInfo.put(ClusterMapUtils.DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
-            diskInfo.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.ONLINE_STR);
+            diskInfo.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.AVAILABLE_STR);
             // Note: An instance config has to contain the information for each disk about the replicas it hosts.
             // This information will be initialized to the empty string - but will be updated whenever the partition
             // is added to the cluster.

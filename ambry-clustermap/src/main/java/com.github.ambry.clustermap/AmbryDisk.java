@@ -45,6 +45,7 @@ class AmbryDisk implements DiskId, Resource {
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, state, clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     validate();
+    ClusterMapUtils.validateDiskCapacity(rawCapacityBytes);
   }
 
   /**

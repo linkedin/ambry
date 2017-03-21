@@ -27,10 +27,6 @@ import org.slf4j.LoggerFactory;
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
 class Disk implements DiskId {
-  // Hard-code disk capacity limits in bytes for validation
-  private static final long MinCapacityInBytes = 10L * 1024 * 1024 * 1024;
-  private static final long MaxCapacityInBytes = 10L * 1024 * 1024 * 1024 * 1024; // 10 TB
-
   private final DataNode dataNode;
   private final String mountPath;
   private final ResourceStatePolicy diskStatePolicy;
@@ -106,21 +102,11 @@ class Disk implements DiskId {
     }
   }
 
-  private void validateCapacity() {
-    if (capacityInBytes < MinCapacityInBytes) {
-      throw new IllegalStateException(
-          "Invalid disk capacity: " + capacityInBytes + " is less than " + MinCapacityInBytes);
-    } else if (capacityInBytes > MaxCapacityInBytes) {
-      throw new IllegalStateException(
-          "Invalid disk capacity: " + capacityInBytes + " is more than " + MaxCapacityInBytes);
-    }
-  }
-
   protected void validate() {
     logger.trace("begin validate.");
     validateDataNode();
     validateMountPath();
-    validateCapacity();
+    ClusterMapUtils.validateDiskCapacity(capacityInBytes);
     logger.trace("complete validate.");
   }
 

@@ -15,7 +15,6 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
-import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -29,6 +28,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import org.apache.helix.ConfigChangeListener;
+import org.apache.helix.ExternalViewChangeListener;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
@@ -38,7 +39,6 @@ import org.apache.helix.NotificationContext;
 import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
-import org.apache.helix.spectator.RoutingTableProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -105,7 +105,7 @@ class HelixClusterManager implements ClusterMap {
       }
     } catch (Exception e) {
       helixClusterManagerMetrics.initializeInstantiationMetric(false);
-      throw new IOException("Encountered exception parsing json or connecting to Helix", e);
+      throw new IOException("Encountered exception while parsing json, connecting to Helix or initializing", e);
     }
     helixClusterManagerMetrics.initializeInstantiationMetric(true);
     helixClusterManagerMetrics.initializeDatacenterMetrics();
@@ -138,9 +138,9 @@ class HelixClusterManager implements ClusterMap {
         clusterWideRawCapacityBytes += disk.getRawCapacityInBytes();
       }
     }
-    for (Map.Entry<AmbryPartition, Set<AmbryReplica>> partitionInfo : partitionIdToReplicaIds.entrySet()) {
-      long replicaCapacity = partitionInfo.getValue().iterator().next().getCapacityInBytes();
-      clusterWideAllocatedRawCapacityBytes += replicaCapacity * partitionInfo.getValue().size();
+    for (Set<AmbryReplica> partitionReplicas : partitionIdToReplicaIds.values()) {
+      long replicaCapacity = partitionReplicas.iterator().next().getCapacityInBytes();
+      clusterWideAllocatedRawCapacityBytes += replicaCapacity * partitionReplicas.size();
       clusterWiseAllocatedUsableCapacityBytes += replicaCapacity;
     }
   }
@@ -163,7 +163,7 @@ class HelixClusterManager implements ClusterMap {
       Map<String, String> diskInfo = entry.getValue();
       long capacityBytes = Long.valueOf(diskInfo.get(DISK_CAPACITY_STR));
       HardwareState state =
-          diskInfo.get(DISK_STATE).equals(ONLINE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
+          diskInfo.get(DISK_STATE).equals(AVAILABLE_STR) ? HardwareState.AVAILABLE : HardwareState.UNAVAILABLE;
       String replicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
 
       // Create disk
@@ -185,7 +185,7 @@ class HelixClusterManager implements ClusterMap {
             partitionIdToReplicaIds.put(partition, new HashSet<AmbryReplica>());
             partitionMap.put(ByteBuffer.wrap(partition.getBytes()), partition);
           } else {
-            ensurePartitionAbsenceOnNode(partition, datanode);
+            ensurePartitionAbsenceOnNodeAndValidateCapacity(partition, datanode, replicaCapacity);
           }
           if (sealedReplicas.contains(partitionName)) {
             partition.setState(PartitionState.READ_ONLY);
@@ -204,11 +204,16 @@ class HelixClusterManager implements ClusterMap {
    * done to ensure that two replicas of the same partition do not exist on the same datanode.
    * @param partition the {@link AmbryPartition} to check.
    * @param datanode the {@link AmbryDataNode} on which to check.
+   * @param expectedReplicaCapacity the capacity expected for the replicas of the partition.
    */
-  private void ensurePartitionAbsenceOnNode(AmbryPartition partition, AmbryDataNode datanode) {
+  private void ensurePartitionAbsenceOnNodeAndValidateCapacity(AmbryPartition partition, AmbryDataNode datanode,
+      long expectedReplicaCapacity) {
     for (AmbryReplica replica : partitionIdToReplicaIds.get(partition)) {
       if (replica.getDataNodeId().equals(datanode)) {
         throw new IllegalStateException("Replica already exists on " + datanode + " for " + partition);
+      } else if (replica.getCapacityInBytes() != expectedReplicaCapacity) {
+        throw new IllegalStateException("Expected replica capacity " + expectedReplicaCapacity + " is different from "
+            + "the capacity of an existing replica " + replica.getCapacityInBytes());
       }
     }
   }
@@ -323,26 +328,33 @@ class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * An instance of this object is used to register as listner for Helix related changes in each datacenter.
+   * An instance of this object is used to register as listener for Helix related changes in each datacenter.
    */
-  private class ClusterChangeListener extends RoutingTableProvider implements LiveInstanceChangeListener {
+  private class ClusterChangeListener implements ExternalViewChangeListener, ConfigChangeListener, LiveInstanceChangeListener {
     final Set<String> allInstances = new HashSet<>();
     private boolean liveInstanceChangeTriggered = false;
     private boolean externalViewChangeTriggered = false;
     private boolean configChangeTriggered = false;
     private CountDownLatch initialized = new CountDownLatch(3);
 
+    /**
+     * Triggered whenever there is a change in the list of live instances.
+     * @param liveInstances the list of all live instances (not a change set) at the time of this call.
+     * @param changeContext the {@link NotificationContext} associated.
+     */
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       logger.info("Live instance change triggered with: " + liveInstances);
       Set<String> liveInstancesSet = new HashSet<>();
       for (LiveInstance liveInstance : liveInstances) {
         liveInstancesSet.add(liveInstance.getInstanceName());
-        instanceNameToDataNodeIdMap.get(liveInstance.getInstanceName()).setState(HardwareState.AVAILABLE);
       }
-      Set<String> downInstancesSet = Sets.difference(allInstances, liveInstancesSet);
-      for (String instanceName : downInstancesSet) {
-        instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.UNAVAILABLE);
+      for (String instanceName : allInstances) {
+        if (liveInstancesSet.contains(instanceName)) {
+          instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.AVAILABLE);
+        } else {
+          instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.UNAVAILABLE);
+        }
       }
       if (!liveInstanceChangeTriggered) {
         liveInstanceChangeTriggered = true;
@@ -354,7 +366,6 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onExternalViewChange(List<ExternalView> externalViewList, NotificationContext changeContext) {
       logger.info("ExternalView change triggered with: " + externalViewList);
-      super.onExternalViewChange(externalViewList, changeContext);
 
       // No action taken at this time.
 
@@ -368,7 +379,6 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
       logger.info("Config change triggered with: ", configs);
-      super.onConfigChange(configs, changeContext);
 
       // No action taken at this time. Going forward, changes like marking partitions back to read-write will go here.
 
@@ -403,14 +413,14 @@ class HelixClusterManager implements ClusterMap {
      * @param dcName the associated datacenter name.
      * @param zkConnectStr the associated ZK connect string for this datacenter.
      * @param helixManager the associated {@link HelixManager} for this datacenter.
-     * @param clusterChangeLIstener the associated {@link ClusterChangeListener} for this datacenter.
+     * @param clusterChangeListener the associated {@link ClusterChangeListener} for this datacenter.
      */
     DcZkInfo(String dcName, String zkConnectStr, HelixManager helixManager,
-        ClusterChangeListener clusterChangeLIstener) {
+        ClusterChangeListener clusterChangeListener) {
       this.dcName = dcName;
       this.zkConnectStr = zkConnectStr;
       this.helixManager = helixManager;
-      this.clusterChangeListener = clusterChangeLIstener;
+      this.clusterChangeListener = clusterChangeListener;
     }
   }
 

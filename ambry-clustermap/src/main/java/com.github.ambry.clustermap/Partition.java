@@ -38,7 +38,7 @@ class Partition extends PartitionId {
 
   private static final short Version_Field_Size_In_Bytes = 2;
   private static final short Current_Version = 1;
-  static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
+  private static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
 
   private Long id;
   PartitionState partitionState;

@@ -34,7 +34,7 @@ class AmbryPartition extends PartitionId {
   private static final int PARTITION_SIZE_IN_BYTES = VERSION_FIELD_SIZE_IN_BYTES + 8;
 
   /**
-   * Instantiate an AmbryParitition instance.
+   * Instantiate an AmbryPartition instance.
    * @param id the id associated with this partition.
    * @param clusterManagerCallback the {@link HelixClusterManager.HelixClusterManagerCallback} to use to make callbacks
    *                               to the {@link HelixClusterManager}

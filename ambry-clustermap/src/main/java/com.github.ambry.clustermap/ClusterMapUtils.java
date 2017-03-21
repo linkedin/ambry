@@ -36,25 +36,27 @@ public class ClusterMapUtils {
   static final String SSLPORT_STR = "sslPort";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
-  static final String ONLINE_STR = "ONLINE";
-  static final String OFFLINE_STR = "OFFLINE";
+  static final String AVAILABLE_STR = "AVAILABLE";
+  static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String ZKCONNECTSTR_STR = "zkConnectStr";
   static final String ZKINFO_STR = "zkInfo";
   static final String DATACENTER_STR = "datacenter";
   static final int UNKNOWN_RACK_ID = -1;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
-  static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
-  static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10995116277760L; // 10 TB
+  private static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
+  private static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
+  private static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
+  private static final long MAX_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
 
   /**
    * Construct and return the instance name given the host and port.
    * @param host the hostname of the instance.
-   * @param port the port of the instance.
+   * @param port the port of the instance. Can be null.
    * @return the constructed instance name.
    */
-  public static String getInstanceName(String host, int port) {
-    return port == -1 ? host : host + "_" + port;
+  public static String getInstanceName(String host, Integer port) {
+    return port == null ? host : host + "_" + port;
   }
 
   /**
@@ -132,6 +134,20 @@ public class ClusterMapUtils {
     } else if (replicaCapacityInBytes > MAX_REPLICA_CAPACITY_IN_BYTES) {
       throw new IllegalStateException(
           "Invalid disk capacity: " + replicaCapacityInBytes + " is more than " + MAX_REPLICA_CAPACITY_IN_BYTES);
+    }
+  }
+
+  /**
+   * Validate the disk capacity.
+   * @param diskCapacityInBytes the disk capacity to validate.
+   */
+  static void validateDiskCapacity(long diskCapacityInBytes) {
+    if (diskCapacityInBytes < MIN_DISK_CAPACITY_IN_BYTES) {
+      throw new IllegalStateException(
+          "Invalid disk capacity: " + diskCapacityInBytes + " is less than " + MIN_DISK_CAPACITY_IN_BYTES);
+    } else if (diskCapacityInBytes > MAX_DISK_CAPACITY_IN_BYTES) {
+      throw new IllegalStateException(
+          "Invalid disk capacity: " + diskCapacityInBytes + " is more than " + MAX_DISK_CAPACITY_IN_BYTES);
     }
   }
 }

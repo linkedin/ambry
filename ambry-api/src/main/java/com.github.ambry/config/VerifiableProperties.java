@@ -68,6 +68,16 @@ public class VerifiableProperties {
     return getIntInRange(name, defaultVal, Integer.MIN_VALUE, Integer.MAX_VALUE);
   }
 
+  public Integer getInteger(String name, Integer defaultVal) {
+    Integer v;
+    if (containsKey(name)) {
+      v = Integer.parseInt(getProperty(name));
+    } else {
+      v = defaultVal;
+    }
+    return v;
+  }
+
   public Short getShort(String name, Short defaultVal) {
     return getShortInRange(name, defaultVal, Short.MIN_VALUE, Short.MAX_VALUE);
   }
