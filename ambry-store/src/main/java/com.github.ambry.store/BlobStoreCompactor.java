@@ -29,8 +29,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -122,7 +122,7 @@ class BlobStoreCompactor {
   /**
    * If a compaction was in progress during a crash/shutdown, fixes the state so that the store is loaded correctly
    * and compaction can resume smoothly on a call to {@link #resumeCompaction()}. Expected to be called before the
-   * {@link PersistentIndex} is created in the {@link BlobStore}.
+   * {@link PersistentIndex} is instantiated in the {@link BlobStore}.
    * @throws IOException if the {@link CompactionLog} could not be created or if commit or cleanup failed.
    * @throws StoreException if the commit failed.
    */
@@ -134,12 +134,14 @@ class BlobStoreCompactor {
         case COMMIT:
           commit(true);
           compactionLog.markCleanupStart();
+          // fall through to CLEANUP
         case CLEANUP:
           cleanup(true);
           compactionLog.markCycleComplete();
           break;
         case COPY:
           recoveryStartToken = compactionLog.getSafeToken();
+          // fall through to the break.
         case PREPARE:
         case DONE:
           break;
@@ -172,7 +174,7 @@ class BlobStoreCompactor {
   void shutdown(long waitTimeSecs) throws InterruptedException {
     isActive = false;
     if (waitTimeSecs > 0 && !runningLatch.await(waitTimeSecs, TimeUnit.SECONDS)) {
-      logger.error("Compactor did not shutdown within 2 seconds");
+      logger.error("Compactor did not shutdown within " + waitTimeSecs + " seconds");
     }
   }
 
@@ -180,9 +182,8 @@ class BlobStoreCompactor {
    * Compacts the store by copying valid data from the log segments in {@code details} to swap spaces and switching
    * the compacted segments out for the swap spaces. Returns once the compaction is complete.
    * @param details the {@link CompactionDetails} for the compaction.
-   * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log, if one or more offsets
-   * in the segments to compact are in the journal or if the last modified time of any of the provided log segments is
-   * greater than the provided reference time.
+   * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
+   * in the segments to compact are in the journal.
    * @throws IllegalStateException if the compactor has not been started.
    * @throws InterruptedException if the compaction was interrupted
    * @throws IOException if there were I/O errors during copying, commit or cleanup.
@@ -216,6 +217,7 @@ class BlobStoreCompactor {
       switch (phase) {
         case PREPARE:
           compactionLog.markCopyStart();
+          // fall through to COPY
         case COPY:
           copy();
           if (isActive) {
@@ -238,9 +240,8 @@ class BlobStoreCompactor {
   /**
    * Checks the sanity of the provided {@code details}
    * @param details the {@link CompactionDetails} to use for compaction.
-   * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log, if one or more offsets
-   * in the segments to compact are in the journal or if the last modified time of any of the provided log segments is
-   * greater than the provided reference time.
+   * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
+   * in the segments to compact are in the journal.
    */
   private void checkSanity(CompactionDetails details) {
     List<String> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
@@ -274,6 +275,7 @@ class BlobStoreCompactor {
     Offset startOffsetOfLastIndexSegmentForDelete = getStartOffsetOfLastIndexSegmentForDelete();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
+      // only the very first log segment in the cycle can contain duplicate records.
       LogSegment logSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
       LogSegment prevSegment = srcLog.getPrevSegment(logSegment);
       if (prevSegment != null) {
@@ -325,7 +327,7 @@ class BlobStoreCompactor {
    * Commits the changes made by copying valid data. Commit involves
    * 1. Renaming temporary log segments
    * 2. Adding them to the log segments maintained by the application log.
-   * 3. Atomically switching the old set of index segments for the new ones.
+   * 3. Atomically switching the old set of index segments for the new ones (if not recovering).
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
    * @throws IOException if there were I/O errors during committing.
    * @throws StoreException if there were exceptions reading to writing to store components.
@@ -435,7 +437,7 @@ class BlobStoreCompactor {
 
   /**
    * Copies data from the provided log segment into the target log (swap spaces).
-   * @param from the {@link LogSegment} to copy from.
+   * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates.
    * @param startOffsetOfLastIndexSegmentForDelete  the start {@link Offset} of the index segment up until which delete
    *                                                records are considered applicable.
@@ -444,13 +446,13 @@ class BlobStoreCompactor {
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there are any problems reading or writing to store components.
    */
-  private boolean copyLogSegmentData(LogSegment from, FileSpan duplicateSearchSpan,
+  private boolean copyLogSegmentData(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan,
       Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
     boolean allCopied = true;
-    for (Offset indexSegmentStartOffset : getIndexSegmentDetails(from.getName()).keySet()) {
-      IndexSegment toCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
-      if (needsCopying(toCopy.getEndOffset()) && !copyIndexSegmentData(from, toCopy, duplicateSearchSpan,
-          startOffsetOfLastIndexSegmentForDelete)) {
+    for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
+      IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
+      if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyIndexSegmentData(logSegmentToCopy, indexSegmentToCopy,
+          duplicateSearchSpan, startOffsetOfLastIndexSegmentForDelete)) {
         // there is a shutdown in progress or there was no space to copy all entries.
         allCopied = false;
         break;
@@ -461,7 +463,7 @@ class BlobStoreCompactor {
 
   /**
    * Copies data in the provided {@code indexSegmentToCopy} into the target log (swap spaces).
-   * @param from the {@link LogSegment} to copy from.
+   * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param indexSegmentToCopy the {@link IndexSegment} that contains the entries that need to be copied.
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates.
    * @param startOffsetOfLastIndexSegmentForDelete  the start {@link Offset} of the index segment up until which delete
@@ -471,8 +473,8 @@ class BlobStoreCompactor {
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there are any problems reading or writing to store components.
    */
-  private boolean copyIndexSegmentData(LogSegment from, IndexSegment indexSegmentToCopy, FileSpan duplicateSearchSpan,
-      Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
+  private boolean copyIndexSegmentData(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
+      FileSpan duplicateSearchSpan, Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
     List<IndexEntry> allIndexEntries = new ArrayList<>();
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
@@ -495,7 +497,7 @@ class BlobStoreCompactor {
             startOffsetOfLastIndexSegmentForDelete, checkAlreadyCopied);
 
     // Copy these over
-    boolean copiedAll = copyRecords(from, indexEntriesToCopy, indexSegmentToCopy.getLastModifiedTimeSecs());
+    boolean copiedAll = copyRecords(logSegmentToCopy, indexEntriesToCopy, indexSegmentToCopy.getLastModifiedTimeSecs());
     // persist
     tgtIndex.persistIndex();
     return copiedAll;
@@ -506,7 +508,7 @@ class BlobStoreCompactor {
    * 1. Records that are not duplicates.
    * 2. Records that are not expired or deleted.
    * 3. Delete records.
-   * 4. Records that are already in the target log (because they were copied before crash/shutdown).
+   * Records will be excluded because they are expired/deleted or because they are duplicates.
    * @param allIndexEntries the {@link MessageInfo} of all the entries in the index segment.
    * @param duplicateSearchSpan the {@link FileSpan} in which to search for duplicates
    * @param indexSegmentStartOffset the start {@link Offset} of the index segment under consideration.
@@ -551,6 +553,16 @@ class BlobStoreCompactor {
     return indexEntriesToCopy;
   }
 
+  /**
+   * Gets all the valid index entries in the given list of index entries.
+   * @param indexSegmentStartOffset the start {@link Offset} of the {@link IndexSegment} that {@code allIndexEntries} is
+   *                                from.
+   * @param allIndexEntries the list of {@link IndexEntry} instances from which the valid entries have to be chosen.
+   * @param startOffsetOfLastIndexSegmentForDelete the start {@link Offset} of the index segment up until which delete
+   *                                                records are considered applicable.
+   * @return the list of valid entries picked from {@code allIndexEntries}.
+   * @throws StoreException if {@link BlobReadOptions} could not be obtained from the store for deleted blobs.
+   */
   private List<IndexEntry> getValidIndexEntries(Offset indexSegmentStartOffset, List<IndexEntry> allIndexEntries,
       Offset startOffsetOfLastIndexSegmentForDelete) throws StoreException {
     // TODO: move this blob store stats
@@ -613,7 +625,7 @@ class BlobStoreCompactor {
 
   /**
    * Copies the given {@code srcIndexEntries} from the given log segment into the swap spaces.
-   * @param from the {@link LogSegment} to copy from.
+   * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param srcIndexEntries the {@link IndexEntry}s to copy.
    * @param lastModifiedTimeSecs the last modified time of the source index segment.
    * @return @code true} if all the records  were copied. {@code false} if some records were not copied either because
@@ -621,11 +633,11 @@ class BlobStoreCompactor {
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there are any problems reading or writing to store components.
    */
-  private boolean copyRecords(LogSegment from, List<IndexEntry> srcIndexEntries, long lastModifiedTimeSecs)
+  private boolean copyRecords(LogSegment logSegmentToCopy, List<IndexEntry> srcIndexEntries, long lastModifiedTimeSecs)
       throws IOException, StoreException {
     boolean copiedAll = true;
     long totalCapacity = tgtLog.getCapacityInBytes();
-    FileChannel fileChannel = Utils.openChannel(from.getView().getFirst(), false);
+    FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false);
     long writtenLastTime = 0;
     for (IndexEntry srcIndexEntry : srcIndexEntries) {
       IndexValue srcValue = srcIndexEntry.getValue();
@@ -666,12 +678,12 @@ class BlobStoreCompactor {
       } else {
         // this is the extra segment, so it is ok to run out of space.
         logger.info("There is no more capacity in the destination log. Total capacity is {}. Used capacity is {}. "
-            + "Segment that was being copied is {}", totalCapacity, usedCapacity, from.getName());
+            + "Segment that was being copied is {}", totalCapacity, usedCapacity, logSegmentToCopy.getName());
         copiedAll = false;
         break;
       }
     }
-    from.closeView();
+    logSegmentToCopy.closeView();
     return copiedAll;
   }
 
@@ -741,11 +753,11 @@ class BlobStoreCompactor {
     }
 
     List<File> indexSegmentFilesToAdd = new ArrayList<>();
-    Map<String, NavigableMap<Offset, File>> newLogSegmentsToIndexSegmentFiles =
+    Map<String, SortedMap<Offset, File>> newLogSegmentsToIndexSegmentDetails =
         getLogSegmentsToIndexSegmentsMap(logSegmentNames);
-    for (Map.Entry<String, NavigableMap<Offset, File>> entry : newLogSegmentsToIndexSegmentFiles.entrySet()) {
+    for (Map.Entry<String, SortedMap<Offset, File>> entry : newLogSegmentsToIndexSegmentDetails.entrySet()) {
       LogSegment logSegment = srcLog.getSegment(entry.getKey());
-      NavigableMap<Offset, File> indexSegmentDetails = entry.getValue();
+      SortedMap<Offset, File> indexSegmentDetails = entry.getValue();
       long endOffset = logSegment.getStartOffset();
       for (Map.Entry<Offset, File> indexSegmentEntry : indexSegmentDetails.entrySet()) {
         File indexSegmentFile = indexSegmentEntry.getValue();
@@ -764,12 +776,12 @@ class BlobStoreCompactor {
    * @param logSegmentNames the names of log segments whose index segment files are required.
    * @return a map keyed on log segment name and containing details about all the index segment files that refer to it.
    */
-  private Map<String, NavigableMap<Offset, File>> getLogSegmentsToIndexSegmentsMap(List<String> logSegmentNames) {
-    Map<String, NavigableMap<Offset, File>> logSegmentsToIndexSegmentsMap = new HashMap<>();
+  private Map<String, SortedMap<Offset, File>> getLogSegmentsToIndexSegmentsMap(List<String> logSegmentNames) {
+    Map<String, SortedMap<Offset, File>> logSegmentsToIndexSegmentDetails = new HashMap<>();
     for (String logSegmentName : logSegmentNames) {
-      logSegmentsToIndexSegmentsMap.put(logSegmentName, getIndexSegmentDetails(logSegmentName));
+      logSegmentsToIndexSegmentDetails.put(logSegmentName, getIndexSegmentDetails(logSegmentName));
     }
-    return logSegmentsToIndexSegmentsMap;
+    return logSegmentsToIndexSegmentDetails;
   }
 
   // cleanup() helpers
@@ -838,14 +850,14 @@ class BlobStoreCompactor {
    * @param logSegmentName the name of the log segment whose index segment files are required.
    * @return a map that contains all the index segment files of the log segment - keyed on the start offset.
    */
-  private NavigableMap<Offset, File> getIndexSegmentDetails(String logSegmentName) {
-    NavigableMap<Offset, File> indexSegmentFileToStartOffset = new TreeMap<>();
+  private SortedMap<Offset, File> getIndexSegmentDetails(String logSegmentName) {
+    SortedMap<Offset, File> indexSegmentStartOffsetToFile = new TreeMap<>();
     File[] indexSegmentFiles =
         PersistentIndex.getIndexSegmentFilesForLogSegment(dataDir.getAbsolutePath(), logSegmentName);
     for (File indexSegmentFile : indexSegmentFiles) {
-      indexSegmentFileToStartOffset.put(IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName()),
+      indexSegmentStartOffsetToFile.put(IndexSegment.getIndexSegmentStartOffset(indexSegmentFile.getName()),
           indexSegmentFile);
     }
-    return indexSegmentFileToStartOffset;
+    return indexSegmentStartOffsetToFile;
   }
 }
