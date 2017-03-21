@@ -43,7 +43,6 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private StringBuilder logMessage;
   private HttpRequest request;
   private StringBuilder sslLogMessage;
-//  private SSLSession las
 
   private static final long INIT_TIME = -1;
   private final Logger logger = LoggerFactory.getLogger(getClass());

@@ -150,16 +150,16 @@ class AdminBlobStorageService implements BlobStorageService {
         logger.trace("Sub-resource requested: {}", subresource);
         switch (subresource) {
           case BlobInfo:
-            requestMetrics =
-                restRequest.getSSLSession() != null ? adminMetrics.getBlobInfoMetrics : adminMetrics.getBlobInfoMetrics;
+            requestMetrics = restRequest.getSSLSession() != null ? adminMetrics.getBlobInfoSSLMetrics
+                : adminMetrics.getBlobInfoMetrics;
             break;
           case UserMetadata:
             requestMetrics = restRequest.getSSLSession() != null ? adminMetrics.getUserMetadataSSLMetrics
                 : adminMetrics.getUserMetadataMetrics;
             break;
           case Replicas:
-            requestMetrics =
-                restRequest.getSSLSession() != null ? adminMetrics.getReplicasMetrics : adminMetrics.getReplicasMetrics;
+            requestMetrics = restRequest.getSSLSession() != null ? adminMetrics.getReplicasSSLMetrics
+                : adminMetrics.getReplicasMetrics;
             securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
             break;
         }

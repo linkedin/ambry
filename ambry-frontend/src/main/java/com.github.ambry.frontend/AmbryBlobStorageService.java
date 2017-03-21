@@ -147,7 +147,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         logger.trace("Sub-resource requested: {}", subresource);
         switch (subresource) {
           case BlobInfo:
-            requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getBlobInfoMetrics
+            requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getBlobInfoSSLMetrics
                 : frontendMetrics.getBlobInfoMetrics;
             break;
           case UserMetadata:

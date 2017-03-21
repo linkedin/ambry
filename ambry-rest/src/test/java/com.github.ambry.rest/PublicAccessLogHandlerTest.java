@@ -268,7 +268,6 @@ public class PublicAccessLogHandlerTest {
       channel.writeInbound(new DefaultLastHttpContent());
     }
     String lastLogEntry = publicAccessLogger.getLastPublicAccessLogEntry();
-    System.out.println(lastLogEntry);
     // verify remote host, http method and uri
     String subString = testErrorCase ? "Error" : "Info" + ":embedded" + " " + httpRequest.method() + " " + uri;
     Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
