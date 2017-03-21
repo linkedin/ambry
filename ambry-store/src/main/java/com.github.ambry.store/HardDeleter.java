@@ -173,6 +173,8 @@ public class HardDeleter implements Runnable {
     hardDeleteLock.lock();
     try {
       if (paused.compareAndSet(true, false)) {
+        startToken =
+            startTokenBeforeLogFlush = startTokenSafeToPersist = endToken = index.revalidateFindToken(startToken);
         pauseCondition.signal();
       }
       logger.info("Hard delete resumed for {}", dataDir);

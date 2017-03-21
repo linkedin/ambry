@@ -798,6 +798,37 @@ public class IndexTest {
   }
 
   /**
+   * Tests the cases where tokens have to be revalidated on a call to
+   * {@link PersistentIndex#findEntriesSince(FindToken, long)}.
+   * @throws StoreException
+   */
+  @Test
+  public void tokenRevalidationTest() throws StoreException {
+    // this test is valid only when the log has > 1 log segments i.e. when it can undergo compaction.
+    if (isLogSegmented) {
+      StoreFindToken absoluteEndToken =
+          new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false);
+      absoluteEndToken.setBytesRead(state.index.getLogUsedCapacity());
+
+      // generate an offset that does not exist.
+      Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
+      MockId firstIdInFirstIndexSegment = state.referenceIndex.firstEntry().getValue().firstKey();
+      String newName = LogSegmentNameHelper.getNextGenerationName(firstIndexSegmentStartOffset.getName());
+      long newOffset = firstIndexSegmentStartOffset.getOffset() + 1;
+      Offset invalidOffset = new Offset(newName, newOffset + 1);
+
+      // Generate an index based token from invalidOffset
+      StoreFindToken startToken =
+          new StoreFindToken(firstIdInFirstIndexSegment, invalidOffset, state.sessionId, state.incarnationId);
+      doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
+
+      // Generate a journal based token from invalidOffset (not in journal and is invalid)
+      startToken = new StoreFindToken(invalidOffset, state.sessionId, state.incarnationId, false);
+      doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
+    }
+  }
+
+  /**
    * Generates token in {@link StoreFindToken#VERSION_1} so that incarnationId is null
    * @param token the {@link StoreFindToken} that needs be parsed to generate the token with null incarnationId
    * @return the {@link StoreFindToken} with null incarnationId

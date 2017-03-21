@@ -39,6 +39,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.junit.Assert.*;
+
 
 /**
  * Tests for {@link HardDeleter}.
@@ -228,81 +230,86 @@ public class HardDeleterTest {
       // Let enough time to pass so that the above records become eligible for hard deletes.
       time.currentMilliseconds = time.currentMilliseconds + 2 * Time.SecsPerDay * Time.MsPerSec;
 
-      // The first * shows where startTokenSafeToPersist is
-      // The second * shows where startToken/endToken are before the operations.
-      // Note since we are only depicting values before and after hardDelete() is done, startToken and endToken
-      // will be the same.
+      for (int i = 0; i < 3; i++) {
+        assertEquals("There should have been no progress reported for hard deletes", 0, index.getHardDeleteProgress());
+        // The first * shows where startTokenSafeToPersist is
+        // The second * shows where startToken/endToken are before the operations.
+        // Note since we are only depicting values before and after hardDelete() is done, startToken and endToken
+        // will be the same.
 
-      // indexes: **[1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8]
-      boolean tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
-      // startToken = endToken = 2.
+        // indexes: **[1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8]
+        boolean tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
+        // startToken = endToken = 2.
 
-      // call into the log flush hooks so that startTokenSafeToPersist = startToken = 2.
-      index.persistAndAdvanceStartTokenSafeToPersist();
+        // call into the log flush hooks so that startTokenSafeToPersist = startToken = 2.
+        index.persistAndAdvanceStartTokenSafeToPersist();
 
-      // indexes: [1 2**] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8]
-      tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
-      // startToken = endToken = 4.
+        // indexes: [1 2**] [3 4] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8]
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
+        // startToken = endToken = 4.
 
-      // indexes: [1 2*] [3 4*] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8]
-      tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
-      // startToken = 5, endToken = 5, startTokenSafeToPersist = 2
+        // indexes: [1 2*] [3 4*] [3d 5] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8]
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
+        // startToken = 5, endToken = 5, startTokenSafeToPersist = 2
 
-      // indexes: [1 2*] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8]
-      index.persistAndAdvanceStartTokenSafeToPersist();
-      tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
-      // startToken = 7, endToken = 7, starttokenSafeToPersist = 5
-      // 3d just got pruned.
+        // indexes: [1 2*] [3 4] [3d 5*] [6 7] [2d 6d] [8 9] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8]
+        index.persistAndAdvanceStartTokenSafeToPersist();
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
+        // startToken = 7, endToken = 7, starttokenSafeToPersist = 5
+        // 3d just got pruned.
 
-      // indexes: [1 2] [3 4] [3d 5*] [6 7*] [2d 6d] [8 9] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8]
-      tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
+        // indexes: [1 2] [3 4] [3d 5*] [6 7*] [2d 6d] [8 9] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8]
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
 
-      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d*] [8 9] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8]
-      tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
+        // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d*] [8 9] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8]
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
 
-      // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8]
-      index.persistAndAdvanceStartTokenSafeToPersist();
-      tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
+        // indexes: [1 2] [3 4] [3d 5*] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8]
+        index.persistAndAdvanceStartTokenSafeToPersist();
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
 
-      // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
-      // journal:                                       [10 10d* 1d 8]
+        // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
+        // journal:                                       [10 10d* 1d 8]
 
-      tokenMovedForward = index.hardDelete();
-      Assert.assertTrue(tokenMovedForward);
+        tokenMovedForward = index.hardDelete();
+        Assert.assertTrue(tokenMovedForward);
 
-      // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
-      // journal:                                       [10 10d 1d 8*]
-      // All caught up, so token should not have moved forward.
-      tokenMovedForward = index.hardDelete();
-      Assert.assertFalse(tokenMovedForward);
+        // indexes: [1 2] [3 4] [3d 5] [6 7] [2d 6d] [8 9*] [1d 10d] [8]
+        // journal:                                       [10 10d 1d 8*]
+        // All caught up, so token should not have moved forward.
+        tokenMovedForward = index.hardDelete();
+        Assert.assertFalse(tokenMovedForward);
 
-      index.persistAndAdvanceStartTokenSafeToPersist();
+        index.persistAndAdvanceStartTokenSafeToPersist();
 
-      // directly prune the recovery range completely (which should happen since we flushed till the endToken).
-      index.pruneHardDeleteRecoveryRange(); //
+        // directly prune the recovery range completely (which should happen since we flushed till the endToken).
+        index.pruneHardDeleteRecoveryRange();
 
-      // Test recovery - this tests reading from the persisted token, filling up the hard delete recovery range and
-      // then actually redoing the hard deletes on the range.
-      index.performHardDeleteRecovery();
+        // Test recovery - this tests reading from the persisted token, filling up the hard delete recovery range and
+        // then actually redoing the hard deletes on the range.
+        index.performHardDeleteRecovery();
 
+        // reset the internal tokens
+        index.resetHardDeleterTokens();
+      }
       index.close();
     } catch (Exception e) {
       e.printStackTrace();
-      org.junit.Assert.assertEquals(false, true);
+      assertEquals(false, true);
     }
   }
 
@@ -314,26 +321,45 @@ public class HardDeleterTest {
           new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1), incarnationId);
     }
 
+    /**
+     * Always returns a {@link StoreFindToken.Type#Uninitialized} token.
+     * @param token the {@link StoreFindToken} to revalidate.
+     * @return a {@link StoreFindToken.Type#Uninitialized} token.
+     */
+    @Override
+    FindToken revalidateFindToken(FindToken token) {
+      return new StoreFindToken();
+    }
+
+    long getHardDeleteProgress() {
+      return index.hardDeleter.getProgress();
+    }
+
     void setHardDeleteRunningStatus(boolean status) {
-      super.hardDeleter.enabled.set(status);
+      hardDeleter.enabled.set(status);
     }
 
     boolean hardDelete() throws StoreException {
-      return super.hardDeleter.hardDelete();
+      return hardDeleter.hardDelete();
     }
 
     void persistAndAdvanceStartTokenSafeToPersist() {
-      super.hardDeleter.preLogFlush();
+      hardDeleter.preLogFlush();
       // no flushing to do.
-      super.hardDeleter.postLogFlush();
+      hardDeleter.postLogFlush();
     }
 
     void pruneHardDeleteRecoveryRange() {
-      super.hardDeleter.pruneHardDeleteRecoveryRange();
+      hardDeleter.pruneHardDeleteRecoveryRange();
     }
 
     void performHardDeleteRecovery() throws StoreException {
-      super.hardDeleter.performRecovery();
+      hardDeleter.performRecovery();
+    }
+
+    void resetHardDeleterTokens() throws InterruptedException, IOException, StoreException {
+      hardDeleter.pause();
+      hardDeleter.resume();
     }
   }
 }
