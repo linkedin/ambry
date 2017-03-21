@@ -21,7 +21,7 @@ import com.github.ambry.store.StoreKey;
  * This class contains the request parameters for a background delete operation.
  */
 class BackgroundDeleteRequest {
-  static final String SERVICE_ID_PREFIX = "ambry-bg-delete-";
+  static final String SERVICE_ID_PREFIX = "ambry-background-delete-";
   private final StoreKey storeKey;
   private final String serviceId;
 

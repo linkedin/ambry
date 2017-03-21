@@ -17,6 +17,6 @@ package com.github.ambry.notification;
 /**
  * Denotes the type of blob created. i.e. whether this is a simple blob, a metadata (composite) blob, or a data chunk
  */
-public enum CreatedBlobType {
+public enum BlobType {
   Simple, Composite, DataChunk
 }

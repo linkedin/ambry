@@ -22,7 +22,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.notification.CreatedBlobType;
+import com.github.ambry.notification.BlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
@@ -249,11 +249,11 @@ class PutManager {
       routerMetrics.onPutBlobError(e);
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite(), op.getServiceId());
     } else {
-      CreatedBlobType blobType = op.getNumDataChunks() == 1 ? CreatedBlobType.Simple : CreatedBlobType.Composite;
+      BlobType blobType = op.getNumDataChunks() == 1 ? BlobType.Simple : BlobType.Composite;
       notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata(), blobType);
       for (StoreKey storeKey : op.getSuccessfullyPutChunkIdsIfComposite()) {
         notificationSystem.onBlobCreated(storeKey.getID(), op.getBlobProperties(), op.getUserMetadata(),
-            CreatedBlobType.DataChunk);
+            BlobType.DataChunk);
       }
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
