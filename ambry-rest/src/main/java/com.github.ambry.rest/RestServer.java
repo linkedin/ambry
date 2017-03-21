@@ -179,8 +179,7 @@ public class RestServer {
         restServerConfig.restServerRequestHandlerScalingUnitCount, metricRegistry, blobStorageService);
     restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
-        restServerConfig.restServerPublicAccessLogResponseHeaders.split(","),
-        restServerConfig.restServerPublicAccessLogEnableCertLogging);
+        restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
 
     NioServerFactory nioServerFactory =
         Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,

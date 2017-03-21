@@ -84,10 +84,6 @@ public class RestServerConfig {
   @Default("Location,x-ambry-blob-size")
   public final String restServerPublicAccessLogResponseHeaders;
 
-  @Config("rest.server.public.access.log.enable.cert.logging")
-  @Default("false")
-  public final boolean restServerPublicAccessLogEnableCertLogging;
-
   /**
    * Health check URI for load balancers (VIPs)
    */
@@ -114,8 +110,6 @@ public class RestServerConfig {
             "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
-    restServerPublicAccessLogEnableCertLogging =
-        verifiableProperties.getBoolean("rest.server.public.access.log.enable.cert.logging", false);
     restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
   }
 }

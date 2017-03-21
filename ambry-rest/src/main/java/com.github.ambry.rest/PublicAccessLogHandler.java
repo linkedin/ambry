@@ -201,7 +201,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
         boolean sslUsed = sslHandler != null;
         sslLogMessage.append("[used=").append(sslUsed).append("]");
-        if (sslUsed && publicAccessLogger.isCertLoggingEnabled()) {
+        if (sslUsed) {
           X509Certificate certificate = (X509Certificate) sslHandler.engine().getSession().getPeerCertificates()[0];
           X500Principal principal = certificate.getSubjectX500Principal();
           Collection subjectAlternativeNames = certificate.getSubjectAlternativeNames();

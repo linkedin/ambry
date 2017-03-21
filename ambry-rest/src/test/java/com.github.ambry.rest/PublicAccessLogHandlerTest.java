@@ -67,7 +67,7 @@ public class PublicAccessLogHandlerTest {
    * Sets up the mock public access logger that {@link PublicAccessLogHandler} can use.
    */
   public PublicAccessLogHandlerTest() {
-    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","), false);
+    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","));
   }
 
   /**
@@ -79,18 +79,7 @@ public class PublicAccessLogHandlerTest {
     doRequestHandleTest(HttpMethod.POST, "POST", false, false);
     doRequestHandleTest(HttpMethod.GET, "GET", false, false);
     doRequestHandleTest(HttpMethod.DELETE, "DELETE", false, false);
-    // SSL enabled, but no cert logging
-    doRequestHandleTest(HttpMethod.GET, "GET", false, true);
-  }
-
-  /**
-   * Tests with cert logging enabled.
-   * @throws Exception
-   */
-  @Test
-  public void certLoggingTest() throws Exception {
-    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","), true);
-    doRequestHandleTest(HttpMethod.GET, "GET", false, false);
+    // SSL enabled
     doRequestHandleTest(HttpMethod.GET, "GET", false, true);
   }
 
@@ -275,7 +264,7 @@ public class PublicAccessLogHandlerTest {
     // verify SSL-related info
     boolean sslUsed = channel.pipeline().get(SslHandler.class) != null;
     subString = "SSL ([used=" + sslUsed + "]";
-    if (sslUsed && publicAccessLogger.isCertLoggingEnabled()) {
+    if (sslUsed) {
       subString += ", [principal=" + PEER_CERT.getSubjectX500Principal() + "]";
       subString += ", [san=" + PEER_CERT.getSubjectAlternativeNames() + "]";
     }
