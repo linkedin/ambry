@@ -17,6 +17,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.Closeable;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -155,10 +156,10 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Starts the compactor and sets the {@link PersistentIndex} to copy data from.
+   * Initializes the compactor and sets the {@link PersistentIndex} to copy data from.
    * @param srcIndex the {@link PersistentIndex} to copy data from.
    */
-  void start(PersistentIndex srcIndex) {
+  void initialize(PersistentIndex srcIndex) {
     this.srcIndex = srcIndex;
     if (compactionLog == null && srcIndex.hardDeleter != null && srcIndex.hardDeleter.isPaused()) {
       srcIndex.hardDeleter.resume();
@@ -167,11 +168,11 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Shuts down the compactor and waits for {@code waitTimeSecs} for the shutdown to complete.
-   * @param waitTimeSecs the number of seconds to wait for shutdown to complete.
-   * @throws InterruptedException if the wait for shutdown was interrupted.
+   * Closes the compactor and waits for {@code waitTimeSecs} for the close to complete.
+   * @param waitTimeSecs the number of seconds to wait for close to complete.
+   * @throws InterruptedException if the wait for close was interrupted.
    */
-  void shutdown(long waitTimeSecs) throws InterruptedException {
+  void close(long waitTimeSecs) throws InterruptedException {
     isActive = false;
     if (waitTimeSecs > 0 && !runningLatch.await(waitTimeSecs, TimeUnit.SECONDS)) {
       logger.error("Compactor did not shutdown within " + waitTimeSecs + " seconds");

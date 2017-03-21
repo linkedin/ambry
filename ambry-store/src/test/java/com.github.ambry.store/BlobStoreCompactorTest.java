@@ -59,13 +59,13 @@ public class BlobStoreCompactorTest {
   private CuratedLogIndexState state = null;
   private BlobStoreCompactor compactor = null;
 
-  // indicates whether any of InterruptionInducers induced the shutdown/crash.
-  private boolean shutdownOrExceptionInduced = false;
+  // indicates whether any of InterruptionInducers induced the close/crash.
+  private boolean closeOrExceptionInduced = false;
   // for InterruptionInducingLog and InterruptionInducingIndex, an exception is thrown after the operation
   // if throwExceptionBeforeOperation is not true.
-  private boolean throwExceptionInsteadOfShutdown = false;
+  private boolean throwExceptionInsteadOfClose = false;
   // not applicable to the InterruptionInducingDiskIOScheduler. Throws in InterruptionInducingLog and
-  // InterruptionInducingIndex irrespective of the value of throwExceptionInsteadOfShutdown
+  // InterruptionInducingIndex irrespective of the value of throwExceptionInsteadOfClose
   private boolean throwExceptionBeforeOperation = false;
 
   /**
@@ -88,34 +88,34 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests basic startup/shutdown.
+   * Tests basic init/close.
    * @throws Exception
    */
   @Test
-  public void startShutdownTest() throws Exception {
+  public void initCloseTest() throws Exception {
     refreshState(false, true);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    compactor.start(state.index);
-    compactor.shutdown(0);
+    compactor.initialize(state.index);
+    compactor.close(0);
   }
 
   /**
-   * Tests shutting down without starting up.
+   * Tests closing without initialization.
    * @throws Exception
    */
   @Test
-  public void shutdownWithoutStartTest() throws Exception {
+  public void closeWithoutInitTest() throws Exception {
     refreshState(false, true);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    compactor.shutdown(0);
+    compactor.close(0);
   }
 
   /**
-   * Tests that attempt to use the service without starting the service.
+   * Tests attempt to use the service without initializing the service.
    * @throws Exception
    */
   @Test
-  public void useServiceWithoutStartTest() throws Exception {
+  public void useServiceWithoutInitTest() throws Exception {
     refreshState(false, true);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     String firstSegmentName = state.log.getFirstSegment().getName();
@@ -124,7 +124,7 @@ public class BlobStoreCompactorTest {
 
     try {
       compactor.compact(details);
-      fail("Should have failed to do anything because compactor has not been started");
+      fail("Should have failed to do anything because compactor has not been initialized");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
     }
@@ -132,7 +132,7 @@ public class BlobStoreCompactorTest {
     // create compaction log so that resumeCompaction() thinks there is a compaction in progress
     try (CompactionLog cLog = new CompactionLog(tempDirStr, STORE_ID, state.time, details)) {
       compactor.resumeCompaction();
-      fail("Should have failed to do anything because compactor has not been started");
+      fail("Should have failed to do anything because compactor has not been initialized");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
     }
@@ -166,7 +166,7 @@ public class BlobStoreCompactorTest {
   public void resumeCompactionWithoutAnyInProgressTest() throws Exception {
     refreshState(false, true);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    compactor.start(state.index);
+    compactor.initialize(state.index);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
     try {
       compactor.resumeCompaction();
@@ -174,7 +174,7 @@ public class BlobStoreCompactorTest {
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
     } finally {
-      compactor.shutdown(0);
+      compactor.close(0);
     }
   }
 
@@ -263,11 +263,11 @@ public class BlobStoreCompactorTest {
       CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
 
       compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-      compactor.start(state.index);
+      compactor.initialize(state.index);
       try {
         compactor.compact(details);
       } finally {
-        compactor.shutdown(0);
+        compactor.close(0);
       }
       assertFalse("Sum of size of log segments did not change after compaction",
           logSegmentSizeSumBeforeCompaction == getSumOfLogSegmentEndOffsets());
@@ -294,10 +294,10 @@ public class BlobStoreCompactorTest {
   public void compactWholeLogWithHardDeleteEnabledTest() throws Exception {
     // no interruptions
     doCompactWholeLogWithHardDeleteEnabledTest(false, false);
-    // shutdown in the middle of copying
+    // close in the middle of copying
     doCompactWholeLogWithHardDeleteEnabledTest(true, true);
     // crash in the middle of copying
-    throwExceptionInsteadOfShutdown = true;
+    throwExceptionInsteadOfClose = true;
     doCompactWholeLogWithHardDeleteEnabledTest(true, true);
     // crash in the middle of commit
     doCompactWholeLogWithHardDeleteEnabledTest(true, false);
@@ -486,11 +486,11 @@ public class BlobStoreCompactorTest {
     long endOffsetOfSegmentBeforeCompaction = state.log.getSegment(logSegmentName).getEndOffset();
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    compactor.start(state.index);
+    compactor.initialize(state.index);
     try {
       compactor.compact(details);
     } finally {
-      compactor.shutdown(0);
+      compactor.close(0);
     }
 
     String compactedLogSegmentName = LogSegmentNameHelper.getNextGenerationName(logSegmentName);
@@ -556,20 +556,20 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where there is an interruption (crash/shutdown) of compaction during log commit or cleanup.
+   * Tests the case where there is an interruption (crash/close) of compaction during log commit or cleanup.
    * @throws Exception
    */
   @Test
   public void interruptionDuringLogCommitAndCleanupTest() throws Exception {
-    // shutdown testing
-    // shutdown during commit
+    // close testing
+    // close during commit
     doTestWithInterruptionInducingLog(1, Integer.MAX_VALUE);
-    // shutdown during cleanup
+    // close during cleanup
     doTestWithInterruptionInducingLog(Integer.MAX_VALUE, 1);
 
     // crash testing
     // crash after executing operation
-    throwExceptionInsteadOfShutdown = true;
+    throwExceptionInsteadOfClose = true;
     throwExceptionBeforeOperation = false;
     // crash after commit
     doTestWithInterruptionInducingLog(1, Integer.MAX_VALUE);
@@ -584,16 +584,16 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where there is an interruption (crash/shutdown) of compaction during index commit.
+   * Tests the case where there is an interruption (crash/close) of compaction during index commit.
    * @throws Exception
    */
   @Test
   public void interruptionDuringIndexCommitTest() throws Exception {
-    // shutdown testing
+    // close testing
     doInterruptionDuringIndexCommitTest();
     // crash testing
     // crash after executing operation
-    throwExceptionInsteadOfShutdown = true;
+    throwExceptionInsteadOfClose = true;
     throwExceptionBeforeOperation = false;
     doInterruptionDuringIndexCommitTest();
     // crash before executing operation
@@ -602,17 +602,17 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where there is an interruption (crash/shutdown) of compaction during copy after a few index segments
+   * Tests the case where there is an interruption (crash/close) of compaction during copy after a few index segments
    * have been processed.
    * @throws Exception
    */
   @Test
   public void interruptionDuringOrAfterIndexSegmentProcessingTest() throws Exception {
-    // shutdown testing
+    // close testing
     doInterruptionDuringOrAfterIndexSegmentProcessingTest();
     // crash testing
     // crash after executing operation
-    throwExceptionInsteadOfShutdown = true;
+    throwExceptionInsteadOfClose = true;
     throwExceptionBeforeOperation = false;
     doInterruptionDuringOrAfterIndexSegmentProcessingTest();
     // crash before executing operation
@@ -621,21 +621,21 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where there is an interruption (crash/shutdown) of compaction during copy when a few records from
+   * Tests the case where there is an interruption (crash/close) of compaction during copy when a few records from
    * an index segment have been copied over.
    * @throws Exception
    */
   @Test
   public void interruptionDuringRecordCopyTest() throws Exception {
-    // shutdown testing
+    // close testing
     doInterruptionDuringRecordCopyTest();
     // crash testing
-    throwExceptionInsteadOfShutdown = true;
+    throwExceptionInsteadOfClose = true;
     doInterruptionDuringRecordCopyTest();
   }
 
   /**
-   * Tests the case where there is an interruption (crash/shutdown) of compaction during log commit of the very last
+   * Tests the case where there is an interruption (crash/close) of compaction during log commit of the very last
    * cycle of compaction (tests the case where compaction finishes in {@link BlobStoreCompactor#fixStateIfRequired()}.
    * @throws Exception
    */
@@ -687,7 +687,7 @@ public class BlobStoreCompactorTest {
    * @throws IOException
    */
   private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler) throws IOException {
-    shutdownOrExceptionInduced = false;
+    closeOrExceptionInduced = false;
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config,
         new StoreMetrics(STORE_ID, new MetricRegistry()), ioScheduler, log, state.scheduler, state.recovery, state.time,
@@ -819,12 +819,12 @@ public class BlobStoreCompactorTest {
     Set<MockId> idsInCompactedLogSegments = getIdsInSegments(segmentsUnderCompaction);
 
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    compactor.start(state.index);
+    compactor.initialize(state.index);
 
     try {
       compactor.compact(details);
     } finally {
-      compactor.shutdown(0);
+      compactor.close(0);
     }
 
     assertFalse("No compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
@@ -873,20 +873,20 @@ public class BlobStoreCompactorTest {
     Set<MockId> idsInCompactedLogSegments = getIdsInSegments(segmentsUnderCompaction);
 
     compactor = getCompactor(log, diskIOScheduler);
-    compactor.start(index);
+    compactor.initialize(index);
 
     try {
       compactor.compact(details);
-      if (throwExceptionInsteadOfShutdown) {
+      if (throwExceptionInsteadOfClose) {
         fail("Compact should have thrown exception");
       }
     } catch (RuntimeException e) {
       assertEquals("Exception not as expected", EXCEPTION_MSG, e.getMessage());
     } finally {
-      assertTrue("Shutdown was not induced by the test", shutdownOrExceptionInduced);
+      assertTrue("Close was not induced by the test", closeOrExceptionInduced);
       assertTrue("There should be a compaction in progress",
           CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
-      compactor.shutdown(0);
+      compactor.close(0);
     }
 
     // have to reload log since the instance changed by the old compactor compactor is different.
@@ -895,13 +895,13 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.fixStateIfRequired();
     state.initIndex(state.metricRegistry);
-    compactor.start(state.index);
+    compactor.initialize(state.index);
     try {
       if (CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID)) {
         compactor.resumeCompaction();
       }
     } finally {
-      compactor.shutdown(0);
+      compactor.close(0);
     }
 
     verifyCompaction(segmentsUnderCompaction, unaffectedSegments, expectedValidDataSize, validLogEntriesInOrder,
@@ -1242,14 +1242,14 @@ public class BlobStoreCompactorTest {
    */
   private void ensureArgumentFailure(CompactionDetails details, String msg) throws Exception {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    compactor.start(state.index);
+    compactor.initialize(state.index);
     try {
       compactor.compact(details);
       fail(msg);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     } finally {
-      compactor.shutdown(0);
+      compactor.close(0);
     }
   }
 
@@ -1397,7 +1397,7 @@ public class BlobStoreCompactorTest {
     Pair<Long, List<String>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     List<String> segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
     Map<String, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(segmentsUnderCompaction);
-    // create another log that wraps over the same files but induces shutdown as required.
+    // create another log that wraps over the same files but induces close as required.
     Log log = new InterruptionInducingLog(addSegmentCallCountToInterruptAt, dropSegmentCallCountToInterruptAt);
     compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction,
         state.time.milliseconds(), false);
@@ -1407,7 +1407,7 @@ public class BlobStoreCompactorTest {
     expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
     state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
-    // create another log that wraps over the same files but induces shutdown as required.
+    // create another log that wraps over the same files but induces close as required.
     log = new InterruptionInducingLog(addSegmentCallCountToInterruptAt, dropSegmentCallCountToInterruptAt);
     compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction,
         state.time.milliseconds(), true);
@@ -1424,7 +1424,7 @@ public class BlobStoreCompactorTest {
     Pair<Long, List<String>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     List<String> segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
     Map<String, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(segmentsUnderCompaction);
-    // create another index that wraps over the same files but induces shutdown as required.
+    // create another index that wraps over the same files but induces close as required.
     PersistentIndex index = new InterruptionInducingIndex();
     compactWithRecoveryAndVerify(state.log, DISK_IO_SCHEDULER, index, segmentsUnderCompaction,
         state.time.milliseconds(), false);
@@ -1434,7 +1434,7 @@ public class BlobStoreCompactorTest {
     expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
     segmentsUnderCompaction = expiryTimeAndSegmentsUnderCompaction.getSecond();
     state.advanceTime(expiryTimeAndSegmentsUnderCompaction.getFirst() + Time.MsPerSec - state.time.milliseconds());
-    // create another index that wraps over the same files but induces shutdown as required.
+    // create another index that wraps over the same files but induces close as required.
     index = new InterruptionInducingIndex();
     compactWithRecoveryAndVerify(state.log, DISK_IO_SCHEDULER, index, segmentsUnderCompaction,
         state.time.milliseconds(), true);
@@ -1585,23 +1585,23 @@ public class BlobStoreCompactorTest {
    */
   private void throwExceptionIfRequired() {
     if (throwExceptionBeforeOperation) {
-      shutdownOrExceptionInduced = true;
+      closeOrExceptionInduced = true;
       throw new RuntimeException(EXCEPTION_MSG);
     }
   }
 
   /**
    * Interrupts the compactor.
-   * 1. Throws an exception if {@link #throwExceptionInsteadOfShutdown} is {@code true}.
-   * 2. Shuts down the compactor otherwise.
+   * 1. Throws an exception if {@link #throwExceptionInsteadOfClose} is {@code true}.
+   * 2. Closes the compactor otherwise.
    */
-  private void shutdownCompactorOrThrowException() {
-    shutdownOrExceptionInduced = true;
-    if (throwExceptionInsteadOfShutdown) {
+  private void closeCompactorOrThrowException() {
+    closeOrExceptionInduced = true;
+    if (throwExceptionInsteadOfClose) {
       throw new RuntimeException(EXCEPTION_MSG);
     }
     try {
-      compactor.shutdown(0);
+      compactor.close(0);
     } catch (InterruptedException e) {
       throw new IllegalStateException(e);
     }
@@ -1636,7 +1636,7 @@ public class BlobStoreCompactorTest {
         numBytesCopied += usedSinceLastCall;
       }
       if (indexSegmentsCopied == indexSegmentCountToCutoffAt || numBytesCopied >= numBytesToCutoffAt) {
-        shutdownCompactorOrThrowException();
+        closeCompactorOrThrowException();
       }
       return Long.MAX_VALUE;
     }
@@ -1657,7 +1657,7 @@ public class BlobStoreCompactorTest {
     void changeIndexSegments(List<File> segmentFilesToAdd, Set<Offset> segmentsToRemove) throws StoreException {
       throwExceptionIfRequired();
       super.changeIndexSegments(segmentFilesToAdd, segmentsToRemove);
-      shutdownCompactorOrThrowException();
+      closeCompactorOrThrowException();
     }
   }
 
@@ -1697,7 +1697,7 @@ public class BlobStoreCompactorTest {
       }
       super.addSegment(segment, increaseUsedSegmentCount);
       if (segmentsAdded == addSegmentCallCountToInterruptAt) {
-        shutdownCompactorOrThrowException();
+        closeCompactorOrThrowException();
       }
     }
 
@@ -1709,7 +1709,7 @@ public class BlobStoreCompactorTest {
       }
       super.dropSegment(segmentName, decreaseUsedSegmentCount);
       if (segmentsDropped == dropSegmentCallCountToInterruptAt) {
-        shutdownCompactorOrThrowException();
+        closeCompactorOrThrowException();
       }
     }
   }
