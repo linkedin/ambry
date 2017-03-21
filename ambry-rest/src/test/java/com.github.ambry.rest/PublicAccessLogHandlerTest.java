@@ -80,7 +80,9 @@ public class PublicAccessLogHandlerTest {
     doRequestHandleTest(HttpMethod.GET, "GET", false, false);
     doRequestHandleTest(HttpMethod.DELETE, "DELETE", false, false);
     // SSL enabled
+    doRequestHandleTest(HttpMethod.POST, "POST", false, true);
     doRequestHandleTest(HttpMethod.GET, "GET", false, true);
+    doRequestHandleTest(HttpMethod.DELETE, "DELETE", false, true);
   }
 
   /**
@@ -89,9 +91,13 @@ public class PublicAccessLogHandlerTest {
    */
   @Test
   public void requestHandleWithGoodInputTestWithKeepAlive() throws Exception {
-    doRequestHandleWithKeepAliveTest(HttpMethod.POST, "POST");
-    doRequestHandleWithKeepAliveTest(HttpMethod.GET, "GET");
-    doRequestHandleWithKeepAliveTest(HttpMethod.DELETE, "DELETE");
+    doRequestHandleWithKeepAliveTest(HttpMethod.POST, "POST", false);
+    doRequestHandleWithKeepAliveTest(HttpMethod.GET, "GET", false);
+    doRequestHandleWithKeepAliveTest(HttpMethod.DELETE, "DELETE", false);
+    // SSL enabled
+    doRequestHandleWithKeepAliveTest(HttpMethod.POST, "POST", true);
+    doRequestHandleWithKeepAliveTest(HttpMethod.GET, "GET", true);
+    doRequestHandleWithKeepAliveTest(HttpMethod.DELETE, "DELETE", true);
   }
 
   /**
@@ -100,9 +106,13 @@ public class PublicAccessLogHandlerTest {
    */
   @Test
   public void requestHandleWithTwoSuccessiveRequest() throws Exception {
-    doRequestHandleWithMultipleRequest(HttpMethod.POST, "POST");
-    doRequestHandleWithMultipleRequest(HttpMethod.GET, "GET");
-    doRequestHandleWithMultipleRequest(HttpMethod.DELETE, "DELETE");
+    doRequestHandleWithMultipleRequest(HttpMethod.POST, "POST", false);
+    doRequestHandleWithMultipleRequest(HttpMethod.GET, "GET", false);
+    doRequestHandleWithMultipleRequest(HttpMethod.DELETE, "DELETE", false);
+    // SSL enabled
+    doRequestHandleWithMultipleRequest(HttpMethod.POST, "POST", true);
+    doRequestHandleWithMultipleRequest(HttpMethod.GET, "GET", true);
+    doRequestHandleWithMultipleRequest(HttpMethod.DELETE, "DELETE", true);
   }
 
   /**
@@ -114,6 +124,10 @@ public class PublicAccessLogHandlerTest {
     doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.CLOSE_URI, true, false);
     doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.CLOSE_URI, true, false);
     doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.CLOSE_URI, true, false);
+    // SSL enabled
+    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.CLOSE_URI, true, true);
+    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.CLOSE_URI, true, true);
+    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.CLOSE_URI, true, true);
   }
 
   /**
@@ -126,21 +140,20 @@ public class PublicAccessLogHandlerTest {
     doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.DISCONNECT_URI, true, false);
     doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.DISCONNECT_URI, true, false);
     doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.DISCONNECT_URI, true, false);
+    // SSL enabled
+    doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.DISCONNECT_URI, true, true);
+    doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.DISCONNECT_URI, true, true);
+    doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.DISCONNECT_URI, true, true);
   }
 
   /**
    * Tests for the request handling flow with transfer encoding chunked
    */
   @Test
-  public void doRequestHandleWithChunkedResponse() throws Exception {
-    EmbeddedChannel channel = createChannel();
-    HttpHeaders headers = new DefaultHttpHeaders();
-    headers.add(EchoMethodHandler.IS_CHUNKED, "true");
-    HttpRequest request = RestTestUtils.createRequest(HttpMethod.POST, "POST", headers);
-    HttpUtil.setKeepAlive(request, true);
-    sendRequestCheckResponse(channel, request, "POST", headers, false, true);
-    Assert.assertTrue("Channel should not be closed ", channel.isOpen());
-    channel.close();
+  public void requestHandleWithChunkedResponse() throws Exception {
+    doRequestHandleWithChunkedResponse(false);
+    // SSL enabled
+    doRequestHandleWithChunkedResponse(true);
   }
 
   // requestHandleTest() helpers
@@ -155,22 +168,17 @@ public class PublicAccessLogHandlerTest {
    */
   private void doRequestHandleTest(HttpMethod httpMethod, String uri, boolean testErrorCase, boolean useSSL)
       throws Exception {
-    EmbeddedChannel channel = createChannel();
-    if (useSSL) {
-      SSLEngine sslEngine = SSL_CONTEXT.newEngine(channel.alloc());
-      SSLEngine mockSSLEngine = new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), PEER_CERT));
-      channel.pipeline().addFirst(new SslHandler(mockSSLEngine));
-    }
+    EmbeddedChannel channel = createChannel(useSSL);
     List<HttpHeaders> httpHeadersList = getHeadersList();
     for (HttpHeaders headers : httpHeadersList) {
       HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
       HttpUtil.setKeepAlive(request, true);
-      sendRequestCheckResponse(channel, request, uri, headers, testErrorCase, false);
+      sendRequestCheckResponse(channel, request, uri, headers, testErrorCase, false, useSSL);
       if (!testErrorCase) {
         Assert.assertTrue("Channel should not be closed ", channel.isOpen());
       } else {
         Assert.assertFalse("Channel should have been closed ", channel.isOpen());
-        channel = createChannel();
+        channel = createChannel(useSSL);
       }
     }
     channel.close();
@@ -181,17 +189,18 @@ public class PublicAccessLogHandlerTest {
    * with keep alive
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
+   * @param useSSL {@code true} to test SSL logging.
    * @throws Exception
    */
-  private void doRequestHandleWithKeepAliveTest(HttpMethod httpMethod, String uri) throws Exception {
-    EmbeddedChannel channel = createChannel();
+  private void doRequestHandleWithKeepAliveTest(HttpMethod httpMethod, String uri, boolean useSSL) throws Exception {
+    EmbeddedChannel channel = createChannel(useSSL);
     // contains one logged request header
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(HttpHeaderNames.CONTENT_LENGTH, new Random().nextLong());
 
     HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, headers);
     HttpUtil.setKeepAlive(request, true);
-    sendRequestCheckResponse(channel, request, uri, headers, false, false);
+    sendRequestCheckResponse(channel, request, uri, headers, false, false, useSSL);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
 
     // contains one logged and not logged header
@@ -201,7 +210,7 @@ public class PublicAccessLogHandlerTest {
 
     request = RestTestUtils.createRequest(httpMethod, uri, headers);
     HttpUtil.setKeepAlive(request, true);
-    sendRequestCheckResponse(channel, request, uri, headers, false, false);
+    sendRequestCheckResponse(channel, request, uri, headers, false, false, useSSL);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
     channel.close();
   }
@@ -210,10 +219,11 @@ public class PublicAccessLogHandlerTest {
    * Does a test to see that two consecutive requests without sending last http content for first request fails
    * @param httpMethod the {@link HttpMethod} for the request.
    * @param uri Uri to be used during the request
+   * @param useSSL {@code true} to test SSL logging.
    * @throws Exception
    */
-  private void doRequestHandleWithMultipleRequest(HttpMethod httpMethod, String uri) throws Exception {
-    EmbeddedChannel channel = createChannel();
+  private void doRequestHandleWithMultipleRequest(HttpMethod httpMethod, String uri, boolean useSSL) throws Exception {
+    EmbeddedChannel channel = createChannel(useSSL);
     // contains one logged request header
     HttpHeaders headers1 = new DefaultHttpHeaders();
     headers1.add(HttpHeaderNames.CONTENT_LENGTH, new Random().nextLong());
@@ -229,7 +239,7 @@ public class PublicAccessLogHandlerTest {
     // sending another request w/o sending last http content
     request = RestTestUtils.createRequest(httpMethod, uri, headers2);
     HttpUtil.setKeepAlive(request, true);
-    sendRequestCheckResponse(channel, request, uri, headers2, false, false);
+    sendRequestCheckResponse(channel, request, uri, headers2, false, false, useSSL);
     Assert.assertTrue("Channel should not be closed ", channel.isOpen());
 
     // verify that headers from first request is not found in public access log
@@ -247,9 +257,10 @@ public class PublicAccessLogHandlerTest {
    * @param uri, Uri to be used for the request
    * @param headers {@link HttpHeaders} that is set in the request to be used for verification purposes
    * @param testErrorCase true if error case has to be tested, false otherwise
+   * @param sslUsed true if SSL was used for this request.
    */
   private void sendRequestCheckResponse(EmbeddedChannel channel, HttpRequest httpRequest, String uri,
-      HttpHeaders headers, boolean testErrorCase, boolean chunkedResponse) throws Exception {
+      HttpHeaders headers, boolean testErrorCase, boolean chunkedResponse, boolean sslUsed) throws Exception {
     channel.writeInbound(httpRequest);
     if (uri.equals(EchoMethodHandler.DISCONNECT_URI)) {
       channel.disconnect();
@@ -262,7 +273,6 @@ public class PublicAccessLogHandlerTest {
     Assert.assertTrue("Public Access log entry doesn't have expected remote host/method/uri ",
         lastLogEntry.startsWith(subString));
     // verify SSL-related info
-    boolean sslUsed = channel.pipeline().get(SslHandler.class) != null;
     subString = "SSL ([used=" + sslUsed + "]";
     if (sslUsed) {
       subString += ", [principal=" + PEER_CERT.getSubjectX500Principal() + "]";
@@ -291,18 +301,43 @@ public class PublicAccessLogHandlerTest {
     }
   }
 
+  /**
+   * Does a test for the request handling flow with transfer encoding chunked
+   */
+  private void doRequestHandleWithChunkedResponse(boolean useSSL) throws Exception {
+    EmbeddedChannel channel = createChannel(useSSL);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(EchoMethodHandler.IS_CHUNKED, "true");
+    HttpRequest request = RestTestUtils.createRequest(HttpMethod.POST, "POST", headers);
+    HttpUtil.setKeepAlive(request, true);
+    sendRequestCheckResponse(channel, request, "POST", headers, false, true, useSSL);
+    Assert.assertTrue("Channel should not be closed ", channel.isOpen());
+    channel.close();
+  }
+
   // helpers
   // general
 
   /**
    * Creates an {@link EmbeddedChannel} that incorporates an instance of {@link PublicAccessLogHandler}
    * and {@link EchoMethodHandler}.
+   * @param useSSL {@code true} to add an {@link SslHandler} to the pipeline.
    * @return an {@link EmbeddedChannel} that incorporates an instance of {@link PublicAccessLogHandler}
-   * nad {@link EchoMethodHandler}.
+   *         and {@link EchoMethodHandler}, and an {@link SslHandler} if needed.
    */
-  private EmbeddedChannel createChannel() {
-    return new EmbeddedChannel(new PublicAccessLogHandler(publicAccessLogger, new NettyMetrics(new MetricRegistry())),
-        new EchoMethodHandler());
+  private EmbeddedChannel createChannel(boolean useSSL) {
+    EmbeddedChannel channel = new EmbeddedChannel();
+    if (useSSL) {
+      SSLEngine sslEngine = SSL_CONTEXT.newEngine(channel.alloc());
+      // HttpRequests pass through the SslHandler without a handshake (it only operates on ByteBuffers) so we have
+      // to mock certain methods of SSLEngine and SSLSession to ensure that we can test certificate logging.
+      SSLEngine mockSSLEngine = new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), PEER_CERT));
+      channel.pipeline().addLast(new SslHandler(mockSSLEngine));
+    }
+    channel.pipeline()
+        .addLast(new PublicAccessLogHandler(publicAccessLogger, new NettyMetrics(new MetricRegistry())))
+        .addLast(new EchoMethodHandler());
+    return channel;
   }
 
   /**
