@@ -17,7 +17,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.Closeable;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -63,12 +62,14 @@ class BlobStoreCompactor {
 
   private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * Time.MsPerSec;
   private static final String TEMP_LOG_SEGMENT_NAME_SUFFIX = BlobStore.SEPARATOR + "temp";
+  private static final String METRICS_SUFFIX = BlobStore.SEPARATOR + "temp";
 
   private final File dataDir;
   private final String storeId;
   private final StoreKeyFactory storeKeyFactory;
   private final StoreConfig config;
-  private final StoreMetrics metrics;
+  private final StoreMetrics srcMetrics;
+  private final StoreMetrics tgtMetrics;
   private final Log srcLog;
   private final DiskIOScheduler diskIOScheduler;
   private final ScheduledExecutorService scheduler;
@@ -110,7 +111,8 @@ class BlobStoreCompactor {
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
     this.config = config;
-    this.metrics = metrics;
+    this.srcMetrics = metrics;
+    tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry());
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
     this.scheduler = scheduler;
@@ -213,6 +215,18 @@ class BlobStoreCompactor {
       throw new IllegalStateException("There is no compaction to resume");
     }
     runningLatch = new CountDownLatch(1);
+    /*
+    A single compaction job could be performed across multiple compaction cycles (if there aren't enough swap spaces to
+    complete the job in one cycle). Therefore, we loop and perform PREPARE, COPY, COMMIT and CLEANUP until the
+    CompactionLog reports the job as DONE.
+    Short description of each of the phases:
+    1. PREPARE - Initial state of a compaction cycle. Signifies that the cycle has just started.
+    2. COPY - Valid data from the segments under compaction is copied over to the swap spaces. If all the
+    data cannot be copied, it auto splits the compaction job into two cycles.
+    3. COMMIT - Adds the new log segments to the application log and atomically changes the set of index segments
+    4. CLEANUP - Cleans up the old log segments and their index files
+     */
+
     while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
       CompactionLog.Phase phase = compactionLog.getCompactionPhase();
       switch (phase) {
@@ -290,7 +304,7 @@ class BlobStoreCompactor {
     for (String logSegmentName : logSegmentsUnderCompaction) {
       LogSegment srcLogSegment = srcLog.getSegment(logSegmentName);
       Offset logSegmentEndOffset = new Offset(srcLogSegment.getName(), srcLogSegment.getEndOffset());
-      if (needsCopying(logSegmentEndOffset) && !copyLogSegmentData(srcLogSegment, duplicateSearchSpan,
+      if (needsCopying(logSegmentEndOffset) && !copyDataByLogSegment(srcLogSegment, duplicateSearchSpan,
           startOffsetOfLastIndexSegmentForDelete)) {
         if (isActive) {
           compactionLog.splitCurrentCycle(logSegmentName);
@@ -339,9 +353,6 @@ class BlobStoreCompactor {
     commitLogSegments(logSegmentNames, recovering);
     if (!recovering) {
       commitIndexSegments(logSegmentNames);
-      if (srcIndex.hardDeleter != null) {
-        srcIndex.hardDeleter.resume();
-      }
     }
   }
 
@@ -387,20 +398,20 @@ class BlobStoreCompactor {
           LogSegmentNameHelper.nameToFilename(targetSegmentName) + TEMP_LOG_SEGMENT_NAME_SUFFIX;
       File targetSegmentFile = new File(dataDir, targetSegmentFileName);
       if (targetSegmentFile.exists()) {
-        existingTargetLogSegments.add(new LogSegment(targetSegmentName, targetSegmentFile, metrics));
+        existingTargetLogSegments.add(new LogSegment(targetSegmentName, targetSegmentFile, tgtMetrics));
       } else {
         targetSegmentNamesAndFilenames.add(new Pair<>(targetSegmentName, targetSegmentFileName));
       }
     }
     // TODO: available swap space count should be obtained from DiskManager. For now, assumed to be 1.
     long targetLogTotalCapacity = srcLog.getSegmentCapacity();
-    tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, srcLog.getSegmentCapacity(), metrics, true,
+    tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, srcLog.getSegmentCapacity(), tgtMetrics, true,
         existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
     tgtIndex =
         new PersistentIndex(dataDir.getAbsolutePath(), scheduler, tgtLog, config, storeKeyFactory, recovery, null,
-            metrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
+            tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (srcIndex.hardDeleter != null && !srcIndex.hardDeleter.isPaused()) {
       srcIndex.hardDeleter.pause();
     }
@@ -447,13 +458,13 @@ class BlobStoreCompactor {
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there are any problems reading or writing to store components.
    */
-  private boolean copyLogSegmentData(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan,
+  private boolean copyDataByLogSegment(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan,
       Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
     boolean allCopied = true;
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
-      if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyIndexSegmentData(logSegmentToCopy, indexSegmentToCopy,
-          duplicateSearchSpan, startOffsetOfLastIndexSegmentForDelete)) {
+      if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyDataByIndexSegment(logSegmentToCopy,
+          indexSegmentToCopy, duplicateSearchSpan, startOffsetOfLastIndexSegmentForDelete)) {
         // there is a shutdown in progress or there was no space to copy all entries.
         allCopied = false;
         break;
@@ -474,7 +485,7 @@ class BlobStoreCompactor {
    * @throws IOException if there were I/O errors during copying.
    * @throws StoreException if there are any problems reading or writing to store components.
    */
-  private boolean copyIndexSegmentData(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
+  private boolean copyDataByIndexSegment(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
       FileSpan duplicateSearchSpan, Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
     List<IndexEntry> allIndexEntries = new ArrayList<>();
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
@@ -643,7 +654,7 @@ class BlobStoreCompactor {
     for (IndexEntry srcIndexEntry : srcIndexEntries) {
       IndexValue srcValue = srcIndexEntry.getValue();
       long usedCapacity = tgtIndex.getLogUsedCapacity();
-      if (isActive && tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize()) {
+      if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
         fileChannel.position(srcValue.getOffset().getOffset());
         Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
         // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
@@ -654,16 +665,19 @@ class BlobStoreCompactor {
         if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
           IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
           if (putValue != null && putValue.getOffset().getName().equals(fileSpan.getStartOffset().getName())) {
-            tgtValue = new IndexValue(putValue.getSize(), putValue.getOffset(), putValue.getExpiresAtMs());
+            tgtValue = new IndexValue(putValue.getSize(), putValue.getOffset(), putValue.getExpiresAtMs(),
+                srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
             tgtValue.setNewOffset(fileSpan.getStartOffset());
             tgtValue.setNewSize(srcValue.getSize());
           } else {
-            tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs());
+            tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
+                srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
             tgtValue.clearOriginalMessageOffset();
           }
           tgtValue.setFlag(IndexValue.Flags.Delete_Index);
         } else {
-          tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs());
+          tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
+              srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
         }
         IndexEntry entry = new IndexEntry(srcIndexEntry.getKey(), tgtValue);
         tgtIndex.addToIndex(entry, fileSpan);
@@ -671,7 +685,6 @@ class BlobStoreCompactor {
           tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecs);
         }
         writtenLastTime = srcValue.getSize();
-        logger.trace("Store : {} message set written to index ", dataDir);
       } else if (!isActive) {
         logger.info("Stopping copying because shutdown is in progress");
         copiedAll = false;
@@ -735,7 +748,7 @@ class BlobStoreCompactor {
   private void commitLogSegments(List<String> logSegmentNames, boolean recovering) throws IOException {
     for (String logSegmentName : logSegmentNames) {
       File segmentFile = new File(dataDir, LogSegmentNameHelper.nameToFilename(logSegmentName));
-      LogSegment segment = new LogSegment(logSegmentName, segmentFile, metrics);
+      LogSegment segment = new LogSegment(logSegmentName, segmentFile, srcMetrics);
       srcLog.addSegment(segment, recovering);
     }
   }
@@ -763,7 +776,7 @@ class BlobStoreCompactor {
       for (Map.Entry<Offset, File> indexSegmentEntry : indexSegmentDetails.entrySet()) {
         File indexSegmentFile = indexSegmentEntry.getValue();
         IndexSegment indexSegment =
-            new IndexSegment(indexSegmentFile, true, storeKeyFactory, config, metrics, null, time);
+            new IndexSegment(indexSegmentFile, true, storeKeyFactory, config, tgtMetrics, null, time);
         endOffset = indexSegment.getEndOffset().getOffset();
         indexSegmentFilesToAdd.add(indexSegmentFile);
       }
@@ -841,6 +854,9 @@ class BlobStoreCompactor {
     if (compactionLog != null) {
       compactionLog.close();
       compactionLog = null;
+      if (srcIndex != null && srcIndex.hardDeleter != null) {
+        srcIndex.hardDeleter.resume();
+      }
     }
   }
 
