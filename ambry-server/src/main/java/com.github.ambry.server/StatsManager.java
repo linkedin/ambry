@@ -133,7 +133,7 @@ class StatsManager {
     } else {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
-        StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot();
+        StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
         aggregate(aggregatedSnapshot, statsSnapshot);
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {

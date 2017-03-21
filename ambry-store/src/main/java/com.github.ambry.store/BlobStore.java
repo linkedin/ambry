@@ -41,6 +41,7 @@ class BlobStore implements Store {
   private final String storeId;
   private final String dataDir;
   private final ScheduledExecutorService taskScheduler;
+  private final ScheduledExecutorService storeStatsScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
@@ -75,13 +76,15 @@ class BlobStore implements Store {
     SOME_NOT_ALL_DUPLICATE, // At least one of the message is a duplicate, but not all.
   }
 
-  BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler, DiskIOScheduler diskIOScheduler,
+  BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
+      ScheduledExecutorService storeStatsScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
+    this.storeStatsScheduler = storeStatsScheduler;
     this.diskIOScheduler = diskIOScheduler;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
@@ -132,7 +135,9 @@ class BlobStore implements Store {
             sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
-        blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);
+        blobStoreStats = new BlobStoreStats(index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMs,
+            config.storeStatsLogSegmentForecastOffsetInSecs, config.storeStatsQueueProcessorPeriodInMs, time,
+            storeStatsScheduler, diskIOScheduler, metrics);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -241,6 +246,9 @@ class BlobStore implements Store {
             }
             FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
             index.addToIndex(indexEntries, fileSpan);
+            for (IndexEntry newEntry : indexEntries) {
+              blobStoreStats.handleNewPut(newEntry.getValue());
+            }
             logger.trace("Store : {} message set written to index ", dataDir);
           }
         }
@@ -278,6 +286,7 @@ class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.deleteResponse.time();
     try {
+      List<IndexValue> indexValuesToDelete = new ArrayList<>();
       List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infoList) {
@@ -290,6 +299,7 @@ class BlobStore implements Store {
               "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
               StoreErrorCodes.ID_Deleted);
         }
+        indexValuesToDelete.add(value);
       }
       synchronized (lock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
@@ -307,10 +317,13 @@ class BlobStore implements Store {
         Offset endOffsetOfLastMessage = log.getEndOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
+        int correspondingPutIndex = 0;
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          index.markAsDeleted(info.getStoreKey(), fileSpan);
+          IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan);
           endOffsetOfLastMessage = fileSpan.getEndOffset();
+          blobStoreStats.handleNewDelete(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex));
+          correspondingPutIndex++;
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }

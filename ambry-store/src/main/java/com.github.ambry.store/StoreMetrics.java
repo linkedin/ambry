@@ -64,6 +64,16 @@ public class StoreMetrics {
   public final Counter compactionFixStateCount;
   public final Meter compactionCopyRateInBytes;
 
+  // BlobStoreStats metrics
+  public final Counter blobStoreStatsErrorCount;
+  public final Counter statsOnDemandScanCount;
+  public final Histogram statsOnDemandScanTimePerIndexSegmentMs;
+  public final Histogram statsOnDemandScanTotalTimeMs;
+  public final Counter statsBucketingScanCount;
+  public final Histogram statsBucketingScanTimePerIndexSegmentMs;
+  public final Histogram statsBucketingScanTotalTimeMs;
+  public final Histogram statsBucketingServeTotalTimeMs;
+
   private final MetricRegistry registry;
   private final String name;
 
@@ -115,9 +125,24 @@ public class StoreMetrics {
         registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentsAccessedPerBlobCount"));
     identicalPutAttemptCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IdenticalPutAttemptCount"));
-
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, "CopyRateInBytes"));
+    blobStoreStatsErrorCount =
+        registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsErrorCount"));
+    statsOnDemandScanCount =
+        registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "StatsOnDemandScanCount"));
+    statsOnDemandScanTimePerIndexSegmentMs =
+        registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsOnDemandScanTimePerIndexSegmentMs"));
+    statsOnDemandScanTotalTimeMs =
+        registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsOnDemandScanTotalTimeMs"));
+    statsBucketingScanCount =
+        registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "StatsBucketingScanCount"));
+    statsBucketingScanTimePerIndexSegmentMs =
+        registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsBucketingScanTimePerIndexSegmentMs"));
+    statsBucketingScanTotalTimeMs =
+        registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsBucketingScanTotalTimeMs"));
+    statsBucketingServeTotalTimeMs =
+        registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsBucketingServeTotalTimeMs"));
   }
 
   MetricRegistry getRegistry() {

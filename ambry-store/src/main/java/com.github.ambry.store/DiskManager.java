@@ -64,11 +64,12 @@ class DiskManager {
     this.metrics = metrics;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(config, time));
+    ScheduledExecutorService storeStatsScheduler = Utils.newScheduler(1, false);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
-        BlobStore store = new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, replica.getReplicaPath(),
-            replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
+        BlobStore store = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics,
+            replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
         stores.put(replica.getPartitionId(), store);
       }
     }

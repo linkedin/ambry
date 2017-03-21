@@ -14,13 +14,17 @@
 
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.server.StatsSnapshot;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +32,10 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,19 +50,17 @@ import static org.junit.Assert.*;
 @RunWith(Parameterized.class)
 public class BlobStoreStatsTest {
   private static final long TEST_TIME_INTERVAL_IN_MS = CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / 2;
-  private static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
+  private static final long BUCKET_SPAN_IN_MS = Time.MsPerSec;
+  private static final long QUEUE_PROCESSOR_PERIOD_IN_SECS = 1;
+  private static final StoreMetrics METRICS = new StoreMetrics("test", new MetricRegistry());
+  private final Map<String, Throttler> throttlers = new HashMap<>();
+  private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(throttlers);
+  private final ScheduledExecutorService storeStatsScheduler = Utils.newScheduler(1, false);
   private final CuratedLogIndexState state;
   private final File tempDir;
-  private final BlobStoreStats blobStoreStats;
-
-  /**
-   * Running for both segmented and non-segmented log.
-   * @return an array with both {@code false} and {@code true}.
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
-  }
+  private final long logSegmentForecastOffsetMs;
+  private final int bucketCount;
+  private BlobStoreStats blobStoreStats;
 
   /**
    * Creates a temporary directory and sets up some test state.
@@ -63,7 +69,20 @@ public class BlobStoreStatsTest {
   public BlobStoreStatsTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + UtilsTest.getRandomString(10));
     state = new CuratedLogIndexState(isLogSegmented, tempDir);
-    blobStoreStats = new BlobStoreStats(state.index, state.time, DISK_IO_SCHEDULER);
+    logSegmentForecastOffsetMs = state.time.milliseconds();
+    bucketCount = 2 * (int) (logSegmentForecastOffsetMs / BUCKET_SPAN_IN_MS);
+    blobStoreStats =
+        new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs / Time.MsPerSec,
+            QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, Utils.newScheduler(1, false), diskIOScheduler, METRICS);
+  }
+
+  /**
+   * Running for both segmented and non-segmented log.
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   /**
@@ -85,10 +104,10 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testContainerValidDataSize() throws InterruptedException, StoreException, IOException {
-    verifyAndGetContainerValidSize();
+    verifyAndGetContainerValidSize(state.time.milliseconds());
     // advance time
     state.advanceTime(TEST_TIME_INTERVAL_IN_MS);
-    verifyAndGetContainerValidSize();
+    verifyAndGetContainerValidSize(state.time.milliseconds());
   }
 
   /**
@@ -99,7 +118,8 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testLogSegmentValidDataSize() throws InterruptedException, StoreException, IOException {
-    for (long i = 0; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS; i += TEST_TIME_INTERVAL_IN_MS) {
+    long currentTimeInMs = state.time.milliseconds();
+    for (long i = 0; i <= currentTimeInMs + TEST_TIME_INTERVAL_IN_MS; i += TEST_TIME_INTERVAL_IN_MS) {
       TimeRange timeRange = new TimeRange(i, 0L);
       verifyAndGetLogSegmentValidSize(timeRange);
     }
@@ -121,14 +141,14 @@ public class BlobStoreStatsTest {
     advanceTimeToNextSecond();
     long timeInMsBeforePuts = state.time.milliseconds();
     long totalLogSegmentValidSizeBeforePuts = verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsBeforePuts, 0L));
-    long totalContainerValidSizeBeforePuts = verifyAndGetContainerValidSize();
+    long totalContainerValidSizeBeforePuts = verifyAndGetContainerValidSize(timeInMsBeforePuts);
 
     // 3 puts
     state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
 
     long timeInMsAfterPuts = state.time.milliseconds();
     long totalLogSegmentValidSizeAfterPuts = verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsAfterPuts, 0L));
-    long totalContainerValidSizeAfterPuts = verifyAndGetContainerValidSize();
+    long totalContainerValidSizeAfterPuts = verifyAndGetContainerValidSize(timeInMsAfterPuts);
     long expectedIncrement = 3 * CuratedLogIndexState.PUT_RECORD_SIZE;
     assertEquals("Put entries are not properly counted for log segment valid size", totalLogSegmentValidSizeAfterPuts,
         totalLogSegmentValidSizeBeforePuts + expectedIncrement);
@@ -154,7 +174,7 @@ public class BlobStoreStatsTest {
     advanceTimeToNextSecond();
     long timeInMsBeforePuts = state.time.milliseconds();
     long totalLogSegmentValidSizeBeforePuts = verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsBeforePuts, 0L));
-    long totalContainerValidSizeBeforePuts = verifyAndGetContainerValidSize();
+    long totalContainerValidSizeBeforePuts = verifyAndGetContainerValidSize(state.time.milliseconds());
 
     // 1 put with no expiry
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -168,7 +188,7 @@ public class BlobStoreStatsTest {
     long expectedDeltaAfterPut = 4 * CuratedLogIndexState.PUT_RECORD_SIZE;
     long timeInMsAfterPuts = state.time.milliseconds();
     long totalLogSegmentValidSizeAfterPuts = verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsAfterPuts, 0L));
-    long totalContainerValidSizeAfterPuts = verifyAndGetContainerValidSize();
+    long totalContainerValidSizeAfterPuts = verifyAndGetContainerValidSize(timeInMsAfterPuts);
     assertEquals("Put entries with expiry are not properly counted for log segment valid size",
         totalLogSegmentValidSizeAfterPuts, totalLogSegmentValidSizeBeforePuts + expectedDeltaAfterPut);
     assertEquals("Put entries with expiry are not properly counted for container valid size",
@@ -181,7 +201,7 @@ public class BlobStoreStatsTest {
     long timeInMsAfterExpiration = state.time.milliseconds();
     long totalLogSegmentValidSizeAfterExpiration =
         verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsAfterExpiration, 0L));
-    long totalContainerValidSizeAfterExpiration = verifyAndGetContainerValidSize();
+    long totalContainerValidSizeAfterExpiration = verifyAndGetContainerValidSize(timeInMsAfterExpiration);
     assertEquals("Expired put entries are not properly counted for log segment valid size",
         totalLogSegmentValidSizeAfterExpiration, totalLogSegmentValidSizeBeforePuts + expectedDeltaAfterExpiration);
     assertEquals("Expired put entries are not properly counted for container valid size",
@@ -206,9 +226,10 @@ public class BlobStoreStatsTest {
         + CuratedLogIndexState.MAX_IN_MEM_ELEMENTS - 2;
     state.addPutEntries(numEntries, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
 
-    TimeRange timeBeforeDeletes = new TimeRange(state.time.milliseconds(), 0L);
-    long totalLogSegmentValidSizeBeforeDeletes = verifyAndGetLogSegmentValidSize(timeBeforeDeletes);
-    long totalContainerValidSizeBeforeDeletes = verifyAndGetContainerValidSize();
+    long timeInMsBeforeDeletes = state.time.milliseconds();
+    long totalLogSegmentValidSizeBeforeDeletes =
+        verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsBeforeDeletes, 0L));
+    long totalContainerValidSizeBeforeDeletes = verifyAndGetContainerValidSize(timeInMsBeforeDeletes);
 
     // advance time to the next seconds before adding the deletes
     advanceTimeToNextSecond();
@@ -217,8 +238,9 @@ public class BlobStoreStatsTest {
     state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
 
     long expectedDeltaBeforeDeletesRelevant = 2 * CuratedLogIndexState.DELETE_RECORD_SIZE;
-    long totalLogSegmentValidSizeBeforeDeletesRelevant = verifyAndGetLogSegmentValidSize(timeBeforeDeletes);
-    long totalContainerValidSizeBeforeDeletesRelevant = verifyAndGetContainerValidSize();
+    long totalLogSegmentValidSizeBeforeDeletesRelevant =
+        verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsBeforeDeletes, 0L));
+    long totalContainerValidSizeBeforeDeletesRelevant = verifyAndGetContainerValidSize(timeInMsBeforeDeletes);
     assertEquals("Delete entries are not properly counted for log segment valid size",
         totalLogSegmentValidSizeBeforeDeletesRelevant,
         totalLogSegmentValidSizeBeforeDeletes + expectedDeltaBeforeDeletesRelevant);
@@ -231,7 +253,7 @@ public class BlobStoreStatsTest {
     long timeInMsAfterDeletes = state.time.milliseconds();
     long totalLogSegmentValidSizeAfterDeletes =
         verifyAndGetLogSegmentValidSize(new TimeRange(timeInMsAfterDeletes, 0L));
-    long totalContainerValidSizeAfterDeletes = verifyAndGetContainerValidSize();
+    long totalContainerValidSizeAfterDeletes = verifyAndGetContainerValidSize(timeInMsAfterDeletes);
     long expectedLogSegmentDecrement =
         2 * (CuratedLogIndexState.PUT_RECORD_SIZE - CuratedLogIndexState.DELETE_RECORD_SIZE);
     long expectedContainerDecrement = 2 * CuratedLogIndexState.PUT_RECORD_SIZE;
@@ -242,7 +264,288 @@ public class BlobStoreStatsTest {
   }
 
   /**
+   <<<<<<< HEAD
    * Test the static method that converts the quota stats in the form of a nested {@link Map} to the generic
+   =======
+   * Test {@link BlobStoreStats} can start and shutdown properly.
+   * @throws InterruptedException
+   */
+  @Test
+  public void testStartAndShutdown() throws InterruptedException {
+    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
+    blobStoreStats.start();
+    // proceed only when the scan is started
+    assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
+    blobStoreStats.shutdown();
+  }
+
+  /**
+   * Test {@link BlobStoreStats} can shutdown properly even if it's not started.
+   * @throws InterruptedException
+   */
+  @Test
+  public void testShutdownBeforeStart() throws InterruptedException {
+    blobStoreStats.shutdown();
+  }
+
+  /**
+   * Basic test to verify that the {@link BlobStoreStats} can scan the index, populate the buckets and use these buckets
+   * to report stats correctly.
+   * @throws StoreException
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void testBucketingBasic() throws StoreException, InterruptedException, IOException {
+    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
+    // add 3 puts with expiry
+    long expiresAtInMs = state.time.milliseconds() + 30 * Time.MsPerSec;
+    List<IndexEntry> newPutEntries = state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, expiresAtInMs);
+    for (IndexEntry entry : newPutEntries) {
+      blobStoreStats.handleNewPut(entry.getValue());
+    }
+    // since new entries are added before the scan, compute the new log segment forecast start time to ensure requests
+    // are within the forecast coverage
+    long logSegmentForecastStartTimeMs = state.time.milliseconds() - logSegmentForecastOffsetMs;
+    blobStoreStats.start();
+    // proceed only when the scan is started
+    assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    long throttleCountBeforeRequests = mockThrottler.throttleCount.get();
+    // requests within the forecast coverage of the ongoing scan will wait for the scan to complete
+    for (long i = logSegmentForecastStartTimeMs; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
+        i += TEST_TIME_INTERVAL_IN_MS) {
+      verifyAndGetLogSegmentValidSize(new TimeRange(i, 0L));
+    }
+    // advance time to let the added puts to expire
+    long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
+    state.advanceTime(timeToLiveInMs + Time.MsPerSec);
+    for (long i = logSegmentForecastStartTimeMs; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
+        i += TEST_TIME_INTERVAL_IN_MS) {
+      verifyAndGetLogSegmentValidSize(new TimeRange(i, 0L));
+    }
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    assertEquals("Throttle count shouldn't have changed", throttleCountBeforeRequests,
+        mockThrottler.throttleCount.get());
+    blobStoreStats.shutdown();
+  }
+
+  /**
+   * Test to verify new entries after a scan are properly counted to keep the current {@link ScanResults} relevant
+   * before the next scan. In addition, verify that requests within the coverage are served without triggering any scan.
+   * @throws StoreException
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void testBucketingWithNewEntriesAfterScan() throws StoreException, InterruptedException, IOException {
+    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    CountDownLatch queueProcessedLatch = new CountDownLatch(1);
+    MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
+    blobStoreStats.start();
+    // proceed only when the scan is started
+    assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
+    advanceTimeToNextSecond();
+    verifyAndGetLogSegmentValidSize(new TimeRange(state.time.milliseconds(), 0L));
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    int throttleCountBeforeRequests = mockThrottler.throttleCount.get();
+    // add 3 put with expiry
+    long expiresAtInMs = state.time.milliseconds() + 30 * Time.MsPerSec;
+    List<IndexEntry> newPutEntries = state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, expiresAtInMs);
+    for (IndexEntry entry : newPutEntries) {
+      blobStoreStats.handleNewPut(entry.getValue());
+    }
+    // delete the first new put with expiry
+    MockId firstPutWithExpiry = getIdToDelete(newPutEntries.get(0).getKey());
+    newDelete(firstPutWithExpiry);
+    // a probe put with a latch to inform us about the state of the queue
+    blobStoreStats.handleNewPut(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
+    assertTrue("QueueProcessor took too long to process the new entries",
+        queueProcessedLatch.await(5, TimeUnit.SECONDS));
+    advanceTimeToNextSecond();
+    verifyAndGetLogSegmentValidSize(new TimeRange(state.time.milliseconds(), 0L));
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    // add 3 put with no expiry
+    newPutEntries = state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    for (IndexEntry entry : newPutEntries) {
+      blobStoreStats.handleNewPut(entry.getValue());
+    }
+    // delete one of the newly added put
+    newDelete(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    queueProcessedLatch = new CountDownLatch(1);
+    // a probe put with a latch to inform us about the state of the queue
+    blobStoreStats.handleNewPut(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
+    assertTrue("QueueProcessor took too long to process the new entries",
+        queueProcessedLatch.await(5, TimeUnit.SECONDS));
+    advanceTimeToNextSecond();
+    verifyAndGetLogSegmentValidSize(new TimeRange(state.time.milliseconds(), 0L));
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    // advance time beyond expiration of the blobs and verify no double counting for expiration and delete
+    long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
+    state.advanceTime(timeToLiveInMs + Time.MsPerSec);
+    verifyAndGetLogSegmentValidSize(new TimeRange(state.time.milliseconds(), 0L));
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    assertEquals("Throttle count shouldn't have changed", throttleCountBeforeRequests,
+        mockThrottler.throttleCount.get());
+    blobStoreStats.shutdown();
+  }
+
+  /**
+   * Test to verify that new entries that got added while scanning are being counted properly. That is, no double
+   * counting or miscounting. The behavior is verified via the following steps:
+   * 1. Start the scan.
+   * 2. Once the scan is started it will be put on hold and various new entries will be added.
+   * 3. Resume the scan and wait for queue processor to process the new entries.
+   * 4. Perform various checks to verify the reported stats.
+   * @throws StoreException
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void testBucketingWithNewEntriesDuringScan() throws StoreException, InterruptedException, IOException {
+    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    // scan will be put on hold once it's started
+    final CountDownLatch scanHoldLatch = new CountDownLatch(1);
+    final CountDownLatch queueProcessedLatch = new CountDownLatch(1);
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, new MockThrottler(scanStartedLatch, scanHoldLatch));
+    blobStoreStats.start();
+    // proceed only when the scan is started
+    assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
+    // 1 new put that will expire in 20 seconds
+    long expiresAtInMs = state.time.milliseconds() + 20 * Time.MsPerSec;
+    List<IndexEntry> newPutEntries = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, expiresAtInMs);
+    // 3 new puts with no expiry
+    newPutEntries.addAll(state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
+    for (IndexEntry entry : newPutEntries) {
+      blobStoreStats.handleNewPut(entry.getValue());
+    }
+    List<MockId> newDeletes = new ArrayList<>();
+    // 1 delete from the first index segment
+    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.firstKey()));
+    // 1 delete from the last index segment
+    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    for (MockId idToDelete : newDeletes) {
+      if (idToDelete != null) {
+        newDelete(idToDelete);
+      }
+    }
+    // a probe put with a latch to inform us about the state of the queue
+    blobStoreStats.handleNewPut(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
+    scanHoldLatch.countDown();
+    assertTrue("QueueProcessor took too long to process the new entries",
+        queueProcessedLatch.await(5, TimeUnit.SECONDS));
+    for (long i = 0; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS; i += TEST_TIME_INTERVAL_IN_MS) {
+      verifyAndGetLogSegmentValidSize(new TimeRange(i, 0L));
+    }
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    long timeToLiveInMs = expiresAtInMs - state.time.milliseconds() < 0 ? 0 : expiresAtInMs - state.time.milliseconds();
+    state.advanceTime(timeToLiveInMs + Time.MsPerSec);
+    advanceTimeToNextSecond();
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    blobStoreStats.shutdown();
+  }
+
+  /**
+   * Tests to verify requests inside and outside of the forecast coverage can still be served properly while scanning.
+   */
+  @Test
+  public void testBucketingCoverageTransition() throws InterruptedException, StoreException, IOException {
+    int bucketCount = 2;
+    long logSegmentForecastOffsetSecs = 0;
+    blobStoreStats = new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetSecs,
+        QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, storeStatsScheduler, diskIOScheduler, METRICS);
+    CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    // do not hold the initial scan
+    MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
+    // add a put that is going to expire in 20 seconds
+    long initialScanTimeInMs = state.time.milliseconds();
+    blobStoreStats.start();
+    // proceed only when the scan is started
+    assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
+    verifyAndGetLogSegmentValidSize(new TimeRange(initialScanTimeInMs, 0L));
+    verifyAndGetContainerValidSize(initialScanTimeInMs);
+    // advance time by 20 seconds
+    state.advanceTime(20 * Time.MsPerSec);
+    // hold the next scan
+    CountDownLatch scanHoldLatch = new CountDownLatch(1);
+    scanStartedLatch = new CountDownLatch(1);
+    mockThrottler.holdLatch = scanHoldLatch;
+    mockThrottler.startedLatch = scanStartedLatch;
+    mockThrottler.isThrottlerStarted = false;
+    assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
+    int throttleCountBeforeRequests = mockThrottler.throttleCount.get();
+    verifyAndGetLogSegmentValidSize(new TimeRange(initialScanTimeInMs, 0L));
+    verifyAndGetContainerValidSize(initialScanTimeInMs);
+    assertEquals("Throttle count shouldn't have changed", throttleCountBeforeRequests,
+        mockThrottler.throttleCount.get());
+    // request something outside of the forecast coverage
+    verifyAndGetLogSegmentValidSize(new TimeRange(0L, 0L));
+    verifyAndGetContainerValidSize(0L);
+    scanHoldLatch.countDown();
+    blobStoreStats.shutdown();
+  }
+
+  /**
+   * Test to verify {@link BlobStoreStats} is resolving the given {@link TimeRange} correctly and the appropriate action
+   * is taken. That is, use the readily available {@link ScanResults} to answer the request or trigger a on demand scan.
+   * Specifically the following cases are tested (plus cases when boundaries touch each other):
+   *    [_______]  [_______]     [________]   [______]              [______]  <--- forecast range
+   *  [___]      ,       [___] ,   [___]    ,         [___] , [___]           <--- given time range
+   * @throws InterruptedException
+   */
+  @Test
+  public void testTimeRangeResolutionWithStats() throws InterruptedException, StoreException {
+    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
+    // advance time before starting the scan to offset the log segment forecast start time from 0
+    state.advanceTime(20000);
+    long logSegmentForecastStartTimeMs = state.time.milliseconds() - logSegmentForecastOffsetMs;
+    long logSegmentForecastEndTimeMs = bucketCount * BUCKET_SPAN_IN_MS + logSegmentForecastStartTimeMs;
+    blobStoreStats.start();
+    // proceed only when the scan is started
+    assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
+    // ensure the scan is complete before proceeding
+    verifyAndGetContainerValidSize(state.time.milliseconds());
+    int throttleCountBeforeRequests = mockThrottler.throttleCount.get();
+    TimeRange timeRange = new TimeRange(logSegmentForecastStartTimeMs, Time.MsPerSec);
+    assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
+    timeRange = new TimeRange(logSegmentForecastEndTimeMs, Time.MsPerSec);
+    assertEquals("Unexpected collection time", logSegmentForecastEndTimeMs - BUCKET_SPAN_IN_MS,
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
+    timeRange = new TimeRange((logSegmentForecastStartTimeMs + logSegmentForecastEndTimeMs) / 2, Time.MsPerSec);
+    assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
+    // time range end time is equal to the start of forecast range
+    timeRange = new TimeRange(logSegmentForecastStartTimeMs - Time.MsPerSec, Time.MsPerSec);
+    assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
+    // all previous time range are inside the forecast range
+    assertEquals("Throttle count shouldn't have changed", throttleCountBeforeRequests,
+        mockThrottler.throttleCount.get());
+    // time range start time is equal the end of forecast range (considered to be outside of forecast range)
+    timeRange = new TimeRange(logSegmentForecastEndTimeMs + Time.MsPerSec, Time.MsPerSec);
+    assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
+    timeRange = new TimeRange(logSegmentForecastEndTimeMs + 5 * Time.MsPerSec, Time.MsPerSec);
+    assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
+    timeRange = new TimeRange(logSegmentForecastStartTimeMs - 5 * Time.MsPerSec, Time.MsPerSec);
+    assertEquals("Unexpected collection time", timeRange.getEndTimeInMs(),
+        blobStoreStats.getValidDataSizeByLogSegment(timeRange).getFirst().longValue());
+    blobStoreStats.shutdown();
+  }
+
+  /**
+   * Test the static method that converts the quota stats stored in a nested Map to an avro generated
+   >>>>>>> Refactored bucketing for BlobStoreStats
    * {@link StatsSnapshot} object.
    */
   @Test
@@ -276,8 +579,10 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testGetStatsSnapshot() throws StoreException {
-    Map<String, Map<String, Long>> quotaMap = blobStoreStats.getValidDataSizeByContainer();
-    StatsSnapshot statsSnapshot = blobStoreStats.getStatsSnapshot();
+    long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
+    Map<String, Map<String, Long>> quotaMap =
+        blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
+    StatsSnapshot statsSnapshot = blobStoreStats.getStatsSnapshot(deleteAndExpirationRefTimeInMs);
     Map<String, StatsSnapshot> accountValidSizeMap = statsSnapshot.getSubMap();
     assertEquals("Mismatch on number of accounts", quotaMap.size(), accountValidSizeMap.size());
     for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
@@ -292,6 +597,39 @@ public class BlobStoreStatsTest {
   }
 
   /**
+   * Use the given {@link StoreKey} to get its corresponding {@link MockId} and update various states in
+   * {@link CuratedLogIndexState} in preparation for the delete.
+   * @param storeKey the {@link StoreKey} to be deleted
+   * @return the {@link MockId} to be deleted
+   */
+  private MockId getIdToDelete(StoreKey storeKey) {
+    MockId idToDelete = null;
+    for (MockId id : state.liveKeys) {
+      if (id.getID().equals(storeKey.getID())) {
+        idToDelete = id;
+      }
+    }
+    if (idToDelete != null) {
+      state.deletedKeys.add(idToDelete);
+      state.liveKeys.remove(idToDelete);
+    }
+    return idToDelete;
+  }
+
+  /**
+   * A helper function that deletes the PUT with the given {@link MockId} and inform {@link BlobStoreStats} about it.
+   * @param idToDelete the {@link MockId} to be deleted
+   * @throws InterruptedException
+   * @throws StoreException
+   * @throws IOException
+   */
+  private void newDelete(MockId idToDelete) throws InterruptedException, StoreException, IOException {
+    state.addDeleteEntry(idToDelete);
+    Pair<IndexValue, IndexValue> putAndDeletePair = state.allKeys.get(idToDelete);
+    blobStoreStats.handleNewDelete(putAndDeletePair.getSecond(), putAndDeletePair.getFirst());
+  }
+
+  /**
    * Advance the time to the next nearest second. That is, 1 sec to 2 sec or 1001 ms to 2000ms.
    */
   private void advanceTimeToNextSecond() throws InterruptedException {
@@ -302,11 +640,12 @@ public class BlobStoreStatsTest {
   /**
    * Verify the correctness of valid data size information per container returned by BlobStoreStats and return the
    * total valid data size of all containers.
+   * @param deleteAndExpirationRefTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @return the total valid data size of all containers (from all serviceIds)
    */
-  private long verifyAndGetContainerValidSize() throws StoreException {
-    long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
-    Map<String, Map<String, Long>> actualContainerValidSizeMap = blobStoreStats.getValidDataSizeByContainer();
+  private long verifyAndGetContainerValidSize(long deleteAndExpirationRefTimeInMs) throws StoreException {
+    Map<String, Map<String, Long>> actualContainerValidSizeMap =
+        blobStoreStats.getValidDataSizeByContainer(deleteAndExpirationRefTimeInMs);
     Map<String, Map<String, Long>> expectedContainerValidSizeMap =
         getValidSizeByContainer(deleteAndExpirationRefTimeInMs);
     long totalValidSize = 0L;
@@ -339,11 +678,12 @@ public class BlobStoreStatsTest {
    * {@link TimeRange} and return the total valid data size of all log segments.
    * @param timeRange the {@link TimeRange} to be used for the verification
    * @return the total valid data size of all log segments
+   * @throws StoreException
    */
   private long verifyAndGetLogSegmentValidSize(TimeRange timeRange) throws StoreException {
+    long expiryReferenceTimeMs = timeRange.getEndTimeInMs();
     Pair<Long, NavigableMap<String, Long>> actualLogSegmentValidSizeMap =
         blobStoreStats.getValidDataSizeByLogSegment(timeRange);
-    long expiryReferenceTimeMs = state.time.milliseconds();
     assertTrue("Valid data size collection time should be in the range",
         timeRange.getStartTimeInMs() <= actualLogSegmentValidSizeMap.getFirst()
             && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
@@ -372,7 +712,7 @@ public class BlobStoreStatsTest {
         actualLogSegmentValidSizeMap.getSecond().size());
 
     Pair<Long, Long> actualTotalValidSize = blobStoreStats.getValidSize(timeRange);
-    assertTrue("Valid data size collection time should be in the range",
+    assertTrue("Returned collection time should be in the range",
         timeRange.getStartTimeInMs() <= actualTotalValidSize.getFirst()
             && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
     assertEquals("Total valid data size of all log segments mismatch", expectedTotalLogSegmentValidSize,
@@ -419,5 +759,50 @@ public class BlobStoreStatsTest {
     Map<String, Long> innerMap = nestedMap.get(firstKey);
     Long newValue = innerMap.containsKey(secondKey) ? innerMap.get(secondKey) + value : value;
     innerMap.put(secondKey, newValue);
+  }
+
+  /**
+   * Mock {@link Throttler} with latches and a counter to track and control various states during a scan.
+   */
+  private class MockThrottler extends Throttler {
+    final AtomicInteger throttleCount = new AtomicInteger(0);
+    volatile boolean isThrottlerStarted = false;
+    CountDownLatch startedLatch;
+    CountDownLatch holdLatch;
+
+    MockThrottler(CountDownLatch startedLatch, CountDownLatch holdLatch) {
+      super(0, 0, true, new MockTime());
+      this.startedLatch = startedLatch;
+      this.holdLatch = holdLatch;
+    }
+
+    @Override
+    public void maybeThrottle(double observed) throws InterruptedException {
+      throttleCount.incrementAndGet();
+      if (!isThrottlerStarted) {
+        isThrottlerStarted = true;
+        startedLatch.countDown();
+        assertTrue("IndexScanner is held for too long", holdLatch.await(3, TimeUnit.SECONDS));
+      }
+    }
+  }
+
+  /**
+   * Mock {@link IndexValue} with a latch to act as a probe to inform us about the state of the newEntryQueue in
+   * {@link BlobStoreStats}.
+   */
+  private class MockIndexValue extends IndexValue {
+    private final CountDownLatch latch;
+
+    MockIndexValue(CountDownLatch latch, Offset offset) {
+      super(0, offset, Utils.Infinite_Time);
+      this.latch = latch;
+    }
+
+    @Override
+    Offset getOffset() {
+      latch.countDown();
+      return super.getOffset();
+    }
   }
 }

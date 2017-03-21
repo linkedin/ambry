@@ -133,6 +133,31 @@ public class StoreConfig {
   @Default("1")
   public final int storeMinLogSegmentCountToReclaimToTriggerCompaction;
 
+  /**
+   * The number of buckets for stats bucketing, a value of 0 will disable bucketing.
+   */
+  @Config("store.stats.bucket.count")
+  @Default("24")
+  public final int storeStatsBucketCount;
+
+  /**
+   * The time coverage of each buckets in milliseconds.
+   */
+  @Config("store.stats.bucket.span.in.ms")
+  @Default("3600000")
+  public final long storeStatsBucketSpanInMs;
+
+  /**
+   * The time offset in seconds to be applied to obtain the delete reference time for log segment valid data size.
+   */
+  @Config("store.stats.log.segment.forecast.offset.in.secs")
+  @Default("604800")
+  public final long storeStatsLogSegmentForecastOffsetInSecs;
+
+  @Config("store.stats.queue.processor.period.in.ms")
+  @Default("120000")
+  public final long storeStatsQueueProcessorPeriodInMs;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -160,6 +185,12 @@ public class StoreConfig {
         "com.github.ambry.store.DefaultCompactionPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
+    storeStatsBucketCount = verifiableProperties.getInt("store.stats.bucket.count", 24);
+    storeStatsBucketSpanInMs = verifiableProperties.getLong("store.stats.bucket.span.in.ms", 3600000);
+    storeStatsLogSegmentForecastOffsetInSecs =
+        verifiableProperties.getLong("store.stats.log.segment.forecast.offset.in.secs", 604800);
+    storeStatsQueueProcessorPeriodInMs =
+        verifiableProperties.getLong("store.stats.queue.processor.period.in.ms", 120000);
   }
 }
 
