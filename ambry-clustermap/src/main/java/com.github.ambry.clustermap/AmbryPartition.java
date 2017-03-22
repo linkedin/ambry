@@ -55,7 +55,7 @@ class AmbryPartition extends PartitionId {
   }
 
   @Override
-  public List<? extends ReplicaId> getReplicaIds() {
+  public List<AmbryReplica> getReplicaIds() {
     return clusterManagerCallback.getReplicaIdsForPartition(this);
   }
 

@@ -28,11 +28,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
-import org.apache.helix.ConfigChangeListener;
 import org.apache.helix.ExternalViewChangeListener;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
-import org.apache.helix.HelixManagerFactory;
+import org.apache.helix.InstanceConfigChangeListener;
 import org.apache.helix.InstanceType;
 import org.apache.helix.LiveInstanceChangeListener;
 import org.apache.helix.NotificationContext;
@@ -62,10 +61,10 @@ class HelixClusterManager implements ClusterMap {
   private final Map<AmbryDataNode, Set<AmbryReplica>> dataNodeIdToReplicaIds = new ConcurrentHashMap<>();
   private final Map<AmbryDataNode, Set<AmbryDisk>> dataNodeIdToDiskIds = new ConcurrentHashMap<>();
   private final Map<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
-  private final HelixClusterManagerCallback helixClusterManagerCallback;
   private long clusterWideRawCapacityBytes;
   private long clusterWideAllocatedRawCapacityBytes;
   private long clusterWiseAllocatedUsableCapacityBytes;
+  private final HelixClusterManagerCallback helixClusterManagerCallback;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -75,10 +74,11 @@ class HelixClusterManager implements ClusterMap {
    * @throws IOException if there is an error in parsing the clusterMapConfig or in connecting with the associated
    *                     remote Zookeeper services.
    */
-  HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName) throws IOException {
+  HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName, HelixFactory helixFactory,
+      MetricRegistry metricRegistry) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
+    this.metricRegistry = metricRegistry;
     clusterName = clusterMapConfig.clusterMapClusterName;
-    metricRegistry = new MetricRegistry();
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     try {
@@ -88,7 +88,7 @@ class HelixClusterManager implements ClusterMap {
         String dcName = entry.getKey();
         String zkConnectStr = entry.getValue();
         HelixManager manager =
-            HelixManagerFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+            helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
         manager.connect();
         ClusterChangeListener clusterChangeListener = new ClusterChangeListener();
         DcZkInfo dcZkInfo = new DcZkInfo(dcName, zkConnectStr, manager, clusterChangeListener);
@@ -99,12 +99,13 @@ class HelixClusterManager implements ClusterMap {
       // Now register listeners to get notified on change.
       for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
         dcZkInfo.helixManager.addExternalViewChangeListener(dcZkInfo.clusterChangeListener);
-        dcZkInfo.helixManager.addConfigChangeListener(dcZkInfo.clusterChangeListener);
+        dcZkInfo.helixManager.addInstanceConfigChangeListener(dcZkInfo.clusterChangeListener);
         dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeListener);
         dcZkInfo.clusterChangeListener.waitForInitialization();
       }
     } catch (Exception e) {
       helixClusterManagerMetrics.initializeInstantiationMetric(false);
+      close();
       throw new IOException("Encountered exception while parsing json, connecting to Helix or initializing", e);
     }
     helixClusterManagerMetrics.initializeInstantiationMetric(true);
@@ -125,9 +126,8 @@ class HelixClusterManager implements ClusterMap {
       HelixAdmin admin = dcZkInfo.helixManager.getClusterManagmentTool();
       for (String instanceName : admin.getInstancesInCluster(clusterName)) {
         InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
-        AmbryDataNode datanode =
-            new AmbryDataNode(dcZkInfo.dcName, clusterMapConfig, instanceConfig.getHostName(), instanceConfig.getPort(),
-                getRackIdStr(instanceConfig), getSslPortStr(instanceConfig));
+        AmbryDataNode datanode = new AmbryDataNode(dcZkInfo.dcName, clusterMapConfig, instanceConfig.getHostName(),
+            Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig));
         initializeDisksAndReplicasOnNode(datanode, instanceConfig);
         instanceNameToDataNodeIdMap.put(instanceName, datanode);
         dcZkInfo.clusterChangeListener.allInstances.add(instanceName);
@@ -224,21 +224,21 @@ class HelixClusterManager implements ClusterMap {
   }
 
   @Override
-  public DataNodeId getDataNodeId(String hostname, int port) {
+  public AmbryDataNode getDataNodeId(String hostname, int port) {
     return instanceNameToDataNodeIdMap.get(getInstanceName(hostname, port));
   }
 
   @Override
-  public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
+  public List<AmbryReplica> getReplicaIds(DataNodeId dataNodeId) {
     if (!(dataNodeId instanceof AmbryDataNode)) {
-      throw new IllegalStateException("Incompatible type passed in");
+      throw new IllegalArgumentException("Incompatible type passed in");
     }
     AmbryDataNode datanode = (AmbryDataNode) dataNodeId;
     return new ArrayList<>(dataNodeIdToReplicaIds.get(datanode));
   }
 
   @Override
-  public List<? extends DataNodeId> getDataNodeIds() {
+  public List<AmbryDataNode> getDataNodeIds() {
     return new ArrayList<>(instanceNameToDataNodeIdMap.values());
   }
 
@@ -252,19 +252,19 @@ class HelixClusterManager implements ClusterMap {
     AmbryReplica replica = (AmbryReplica) replicaId;
     switch (event) {
       case Node_Response:
-        ((AmbryDataNode) replica.getDataNodeId()).onNodeResponse();
+        replica.getDataNodeId().onNodeResponse();
         break;
       case Node_Timeout:
-        ((AmbryDataNode) replica.getDataNodeId()).onNodeTimeout();
+        replica.getDataNodeId().onNodeTimeout();
         break;
       case Disk_Error:
-        ((AmbryDisk) replica.getDiskId()).onDiskError();
+        replica.getDiskId().onDiskError();
         break;
       case Disk_Ok:
-        ((AmbryDisk) replica.getDiskId()).onDiskOk();
+        replica.getDiskId().onDiskOk();
         break;
       case Partition_ReadOnly:
-        ((AmbryPartition) replica.getPartitionId()).onPartitionReadOnly();
+        replica.getPartitionId().onPartitionReadOnly();
         break;
     }
   }
@@ -283,9 +283,9 @@ class HelixClusterManager implements ClusterMap {
    * @return list of partition ids that are in {@link PartitionState#READ_WRITE}.
    */
   @Override
-  public List<PartitionId> getWritablePartitionIds() {
-    List<PartitionId> writablePartitions = new ArrayList<>();
-    List<PartitionId> healthyWritablePartitions = new ArrayList<>();
+  public List<AmbryPartition> getWritablePartitionIds() {
+    List<AmbryPartition> writablePartitions = new ArrayList<>();
+    List<AmbryPartition> healthyWritablePartitions = new ArrayList<>();
     for (AmbryPartition partition : partitionNameToPartitionIdMap.values()) {
       if (partition.getPartitionState() == PartitionState.READ_WRITE) {
         writablePartitions.add(partition);
@@ -295,6 +295,17 @@ class HelixClusterManager implements ClusterMap {
       }
     }
     return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+  }
+
+  /**
+   * Disconnect from the HelixManagers associated with each and every datacenter.
+   */
+  @Override
+  public void close() {
+    for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
+      dcZkInfo.helixManager.disconnect();
+    }
+    dcToDcZkInfo.clear();
   }
 
   /**
@@ -330,12 +341,13 @@ class HelixClusterManager implements ClusterMap {
   /**
    * An instance of this object is used to register as listener for Helix related changes in each datacenter.
    */
-  private class ClusterChangeListener implements ExternalViewChangeListener, ConfigChangeListener, LiveInstanceChangeListener {
+  private class ClusterChangeListener implements ExternalViewChangeListener, InstanceConfigChangeListener, LiveInstanceChangeListener {
     final Set<String> allInstances = new HashSet<>();
     private boolean liveInstanceChangeTriggered = false;
     private boolean externalViewChangeTriggered = false;
     private boolean configChangeTriggered = false;
-    private CountDownLatch initialized = new CountDownLatch(3);
+    private final Object notificationLock = new Object();
+    private final CountDownLatch initialized = new CountDownLatch(3);
 
     /**
      * Triggered whenever there is a change in the list of live instances.
@@ -344,49 +356,55 @@ class HelixClusterManager implements ClusterMap {
      */
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
-      logger.info("Live instance change triggered with: " + liveInstances);
-      Set<String> liveInstancesSet = new HashSet<>();
-      for (LiveInstance liveInstance : liveInstances) {
-        liveInstancesSet.add(liveInstance.getInstanceName());
-      }
-      for (String instanceName : allInstances) {
-        if (liveInstancesSet.contains(instanceName)) {
-          instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.AVAILABLE);
-        } else {
-          instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.UNAVAILABLE);
+      synchronized (notificationLock) {
+        logger.info("Live instance change triggered with: " + liveInstances);
+        Set<String> liveInstancesSet = new HashSet<>();
+        for (LiveInstance liveInstance : liveInstances) {
+          liveInstancesSet.add(liveInstance.getInstanceName());
         }
+        for (String instanceName : allInstances) {
+          if (liveInstancesSet.contains(instanceName)) {
+            instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.AVAILABLE);
+          } else {
+            instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.UNAVAILABLE);
+          }
+        }
+        if (!liveInstanceChangeTriggered) {
+          liveInstanceChangeTriggered = true;
+          initialized.countDown();
+        }
+        helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
       }
-      if (!liveInstanceChangeTriggered) {
-        liveInstanceChangeTriggered = true;
-        initialized.countDown();
-      }
-      helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
     }
 
     @Override
     public void onExternalViewChange(List<ExternalView> externalViewList, NotificationContext changeContext) {
-      logger.info("ExternalView change triggered with: " + externalViewList);
+      synchronized (notificationLock) {
+        logger.info("ExternalView change triggered with: " + externalViewList);
 
-      // No action taken at this time.
+        // No action taken at this time.
 
-      if (!externalViewChangeTriggered) {
-        externalViewChangeTriggered = true;
-        initialized.countDown();
+        if (!externalViewChangeTriggered) {
+          externalViewChangeTriggered = true;
+          initialized.countDown();
+        }
+        helixClusterManagerMetrics.externalViewChangeTriggerCount.inc();
       }
-      helixClusterManagerMetrics.externalViewChangeTriggerCount.inc();
     }
 
     @Override
-    public void onConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
-      logger.info("Config change triggered with: ", configs);
+    public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
+      synchronized (notificationLock) {
+        logger.info("Config change triggered with: ", configs);
 
-      // No action taken at this time. Going forward, changes like marking partitions back to read-write will go here.
+        // No action taken at this time. Going forward, changes like marking partitions back to read-write will go here.
 
-      if (!configChangeTriggered) {
-        configChangeTriggered = true;
-        initialized.countDown();
+        if (!configChangeTriggered) {
+          configChangeTriggered = true;
+          initialized.countDown();
+        }
+        helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
       }
-      helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
     }
 
     /**
@@ -427,7 +445,7 @@ class HelixClusterManager implements ClusterMap {
   /**
    * A callback class used to query information from the {@link HelixClusterManager}
    */
-  class HelixClusterManagerCallback {
+  public class HelixClusterManagerCallback {
     /**
      * Get all replica ids associated with the given {@link AmbryPartition}
      * @param partition the {@link AmbryPartition} for which to get the list of replicas.

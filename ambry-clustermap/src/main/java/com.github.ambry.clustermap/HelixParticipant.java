@@ -16,7 +16,6 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import org.apache.helix.HelixManager;
-import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.StateMachineEngine;
@@ -27,17 +26,20 @@ import org.json.JSONException;
  * An implementation of {@link ClusterParticipant} that registers registers as a participant to a Helix cluster.
  */
 class HelixParticipant implements ClusterParticipant {
-  private HelixManager manager;
   private final String clusterName;
   private final String zkConnectStr;
+  private final HelixFactory helixFactory;
+  private HelixManager manager;
 
   /**
    * Instantiate a HelixParticipant.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
+   * @param helixFactory the {@link HelixFactory} to use to get the {@link HelixManager}.
    * @throws JSONException if there is an error in parsing the JSON serialized ZK connect string config.
    */
-  HelixParticipant(ClusterMapConfig clusterMapConfig) throws IOException {
+  HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) throws IOException {
     clusterName = clusterMapConfig.clusterMapClusterName;
+    this.helixFactory = helixFactory;
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Clustername is empty in clusterMapConfig");
     }
@@ -54,15 +56,19 @@ class HelixParticipant implements ClusterParticipant {
    * cluster.
    * @param hostName the hostname to use when registering as a participant.
    * @param port the port to use when registering as a participant.
-   * @throws Exception if there is an error connecting to the Helix cluster.
+   * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void initialize(String hostName, int port) throws Exception {
+  public void initialize(String hostName, int port) throws IOException {
     String instanceName = ClusterMapUtils.getInstanceName(hostName, port);
-    manager = HelixManagerFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
+    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
-    manager.connect();
+    try {
+      manager.connect();
+    } catch (Exception e) {
+      throw new IOException("Exception while connecting to the Helix manager", e);
+    }
   }
 
   /**
@@ -72,6 +78,7 @@ class HelixParticipant implements ClusterParticipant {
   public void terminate() {
     if (manager != null) {
       manager.disconnect();
+      manager = null;
     }
   }
 }

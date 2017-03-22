@@ -36,7 +36,7 @@ class HelixClusterManagerMetrics {
   public final Counter getReplicaIdsMismatchCount;
   public final Counter getDataNodeIdsMismatchCount;
 
-  public Gauge<Long> helixClusterManagerInstantiationFailed;
+  public Gauge<Boolean> helixClusterManagerInstantiationFailed;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -69,10 +69,10 @@ class HelixClusterManagerMetrics {
   }
 
   void initializeInstantiationMetric(final boolean instantiated) {
-    helixClusterManagerInstantiationFailed = new Gauge<Long>() {
+    helixClusterManagerInstantiationFailed = new Gauge<Boolean>() {
       @Override
-      public Long getValue() {
-        return instantiated ? 0L : 1L;
+      public Boolean getValue() {
+        return !instantiated;
       }
     };
     registry.register(MetricRegistry.name(HelixClusterManager.class, "helixClusterManagerInstantiationFailed"),
@@ -114,10 +114,10 @@ class HelixClusterManagerMetrics {
 
     for (final AmbryDataNode datanode : clusterMapCallback.getDatanodes()) {
       final String metricName = datanode.getHostname() + "-" + datanode.getPort() + "-ResourceState";
-      Gauge<Long> dataNodeState = new Gauge<Long>() {
+      Gauge<Boolean> dataNodeState = new Gauge<Boolean>() {
         @Override
-        public Long getValue() {
-          return datanode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
+        public Boolean getValue() {
+          return datanode.getState() == HardwareState.AVAILABLE;
         }
       };
       registry.register(MetricRegistry.name(HelixClusterManager.class, metricName), dataNodeState);
@@ -148,10 +148,10 @@ class HelixClusterManagerMetrics {
       final String metricName =
           disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
               + "-ResourceState";
-      Gauge<Long> diskState = new Gauge<Long>() {
+      Gauge<Boolean> diskState = new Gauge<Boolean>() {
         @Override
-        public Long getValue() {
-          return disk.getState() == HardwareState.AVAILABLE ? 1L : 0L;
+        public Boolean getValue() {
+          return disk.getState() == HardwareState.AVAILABLE;
         }
       };
       registry.register(MetricRegistry.name(HelixClusterManager.class, metricName), diskState);

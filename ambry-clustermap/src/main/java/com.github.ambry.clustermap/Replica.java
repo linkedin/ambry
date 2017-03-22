@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory;
 
 
 /**
+ * An implementation of {@link ReplicaId} to be used within the {@link StaticClusterManager}.
+ *
  * A Replica is one constituent piece of a {@link Partition}. A Replica is uniquely identifiable by its Partition and
  * its {@link Disk}. Note that this induces a constraint that a Partition can never have more than one Replica on a
  * given Disk. This ensures that a Partition does not have Replicas that share fates.

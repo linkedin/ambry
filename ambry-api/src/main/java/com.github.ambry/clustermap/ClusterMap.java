@@ -79,4 +79,9 @@ public interface ClusterMap {
    * Performs the required action for a replica related event.
    */
   void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event);
+
+  /**
+   * Close the cluster map. Any cleanups should be done in this call.
+   */
+  void close();
 }

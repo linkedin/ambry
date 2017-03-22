@@ -31,6 +31,8 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
+ * An extension of {@link PartitionId} to be used within the {@link StaticClusterManager}.
+ *
  * A Partition is the unit of data management in Ambry. Each Partition is uniquely identifiable by an ID. Partitions
  * consist of one or more {@link Replica}s. Replicas ensure that a Partition is available and reliable.
  */

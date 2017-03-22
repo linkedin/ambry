@@ -51,12 +51,12 @@ class AmbryReplica implements ReplicaId {
   }
 
   @Override
-  public PartitionId getPartitionId() {
+  public AmbryPartition getPartitionId() {
     return partition;
   }
 
   @Override
-  public DataNodeId getDataNodeId() {
+  public AmbryDataNode getDataNodeId() {
     return disk.getDataNode();
   }
 
@@ -71,8 +71,8 @@ class AmbryReplica implements ReplicaId {
   }
 
   @Override
-  public List<? extends ReplicaId> getPeerReplicaIds() {
-    List<? extends ReplicaId> replicasOfPartition = partition.getReplicaIds();
+  public List<AmbryReplica> getPeerReplicaIds() {
+    List<AmbryReplica> replicasOfPartition = partition.getReplicaIds();
     replicasOfPartition.remove(this);
     return replicasOfPartition;
   }
@@ -83,7 +83,7 @@ class AmbryReplica implements ReplicaId {
   }
 
   @Override
-  public DiskId getDiskId() {
+  public AmbryDisk getDiskId() {
     return disk;
   }
 

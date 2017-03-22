@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 
 
 /**
- *
+ * Tests for the {@link FixedBackoffResourceStatePolicy}
  */
 public class FixedBackoffResourceStatePolicyTest {
   private final FixedBackoffResourceStatePolicy policy;
@@ -52,6 +52,9 @@ public class FixedBackoffResourceStatePolicyTest {
     assertFalse(policy.isHardDown());
   }
 
+  /**
+   * Tests to validate that the thresholds and retries are serving exactly their intended purposes.
+   */
   @Test
   public void testThresholdsAndRetries() {
     // Verify that the resource becomes down exactly after receiving 3 errors.
@@ -79,6 +82,9 @@ public class FixedBackoffResourceStatePolicyTest {
     initiateAndVerifyResourceGoesDownExactlyAtThresholdFailures();
   }
 
+  /**
+   * Tests that hard events are honored in the way expected.
+   */
   @Test
   public void testHardDownandHardUp() {
     // Verify that once the resource is hard down, it stays down indefinitely unless an explicit event occurs.

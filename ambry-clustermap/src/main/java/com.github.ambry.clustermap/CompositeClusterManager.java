@@ -30,9 +30,9 @@ import java.util.Set;
  * and reports inconsistencies in the views from the two underlying cluster managers.
  */
 class CompositeClusterManager implements ClusterMap {
-  private final StaticClusterManager staticClusterManager;
-  private final HelixClusterManager helixClusterManager;
-  private final HelixClusterManagerMetrics helixClusterManagerMetrics;
+  final StaticClusterManager staticClusterManager;
+  final HelixClusterManager helixClusterManager;
+  final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
    * Construct a CompositeClusterManager instance.
@@ -203,6 +203,14 @@ class CompositeClusterManager implements ClusterMap {
           helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId().getHostname(),
               replicaId.getDataNodeId().getPort(), replicaId.getPartitionId().toString());
       helixClusterManager.onReplicaEvent(ambryReplica, event);
+    }
+  }
+
+  @Override
+  public void close() {
+    staticClusterManager.close();
+    if (helixClusterManager != null) {
+      helixClusterManager.close();
     }
   }
 }

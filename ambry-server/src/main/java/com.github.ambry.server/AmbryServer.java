@@ -89,7 +89,7 @@ class AmbryServer {
   }
 
   AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
-      NotificationSystem notificationSystem, Time time) throws IOException {
+      NotificationSystem notificationSystem, Time time) {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
     this.notificationSystem = notificationSystem;
@@ -216,6 +216,7 @@ class AmbryServer {
           logger.error("Error while closing notification system.", e);
         }
       }
+      clusterMap.close();
       logger.info("shutdown completed");
     } catch (Exception e) {
       logger.error("Error while shutting down server", e);

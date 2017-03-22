@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 
@@ -24,6 +25,8 @@ import java.io.IOException;
 public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   private final ClusterMapConfig clusterMapConfig;
   private final String instanceName;
+  private final HelixFactory helixFactory;
+  private final MetricRegistry metricRegistry;
   private HelixClusterManager helixClusterManager;
   private HelixParticipant helixParticipant;
 
@@ -35,15 +38,21 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
    */
   public HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
       String partitionLayoutFilePath) {
+    this(clusterMapConfig, new MetricRegistry());
+  }
+
+  public HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, MetricRegistry metricRegistry) {
     this.clusterMapConfig = clusterMapConfig;
     this.instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
+    helixFactory = new HelixFactory();
+    this.metricRegistry = metricRegistry;
   }
 
   @Override
   public HelixClusterManager getClusterMap() throws IOException {
     if (helixClusterManager == null) {
-      helixClusterManager = new HelixClusterManager(clusterMapConfig, instanceName);
+      helixClusterManager = new HelixClusterManager(clusterMapConfig, instanceName, helixFactory, metricRegistry);
     }
     return helixClusterManager;
   }
@@ -51,7 +60,7 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   @Override
   public HelixParticipant getClusterParticipant() throws IOException {
     if (helixParticipant == null) {
-      helixParticipant = new HelixParticipant(clusterMapConfig);
+      helixParticipant = new HelixParticipant(clusterMapConfig, helixFactory);
     }
     return helixParticipant;
   }

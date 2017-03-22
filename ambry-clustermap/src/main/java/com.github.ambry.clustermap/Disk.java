@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory;
 
 
 /**
+ * An implementation of {@link DiskId} to be used within the {@link StaticClusterManager}.
+ *
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */

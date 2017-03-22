@@ -33,6 +33,8 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
+ * An extension of {@link DataNodeId} to be used within the {@link StaticClusterManager}.
+ *
  * DataNode is uniquely identified by its hostname and port. A DataNode is in a {@link Datacenter}. A DataNode has zero
  * or more {@link Disk}s.
  */

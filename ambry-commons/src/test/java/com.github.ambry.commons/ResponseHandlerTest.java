@@ -92,6 +92,10 @@ public class ResponseHandlerTest {
       lastReplicaEvents.add(event);
     }
 
+    @Override
+    public void close() {
+    }
+
     public void reset() {
       lastReplicaID = null;
       lastReplicaEvents.clear();

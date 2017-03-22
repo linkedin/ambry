@@ -43,7 +43,8 @@ public class CompositeClusterAgentsFactory implements ClusterAgentsFactory {
       String partitionLayoutFilePath) throws JSONException, IOException {
     staticClusterAgentsFactory =
         new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutFilePath, partitionLayoutFilePath);
-    helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, null, null);
+    helixClusterAgentsFactory =
+        new HelixClusterAgentsFactory(clusterMapConfig, staticClusterAgentsFactory.getMetricRegistry());
   }
 
   /**
@@ -56,7 +57,8 @@ public class CompositeClusterAgentsFactory implements ClusterAgentsFactory {
   CompositeClusterAgentsFactory(ClusterMapConfig clusterMapConfig, PartitionLayout partitionLayout)
       throws JSONException, IOException {
     staticClusterAgentsFactory = new StaticClusterAgentsFactory(clusterMapConfig, partitionLayout);
-    helixClusterAgentsFactory = new HelixClusterAgentsFactory(clusterMapConfig, null, null);
+    helixClusterAgentsFactory =
+        new HelixClusterAgentsFactory(clusterMapConfig, staticClusterAgentsFactory.getMetricRegistry());
   }
 
   /**

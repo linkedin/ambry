@@ -11,23 +11,22 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-
 package com.github.ambry.clustermap;
 
-import java.io.IOException;
-
+import org.apache.helix.HelixAdmin;
+import org.apache.helix.manager.zk.ZKHelixAdmin;
 
 /**
- * A ClusterParticipant is a component that makes up the Ambry cluster.
+ * A factory class to construct and get a reference to a {@link HelixAdmin}
  */
-public interface ClusterParticipant {
+public class HelixAdminFactory {
   /**
-   * Initialize the participant.
+   * Get a reference to a {@link HelixAdmin}
+   * @param zkAddr the address identifying the zk service to which this request is to be made.
+   * @return the reference to the {@link HelixAdmin}.
    */
-  void initialize(String hostname, int port) throws IOException;
-
-  /**
-   * Terminate the participant.
-   */
-  void terminate();
+  HelixAdmin getHelixAdmin(String zkAddr) {
+    return new ZKHelixAdmin(zkAddr);
+  }
 }
+

@@ -289,5 +289,10 @@ public class MockClusterMap implements ClusterMap {
         break;
     }
   }
+
+  @Override
+  public void close() {
+
+  }
 }
 

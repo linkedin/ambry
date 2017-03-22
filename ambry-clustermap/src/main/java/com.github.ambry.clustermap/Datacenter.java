@@ -28,6 +28,8 @@ import org.slf4j.LoggerFactory;
  * A Datacenter in an Ambry cluster. A Datacenter must be uniquely identifiable by its name. A Datacenter is the primary
  * unit at which Ambry hardware is organized (see {@link HardwareLayout})). A Datacenter has zero or more {@link
  * DataNode}s.
+ *
+ * This class is meant to be used within the {@link StaticClusterManager}.
  */
 class Datacenter {
   private final HardwareLayout hardwareLayout;

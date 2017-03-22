@@ -45,7 +45,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         @Override
-        public void initialize(String hostname, int port) throws Exception {
+        public void initialize(String hostname, int port) {
 
         }
 

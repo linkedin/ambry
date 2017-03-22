@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import java.io.IOException;
 import org.json.JSONException;
@@ -28,6 +29,7 @@ import static com.github.ambry.utils.Utils.*;
 public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
   private final PartitionLayout partitionLayout;
   private final ClusterMapConfig clusterMapConfig;
+  private final MetricRegistry metricRegistry;
   private StaticClusterManager staticClusterManager;
   private ClusterParticipant clusterParticipant;
 
@@ -53,12 +55,13 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
   StaticClusterAgentsFactory(ClusterMapConfig clusterMapConfig, PartitionLayout partitionLayout) {
     this.clusterMapConfig = clusterMapConfig;
     this.partitionLayout = partitionLayout;
+    this.metricRegistry = new MetricRegistry();
   }
 
   @Override
   public StaticClusterManager getClusterMap() {
     if (staticClusterManager == null) {
-      staticClusterManager = new StaticClusterManager(partitionLayout);
+      staticClusterManager = new StaticClusterManager(partitionLayout, metricRegistry);
     }
     return staticClusterManager;
   }
@@ -72,7 +75,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         @Override
-        public void initialize(String hostname, int port) throws Exception {
+        public void initialize(String hostname, int port) {
 
         }
 
@@ -83,6 +86,13 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
       };
     }
     return clusterParticipant;
+  }
+
+  /**
+   * @return the {@link MetricRegistry} used when creating the {@link StaticClusterManager}
+   */
+  MetricRegistry getMetricRegistry() {
+    return metricRegistry;
   }
 }
 

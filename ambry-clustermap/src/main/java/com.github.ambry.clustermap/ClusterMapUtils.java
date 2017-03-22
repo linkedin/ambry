@@ -44,10 +44,10 @@ public class ClusterMapUtils {
   static final int UNKNOWN_RACK_ID = -1;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
-  private static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
-  private static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
-  private static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
-  private static final long MAX_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
+  static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
+  static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
+  static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
+  static final long MAX_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
 
   /**
    * Construct and return the instance name given the host and port.
@@ -62,12 +62,13 @@ public class ClusterMapUtils {
   /**
    * Parses zk layout JSON string and populates and returns a map of datacenter name to Zk connect strings.
    * @param zkLayoutJsonString the string containing the Zookeeper layout.
+   * @return a map of dcName -> zkConnectStr.
    * @throws JSONException if there is an error parsing the JSON.
    */
   static Map<String, String> parseZkJsonAndPopulateZkInfo(String zkLayoutJsonString) throws JSONException {
     Map<String, String> dataCenterToZkAddress = new HashMap<>();
     JSONObject root = new JSONObject(zkLayoutJsonString);
-    JSONArray all = (root).getJSONArray(ZKINFO_STR);
+    JSONArray all = root.getJSONArray(ZKINFO_STR);
     for (int i = 0; i < all.length(); i++) {
       JSONObject entry = all.getJSONObject(i);
       dataCenterToZkAddress.put(entry.getString(DATACENTER_STR), entry.getString(ZKCONNECTSTR_STR));
@@ -89,17 +90,18 @@ public class ClusterMapUtils {
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the rack id associated with the given instance.
    */
-  static String getRackIdStr(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getSimpleField(RACKID_STR);
+  static Long getRackId(InstanceConfig instanceConfig) {
+    return Long.valueOf(instanceConfig.getRecord().getSimpleField(RACKID_STR));
   }
 
   /**
-   * Get the ssl port string associated with the given instance (if any).
+   * Get the ssl port associated with the given instance (if any).
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the ssl port associated with the given instance.
    */
-  static String getSslPortStr(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getSimpleField(SSLPORT_STR);
+  static Integer getSslPortStr(InstanceConfig instanceConfig) {
+    String sslPortStr = instanceConfig.getRecord().getSimpleField(SSLPORT_STR);
+    return sslPortStr == null ? null : Integer.valueOf(sslPortStr);
   }
 
   /**

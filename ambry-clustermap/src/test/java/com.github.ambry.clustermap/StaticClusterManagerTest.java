@@ -36,7 +36,7 @@ import static org.junit.Assert.*;
 /**
  * Tests {@link StaticClusterManager} class.
  */
-public class ClusterMapManagerTest {
+public class StaticClusterManagerTest {
   @Rule
   public org.junit.rules.TemporaryFolder folder = new TemporaryFolder();
 

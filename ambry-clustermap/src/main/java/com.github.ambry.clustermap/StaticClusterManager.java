@@ -50,13 +50,13 @@ class StaticClusterManager implements ClusterMap {
    */
   private static final int NUM_CHOICES = 2;
 
-  StaticClusterManager(PartitionLayout partitionLayout) {
+  StaticClusterManager(PartitionLayout partitionLayout, MetricRegistry metricRegistry) {
     if (logger.isTraceEnabled()) {
       logger.trace("StaticClusterManager " + partitionLayout);
     }
     this.hardwareLayout = partitionLayout.getHardwareLayout();
     this.partitionLayout = partitionLayout;
-    this.metricRegistry = new MetricRegistry();
+    this.metricRegistry = metricRegistry;
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
   }
 
@@ -481,5 +481,10 @@ class StaticClusterManager implements ClusterMap {
         ((Partition) replicaId.getPartitionId()).onPartitionReadOnly();
         break;
     }
+  }
+
+  @Override
+  public void close() {
+    // No-op.
   }
 }

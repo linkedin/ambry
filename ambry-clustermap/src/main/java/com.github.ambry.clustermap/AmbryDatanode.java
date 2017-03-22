@@ -43,18 +43,18 @@ class AmbryDataNode extends DataNodeId implements Resource {
    * @param dataCenterName the name of the dataCenter associated with this data node.
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @param hostName the hostName identifying this data node.
-   * @param portStr the port identifying this data node.
-   * @param rackIdStr the rack Id associated with this data node (may be null).
-   * @param sslPortStr the ssl port associated with this data node (may be null).
+   * @param portNum the port identifying this data node.
+   * @param rackId the rack Id associated with this data node (may be null).
+   * @param sslPortNum the ssl port associated with this data node (may be null).
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
-  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, String portStr,
-      String rackIdStr, String sslPortStr) throws Exception {
+  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, Long rackId,
+      Integer sslPortNum) throws Exception {
     this.hostName = hostName;
-    this.plainTextPort = new Port(Integer.valueOf(portStr), PortType.PLAINTEXT);
-    this.sslPort = sslPortStr != null ? new Port(Integer.valueOf(sslPortStr), PortType.SSL) : null;
+    this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
+    this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
     this.dataCenterName = dataCenterName;
-    this.rackId = rackIdStr != null ? Long.valueOf(rackIdStr) : UNKNOWN_RACK_ID;
+    this.rackId = rackId != null ? rackId : UNKNOWN_RACK_ID;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
@@ -82,6 +82,8 @@ class AmbryDataNode extends DataNodeId implements Resource {
         throw new IllegalStateException("Same port number for both plain and ssl ports");
       }
       ports.add(sslPort.getPort());
+    } else if (sslEnabledDataCenters.contains(dataCenterName)) {
+      throw new IllegalArgumentException("No SSL port to a datanode to which SSL is enabled.");
     }
     if (ports.first() < MIN_PORT || ports.last() > MAX_PORT) {
       throw new IllegalStateException("Ports " + ports + " not in valid range [" + MIN_PORT + " - " + MAX_PORT + "]");
