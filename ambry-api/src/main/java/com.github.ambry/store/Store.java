@@ -72,7 +72,7 @@ public interface Store {
 
   /**
    * Get the corresponding {@link StoreStats} instance for this store.
-   * @return a {@link StoreStats} with stats related information
+   * @return a {@link StoreStats} instance which can be used to fetch store related stats
    * @throws StoreException
    */
   StoreStats getStoreStats();

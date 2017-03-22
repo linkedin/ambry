@@ -264,7 +264,7 @@ public class BlobStoreStatsTest {
       firstSubTreeMap.put(String.valueOf(i), new StatsSnapshot(subTotal, secondSubTreeMap));
     }
     StatsSnapshot statsSnapshot = new StatsSnapshot(total, firstSubTreeMap);
-    StatsSnapshot convertedStatsSnapshot = BlobStoreStats.convertQuotaMapToStatsSnapshot(quotaMap);
+    StatsSnapshot convertedStatsSnapshot = BlobStoreStats.convertQuotaToStatsSnapshot(quotaMap);
     assertTrue("Mismatch between the converted StatsSnapshot and expected StatsSnapshot",
         statsSnapshot.equals(convertedStatsSnapshot));
   }

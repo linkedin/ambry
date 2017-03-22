@@ -16,6 +16,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Pair;
 
+
 /**
  * Exposes important stats related to a {@link Store}.
  */
@@ -38,8 +39,8 @@ public interface StoreStats {
   Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException;
 
   /**
-   * Get stats related information of the store as a {@link StatsSnapshot}.
-   * @return a {@link StatsSnapshot} containing stats related information
+   * Fetches stats for the corresponding {@link Store} as a {@link StatsSnapshot}.
+   * @return a {@link StatsSnapshot} with relevant stats
    * @throws StoreException
    */
   StatsSnapshot getStatsSnapshot() throws StoreException;

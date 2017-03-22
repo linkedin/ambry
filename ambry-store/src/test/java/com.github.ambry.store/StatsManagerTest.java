@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.Partition;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -67,7 +68,7 @@ public class StatsManagerTest {
     storeMap.put(new Partition(1000, PartitionState.READ_WRITE, 1024 * 1024 * 1024), null);
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
-    properties.put("stats.output.file.path", outputFileString);
+    properties.put("storestats.output.file.path", outputFileString);
     StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(properties));
     statsManager = new StatsManager(storageManager, config);
   }
@@ -93,13 +94,13 @@ public class StatsManagerTest {
   public void testStatsManagerCollectAggregateAndPublish() throws StoreException, IOException, InterruptedException {
     long[][] aggregatedTestData = new long[][]{{1110, 200, 300}, {350}, {500, 300}, {10, 20, 30, 40, 50}};
     StatsSnapshot aggregatedSnapshot = generateStatsSnapshot(aggregatedTestData);
-    Pair<StatsSnapshot, Integer> result = statsManager.collectAndAggregate(storeMap.keySet());
+    Pair<StatsSnapshot, List<String>> result = statsManager.collectAndAggregate(storeMap.keySet());
     assertTrue("Aggregated StatsSnapshot does not match with expected value",
         aggregatedSnapshot.equals(result.getFirst()));
-    assertEquals("Skipped store count mismatch with expected value", 1, result.getSecond().intValue());
+    assertEquals("Skipped store count mismatch with expected value", 1, result.getSecond().size());
     StatsHeader statsHeader =
         new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), storeMap.keySet().size(),
-            storeMap.keySet().size() - result.getSecond());
+            storeMap.keySet().size() - result.getSecond().size(), result.getSecond());
     File outputFile = new File(outputFileString);
     if (outputFile.exists()) {
       outputFile.createNewFile();
@@ -151,7 +152,7 @@ public class StatsManagerTest {
 
     public MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
       super(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
-          new MetricRegistry(), new ArrayList<>(), new MockIdFactory(), new DummyMessageStoreRecovery(),
+          new MetricRegistry(), new ArrayList<ReplicaId>(), new MockIdFactory(), new DummyMessageStoreRecovery(),
           new DummyMessageStoreHardDelete(), SystemTime.getInstance());
       storeMap = map;
     }

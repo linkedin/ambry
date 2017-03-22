@@ -19,16 +19,30 @@ package com.github.ambry.config;
  */
 public class StatsManagerConfig {
 
-  @Config("stats.output.file.path")
+  /**
+   * The file path (including filename) to be used for publishing store stats to local file.
+   */
+  @Config("storestats.output.file.path")
   @Default("/tmp/stats_output.json")
   public final String outputFilePath;
 
-  @Config("stats.publish.period.in.secs")
-  @Default("3600")
+  /**
+   * The time period in seconds that configures how often are store stats published.
+   */
+  @Config("storestats.publish.period.in.secs")
+  @Default("7200")
   public final long publishPeriodInSecs;
 
+  /**
+   * The option to enable or disable publishing store stats.
+   */
+  @Config("storestats.publish.enabled")
+  @Default("false")
+  public final boolean publishEnabled;
+
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
-    outputFilePath = verifiableProperties.getString("stats.output.file.path", "/tmp/stats_output.json");
-    publishPeriodInSecs = verifiableProperties.getLong("stats.publish.period.in.secs", 3600);
+    outputFilePath = verifiableProperties.getString("storestats.output.file.path", "/tmp/stats_output.json");
+    publishPeriodInSecs = verifiableProperties.getLong("storestats.publish.period.in.secs", 7200);
+    publishEnabled = verifiableProperties.getBoolean("storestats.publish.enabled", false);
   }
 }

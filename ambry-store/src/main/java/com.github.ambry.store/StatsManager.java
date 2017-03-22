@@ -24,7 +24,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -37,6 +40,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * The stats manager is responsible for periodic node level aggregation of store stats and expose/publish such stats to
+ * potential consumers.
+ */
 public class StatsManager {
   private static final Logger logger = LoggerFactory.getLogger(StatsManager.class);
 
@@ -55,15 +62,18 @@ public class StatsManager {
   public StatsManager(StorageManager storageManager, StatsManagerConfig config) throws IOException {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
-    this.publishPeriodInSecs = config.publishPeriodInSecs;
-    this.scheduler = Utils.newScheduler(1, false);
+    publishPeriodInSecs = config.publishPeriodInSecs;
+    scheduler = Utils.newScheduler(1, false);
   }
 
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
   public void start() {
-    statsAggregator = scheduler.scheduleAtFixedRate(new StatsAggregator(), 0, publishPeriodInSecs, TimeUnit.SECONDS);
+    // random initial delay between 1 to 10 minutes to offset nodes from collecting stats at the same time
+    statsAggregator =
+        scheduler.scheduleAtFixedRate(new StatsAggregator(), new Random().nextInt(540) + 60, publishPeriodInSecs,
+            TimeUnit.SECONDS);
   }
 
   /**
@@ -85,31 +95,37 @@ public class StatsManager {
    * @throws IOException
    */
   void publish(StatsWrapper statsWrapper) throws IOException {
-    if (!statsOutputFile.exists()) {
-      statsOutputFile.createNewFile();
-    }
-    OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(statsOutputFile));
-    DatumWriter<StatsWrapper> statsWrapperDatumWriter = new SpecificDatumWriter<StatsWrapper>(StatsWrapper.class);
-    JsonEncoder jsonEncoder = EncoderFactory.get().jsonEncoder(StatsWrapper.getClassSchema(), outputStream, true);
-    try {
-      statsWrapperDatumWriter.write(statsWrapper, jsonEncoder);
-      jsonEncoder.flush();
-      outputStream.flush();
-    } finally {
-      outputStream.close();
+    File tempFile = new File(statsOutputFile.getAbsolutePath() + ".tmp");
+    if (tempFile.createNewFile()) {
+      OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(tempFile));
+      DatumWriter<StatsWrapper> statsWrapperDatumWriter = new SpecificDatumWriter<StatsWrapper>(StatsWrapper.class);
+      JsonEncoder jsonEncoder = EncoderFactory.get().jsonEncoder(StatsWrapper.getClassSchema(), outputStream, true);
+      try {
+        statsWrapperDatumWriter.write(statsWrapper, jsonEncoder);
+        jsonEncoder.flush();
+        outputStream.flush();
+      } finally {
+        outputStream.close();
+      }
+      if (!tempFile.renameTo(statsOutputFile)) {
+        throw new IOException(
+            "Failed to rename " + tempFile.getAbsolutePath() + " to " + statsOutputFile.getAbsolutePath());
+      }
+    } else {
+      throw new IOException("Temporary file creation failed when publishing stats");
     }
   }
 
   /**
-   * Collect and aggregate quota stats from all {@link Store}s in the node by fetching stats from them sequentially
-   * via the {@link StorageManager}.
+   * Collect and aggregate quota stats from all given {@link Store}s by fetching stats from them sequentially via the
+   * {@link StorageManager}.
    * @param partitionIds a {@link Set} of {@link PartitionId}s representing a set of {@link Store}s to be fetched
    * @return a {@link Pair} where the first element is the result in the form of a {@link StatsSnapshot} and the
    * second element is the number of {@link Store}s that were skipped (either unreachable or an error has occurred).
    */
-  Pair<StatsSnapshot, Integer> collectAndAggregate(Set<PartitionId> partitionIds) {
+  Pair<StatsSnapshot, List<String>> collectAndAggregate(Set<PartitionId> partitionIds) {
     StatsSnapshot aggregatedStatsSnapshot = new StatsSnapshot(0L, null);
-    int storeSkipped = 0;
+    List<String> unreachableStores = new ArrayList<>();
     for (PartitionId partitionId : partitionIds) {
       Store store = storageManager.getStore(partitionId);
       if (store != null) {
@@ -118,13 +134,13 @@ public class StatsManager {
           aggregate(aggregatedStatsSnapshot, statsSnapshot);
         } catch (StoreException e) {
           logger.error("Store exception thrown when getting stats for partitionId: " + partitionId.toString(), e);
-          storeSkipped++;
+          unreachableStores.add(partitionId.toString());
         }
       } else {
-        storeSkipped++;
+        unreachableStores.add(partitionId.toString());
       }
     }
-    return new Pair<>(aggregatedStatsSnapshot, storeSkipped);
+    return new Pair<>(aggregatedStatsSnapshot, unreachableStores);
   }
 
   /**
@@ -154,15 +170,16 @@ public class StatsManager {
     @Override
     public void run() {
       Set<PartitionId> partitionIds = storageManager.getPartitionIds();
-      Pair<StatsSnapshot, Integer> result = collectAndAggregate(partitionIds);
+      Pair<StatsSnapshot, List<String>> result = collectAndAggregate(partitionIds);
+      List<String> unreachableStores = result.getSecond();
       StatsHeader statsHeader =
           new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), partitionIds.size(),
-              partitionIds.size() - result.getSecond());
+              partitionIds.size() - unreachableStores.size(), unreachableStores);
       try {
         publish(new StatsWrapper(statsHeader, result.getFirst()));
         logger.info("Stats snapshot published to " + statsOutputFile.getAbsolutePath());
       } catch (IOException e) {
-        logger.error("IOException when trying to publish stats to file", e);
+        logger.error("IOException when publishing stats to " + statsOutputFile.getAbsolutePath(), e);
       }
     }
   }

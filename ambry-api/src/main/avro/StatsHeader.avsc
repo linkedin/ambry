@@ -6,6 +6,7 @@
     {"name": "description", "type": {"type": "enum", "name": "Description", "symbols": ["QUOTA"]}},
     {"name": "timestamp", "type": "long"},
     {"name": "numberOfStoresContacted", "type": "int"},
-    {"name": "numberOfStoresResponded", "type": "int"}
+    {"name": "numberOfStoresResponded", "type": "int"},
+    {"name": "unreachableStores", "type": {"type": "array", "items": "string"}}
   ]
 }

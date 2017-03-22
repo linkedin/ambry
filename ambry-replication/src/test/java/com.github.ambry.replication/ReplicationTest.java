@@ -49,7 +49,6 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
-import com.github.ambry.store.StatsDirectory;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;

@@ -147,8 +147,10 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
-      statsManager = new StatsManager(storageManager, statsConfig);
-      statsManager.start();
+      if (statsConfig.publishEnabled) {
+        statsManager = new StatsManager(storageManager, statsConfig);
+        statsManager.start();
+      }
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
