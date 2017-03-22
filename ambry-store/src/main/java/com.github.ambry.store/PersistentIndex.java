@@ -921,7 +921,7 @@ class PersistentIndex {
     LogSegment logSegment = log.getFirstSegment();
     Offset firstOffsetInJournal = journal.getFirstOffset();
     List<String> logSegmentNamesToReturn = new ArrayList<>();
-    while (logSegment != null) {
+    while (firstOffsetInJournal != null && logSegment != null) {
       if (!logSegment.getName().equals(firstOffsetInJournal.getName())) {
         logSegmentNamesToReturn.add(logSegment.getName());
       } else {

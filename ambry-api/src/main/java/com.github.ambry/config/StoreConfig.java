@@ -97,6 +97,20 @@ public class StoreConfig {
   public final long storeSegmentSizeInBytes;
 
   /**
+   * Whether compaction is to be enabled or not
+   */
+  @Config("store.enable.compaction")
+  @Default("false")
+  public final boolean storeEnableCompaction;
+
+  /**
+   * The frequency (in hours) at which a store is checked to see whether it is ready for compaction.
+   */
+  @Config("store.compaction.check.frequency.in.hours")
+  @Default("7*24")
+  public final int storeCompactionCheckFrequencyInHours;
+
+  /**
    * The minimum capacity that has to be used (as a percentage of the total capacity) for the store to trigger
    * compaction
    */
@@ -122,6 +136,9 @@ public class StoreConfig {
         verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
     storeMinUsedCapacityToTriggerCompactionInPercentage =
         verifiableProperties.getInt("store.min.used.capacity.to.trigger.compaction.in.percentage", 50);
+    storeEnableCompaction = verifiableProperties.getBoolean("store.enable.compaction", false);
+    storeCompactionCheckFrequencyInHours =
+        verifiableProperties.getIntInRange("store.compaction.check.frequency.in.hours", 7 * 24, 1, Integer.MAX_VALUE);
   }
 }
 

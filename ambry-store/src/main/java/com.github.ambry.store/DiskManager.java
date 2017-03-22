@@ -40,6 +40,7 @@ class DiskManager {
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final DiskIOScheduler diskIOScheduler;
+  private final CompactionManager compactionManager;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -69,6 +70,7 @@ class DiskManager {
         stores.put(replica.getPartitionId(), store);
       }
     }
+    compactionManager = new CompactionManager(disk.getMountPath(), config, stores.values(), time);
   }
 
   /**
@@ -104,6 +106,7 @@ class DiskManager {
           logger.error(
               "Could not start " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
         }
+        compactionManager.enable();
       } else {
         metrics.diskMountPathFailures.inc();
         metrics.totalStoreStartFailures.inc(stores.size());
@@ -118,6 +121,7 @@ class DiskManager {
    * Shuts down all the stores this disk.
    */
   void shutdown() {
+    compactionManager.disable();
     for (Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
       try {
         partitionAndStore.getValue().shutdown();
@@ -126,6 +130,7 @@ class DiskManager {
             "Exception while shutting down store for partition " + partitionAndStore.getKey() + " on disk " + disk);
       }
     }
+    compactionManager.awaitTermination();
     diskIOScheduler.close();
   }
 
