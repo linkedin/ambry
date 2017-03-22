@@ -110,6 +110,13 @@ public class StoreConfig {
   @Default("7*24")
   public final int storeCompactionCheckFrequencyInHours;
 
+  /*
+   * The rate of I/O allowed for compaction.
+   */
+  @Config("store.compaction.bytes.per.sec")
+  @Default("1*1024*1024")
+  public final int storeCompactionBytesPerSec;
+
   /**
    * The minimum capacity that has to be used (as a percentage of the total capacity) for the store to trigger
    * compaction
@@ -134,6 +141,8 @@ public class StoreConfig {
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =
         verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
+    storeCompactionBytesPerSec =
+        verifiableProperties.getIntInRange("store.compaction.bytes.per.sec", 1 * 1024 * 1024, 1, Integer.MAX_VALUE);
     storeMinUsedCapacityToTriggerCompactionInPercentage =
         verifiableProperties.getInt("store.min.used.capacity.to.trigger.compaction.in.percentage", 50);
     storeEnableCompaction = verifiableProperties.getBoolean("store.enable.compaction", false);

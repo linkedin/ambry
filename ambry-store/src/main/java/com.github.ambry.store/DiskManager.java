@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -61,7 +62,7 @@ class DiskManager {
       MessageStoreHardDelete hardDelete, Time time) {
     this.disk = disk;
     this.metrics = metrics;
-    diskIOScheduler = new DiskIOScheduler(null);
+    diskIOScheduler = new DiskIOScheduler(getThrottlers(config, time));
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
@@ -149,5 +150,19 @@ class DiskManager {
    */
   DiskId getDisk() {
     return disk;
+  }
+
+  /**
+   * Gets all the throttlers that the {@link DiskIOScheduler} will be constructed with.
+   * @param config the {@link StoreConfig} with configuration values.
+   * @param time the {@link Time} instance to use in the throttlers
+   * @return the throttlers that the {@link DiskIOScheduler} will be constructed with.
+   */
+  private Map<String, Throttler> getThrottlers(StoreConfig config, Time time) {
+    Map<String, Throttler> throttlers = new HashMap<>();
+    // compaction
+    Throttler compactionCopyThrottler = new Throttler(config.storeCompactionBytesPerSec, 1000, true, time);
+    throttlers.put(BlobStoreCompactor.LOG_SEGMENT_COPY_JOB_NAME, compactionCopyThrottler);
+    return throttlers;
   }
 }
