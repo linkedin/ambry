@@ -187,14 +187,15 @@ class BlobStoreCompactor {
    * @param details the {@link CompactionDetails} for the compaction.
    * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
    * in the segments to compact are in the journal.
-   * @throws IllegalStateException if the compactor has not been started.
-   * @throws InterruptedException if the compaction was interrupted
-   * @throws IOException if there were I/O errors during copying, commit or cleanup.
+   * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
+   * in the segments to compact are in the journal.
+   * @throws IllegalStateException if the compactor has not been initialized.
+   * @throws IOException if there were I/O errors creating the {@link CompactionLog}
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
-  void compact(CompactionDetails details) throws InterruptedException, IOException, StoreException {
+  void compact(CompactionDetails details) throws IOException, StoreException {
     if (srcIndex == null) {
-      throw new IllegalStateException("Compactor has not been started");
+      throw new IllegalStateException("Compactor has not been initialized");
     }
     checkSanity(details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details);
@@ -203,14 +204,12 @@ class BlobStoreCompactor {
 
   /**
    * Resumes compaction from where it was left off.
-   * @throws IllegalStateException if the compactor has not been started or if there is no compaction to resume.
-   * @throws InterruptedException if the compaction was interrupted
-   * @throws IOException if there were I/O errors during copying, commit or cleanup.
+   * @throws IllegalStateException if the compactor has not been initialized or if there is no compaction to resume.
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
-  void resumeCompaction() throws InterruptedException, IOException, StoreException {
+  void resumeCompaction() throws StoreException {
     if (srcIndex == null) {
-      throw new IllegalStateException("Compactor has not been started");
+      throw new IllegalStateException("Compactor has not been initialized");
     } else if (compactionLog == null) {
       throw new IllegalStateException("There is no compaction to resume");
     }
@@ -227,29 +226,34 @@ class BlobStoreCompactor {
     4. CLEANUP - Cleans up the old log segments and their index files
      */
 
-    while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
-      CompactionLog.Phase phase = compactionLog.getCompactionPhase();
-      switch (phase) {
-        case PREPARE:
-          compactionLog.markCopyStart();
-          // fall through to COPY
-        case COPY:
-          copy();
-          if (isActive) {
-            compactionLog.markCommitStart();
-            commit(false);
-            compactionLog.markCleanupStart();
-            waitTillRefCountZero();
-            cleanup(false);
-            compactionLog.markCycleComplete();
-          }
-          break;
-        default:
-          throw new IllegalStateException("Illegal compaction phase: " + phase);
+    try {
+      while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
+        CompactionLog.Phase phase = compactionLog.getCompactionPhase();
+        switch (phase) {
+          case PREPARE:
+            compactionLog.markCopyStart();
+            // fall through to COPY
+          case COPY:
+            copy();
+            if (isActive) {
+              compactionLog.markCommitStart();
+              commit(false);
+              compactionLog.markCleanupStart();
+              waitTillRefCountZero();
+              cleanup(false);
+              compactionLog.markCycleComplete();
+            }
+            break;
+          default:
+            throw new IllegalStateException("Illegal compaction phase: " + phase);
+        }
       }
+      endCompaction();
+    } catch (InterruptedException | IOException e) {
+      throw new StoreException("Exception during compaction", e, StoreErrorCodes.Unknown_Error);
+    } finally {
+      runningLatch.countDown();
     }
-    endCompaction();
-    runningLatch.countDown();
   }
 
   /**
