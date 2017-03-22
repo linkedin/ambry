@@ -15,7 +15,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.config.StatsConfig;
+import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -27,6 +27,7 @@ import java.io.OutputStream;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.EncoderFactory;
@@ -42,33 +43,40 @@ public class StatsManager {
   private final StorageManager storageManager;
   private final File statsOutputFile;
   private final ScheduledExecutorService scheduler;
-  private final long publishPeriodInMs;
+  private final long publishPeriodInSecs;
+  private ScheduledFuture<?> statsAggregator = null;
 
   /**
    * Constructs a {@link StatsManager}.
    * @param storageManager the {@link StorageManager} to be used to fetch the {@link Store}s.
-   * @param config the {@link StatsConfig} to be used to configure the output file path and publish period.
+   * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period.
    * @throws IOException
    */
-  public StatsManager(StorageManager storageManager, StatsConfig config) throws IOException {
+  public StatsManager(StorageManager storageManager, StatsManagerConfig config) throws IOException {
     this.storageManager = storageManager;
     statsOutputFile = new File(config.outputFilePath);
-    this.publishPeriodInMs = config.publishPeriodInMs;
-    scheduler = Utils.newScheduler(1, false);
+    this.publishPeriodInSecs = config.publishPeriodInSecs;
+    this.scheduler = Utils.newScheduler(1, false);
   }
 
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
   public void start() {
-    scheduler.scheduleAtFixedRate(new StatsAggregator(), 0, publishPeriodInMs, TimeUnit.MILLISECONDS);
+    statsAggregator = scheduler.scheduleAtFixedRate(new StatsAggregator(), 0, publishPeriodInSecs, TimeUnit.SECONDS);
   }
 
   /**
    * Stops the periodic task that is collecting, aggregating and publishing stats.
    */
-  public void shutdown() {
+  public void shutdown() throws InterruptedException {
+    if (statsAggregator != null) {
+      statsAggregator.cancel(true);
+    }
     scheduler.shutdown();
+    if (!scheduler.awaitTermination(30, TimeUnit.SECONDS)) {
+      logger.error("Could not terminate aggregator tasks after StatsManager shutdown");
+    }
   }
 
   /**
@@ -96,18 +104,18 @@ public class StatsManager {
    * Collect and aggregate quota stats from all {@link Store}s in the node by fetching stats from them sequentially
    * via the {@link StorageManager}.
    * @param partitionIds a {@link Set} of {@link PartitionId}s representing a set of {@link Store}s to be fetched
-   * @return a {@link Pair} where the first element is the result in the form of a {@link StatsDirectory} and the
+   * @return a {@link Pair} where the first element is the result in the form of a {@link StatsSnapshot} and the
    * second element is the number of {@link Store}s that were skipped (either unreachable or an error has occurred).
    */
-  Pair<StatsDirectory, Integer> collectAndAggregate(Set<PartitionId> partitionIds) {
-    StatsDirectory aggregatedStatsDirectory = new StatsDirectory(0L, null);
+  Pair<StatsSnapshot, Integer> collectAndAggregate(Set<PartitionId> partitionIds) {
+    StatsSnapshot aggregatedStatsSnapshot = new StatsSnapshot(0L, null);
     int storeSkipped = 0;
     for (PartitionId partitionId : partitionIds) {
       Store store = storageManager.getStore(partitionId);
       if (store != null) {
         try {
-          StatsDirectory statsDirectory = store.getStoreStats();
-          aggregate(aggregatedStatsDirectory, statsDirectory);
+          StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot();
+          aggregate(aggregatedStatsSnapshot, statsSnapshot);
         } catch (StoreException e) {
           logger.error("Store exception thrown when getting stats for partitionId: " + partitionId.toString(), e);
           storeSkipped++;
@@ -116,24 +124,24 @@ public class StatsManager {
         storeSkipped++;
       }
     }
-    return new Pair<>(aggregatedStatsDirectory, storeSkipped);
+    return new Pair<>(aggregatedStatsSnapshot, storeSkipped);
   }
 
   /**
-   * Performs recursive aggregation of two {@link StatsDirectory} and stores the result in the first one.
-   * @param baseDirectory one of the addends and where the result will be
-   * @param newDirectory the other addend to be added into the first {@link StatsDirectory}
+   * Performs recursive aggregation of two {@link StatsSnapshot} and stores the result in the first one.
+   * @param baseSnapshot one of the addends and where the result will be
+   * @param newSnapshot the other addend to be added into the first {@link StatsSnapshot}
    */
-  private void aggregate(StatsDirectory baseDirectory, StatsDirectory newDirectory) {
-    baseDirectory.setValue(baseDirectory.getValue() + newDirectory.getValue());
-    if (baseDirectory.getSubDirectory() == null) {
-      baseDirectory.setSubDirectory(newDirectory.getSubDirectory());
-    } else if (newDirectory.getSubDirectory() != null) {
-      for (Map.Entry<String, StatsDirectory> entry : newDirectory.getSubDirectory().entrySet()) {
-        if (!baseDirectory.getSubDirectory().containsKey(entry.getKey())) {
-          baseDirectory.getSubDirectory().put(entry.getKey(), new StatsDirectory(0L, null));
+  private void aggregate(StatsSnapshot baseSnapshot, StatsSnapshot newSnapshot) {
+    baseSnapshot.setValue(baseSnapshot.getValue() + newSnapshot.getValue());
+    if (baseSnapshot.getSubtree() == null) {
+      baseSnapshot.setSubtree(newSnapshot.getSubtree());
+    } else if (newSnapshot.getSubtree() != null) {
+      for (Map.Entry<String, StatsSnapshot> entry : newSnapshot.getSubtree().entrySet()) {
+        if (!baseSnapshot.getSubtree().containsKey(entry.getKey())) {
+          baseSnapshot.getSubtree().put(entry.getKey(), new StatsSnapshot(0L, null));
         }
-        aggregate(baseDirectory.getSubDirectory().get(entry.getKey()), entry.getValue());
+        aggregate(baseSnapshot.getSubtree().get(entry.getKey()), entry.getValue());
       }
     }
   }
@@ -146,12 +154,13 @@ public class StatsManager {
     @Override
     public void run() {
       Set<PartitionId> partitionIds = storageManager.getPartitionIds();
-      Pair<StatsDirectory, Integer> result = collectAndAggregate(partitionIds);
+      Pair<StatsSnapshot, Integer> result = collectAndAggregate(partitionIds);
       StatsHeader statsHeader =
           new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), partitionIds.size(),
               partitionIds.size() - result.getSecond());
       try {
         publish(new StatsWrapper(statsHeader, result.getFirst()));
+        logger.info("Stats snapshot published to " + statsOutputFile.getAbsolutePath());
       } catch (IOException e) {
         logger.error("IOException when trying to publish stats to file", e);
       }

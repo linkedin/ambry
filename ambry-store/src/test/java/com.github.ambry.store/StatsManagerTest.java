@@ -18,7 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.Partition;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
-import com.github.ambry.config.StatsConfig;
+import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Pair;
@@ -51,23 +51,24 @@ public class StatsManagerTest {
     long[][] testData1 = new long[][]{{100, 200, 300}, {100}, {200, 300}};
     long[][] testData2 = new long[][]{{10}, {50}};
     long[][] testData3 = new long[][]{{1000}, {200}, {300}, {10, 20, 30, 40, 50}};
-    List<StatsDirectory> statsDirectories = new ArrayList<>();
-    statsDirectories.add(generateStatsDirectory(testData1));
-    statsDirectories.add(generateStatsDirectory(testData2));
-    statsDirectories.add(generateStatsDirectory(testData3));
+    List<StatsSnapshot> statsSnapshots = new ArrayList<>();
+    statsSnapshots.add(generateStatsSnapshot(testData1));
+    statsSnapshots.add(generateStatsSnapshot(testData2));
+    statsSnapshots.add(generateStatsSnapshot(testData3));
     storeMap = new HashMap<>();
     MetricRegistry registry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(registry);
     for (int i = 0; i < 3; i++) {
       PartitionId id = new Partition(i, PartitionState.READ_WRITE, 1024 * 1024 * 1024);
-      Store store = new MockBlobStore(UtilsTest.getRandomString(10), metrics, statsDirectories.get(i));
+      Store store =
+          new MockBlobStore(UtilsTest.getRandomString(10), metrics, new MockBlobStoreStats(statsSnapshots.get(i)));
       storeMap.put(id, store);
     }
     storeMap.put(new Partition(1000, PartitionState.READ_WRITE, 1024 * 1024 * 1024), null);
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
-    StatsConfig config = new StatsConfig(new VerifiableProperties(properties));
+    StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(properties));
     statsManager = new StatsManager(storageManager, config);
   }
 
@@ -91,10 +92,10 @@ public class StatsManagerTest {
   @Test
   public void testStatsManagerCollectAggregateAndPublish() throws StoreException, IOException, InterruptedException {
     long[][] aggregatedTestData = new long[][]{{1110, 200, 300}, {350}, {500, 300}, {10, 20, 30, 40, 50}};
-    StatsDirectory aggregatedDirectory = generateStatsDirectory(aggregatedTestData);
-    Pair<StatsDirectory, Integer> result = statsManager.collectAndAggregate(storeMap.keySet());
-    assertTrue("Aggregated StatsDirectory does not match with expected value",
-        aggregatedDirectory.equals(result.getFirst()));
+    StatsSnapshot aggregatedSnapshot = generateStatsSnapshot(aggregatedTestData);
+    Pair<StatsSnapshot, Integer> result = statsManager.collectAndAggregate(storeMap.keySet());
+    assertTrue("Aggregated StatsSnapshot does not match with expected value",
+        aggregatedSnapshot.equals(result.getFirst()));
     assertEquals("Skipped store count mismatch with expected value", 1, result.getSecond().intValue());
     StatsHeader statsHeader =
         new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), storeMap.keySet().size(),
@@ -121,25 +122,24 @@ public class StatsManagerTest {
   }
 
   /**
-   * Helper method to convert predefined quota stats represented in two dimensional array into a {@link StatsDirectory}.
+   * Helper method to convert predefined quota stats represented in two dimensional array into a {@link StatsSnapshot}.
    * @param rawData the two dimensional array to be converted
-   * @return the result of the conversion in a {@link StatsDirectory}
+   * @return the result of the conversion in a {@link StatsSnapshot}
    */
-  private StatsDirectory generateStatsDirectory(long[][] rawData) {
-    Map<String, StatsDirectory> firstDirectoryMap = new HashMap<>();
+  private StatsSnapshot generateStatsSnapshot(long[][] rawData) {
+    Map<String, StatsSnapshot> firstSubTreeMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < rawData.length; i++) {
-      Map<String, StatsDirectory> secondDirectoryMap = new HashMap<>();
+      Map<String, StatsSnapshot> secondSubTreeMap = new HashMap<>();
       long subTotalSize = 0;
       for (int j = 0; j < rawData[i].length; j++) {
         subTotalSize += rawData[i][j];
-        secondDirectoryMap.put("innerKey_".concat(String.valueOf(j)), new StatsDirectory(rawData[i][j], null));
+        secondSubTreeMap.put("innerKey_".concat(String.valueOf(j)), new StatsSnapshot(rawData[i][j], null));
       }
       totalSize += subTotalSize;
-      firstDirectoryMap.put("outerKey_".concat(String.valueOf(i)),
-          new StatsDirectory(subTotalSize, secondDirectoryMap));
+      firstSubTreeMap.put("outerKey_".concat(String.valueOf(i)), new StatsSnapshot(subTotalSize, secondSubTreeMap));
     }
-    return new StatsDirectory(totalSize, firstDirectoryMap);
+    return new StatsSnapshot(totalSize, firstSubTreeMap);
   }
 
   /**
@@ -147,7 +147,6 @@ public class StatsManagerTest {
    * predefined values.
    */
   private class MockStorageManager extends StorageManager {
-
     private final Map<PartitionId, Store> storeMap;
 
     public MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
@@ -169,19 +168,36 @@ public class StatsManagerTest {
   }
 
   /**
-   * Mocked {@link BlobStore} that is intended to have only the getQuotaStats to be called and return predefined values.
+   * Mocked {@link BlobStore} that is intended to return a predefined {@link StoreStats} when getStoreStats is called.
    */
   private class MockBlobStore extends BlobStore {
-    private final StatsDirectory statsDirectory;
+    private final StoreStats storeStats;
 
-    MockBlobStore(String storeId, StorageManagerMetrics storageManagerMetrics, StatsDirectory statsDirectory) {
+    MockBlobStore(String storeId, StorageManagerMetrics storageManagerMetrics, StoreStats storeStats) {
       super(storeId, null, null, null, storageManagerMetrics, null, 1024, null, null, null, null);
-      this.statsDirectory = statsDirectory;
+      this.storeStats = storeStats;
     }
 
     @Override
-    public StatsDirectory getStoreStats() throws StoreException {
-      return statsDirectory;
+    public StoreStats getStoreStats() {
+      return storeStats;
+    }
+  }
+
+  /**
+   * Mocked {@link BlobStoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
+   */
+  private class MockBlobStoreStats extends BlobStoreStats {
+    private final StatsSnapshot statsSnapshot;
+
+    MockBlobStoreStats(StatsSnapshot statsSnapshot) {
+      super(null, null, null);
+      this.statsSnapshot = statsSnapshot;
+    }
+
+    @Override
+    public StatsSnapshot getStatsSnapshot() {
+      return statsSnapshot;
     }
   }
 }

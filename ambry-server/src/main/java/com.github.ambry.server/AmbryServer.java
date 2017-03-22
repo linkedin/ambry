@@ -24,7 +24,7 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
-import com.github.ambry.config.StatsConfig;
+import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
@@ -106,7 +106,7 @@ public class AmbryServer {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
-      StatsConfig statsConfig = new StatsConfig(properties);
+      StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -172,6 +172,9 @@ public class AmbryServer {
           logger.error("Could not terminate all tasks after scheduler shutdown");
         }
       }
+      if (statsManager != null) {
+        statsManager.shutdown();
+      }
       if (networkServer != null) {
         networkServer.shutdown();
       }
@@ -196,9 +199,6 @@ public class AmbryServer {
         } catch (IOException e) {
           logger.error("Error while closing notification system.", e);
         }
-      }
-      if (statsManager != null) {
-        statsManager.shutdown();
       }
       logger.info("shutdown completed");
     } catch (Exception e) {

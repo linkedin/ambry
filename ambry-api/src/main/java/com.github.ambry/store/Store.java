@@ -71,11 +71,11 @@ public interface Store {
   Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
 
   /**
-   * Get stats related information about the store as a {@link StatsDirectory}.
-   * @return a {@link StatsDirectory} containing stats related information
+   * Get the corresponding {@link StoreStats} instance for this store.
+   * @return a {@link StoreStats} with stats related information
    * @throws StoreException
    */
-  StatsDirectory getStoreStats() throws StoreException;
+  StoreStats getStoreStats();
 
   /**
    * Checks if the key is deleted. Returns true is the key is deleted. Returns false if the

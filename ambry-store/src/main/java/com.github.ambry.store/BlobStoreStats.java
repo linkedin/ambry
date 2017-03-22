@@ -46,24 +46,24 @@ class BlobStoreStats implements StoreStats {
 
   /**
    * Convert a given nested {@link Map} that stores quota related stats to its corresponding
-   * {@link StatsDirectory} object.
+   * {@link StatsSnapshot} object.
    * @param quotaMap the nested {@link Map} to be converted
-   * @return the corresponding {@link StatsDirectory} object.
+   * @return the corresponding {@link StatsSnapshot} object.
    */
-  static StatsDirectory convertQuotaMapToStatsDirectory(Map<String, Map<String, Long>> quotaMap) {
-    Map<String, StatsDirectory> firstDirectoryMap = new HashMap<>();
+  static StatsSnapshot convertQuotaMapToStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
+    Map<String, StatsSnapshot> firstSubTreeMap = new HashMap<>();
     long totalSize = 0;
     for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
       long subTotalSize = 0;
-      Map<String, StatsDirectory> secondDirectoryMap = new HashMap<>();
+      Map<String, StatsSnapshot> secondSubTreeMap = new HashMap<>();
       for (Map.Entry<String, Long> innerEntry : entry.getValue().entrySet()) {
         subTotalSize += innerEntry.getValue();
-        secondDirectoryMap.put(innerEntry.getKey(), new StatsDirectory(innerEntry.getValue(), null));
+        secondSubTreeMap.put(innerEntry.getKey(), new StatsSnapshot(innerEntry.getValue(), null));
       }
       totalSize += subTotalSize;
-      firstDirectoryMap.put(entry.getKey(), new StatsDirectory(subTotalSize, secondDirectoryMap));
+      firstSubTreeMap.put(entry.getKey(), new StatsSnapshot(subTotalSize, secondSubTreeMap));
     }
-    return new StatsDirectory(totalSize, firstDirectoryMap);
+    return new StatsSnapshot(totalSize, firstSubTreeMap);
   }
 
   BlobStoreStats(PersistentIndex index, Time time, DiskIOScheduler diskIOScheduler) {
@@ -80,6 +80,15 @@ class BlobStoreStats implements StoreStats {
       totalValidSize += value;
     }
     return new Pair<>(logSegmentValidSizeResult.getFirst(), totalValidSize);
+  }
+
+  /**
+   * {@inheritDoc}
+   * The implementation in {@link BlobStoreStats} returns quota related stats.
+   */
+  @Override
+  public StatsSnapshot getStatsSnapshot() throws StoreException {
+    return BlobStoreStats.convertQuotaMapToStatsSnapshot(getValidDataSizeByContainer());
   }
 
   /**

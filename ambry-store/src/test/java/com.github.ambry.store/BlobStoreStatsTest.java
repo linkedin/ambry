@@ -240,33 +240,52 @@ public class BlobStoreStatsTest {
   }
 
   /**
-   * Tests the static method that converts the quota stats stored in a nested Map to an avro generated
-   * {@link StatsDirectory} object.
+   * Test the static method that converts the quota stats stored in a nested Map to an avro generated
+   * {@link StatsSnapshot} object.
    */
   @Test
-  public void testConvertQuotaMapToStatsDirectory() {
+  public void testConvertQuotaMapToStatsSnapshot() {
     Random random = new Random();
     Map<String, Map<String, Long>> quotaMap = new HashMap<>();
-    Map<String, StatsDirectory> firstDirectoryMap = new HashMap<>();
+    Map<String, StatsSnapshot> firstSubTreeMap = new HashMap<>();
     long total = 0;
     for (int i = 0; i < 10; i++) {
-      Map<String, StatsDirectory> secondDirectoryMap = new HashMap<>();
+      Map<String, StatsSnapshot> secondSubTreeMap = new HashMap<>();
       Map<String, Long> innerQuotaMap = new HashMap<>();
       long subTotal = 0;
       for (int j = 0; j < 3; j++) {
         long randValue = random.nextInt(10000);
         subTotal += randValue;
         innerQuotaMap.put(String.valueOf(j), randValue);
-        secondDirectoryMap.put(String.valueOf(j), new StatsDirectory(randValue, null));
+        secondSubTreeMap.put(String.valueOf(j), new StatsSnapshot(randValue, null));
       }
       total += subTotal;
       quotaMap.put(String.valueOf(i), innerQuotaMap);
-      firstDirectoryMap.put(String.valueOf(i), new StatsDirectory(subTotal, secondDirectoryMap));
+      firstSubTreeMap.put(String.valueOf(i), new StatsSnapshot(subTotal, secondSubTreeMap));
     }
-    StatsDirectory statsDirectory = new StatsDirectory(total, firstDirectoryMap);
-    StatsDirectory convertedStatsDirectory = BlobStoreStats.convertQuotaMapToStatsDirectory(quotaMap);
-    assertTrue("Mismatch between the converted StatsDirectory and expected StatsDirectory",
-        statsDirectory.equals(convertedStatsDirectory));
+    StatsSnapshot statsSnapshot = new StatsSnapshot(total, firstSubTreeMap);
+    StatsSnapshot convertedStatsSnapshot = BlobStoreStats.convertQuotaMapToStatsSnapshot(quotaMap);
+    assertTrue("Mismatch between the converted StatsSnapshot and expected StatsSnapshot",
+        statsSnapshot.equals(convertedStatsSnapshot));
+  }
+
+  /**
+   * Test the getStatsSnapshot method by verifying the returned {@link StatsSnapshot} against the original {@link Map}.
+   */
+  @Test
+  public void testGetStatsSnapshot() throws StoreException {
+    Map<String, Map<String, Long>> quotaMap = blobStoreStats.getValidDataSizeByContainer();
+    StatsSnapshot statsSnapshot = blobStoreStats.getStatsSnapshot();
+    Map<String, StatsSnapshot> statsSnapshotMap = statsSnapshot.getSubtree();
+    assertEquals("Mismatch on number of accounts", quotaMap.size(), statsSnapshotMap.size());
+    for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
+      Map<String, StatsSnapshot> innerStatsSnapshotMap = statsSnapshotMap.get(entry.getKey()).getSubtree();
+      Map<String, Long> innerQuotaMap = entry.getValue();
+      assertEquals("Mismatch on number of containers", innerQuotaMap.size(), innerStatsSnapshotMap.size());
+      for (Map.Entry<String, Long> innerEntry : innerQuotaMap.entrySet()) {
+        assertEquals("Mismatch on leaf node value", innerEntry.getValue(), innerStatsSnapshotMap.get(innerEntry.getKey()).getValue());
+      }
+    }
   }
 
   /**

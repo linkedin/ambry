@@ -17,18 +17,18 @@ package com.github.ambry.config;
 /**
  * The configs for stats.
  */
-public class StatsConfig {
+public class StatsManagerConfig {
 
   @Config("stats.output.file.path")
   @Default("/tmp/stats_output.json")
   public final String outputFilePath;
 
-  @Config("stats.publish.period.inMs")
-  @Default("3600000")
-  public final long publishPeriodInMs;
+  @Config("stats.publish.period.in.secs")
+  @Default("3600")
+  public final long publishPeriodInSecs;
 
-  public StatsConfig(VerifiableProperties verifiableProperties) {
+  public StatsManagerConfig(VerifiableProperties verifiableProperties) {
     outputFilePath = verifiableProperties.getString("stats.output.file.path", "/tmp/stats_output.json");
-    publishPeriodInMs = verifiableProperties.getLong("stats.publish.period.inMs", 3600000);
+    publishPeriodInSecs = verifiableProperties.getLong("stats.publish.period.in.secs", 3600);
   }
 }

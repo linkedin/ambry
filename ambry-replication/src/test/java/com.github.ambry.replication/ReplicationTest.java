@@ -56,6 +56,7 @@ import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreStats;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -283,7 +284,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public StatsDirectory getStoreStats() throws StoreException {
+    public StoreStats getStoreStats() {
       return null;
     }
 

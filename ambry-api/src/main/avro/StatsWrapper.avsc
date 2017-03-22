@@ -4,6 +4,6 @@
   "name": "StatsWrapper",
   "fields": [
     {"name": "header", "type": "StatsHeader"},
-    {"name": "directory", "type": "StatsDirectory"}
+    {"name": "snapshot", "type": "StatsSnapshot"}
   ]
 }

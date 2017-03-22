@@ -36,4 +36,11 @@ public interface StoreStats {
    * element is the valid data size
    */
   Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException;
+
+  /**
+   * Get stats related information of the store as a {@link StatsSnapshot}.
+   * @return a {@link StatsSnapshot} containing stats related information
+   * @throws StoreException
+   */
+  StatsSnapshot getStatsSnapshot() throws StoreException;
 }

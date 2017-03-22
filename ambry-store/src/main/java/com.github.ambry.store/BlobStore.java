@@ -342,8 +342,8 @@ class BlobStore implements Store {
   }
 
   @Override
-  public StatsDirectory getStoreStats() throws StoreException {
-    return BlobStoreStats.convertQuotaMapToStatsDirectory(blobStoreStats.getValidDataSizeByContainer());
+  public StoreStats getStoreStats() {
+    return blobStoreStats;
   }
 
   @Override
