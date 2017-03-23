@@ -22,13 +22,15 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.notification.BlobType;
+import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -249,11 +251,13 @@ class PutManager {
       routerMetrics.onPutBlobError(e);
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite(), op.getServiceId());
     } else {
-      BlobType blobType = op.getNumDataChunks() == 1 ? BlobType.Simple : BlobType.Composite;
-      notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata(), blobType);
-      for (StoreKey storeKey : op.getSuccessfullyPutChunkIdsIfComposite()) {
-        notificationSystem.onBlobCreated(storeKey.getID(), op.getBlobProperties(), op.getUserMetadata(),
-            BlobType.DataChunk);
+      NotificationBlobType notificationBlobType =
+          op.getNumDataChunks() == 1 ? NotificationBlobType.Simple : NotificationBlobType.Composite;
+      notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata(),
+          notificationBlobType);
+      for (Pair<StoreKey, BlobProperties> chunkIdAndProperties : op.getSuccessfullyPutChunkIdsAndPropertiesIfComposite()) {
+        notificationSystem.onBlobCreated(chunkIdAndProperties.getFirst().getID(), chunkIdAndProperties.getSecond(),
+            op.getUserMetadata(), NotificationBlobType.DataChunk);
       }
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }

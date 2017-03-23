@@ -25,6 +25,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MetadataContentSerDe;
+import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -61,6 +62,7 @@ public class PutManagerTest {
   private final MockClusterMap mockClusterMap;
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
+  private TestNotificationSystem notificationSystem;
   private NonBlockingRouter router;
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
@@ -85,6 +87,7 @@ public class PutManagerTest {
     mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
+    notificationSystem = new TestNotificationSystem();
     instantiateNewRouterForPuts = true;
   }
 
@@ -544,8 +547,7 @@ public class PutManagerTest {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-        mockTime);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, mockTime);
     return router;
   }
 
@@ -594,6 +596,7 @@ public class PutManagerTest {
    * @return a {@link CountDownLatch} to await on for operation completion.
    */
   private CountDownLatch submitPut() throws Exception {
+    notificationSystem.blobCreatedEvents.clear();
     final CountDownLatch doneLatch = new CountDownLatch(requestAndResultsList.size());
     // This check is here for certain tests (like testConcurrentPuts) that require using the same router.
     if (instantiateNewRouterForPuts) {
@@ -661,7 +664,9 @@ public class PutManagerTest {
       throws Exception {
     ByteBuffer serializedRequest = serializedRequests.get(blobId);
     PutRequest.ReceivedPutRequest request = deserializePutRequest(serializedRequest);
+    NotificationBlobType notificationBlobType;
     if (request.getBlobType() == BlobType.MetadataBlob) {
+      notificationBlobType = NotificationBlobType.Composite;
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
           new BlobIdFactory(mockClusterMap));
@@ -675,12 +680,17 @@ public class PutManagerTest {
         Utils.readBytesFromStream(dataBlobPutRequest.getBlobStream(), content, offset,
             (int) dataBlobPutRequest.getBlobSize());
         offset += (int) dataBlobPutRequest.getBlobSize();
+        notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
+            dataBlobPutRequest.getBlobProperties(), dataBlobPutRequest.getUsermetadata().array());
       }
       Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
     } else {
+      notificationBlobType = NotificationBlobType.Simple;
       byte[] content = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
     }
+    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(),
+        request.getUsermetadata().array());
   }
 
   /**
@@ -775,6 +785,48 @@ public class PutManagerTest {
       putContent = new byte[blobSize];
       random.nextBytes(putContent);
       // future result set after the operation is complete.
+    }
+  }
+
+  /**
+   * A notification system for testing that keeps track of data from onBlobCreated calls.
+   */
+  private class TestNotificationSystem extends LoggingNotificationSystem {
+    Map<String, BlobCreatedEvent> blobCreatedEvents = new HashMap<>();
+
+    @Override
+    public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
+        NotificationBlobType notificationBlobType) {
+      blobCreatedEvents.put(blobId, new BlobCreatedEvent(blobProperties, userMetadata, notificationBlobType));
+    }
+
+    /**
+     * Test that an onBlobCreated notification was generated as expected for this blob ID.
+     * @param blobId The blob ID to look up a notification for.
+     * @param expectedNotificationBlobType the expected {@link NotificationBlobType}.
+     * @param expectedBlobProperties the expected {@link BlobProperties}.
+     * @param expectedUserMetadata the expected user metadata.
+     */
+    void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
+        BlobProperties expectedBlobProperties, byte[] expectedUserMetadata) {
+      BlobCreatedEvent event = blobCreatedEvents.get(blobId);
+      Assert.assertEquals("NotificationBlobType does not match data in notification event.",
+          expectedNotificationBlobType, event.notificationBlobType);
+      RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties);
+      Assert.assertArrayEquals("User metadata does not match data in notification event.", expectedUserMetadata,
+          event.userMetadata);
+    }
+  }
+
+  private static class BlobCreatedEvent {
+    BlobProperties blobProperties;
+    byte[] userMetadata;
+    NotificationBlobType notificationBlobType;
+
+    BlobCreatedEvent(BlobProperties blobProperties, byte[] userMetadata, NotificationBlobType notificationBlobType) {
+      this.blobProperties = blobProperties;
+      this.userMetadata = userMetadata;
+      this.notificationBlobType = notificationBlobType;
     }
   }
 }

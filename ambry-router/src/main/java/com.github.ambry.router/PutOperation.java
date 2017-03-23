@@ -31,6 +31,7 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -537,12 +538,22 @@ class PutOperation {
   String getServiceId() {
     return passedInBlobProperties.getServiceId();
   }
+
   /**
-   * if this is a composite object, fill the list with successfully put chunk ids.
+   * If this is a composite object, fill the list with successfully put chunk ids.
    * @return the list of successfully put chunk ids if this is a composite object, empty list otherwise.
    */
   List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
     return metadataPutChunk.getSuccessfullyPutChunkIdsIfComposite();
+  }
+
+  /**
+   * If this is a composite object, fill the list with successfully put chunk ids and their {@link BlobProperties}
+   * @return the list of pairs of successfully put chunk ids and chunk and their {@link BlobProperties} if this is a
+   *         composite object, empty list otherwise.
+   */
+  List<Pair<StoreKey, BlobProperties>> getSuccessfullyPutChunkIdsAndPropertiesIfComposite() {
+    return metadataPutChunk.getSuccessfullyPutChunkIdsAndPropertiesIfComposite();
   }
 
   /**
@@ -1138,6 +1149,28 @@ class PutOperation {
         }
       }
       return chunkIdList;
+    }
+
+    /**
+     * if this is a composite object, fill the list with successfully put chunk ids and their {@link BlobProperties}
+     * @return the list of pairs of successfully put chunk ids and chunk and their {@link BlobProperties} if this is a
+     *         composite object, empty list otherwise.
+     */
+    List<Pair<StoreKey, BlobProperties>> getSuccessfullyPutChunkIdsAndPropertiesIfComposite() {
+      List<Pair<StoreKey, BlobProperties>> chunkIdAndPropertiesList = new ArrayList<>();
+      if (indexToChunkIds.size() > 1) {
+        Iterator<StoreKey> storeKeyIterator = indexToChunkIds.values().iterator();
+        while (storeKeyIterator.hasNext()) {
+          StoreKey storeKey = storeKeyIterator.next();
+          long chunkSize = storeKeyIterator.hasNext() ? routerConfig.routerMaxPutChunkSizeBytes
+              : getBlobSize() % routerConfig.routerMaxPutChunkSizeBytes;
+          chunkIdAndPropertiesList.add(new Pair<>(storeKey,
+              new BlobProperties(chunkSize, passedInBlobProperties.getServiceId(), passedInBlobProperties.getOwnerId(),
+                  passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
+                  passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs())));
+        }
+      }
+      return chunkIdAndPropertiesList;
     }
 
     /**

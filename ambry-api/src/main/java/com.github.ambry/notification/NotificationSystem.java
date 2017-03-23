@@ -29,10 +29,10 @@ public interface NotificationSystem extends Closeable {
    * @param blobId The id of the blob that was created
    * @param blobProperties The blob properties for the blob
    * @param userMetadata The usermetadata for the blob
-   * @param blobType The {@link BlobType} of this blob.
+   * @param notificationBlobType The {@link NotificationBlobType} of this blob.
    */
   public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
-      BlobType blobType);
+      NotificationBlobType notificationBlobType);
 
   /**
    * Notifies the underlying system when an existing blob is deleted
