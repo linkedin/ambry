@@ -50,7 +50,7 @@ public class NettyConfig {
    */
   @Config("netty.server.enable.ssl")
   @Default("false")
-  public final boolean nettyServerSSLEnabled;
+  public final boolean nettyServerEnableSSL;
 
   /**
    * Socket backlog size. Defines the number of connections that can wait in queue to be accepted.
@@ -102,7 +102,7 @@ public class NettyConfig {
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
     nettyServerPort = verifiableProperties.getInt("netty.server.port", 1174);
     nettyServerSSLPort = verifiableProperties.getInt("netty.server.ssl.port", 1175);
-    nettyServerSSLEnabled = verifiableProperties.getBoolean("netty.server.enable.ssl", false);
+    nettyServerEnableSSL = verifiableProperties.getBoolean("netty.server.enable.ssl", false);
     nettyServerSoBacklog = verifiableProperties.getInt("netty.server.so.backlog", 100);
     nettyServerWorkerThreadCount = verifiableProperties.getInt("netty.server.worker.thread.count", 1);
     nettyServerMaxInitialLineLength = verifiableProperties.getInt("netty.server.max.initial.line.length", 4096);

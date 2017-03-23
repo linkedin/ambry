@@ -75,7 +75,7 @@ public class RestServerMain {
    */
   private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
       throws GeneralSecurityException, IOException {
-    boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerSSLEnabled
+    boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerEnableSSL
         || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
     return sslRequired ? new SSLFactory(new SSLConfig(verifiableProperties)) : null;
   }

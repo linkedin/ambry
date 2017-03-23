@@ -64,7 +64,7 @@ public class NettyServerFactoryTest {
     assertEquals("Did not receive a NettyServer instance", NettyServer.class.getCanonicalName(),
         nioServer.getClass().getCanonicalName());
     Map<Integer, ChannelInitializer<SocketChannel>> channelInitializers = nettyServerFactory.channelInitializers;
-    if (nettyConfig.nettyServerSSLEnabled && sslFactory != null) {
+    if (nettyConfig.nettyServerEnableSSL && sslFactory != null) {
       assertEquals("Expected two ChannelInitializers when SSLFactory is not null", 2, channelInitializers.size());
       assertNotNull("No ChannelInitializer for SSL port", channelInitializers.get(nettyConfig.nettyServerSSLPort));
     } else {

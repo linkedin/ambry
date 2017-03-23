@@ -62,7 +62,7 @@ public class RestRequestMetricsTracker {
    * These are usually updated in classes implemented by the {@link NioServer} framework (e.g. Implementations of
    * {@link RestRequest}, {@link RestResponseChannel} or any other classes that form a part of the framework).
    */
-  public class NioMetricsTracker {
+  public static class NioMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
 
@@ -111,7 +111,7 @@ public class RestRequestMetricsTracker {
    * Helper for updating scaling related metrics. These metrics are updated in the classes that provide scaling
    * capabilities when transferring control from {@link NioServer} to {@link BlobStorageService}.
    */
-  public class ScalingMetricsTracker {
+  public static class ScalingMetricsTracker {
     private final AtomicLong requestProcessingTimeInMs = new AtomicLong(0);
     private final AtomicLong requestProcessingWaitTimeInMs = new AtomicLong(0);
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);

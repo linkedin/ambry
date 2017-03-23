@@ -26,18 +26,25 @@ import com.github.ambry.rest.RestRequestMetrics;
  * Exports metrics that are triggered by the Ambry frontend to the provided {@link MetricRegistry}.
  */
 class FrontendMetrics {
+  private static final String SSL_SUFFIX = "Ssl";
 
   // RestRequestMetrics instances
   // DELETE
   public final RestRequestMetrics deleteBlobMetrics;
+  public final RestRequestMetrics deleteBlobSSLMetrics;
   // HEAD
   public final RestRequestMetrics headBlobMetrics;
+  public final RestRequestMetrics headBlobSSLMetrics;
   // GET
   public final RestRequestMetrics getBlobInfoMetrics;
+  public final RestRequestMetrics getBlobInfoSSLMetrics;
   public final RestRequestMetrics getBlobMetrics;
+  public final RestRequestMetrics getBlobSSLMetrics;
   public final RestRequestMetrics getUserMetadataMetrics;
+  public final RestRequestMetrics getUserMetadataSSLMetrics;
   // POST
   public final RestRequestMetrics postBlobMetrics;
+  public final RestRequestMetrics postBlobSSLMetrics;
 
   // Rates
   // AmbrySecurityService
@@ -124,14 +131,23 @@ class FrontendMetrics {
     // RestRequestMetrics instances
     // DELETE
     deleteBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "DeleteBlob", metricRegistry);
+    deleteBlobSSLMetrics =
+        new RestRequestMetrics(AmbryBlobStorageService.class, "DeleteBlob" + SSL_SUFFIX, metricRegistry);
     // HEAD
     headBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "HeadBlob", metricRegistry);
+    headBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "HeadBlob" + SSL_SUFFIX, metricRegistry);
     // GET
     getBlobInfoMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlobInfo", metricRegistry);
+    getBlobInfoSSLMetrics =
+        new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlobInfo" + SSL_SUFFIX, metricRegistry);
     getBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlob", metricRegistry);
+    getBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetBlob" + SSL_SUFFIX, metricRegistry);
     getUserMetadataMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetUserMetadata", metricRegistry);
+    getUserMetadataSSLMetrics =
+        new RestRequestMetrics(AmbryBlobStorageService.class, "GetUserMetadata" + SSL_SUFFIX, metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
+    postBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob" + SSL_SUFFIX, metricRegistry);
 
     // Rates
     // AmbrySecurityService

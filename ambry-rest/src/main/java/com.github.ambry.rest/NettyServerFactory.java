@@ -56,7 +56,7 @@ public class NettyServerFactory implements NioServerFactory {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of NettyServerFactory");
     }
     nettyConfig = new NettyConfig(verifiableProperties);
-    if (sslFactory == null && nettyConfig.nettyServerSSLEnabled) {
+    if (sslFactory == null && nettyConfig.nettyServerEnableSSL) {
       throw new IllegalArgumentException("NettyServer requires SSL, but sslFactory is null");
     }
     nettyMetrics = new NettyMetrics(metricRegistry);
@@ -66,7 +66,7 @@ public class NettyServerFactory implements NioServerFactory {
     initializers.put(nettyConfig.nettyServerPort,
         new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
             publicAccessLogger, restServerState, null));
-    if (nettyConfig.nettyServerSSLEnabled) {
+    if (nettyConfig.nettyServerEnableSSL) {
       initializers.put(nettyConfig.nettyServerSSLPort,
           new NettyServerChannelInitializer(nettyConfig, nettyMetrics, connectionStatsHandler, requestHandler,
               publicAccessLogger, restServerState, sslFactory));

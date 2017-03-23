@@ -22,6 +22,10 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.ssl.SslHandler;
+import java.security.cert.X509Certificate;
+import java.util.Collection;
+import javax.security.auth.x500.X500Principal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +42,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private long responseFirstChunkStartTimeInMs;
   private StringBuilder logMessage;
   private HttpRequest request;
+  private StringBuilder sslLogMessage;
 
   private static final long INIT_TIME = -1;
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -65,6 +70,8 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
       logMessage.append(ctx.channel().remoteAddress()).append(" ");
       logMessage.append(request.method().toString()).append(" ");
       logMessage.append(request.uri()).append(", ");
+      logSSLInfo(ctx);
+      logMessage.append(", ");
       logHeaders("Request", request, publicAccessLogger.getRequestHeaders());
       logMessage.append(", ");
     } else if (obj instanceof LastHttpContent) {
@@ -180,5 +187,32 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
     logDurations();
     logMessage.append(msg);
     publicAccessLogger.logError(logMessage.toString());
+  }
+
+  /**
+   * If this is an SSL channel, log information about the peer certificate.
+   * @param ctx the {@link ChannelHandlerContext} for this channel.
+   */
+  private void logSSLInfo(ChannelHandlerContext ctx) {
+    if (sslLogMessage == null) {
+      sslLogMessage = new StringBuilder();
+      sslLogMessage.append("SSL (");
+      try {
+        SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
+        boolean sslUsed = sslHandler != null;
+        sslLogMessage.append("[used=").append(sslUsed).append("]");
+        if (sslUsed) {
+          X509Certificate certificate = (X509Certificate) sslHandler.engine().getSession().getPeerCertificates()[0];
+          X500Principal principal = certificate.getSubjectX500Principal();
+          Collection subjectAlternativeNames = certificate.getSubjectAlternativeNames();
+          sslLogMessage.append(", [principal=").append(principal).append("]");
+          sslLogMessage.append(", [san=").append(subjectAlternativeNames).append("]");
+        }
+      } catch (Exception e) {
+        logger.error("Unexpected error while getting SSL connection info for public access logger", e);
+      }
+      sslLogMessage.append(")");
+    }
+    logMessage.append(sslLogMessage);
   }
 }

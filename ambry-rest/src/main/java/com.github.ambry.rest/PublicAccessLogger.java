@@ -28,6 +28,10 @@ public class PublicAccessLogger {
   private final String[] responseHeaders;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
+  /**
+   * @param requestHeaders the request headers to log.
+   * @param responseHeaders the response headers to log.
+   */
   public PublicAccessLogger(String[] requestHeaders, String[] responseHeaders) {
     this.requestHeaders = requestHeaders;
     this.responseHeaders = responseHeaders;
