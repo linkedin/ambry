@@ -53,15 +53,15 @@ class BlobStoreStats implements StoreStats {
   static StatsSnapshot convertQuotaToStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
     Map<String, StatsSnapshot> accountValidSizeMap = new HashMap<>();
     long totalSize = 0;
-    for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
+    for (Map.Entry<String, Map<String, Long>> accountEntry : quotaMap.entrySet()) {
       long subTotalSize = 0;
       Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
-      for (Map.Entry<String, Long> innerEntry : entry.getValue().entrySet()) {
-        subTotalSize += innerEntry.getValue();
-        containerValidSizeMap.put(innerEntry.getKey(), new StatsSnapshot(innerEntry.getValue(), null));
+      for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+        subTotalSize += containerEntry.getValue();
+        containerValidSizeMap.put(containerEntry.getKey(), new StatsSnapshot(containerEntry.getValue(), null));
       }
       totalSize += subTotalSize;
-      accountValidSizeMap.put(entry.getKey(), new StatsSnapshot(subTotalSize, containerValidSizeMap));
+      accountValidSizeMap.put(accountEntry.getKey(), new StatsSnapshot(subTotalSize, containerValidSizeMap));
     }
     return new StatsSnapshot(totalSize, accountValidSizeMap);
   }

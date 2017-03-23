@@ -68,7 +68,7 @@ public class StatsManagerTest {
     storeMap.put(new Partition(1000, PartitionState.READ_WRITE, 1024 * 1024 * 1024), null);
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
-    properties.put("storestats.output.file.path", outputFileString);
+    properties.put("store.stats.output.file.path", outputFileString);
     StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(properties));
     statsManager = new StatsManager(storageManager, config);
   }

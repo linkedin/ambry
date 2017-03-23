@@ -112,7 +112,7 @@ public class StatsManager {
             "Failed to rename " + tempFile.getAbsolutePath() + " to " + statsOutputFile.getAbsolutePath());
       }
     } else {
-      throw new IOException("Temporary file creation failed when publishing stats");
+      throw new IOException("Temporary file creation failed when publishing stats " + tempFile.getAbsolutePath());
     }
   }
 

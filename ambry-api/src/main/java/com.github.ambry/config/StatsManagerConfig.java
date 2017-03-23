@@ -22,27 +22,27 @@ public class StatsManagerConfig {
   /**
    * The file path (including filename) to be used for publishing store stats to local file.
    */
-  @Config("storestats.output.file.path")
+  @Config("store.stats.output.file.path")
   @Default("/tmp/stats_output.json")
   public final String outputFilePath;
 
   /**
    * The time period in seconds that configures how often are store stats published.
    */
-  @Config("storestats.publish.period.in.secs")
+  @Config("store.stats.publish.period.in.secs")
   @Default("7200")
   public final long publishPeriodInSecs;
 
   /**
    * The option to enable or disable publishing store stats.
    */
-  @Config("storestats.publish.enabled")
+  @Config("store.stats.publish.enabled")
   @Default("false")
   public final boolean publishEnabled;
 
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
-    outputFilePath = verifiableProperties.getString("storestats.output.file.path", "/tmp/stats_output.json");
-    publishPeriodInSecs = verifiableProperties.getLong("storestats.publish.period.in.secs", 7200);
-    publishEnabled = verifiableProperties.getBoolean("storestats.publish.enabled", false);
+    outputFilePath = verifiableProperties.getString("store.stats.output.file.path", "/tmp/stats_output.json");
+    publishPeriodInSecs = verifiableProperties.getLong("store.stats.publish.period.in.secs", 7200);
+    publishEnabled = verifiableProperties.getBoolean("store.stats.publish.enabled", false);
   }
 }
