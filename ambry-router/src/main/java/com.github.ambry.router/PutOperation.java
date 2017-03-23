@@ -27,6 +27,8 @@ import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.notification.NotificationBlobType;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
@@ -73,6 +75,7 @@ class PutOperation {
   private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
+  private final NotificationSystem notificationSystem;
   private final BlobProperties passedInBlobProperties;
   private final byte[] userMetadata;
   private final ReadableStreamChannel channel;
@@ -138,25 +141,26 @@ class PutOperation {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param blobProperties the BlobProperties associated with the put operation.
-   * @param userMetadata the userMetadata associated with the put operation.
+   * @param notificationSystem
+   *@param userMetadata the userMetadata associated with the put operation.
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time the Time instance to use.
-   * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
+   * @param blobProperties the BlobProperties associated with the put operation.        @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
+      ResponseHandler responseHandler, NotificationSystem notificationSystem, byte[] userMetadata,
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
-      Time time) throws RouterException {
+      Time time, BlobProperties blobProperties) throws RouterException {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
+    this.notificationSystem = notificationSystem;
     this.passedInBlobProperties = blobProperties;
     this.userMetadata = userMetadata;
     this.channel = channel;
@@ -195,6 +199,22 @@ class PutOperation {
    */
   boolean isOperationComplete() {
     return operationCompleted;
+  }
+
+  /**
+   * Notify for overall blob creation if the operation is complete and the blob was put successfully. Also ensure that
+   * notifications have been sent out for all successfully put data chunks.
+   */
+  void maybeNotifyForBlobCreation() {
+    if (isOperationComplete()) {
+      metadataPutChunk.maybeNotifyForFirstChunkCreation();
+      if (blobId != null) {
+        NotificationBlobType notificationBlobType =
+            getNumDataChunks() == 1 ? NotificationBlobType.Simple : NotificationBlobType.Composite;
+        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), getUserMetadata(),
+            notificationBlobType);
+      }
+    }
   }
 
   /**
@@ -258,6 +278,7 @@ class PutOperation {
       // a data chunk has succeeded.
       logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
+      metadataPutChunk.maybeNotifyForChunkCreation(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
       if (chunk.failedAttempts > 0) {
@@ -545,15 +566,6 @@ class PutOperation {
    */
   List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
     return metadataPutChunk.getSuccessfullyPutChunkIdsIfComposite();
-  }
-
-  /**
-   * If this is a composite object, fill the list with successfully put chunk ids and their {@link BlobProperties}
-   * @return the list of pairs of successfully put chunk ids and chunk and their {@link BlobProperties} if this is a
-   *         composite object, empty list otherwise.
-   */
-  List<Pair<StoreKey, BlobProperties>> getSuccessfullyPutChunkIdsAndPropertiesIfComposite() {
-    return metadataPutChunk.getSuccessfullyPutChunkIdsAndPropertiesIfComposite();
   }
 
   /**
@@ -1086,6 +1098,7 @@ class PutOperation {
    */
   private class MetadataPutChunk extends PutChunk {
     TreeMap<Integer, StoreKey> indexToChunkIds;
+    Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
 
     /**
      * Initialize the MetadataPutChunk.
@@ -1103,6 +1116,35 @@ class PutOperation {
      */
     void addChunkId(BlobId chunkBlobId, int chunkIndex) {
       indexToChunkIds.put(chunkIndex, chunkBlobId);
+    }
+
+    /**
+     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, byte[], NotificationBlobType)} for this
+     * chunk, unless it is the first chunk, in which case it might be an entire simple blob. In that case, save
+     * the {@link BlobProperties} from the first chunk.
+     * @param chunk the {@link PutChunk} created.
+     */
+    void maybeNotifyForChunkCreation(PutChunk chunk) {
+      if (chunk.chunkIndex == 0) {
+        firstChunkIdAndProperties = new Pair<>(chunk.chunkBlobId, chunk.chunkBlobProperties);
+      } else {
+        notificationSystem.onBlobCreated(chunk.chunkBlobId.getID(), chunk.chunkBlobProperties, userMetadata,
+            NotificationBlobType.DataChunk);
+      }
+    }
+
+    /**
+     * Notify for the creation of the first chunk if this was found to be a composite blob. To be called after the
+     * overall operation is completed.
+     */
+    void maybeNotifyForFirstChunkCreation() {
+      if (firstChunkIdAndProperties != null) {
+        String chunkId = firstChunkIdAndProperties.getFirst().getID();
+        BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
+        if (!chunkId.equals(getBlobIdString())) {
+          notificationSystem.onBlobCreated(chunkId, chunkProperties, userMetadata, NotificationBlobType.DataChunk);
+        }
+      }
     }
 
     @Override
@@ -1149,34 +1191,6 @@ class PutOperation {
         }
       }
       return chunkIdList;
-    }
-
-    /**
-     * if this is a composite object, fill the list with successfully put chunk ids and their {@link BlobProperties}
-     * @return the list of pairs of successfully put chunk ids and chunk and their {@link BlobProperties} if this is a
-     *         composite object, empty list otherwise.
-     */
-    List<Pair<StoreKey, BlobProperties>> getSuccessfullyPutChunkIdsAndPropertiesIfComposite() {
-      List<Pair<StoreKey, BlobProperties>> chunkIdAndPropertiesList = new ArrayList<>();
-      if (indexToChunkIds.size() > 1) {
-        Iterator<StoreKey> storeKeyIterator = indexToChunkIds.values().iterator();
-        while (storeKeyIterator.hasNext()) {
-          StoreKey storeKey = storeKeyIterator.next();
-          long chunkSize = routerConfig.routerMaxPutChunkSizeBytes;
-          if (!storeKeyIterator.hasNext()) {
-            long remainder = getBlobSize() % routerConfig.routerMaxPutChunkSizeBytes;
-            // If the blob size is not a multiple of chunk size, the size of the last chunk will be different
-            if (remainder != 0) {
-              chunkSize = remainder;
-            }
-          }
-          chunkIdAndPropertiesList.add(new Pair<>(storeKey,
-              new BlobProperties(chunkSize, passedInBlobProperties.getServiceId(), passedInBlobProperties.getOwnerId(),
-                  passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
-                  passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs())));
-        }
-      }
-      return chunkIdAndPropertiesList;
     }
 
     /**

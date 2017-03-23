@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -110,10 +111,11 @@ public class ChunkFillTest {
     FutureResult<String> futureResult = new FutureResult<String>();
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
-    PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
-        putUserMetadata, putChannel, futureResult, null,
-        new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
-        new MockTime());
+    PutOperation op =
+        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
+            putUserMetadata, putChannel, futureResult, null,
+            new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
+            new MockTime(), putBlobProperties);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
@@ -208,10 +210,11 @@ public class ChunkFillTest {
     FutureResult<String> futureResult = new FutureResult<String>();
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
-    PutOperation op = new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, putBlobProperties,
-        putUserMetadata, putChannel, futureResult, null,
-        new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
-        time);
+    PutOperation op =
+        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
+            putUserMetadata, putChannel, futureResult, null,
+            new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
+            time, putBlobProperties);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuffer[numChunks];

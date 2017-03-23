@@ -22,15 +22,11 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
-import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -142,8 +138,8 @@ class PutManager {
       FutureResult<String> futureResult, Callback<String> callback) {
     try {
       PutOperation putOperation =
-          new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
-              channel, futureResult, callback, routerCallback, chunkArrivalListener, time);
+          new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, userMetaData,
+              channel, futureResult, callback, routerCallback, chunkArrivalListener, time, blobProperties);
       putOperations.add(putOperation);
       putOperation.startReadingFromChannel();
     } catch (RouterException e) {
@@ -242,6 +238,7 @@ class PutManager {
   void onComplete(PutOperation op) {
     Exception e = op.getOperationException();
     String blobId = op.getBlobIdString();
+    op.maybeNotifyForBlobCreation();
     if (blobId == null && e == null) {
       e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationFailureWithUnsetExceptionCount.inc();
@@ -251,14 +248,6 @@ class PutManager {
       routerMetrics.onPutBlobError(e);
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite(), op.getServiceId());
     } else {
-      NotificationBlobType notificationBlobType =
-          op.getNumDataChunks() == 1 ? NotificationBlobType.Simple : NotificationBlobType.Composite;
-      notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata(),
-          notificationBlobType);
-      for (Pair<StoreKey, BlobProperties> chunkIdAndProperties : op.getSuccessfullyPutChunkIdsAndPropertiesIfComposite()) {
-        notificationSystem.onBlobCreated(chunkIdAndProperties.getFirst().getID(), chunkIdAndProperties.getSecond(),
-            op.getUserMetadata(), NotificationBlobType.DataChunk);
-      }
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
     routerMetrics.operationDequeuingRate.mark();
