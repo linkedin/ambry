@@ -40,6 +40,9 @@ import java.util.concurrent.atomic.AtomicLong;
 class BlobStoreStats implements StoreStats {
   static final String IO_SCHEDULER_JOB_TYPE = "BlobStoreStats";
   static final String IO_SCHEDULER_JOB_ID = "indexSegment_read";
+  // Error margin to factor in while calculating the cost benefit
+  // In other words, possible max blob size
+  static final long ERROR_MARGIN = 4 * 1024 * 1024;
 
   private final PersistentIndex index;
   private final Time time;
@@ -71,6 +74,14 @@ class BlobStoreStats implements StoreStats {
     this.index = index;
     this.time = time;
     this.diskIOScheduler = diskIOScheduler;
+  }
+
+  /**
+   * Returns the error margin to factor in while calculating the cost benefit
+   * @return the error margin to factor in while calculating the cost benefit
+   */
+  long getErrorMargin() {
+    return ERROR_MARGIN;
   }
 
   @Override

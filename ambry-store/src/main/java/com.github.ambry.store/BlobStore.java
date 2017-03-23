@@ -89,6 +89,7 @@ class BlobStore implements Store {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.time = time;
+    blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);
   }
 
   @Override
@@ -385,12 +386,36 @@ class BlobStore implements Store {
   /**
    * Fetches a list of {@link LogSegment} names whose entries don't over lap with {@link Journal}. Returns {@code null}
    * if there aren't any
-   * @return list of {@link LogSegment} names whose entries don't over lap with {@link Journal}. {@code null}
+   * @return a list of {@link LogSegment} names whose entries don't over lap with {@link Journal}. {@code null}
    * if there aren't any
    */
   List<String> getLogSegmentsNotInJournal() throws StoreException {
     checkStarted();
     return index.getLogSegmentsNotInJournal();
+  }
+
+  /**
+   * Fetches segment capacity of a single log segment
+   * @return the segment capacity of a single log segment
+   */
+  long getSegmentCapacity() {
+    return log.getSegmentCapacity();
+  }
+
+  /**
+   * Fetches segment header size of a single log segment
+   * @return the segment header size of a single log segment
+   */
+  long getLogSegmentHeaderSize() {
+    return LogSegment.HEADER_SIZE;
+  }
+
+  /**
+   * Returns an instance of {@link BlobStoreStats} which can be used to get stats about this {@link BlobStore}
+   * @return an instance of {@link BlobStoreStats} which can be used to get stats about this {@link BlobStore}
+   */
+  BlobStoreStats getBlobStoreStats() {
+    return blobStoreStats;
   }
 
   @Override
