@@ -1162,8 +1162,14 @@ class PutOperation {
         Iterator<StoreKey> storeKeyIterator = indexToChunkIds.values().iterator();
         while (storeKeyIterator.hasNext()) {
           StoreKey storeKey = storeKeyIterator.next();
-          long chunkSize = storeKeyIterator.hasNext() ? routerConfig.routerMaxPutChunkSizeBytes
-              : getBlobSize() % routerConfig.routerMaxPutChunkSizeBytes;
+          long chunkSize = routerConfig.routerMaxPutChunkSizeBytes;
+          if (!storeKeyIterator.hasNext()) {
+            long remainder = getBlobSize() % routerConfig.routerMaxPutChunkSizeBytes;
+            // If the blob size is not a multiple of chunk size, the size of the last chunk will be different
+            if (remainder != 0) {
+              chunkSize = remainder;
+            }
+          }
           chunkIdAndPropertiesList.add(new Pair<>(storeKey,
               new BlobProperties(chunkSize, passedInBlobProperties.getServiceId(), passedInBlobProperties.getOwnerId(),
                   passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),

@@ -812,7 +812,10 @@ public class PutManagerTest {
       BlobCreatedEvent event = blobCreatedEvents.get(blobId);
       Assert.assertEquals("NotificationBlobType does not match data in notification event.",
           expectedNotificationBlobType, event.notificationBlobType);
-      RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties);
+      Assert.assertTrue("BlobProperties does not match data in notification event.",
+          RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
+      Assert.assertEquals("Expected blob size does not match data in notification event.",
+          expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
       Assert.assertArrayEquals("User metadata does not match data in notification event.", expectedUserMetadata,
           event.userMetadata);
     }
