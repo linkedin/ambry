@@ -141,7 +141,7 @@ class PutOperation {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param notificationSystem
+   * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
    *@param userMetadata the userMetadata associated with the put operation.
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
