@@ -160,12 +160,14 @@ class CompactionManager {
               storesToSkip.add(store);
             }
           }
-          long timeElapsed = time.milliseconds() - startTimeMs;
-          lock.lock();
-          try {
-            time.await(waitCondition, waitTimeMs - timeElapsed);
-          } finally {
-            lock.unlock();
+          if (enabled.get()) {
+            long timeElapsed = time.milliseconds() - startTimeMs;
+            lock.lock();
+            try {
+              time.await(waitCondition, waitTimeMs - timeElapsed);
+            } finally {
+              lock.unlock();
+            }
           }
         } catch (Exception e) {
           logger.error("Compaction execution encountered an error either during wait. Continuing", e);
