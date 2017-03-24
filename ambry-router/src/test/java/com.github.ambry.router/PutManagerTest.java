@@ -39,10 +39,12 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -197,7 +199,7 @@ public class PutManagerTest {
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     mockSelectorState.set(MockSelectorState.ThrowExceptionOnConnect);
     Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
-    submitPutsAndAssertFailure(expectedException, false, true);
+    submitPutsAndAssertFailure(expectedException, false, true, true);
     // this should not close the router.
     Assert.assertTrue("Router should not be closed", router.isOpen());
     assertCloseCleanup();
@@ -212,7 +214,7 @@ public class PutManagerTest {
     requestAndResultsList.add(new RequestAndResult(chunkSize * 5));
     mockSelectorState.set(MockSelectorState.DisconnectOnSend);
     Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
-    submitPutsAndAssertFailure(expectedException, false, false);
+    submitPutsAndAssertFailure(expectedException, false, false, true);
     // this should not have closed the router.
     Assert.assertTrue("Router should not be closed", router.isOpen());
     assertCloseCleanup();
@@ -229,7 +231,7 @@ public class PutManagerTest {
     // In the case of an error in poll, the router gets closed, and all the ongoing operations are finished off with
     // RouterClosed error.
     Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
-    submitPutsAndAssertFailure(expectedException, true, true);
+    submitPutsAndAssertFailure(expectedException, true, true, true);
     // router should get closed automatically
     Assert.assertFalse("Router should be closed", router.isOpen());
     Assert.assertEquals("No ChunkFiller threads should be running after the router is closed", 0,
@@ -273,7 +275,7 @@ public class PutManagerTest {
       server.setServerErrorForAllRequests(ServerErrorCode.Unknown_Error);
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
-    submitPutsAndAssertFailure(expectedException, true, false);
+    submitPutsAndAssertFailure(expectedException, true, false, true);
   }
 
   /**
@@ -321,7 +323,7 @@ public class PutManagerTest {
       }
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
-    submitPutsAndAssertFailure(expectedException, true, false);
+    submitPutsAndAssertFailure(expectedException, true, false, false);
   }
 
   /**
@@ -373,7 +375,7 @@ public class PutManagerTest {
       server.setServerErrors(serverErrorList);
     }
     Exception expectedException = new RouterException("", RouterErrorCode.AmbryUnavailable);
-    submitPutsAndAssertFailure(expectedException, true, false);
+    submitPutsAndAssertFailure(expectedException, true, false, true);
   }
 
   /**
@@ -420,7 +422,7 @@ public class PutManagerTest {
     future.await();
     requestAndResult.result = future;
     Exception expectedException = new Exception("Channel encountered an error");
-    assertFailure(expectedException);
+    assertFailure(expectedException, true);
     assertCloseCleanup();
   }
 
@@ -572,9 +574,10 @@ public class PutManagerTest {
    * @param shouldCloseRouterAfter whether the router should be closed after the operation.
    * @param incrementTimer whether mock time should be incremented in CHECKOUT_TIMEOUT_MS increments while waiting
    *                       for the operation to complete.
+   * @param testNotifications {@code true} to test that notifications for successfully put data chunks are received.
    */
   private void submitPutsAndAssertFailure(Exception expectedException, boolean shouldCloseRouterAfter,
-      boolean incrementTimer) throws Exception {
+      boolean incrementTimer, boolean testNotifications) throws Exception {
     CountDownLatch doneLatch = submitPut();
     if (incrementTimer) {
       do {
@@ -584,7 +587,7 @@ public class PutManagerTest {
     } else {
       doneLatch.await();
     }
-    assertFailure(expectedException);
+    assertFailure(expectedException, testNotifications);
     if (shouldCloseRouterAfter) {
       assertCloseCleanup();
     }
@@ -592,7 +595,7 @@ public class PutManagerTest {
 
   /**
    * Submits put operations. This is called by {@link #submitPutsAndAssertSuccess(boolean)} and
-   * {@link #submitPutsAndAssertFailure(Exception, boolean, boolean)} methods.
+   * {@link #submitPutsAndAssertFailure(Exception, boolean, boolean, boolean)} methods.
    * @return a {@link CountDownLatch} to await on for operation completion.
    */
   private CountDownLatch submitPut() throws Exception {
@@ -731,8 +734,9 @@ public class PutManagerTest {
   /**
    * Go through all the requests and ensure all of them have failed.
    * @param expectedException expected exception
+   * @param testNotifications {@code true} to test that notifications for successfully put data chunks are received.
    */
-  private void assertFailure(Exception expectedException) {
+  private void assertFailure(Exception expectedException, boolean testNotifications) {
     for (RequestAndResult requestAndResult : requestAndResultsList) {
       String blobId = requestAndResult.result.result();
       Exception exception = requestAndResult.result.error();
@@ -740,6 +744,9 @@ public class PutManagerTest {
       Assert.assertNotNull("exception should not be null", exception);
       Assert.assertTrue("Exception received should be the expected Exception",
           exceptionsAreEqual(expectedException, exception));
+    }
+    if (testNotifications) {
+      notificationSystem.verifyNotificationsForFailedPut();
     }
   }
 
@@ -792,12 +799,17 @@ public class PutManagerTest {
    * A notification system for testing that keeps track of data from onBlobCreated calls.
    */
   private class TestNotificationSystem extends LoggingNotificationSystem {
-    Map<String, BlobCreatedEvent> blobCreatedEvents = new HashMap<>();
+    Map<String, List<BlobCreatedEvent>> blobCreatedEvents = new HashMap<>();
 
     @Override
     public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
         NotificationBlobType notificationBlobType) {
-      blobCreatedEvents.put(blobId, new BlobCreatedEvent(blobProperties, userMetadata, notificationBlobType));
+      List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
+      if (events == null) {
+        events = new ArrayList<>();
+        blobCreatedEvents.put(blobId, events);
+      }
+      events.add(new BlobCreatedEvent(blobProperties, userMetadata, notificationBlobType));
     }
 
     /**
@@ -809,7 +821,9 @@ public class PutManagerTest {
      */
     void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
         BlobProperties expectedBlobProperties, byte[] expectedUserMetadata) {
-      BlobCreatedEvent event = blobCreatedEvents.get(blobId);
+      List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
+      Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
+      BlobCreatedEvent event = events.get(0);
       Assert.assertEquals("NotificationBlobType does not match data in notification event.",
           expectedNotificationBlobType, event.notificationBlobType);
       Assert.assertTrue("BlobProperties does not match data in notification event.",
@@ -818,6 +832,25 @@ public class PutManagerTest {
           expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
       Assert.assertArrayEquals("User metadata does not match data in notification event.", expectedUserMetadata,
           event.userMetadata);
+    }
+
+    /**
+     * Verify that onBlobCreated notifications were created for the data chunks of a failed put.
+     */
+    void verifyNotificationsForFailedPut() {
+      Set<String> blobIdsVisited = new HashSet<>();
+      for (MockServer mockServer : mockServerLayout.getMockServers()) {
+        for (Map.Entry<String, StoredBlob> blobEntry : mockServer.getBlobs().entrySet()) {
+          if (blobIdsVisited.add(blobEntry.getKey())) {
+            StoredBlob blob = blobEntry.getValue();
+            System.out.println(blobEntry.getKey());
+            verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties,
+                blob.userMetadata.array());
+          }
+        }
+      }
+      Assert.assertEquals("Notifications created for unexpected blob IDs", blobIdsVisited.size(),
+          blobCreatedEvents.size());
     }
   }
 
