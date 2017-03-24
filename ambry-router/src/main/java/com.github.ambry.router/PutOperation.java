@@ -37,6 +37,7 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -207,17 +208,13 @@ class PutOperation {
    */
   void maybeNotifyForBlobCreation() {
     if (isOperationComplete()) {
-      if (blobId != null) {
-        NotificationBlobType notificationBlobType =
-            getNumDataChunks() == 1 ? NotificationBlobType.Simple : NotificationBlobType.Composite;
-        if (notificationBlobType == NotificationBlobType.Composite) {
-          metadataPutChunk.notifyForFirstChunkCreation();
-        }
-        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), getUserMetadata(),
-            notificationBlobType);
-      } else {
-        // If the metadata chunk was not put successfully, the first chunk must be a data chunk.
+      boolean composite = !getSuccessfullyPutChunkIdsIfComposite().isEmpty();
+      if (composite) {
         metadataPutChunk.notifyForFirstChunkCreation();
+      }
+      if (blobId != null) {
+        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), getUserMetadata(),
+            composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
       }
     }
   }
@@ -570,7 +567,14 @@ class PutOperation {
    * @return the list of successfully put chunk ids if this is a composite object, empty list otherwise.
    */
   List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
-    return metadataPutChunk.getSuccessfullyPutChunkIdsIfComposite();
+    List<StoreKey> successfulChunks = metadataPutChunk.getSuccessfullyPutChunkIds();
+    // If the overall operation failed, we treat the successfully put chunks as part of a composite blob.
+    boolean operationFailed = blobId == null || getOperationException() != null;
+    if (operationFailed || successfulChunks.size() > 1) {
+      return successfulChunks;
+    } else {
+      return Collections.emptyList();
+    }
   }
 
   /**
@@ -1183,17 +1187,10 @@ class PutOperation {
     }
 
     /**
-     * Add all the successfully put chunk ids of the overall blob to the passed in list, if the blob is composite.
-     * @return list of chunk ids associated with this blob if it is composite; empty list otherwise.
+     * @return a list of all of the successfully put chunk ids associated with this blob
      */
-    List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
-      List<StoreKey> chunkIdList = new ArrayList<>();
-      if (indexToChunkIds.size() > 1) {
-        for (StoreKey storeKey : indexToChunkIds.values()) {
-          chunkIdList.add(storeKey);
-        }
-      }
-      return chunkIdList;
+    List<StoreKey> getSuccessfullyPutChunkIds() {
+      return new ArrayList<>(indexToChunkIds.values());
     }
 
     /**
