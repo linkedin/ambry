@@ -26,7 +26,9 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -142,7 +144,10 @@ public class IndexReadPerformance {
       String line;
       StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
-      Log log = new Log(System.getProperty("user.dir"), 1000, 1000, metrics);
+      File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
+      reserveFileDir.deleteOnExit();
+      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir);
+      Log log = new Log(System.getProperty("user.dir"), 1000, 1000, diskSpaceAllocator, metrics);
 
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "1048576");

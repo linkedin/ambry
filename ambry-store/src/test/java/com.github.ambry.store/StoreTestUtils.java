@@ -58,4 +58,16 @@ class StoreTestUtils {
     }
     return deleteDirectory ? dir.delete() && success : success;
   }
+
+  /**
+   * Get an un-initialized {@link DiskSpaceAllocator} for use in unit tests.
+   * @return the {@link DiskSpaceAllocator}
+   */
+  static DiskSpaceAllocator getDiskSpaceAllocator() {
+    try {
+      return new DiskSpaceAllocator(StoreTestUtils.createTempDirectory("reserve-pool"));
+    } catch (Exception e) {
+      throw new IllegalStateException("Exception while constructing DiskSpaceAllocator", e);
+    }
+  }
 }

@@ -30,6 +30,7 @@ import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FileWriter;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;
@@ -123,7 +124,10 @@ public class IndexWritePerformance {
       writer = new FileWriter(logFile);
 
       StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
-      Log log = new Log(System.getProperty("user.dir"), 10, 10, metrics);
+      File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
+      reserveFileDir.deleteOnExit();
+      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir);
+      Log log = new Log(System.getProperty("user.dir"), 10, 10, diskSpaceAllocator, metrics);
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);
 

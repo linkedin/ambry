@@ -52,6 +52,7 @@ public class BlobStoreCompactorTest {
 
   private static final String STORE_ID = "compactor_example_store";
   private static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
+  private static final DiskSpaceAllocator DISK_SPACE_ALLOCATOR = StoreTestUtils.getDiskSpaceAllocator();
   private static final String EXCEPTION_MSG = UtilsTest.getRandomString(10);
 
   private final File tempDir;
@@ -937,8 +938,8 @@ public class BlobStoreCompactorTest {
     closeOrExceptionInduced = false;
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config,
-        new StoreMetrics(STORE_ID, new MetricRegistry()), ioScheduler, log, state.time, state.sessionId,
-        state.incarnationId);
+        new StoreMetrics(STORE_ID, new MetricRegistry()), ioScheduler, DISK_SPACE_ALLOCATOR, log, state.time,
+        state.sessionId, state.incarnationId);
   }
 
   /**
@@ -1950,7 +1951,7 @@ public class BlobStoreCompactorTest {
      */
     InterruptionInducingLog(int addSegmentCallCountToInterruptAt, int dropSegmentCallCountToInterruptAt)
         throws IOException {
-      super(tempDirStr, state.log.getCapacityInBytes(), state.log.getSegmentCapacity(),
+      super(tempDirStr, state.log.getCapacityInBytes(), state.log.getSegmentCapacity(), DISK_SPACE_ALLOCATOR,
           new StoreMetrics(STORE_ID, new MetricRegistry()));
       if (addSegmentCallCountToInterruptAt <= 0 || dropSegmentCallCountToInterruptAt <= 0) {
         throw new IllegalArgumentException("Arguments cannot be <= 0");

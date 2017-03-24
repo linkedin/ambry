@@ -66,6 +66,7 @@ class CuratedLogIndexState {
   private static final long HARD_DELETE_LAST_PART_SIZE = 13;
 
   static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
+  static final DiskSpaceAllocator DISK_SPACE_ALLOCATOR = StoreTestUtils.getDiskSpaceAllocator();
   static final int MAX_IN_MEM_ELEMENTS = 5;
   static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * Time.MsPerSec;
   static final StoreKeyFactory STORE_KEY_FACTORY;
@@ -167,7 +168,7 @@ class CuratedLogIndexState {
     tempDirStr = tempDir.getAbsolutePath();
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
     StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
-    log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, segmentCapacity, metrics);
+    log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, segmentCapacity, DISK_SPACE_ALLOCATOR, metrics);
     metricRegistry = new MetricRegistry();
     properties.put("store.index.max.number.of.inmem.elements",
         Integer.toString(CuratedLogIndexState.MAX_IN_MEM_ELEMENTS));
@@ -649,7 +650,7 @@ class CuratedLogIndexState {
     log.close();
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
-    log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, metrics);
+    log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, DISK_SPACE_ALLOCATOR, metrics);
     index = null;
     if (initIndex) {
       initIndex(metricRegistry);

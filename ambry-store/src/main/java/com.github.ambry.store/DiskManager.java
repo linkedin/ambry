@@ -45,6 +45,7 @@ class DiskManager {
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
   private final ScheduledExecutorService longLivedTaskScheduler;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -63,17 +64,20 @@ class DiskManager {
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig config, ScheduledExecutorService scheduler,
       StorageManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time) {
+      MessageStoreHardDelete hardDelete, Time time) throws StoreException {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(config, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
+    diskSpaceAllocator = new DiskSpaceAllocator(new File(disk.getMountPath(), config.storeReserveFileDirName));
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
-        BlobStore store = new BlobStore(storeId, config, scheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
-            replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
+        BlobStore store =
+            new BlobStore(storeId, config, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
+                metrics, replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory, recovery, hardDelete,
+                time);
         stores.put(replica.getPartitionId(), store);
       }
     }
@@ -92,16 +96,13 @@ class DiskManager {
         List<Thread> startupThreads = new ArrayList<>();
         final AtomicInteger numFailures = new AtomicInteger(0);
         for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
-          Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), new Runnable() {
-            @Override
-            public void run() {
-              try {
-                partitionAndStore.getValue().start();
-              } catch (Exception e) {
-                numFailures.incrementAndGet();
-                metrics.totalStoreStartFailures.inc();
-                logger.error("Exception while starting store for the partition" + partitionAndStore.getKey(), e);
-              }
+          Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
+            try {
+              partitionAndStore.getValue().start();
+            } catch (Exception e) {
+              numFailures.incrementAndGet();
+              metrics.totalStoreStartFailures.inc();
+              logger.error("Exception while starting store for the partition" + partitionAndStore.getKey(), e);
             }
           }, false);
           thread.start();
@@ -113,6 +114,17 @@ class DiskManager {
         if (numFailures.get() > 0) {
           logger.error(
               "Could not start " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
+        }
+
+        ;
+        try {
+          List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
+          for (BlobStore blobStore : stores.values()) {
+            requirementsList.add(blobStore.getDiskSpaceRequirements());
+          }
+          diskSpaceAllocator.initializePool(requirementsList);
+        } catch (StoreException e) {
+          logger.error("Error while starting DiskSpaceAllocator", e);
         }
         compactionManager.enable();
       } else {
@@ -137,16 +149,13 @@ class DiskManager {
       final AtomicInteger numFailures = new AtomicInteger(0);
       List<Thread> shutdownThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
-        Thread thread = Utils.newThread("store-shutdown-" + partitionAndStore.getKey(), new Runnable() {
-          @Override
-          public void run() {
-            try {
-              partitionAndStore.getValue().shutdown();
-            } catch (Exception e) {
-              numFailures.incrementAndGet();
-              metrics.totalStoreShutdownFailures.inc();
-              logger.error("Exception while shutting down store {} on disk {}", partitionAndStore.getKey(), disk, e);
-            }
+        Thread thread = Utils.newThread("store-shutdown-" + partitionAndStore.getKey(), () -> {
+          try {
+            partitionAndStore.getValue().shutdown();
+          } catch (Exception e) {
+            numFailures.incrementAndGet();
+            metrics.totalStoreShutdownFailures.inc();
+            logger.error("Exception while shutting down store {} on disk {}", partitionAndStore.getKey(), disk, e);
           }
         }, false);
         thread.start();

@@ -40,6 +40,7 @@ class Log implements Write {
   private final String dataDir;
   private final long capacityInBytes;
   private final boolean isLogSegmented;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final StoreMetrics metrics;
   private final Iterator<Pair<String, String>> segmentNameAndFileNameIterator;
   private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
@@ -54,16 +55,19 @@ class Log implements Write {
    * @param dataDir the directory where the segments of the log need to be loaded from.
    * @param totalCapacityInBytes the total capacity of this log.
    * @param segmentCapacityInBytes the capacity of a single segment in the log.
+   * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
    * @param metrics the {@link StoreMetrics} instance to use.
    * @throws IOException if there is any I/O error loading the segment files.
    * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
-  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics) throws IOException {
+  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
+      StoreMetrics metrics) throws IOException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = totalCapacityInBytes > segmentCapacityInBytes;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.metrics = metrics;
     this.segmentNameAndFileNameIterator = Collections.EMPTY_LIST.iterator();
 
@@ -81,6 +85,7 @@ class Log implements Write {
    * @param dataDir the directory where the segments of the log need to be loaded from.
    * @param totalCapacityInBytes the total capacity of this log.
    * @param segmentCapacityInBytes the capacity of a single segment in the log.
+   * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
    * @param metrics the {@link StoreMetrics} instance to use.
    * @param isLogSegmented {@code true} if this log is segmented or needs to be segmented.
    * @param segmentsToLoad the list of pre-created {@link LogSegment} instances to load.
@@ -92,12 +97,13 @@ class Log implements Write {
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
-  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics,
-      boolean isLogSegmented, List<LogSegment> segmentsToLoad,
+  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
+      StoreMetrics metrics, boolean isLogSegmented, List<LogSegment> segmentsToLoad,
       Iterator<Pair<String, String>> segmentNameAndFileNameIterator) throws IOException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = isLogSegmented;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.metrics = metrics;
     this.segmentNameAndFileNameIterator = segmentNameAndFileNameIterator;
 
@@ -230,6 +236,14 @@ class Log implements Write {
     return new Offset(segment.getName(), segment.getEndOffset());
   }
 
+  DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
+    if (isLogSegmented) {
+      return new DiskSpaceRequirements(getSegmentCapacity(), remainingUnallocatedSegments.get(), true);
+    } else {
+      return null;
+    }
+  }
+
   /**
    * Flushes the Log and all its segments.
    * @throws IOException if the flush encountered an I/O error.
@@ -337,10 +351,10 @@ class Log implements Write {
    * @throws IOException if the there is any I/O error in allocating the file.
    */
   private File allocate(String filename, long size) throws IOException {
-    // TODO (DiskManager changes): This is intended to "request" the segment file from the DiskManager which will have
-    // TODO (DiskManager changes): a pool of segments.
     File segmentFile = new File(dataDir, filename);
-    Utils.preAllocateFileIfNeeded(segmentFile, size);
+    if (!segmentFile.exists()) {
+      diskSpaceAllocator.allocate(segmentFile, size);
+    }
     return segmentFile;
   }
 
@@ -353,9 +367,7 @@ class Log implements Write {
     // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
     File segmentFile = logSegment.getView().getFirst();
     logSegment.close();
-    if (!segmentFile.delete()) {
-      throw new IllegalStateException("Could not delete segment file: " + segmentFile.getAbsolutePath());
-    }
+    diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
   }
 
   /**

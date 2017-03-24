@@ -303,7 +303,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 1 && checkAssignable(ctor.getParameterTypes()[0], arg)) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == 1 && checkAssignable(paramTypes[0], arg)) {
         return (T) ctor.newInstance(arg);
       }
     }
@@ -327,8 +328,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 2 && checkAssignable(ctor.getParameterTypes()[0], arg1) && checkAssignable(
-          ctor.getParameterTypes()[1], arg2)) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == 2 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)) {
         return (T) ctor.newInstance(arg1, arg2);
       }
     }
@@ -353,8 +354,9 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 3 && checkAssignable(ctor.getParameterTypes()[0], arg1) && checkAssignable(
-          ctor.getParameterTypes()[1], arg2) && checkAssignable(ctor.getParameterTypes()[2], arg3)) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == 3 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)
+          && checkAssignable(paramTypes[2], arg3)) {
         return (T) ctor.newInstance(arg1, arg2, arg3);
       }
     }
@@ -377,10 +379,11 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == objects.length) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == objects.length) {
         int i = 0;
         for (; i < objects.length; i++) {
-          if (!checkAssignable(ctor.getParameterTypes()[i], objects[i])) {
+          if (!checkAssignable(paramTypes[i], objects[i])) {
             break;
           }
         }
@@ -770,6 +773,23 @@ public class Utils {
   public static long getTimeInMsToTheNearestSec(long timeInMs) {
     long timeInSecs = timeInMs / Time.MsPerSec;
     return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
+  }
+
+  /**
+   * Delete a directory recursively.
+   * @param file the directory to delete.
+   * @return {@code true} if successful, {@code false} if all files could not be deleted.
+   */
+  public static boolean deleteDirectory(File file) {
+    File[] contents = file.listFiles();
+    if (contents != null) {
+      for (File f : contents) {
+        if (!deleteDirectory(f)) {
+          return false;
+        }
+      }
+    }
+    return file.delete();
   }
 
   /**

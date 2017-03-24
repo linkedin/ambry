@@ -83,8 +83,9 @@ public class StorageManagerTest {
         downReplicaCount++;
       }
     }
-    deleteDirectory(new File(mountPathToDelete));
-    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    Utils.deleteDirectory(new File(mountPathToDelete));
+    storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(1, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
@@ -122,7 +123,8 @@ public class StorageManagerTest {
     for (Integer badReplicaIndex : badReplicaIndexes) {
       new File(replicas.get(badReplicaIndex).getReplicaPath()).setReadable(false);
     }
-    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(badReplicaIndexes.size(),
         getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
@@ -166,7 +168,8 @@ public class StorageManagerTest {
         downReplicaCount++;
       }
     }
-    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
@@ -199,7 +202,8 @@ public class StorageManagerTest {
   public void successfulStartupShutdownTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    storageManager.start();
     for (ReplicaId replica : replicas) {
       Store store = storageManager.getStore(replica.getPartitionId());
       assertTrue("Store should be started", ((BlobStore) store).isStarted());
@@ -219,13 +223,13 @@ public class StorageManagerTest {
   }
 
   /**
-   * Create a {@link StorageManager} and start stores for the passed in set of replicas.
+   * Construct a {@link StorageManager} for the passed in set of replicas.
    * @param replicas the list of replicas for the {@link StorageManager} to use.
    * @param metricRegistry the {@link MetricRegistry} instance to use to instantiate {@link StorageManager}
    * @return a started {@link StorageManager}
    * @throws StoreException
    */
-  private StorageManager createAndStartStoreManager(List<ReplicaId> replicas, MetricRegistry metricRegistry)
+  private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry)
       throws StoreException, InterruptedException {
     Properties properties = new Properties();
     properties.put("store.compaction.triggers", "Periodic,Admin");
@@ -233,7 +237,6 @@ public class StorageManagerTest {
         new StorageManager(new StoreConfig(new VerifiableProperties(properties)), Utils.newScheduler(1, false),
             metricRegistry, replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
             new DummyMessageStoreHardDelete(), SystemTime.getInstance());
-    storageManager.start();
     return storageManager;
   }
 
@@ -261,20 +264,6 @@ public class StorageManagerTest {
    */
   private long getCounterValue(Map<String, Counter> counters, String className, String suffix) {
     return counters.get(className + "." + suffix).getCount();
-  }
-
-  /**
-   * Delete a directory recursively.
-   * @param file the directory to delete.
-   */
-  private static void deleteDirectory(File file) {
-    File[] contents = file.listFiles();
-    if (contents != null) {
-      for (File f : contents) {
-        deleteDirectory(f);
-      }
-    }
-    file.delete();
   }
 
   /**

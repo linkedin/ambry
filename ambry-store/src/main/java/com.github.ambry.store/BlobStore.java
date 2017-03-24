@@ -44,6 +44,7 @@ class BlobStore implements Store {
   private final ScheduledExecutorService taskScheduler;
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
   private final Object lock = new Object();
@@ -79,14 +80,16 @@ class BlobStore implements Store {
 
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
-      StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
+      DiskSpaceAllocator diskSpaceAllocator, StorageManagerMetrics storageManagerMetrics, String dataDir,
+      long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
     this.factory = factory;
@@ -127,10 +130,10 @@ class BlobStore implements Store {
         }
 
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
-        log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
+        log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, diskSpaceAllocator, metrics);
         compactor =
-            new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, diskIOScheduler, log, time, sessionId,
-                storeDescriptor.getIncarnationId());
+            new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, diskIOScheduler, diskSpaceAllocator, log,
+                time, sessionId, storeDescriptor.getIncarnationId());
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, diskIOScheduler,
             metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
@@ -428,6 +431,11 @@ class BlobStore implements Store {
         metrics.storeShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
       }
     }
+  }
+
+  DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
+    checkStarted();
+    return null;
   }
 
   /**

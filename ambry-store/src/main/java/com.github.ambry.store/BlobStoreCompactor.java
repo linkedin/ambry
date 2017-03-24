@@ -71,6 +71,7 @@ class BlobStoreCompactor {
   private final StoreMetrics tgtMetrics;
   private final Log srcLog;
   private final DiskIOScheduler diskIOScheduler;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final Time time;
   private final UUID sessionId;
   private final UUID incarnationId;
@@ -103,8 +104,8 @@ class BlobStoreCompactor {
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
-      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, Time time, UUID sessionId, UUID incarnationId)
-      throws IOException, StoreException {
+      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, DiskSpaceAllocator diskSpaceAllocator, Log srcLog,
+      Time time, UUID sessionId, UUID incarnationId) throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -113,6 +114,7 @@ class BlobStoreCompactor {
     tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry());
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
@@ -435,8 +437,8 @@ class BlobStoreCompactor {
     long targetLogTotalCapacity = srcLog.getSegmentCapacity();
     logger.debug("Target log capacity is {} for {}. Existing log segments are {}. Future names and files are {}",
         targetLogTotalCapacity, storeId, existingTargetLogSegments, targetSegmentNamesAndFilenames);
-    tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, srcLog.getSegmentCapacity(), tgtMetrics, true,
-        existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
+    tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, srcLog.getSegmentCapacity(), diskSpaceAllocator,
+        tgtMetrics, true, existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
     tgtIndex = new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, null, null,

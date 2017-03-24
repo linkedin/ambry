@@ -30,6 +30,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -260,14 +261,17 @@ public class CompactionVerifier implements Closeable {
     MessageStoreHardDelete hardDelete = new BlobStoreHardDelete();
 
     DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
+    File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
+    reserveFileDir.deleteOnExit();
+    DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir);
     // load "src compaction" log and index
-    srcLog = new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, srcMetrics);
+    srcLog = new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, diskSpaceAllocator, srcMetrics);
     srcIndex =
         new PersistentIndex(srcDir.getAbsolutePath(), null, srcLog, storeConfig, storeKeyFactory, null, hardDelete,
             diskIOScheduler, srcMetrics, SystemTime.getInstance(), sessionId, incarnationId);
 
     // load "tgt" compaction log and index
-    tgtLog = new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, tgtMetrics);
+    tgtLog = new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, diskSpaceAllocator, tgtMetrics);
     tgtIndex =
         new PersistentIndex(tgtDir.getAbsolutePath(), null, tgtLog, storeConfig, storeKeyFactory, null, hardDelete,
             diskIOScheduler, tgtMetrics, SystemTime.getInstance(), sessionId, incarnationId);
