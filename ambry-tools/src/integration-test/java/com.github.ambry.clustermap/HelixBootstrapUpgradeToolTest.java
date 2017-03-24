@@ -1,5 +1,5 @@
-/**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,6 +92,8 @@ public class HelixBootstrapUpgradeToolTest {
   private final JSONObject zkJson;
   private TestHardwareLayout testHardwareLayout;
   private TestPartitionLayout testPartitionLayout;
+  private final String clusterNameInStaticClusterMap = "AmbryToolTestStatic";
+  private final String clusterNameInHelix = "AmbryToolTestHelix";
 
   /**
    * Shutdown all Zk servers before exit.
@@ -143,7 +145,7 @@ public class HelixBootstrapUpgradeToolTest {
    * @return return the constructed layout.
    */
   private TestHardwareLayout constructInitialHardwareLayoutJSON() throws JSONException {
-    return new TestHardwareLayout("Proto", 6, 100L * 1024 * 1024 * 1024, 6, 2, 18088, 20, false);
+    return new TestHardwareLayout(clusterNameInStaticClusterMap, 6, 100L * 1024 * 1024 * 1024, 6, 2, 18088, 20, false);
   }
 
   /**
@@ -169,8 +171,8 @@ public class HelixBootstrapUpgradeToolTest {
       Utils.writeJsonToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
       Utils.writeJsonToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
       try {
-        HelixBootstrapUpgradeTool.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "DC1",
-            DEFAULT_MAX_PARTITIONS_PER_RESOURCE);
+        HelixBootstrapUpgradeTool.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+            clusterNameInHelix, "DC1", DEFAULT_MAX_PARTITIONS_PER_RESOURCE);
         Assert.fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -181,8 +183,7 @@ public class HelixBootstrapUpgradeToolTest {
   /**
    * A single test (for convenience) that tests bootstrap and upgrades.
    */
-  // @todo: uncomment when we move to Helix 0.6.7.
-  // @Test
+  @Test
   public void testEverything() throws Exception {
     /* Test bootstrap */
     long expectedResourceCount =
@@ -244,8 +245,8 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
-    HelixBootstrapUpgradeTool.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "DC1",
-        DEFAULT_MAX_PARTITIONS_PER_RESOURCE);
+    HelixBootstrapUpgradeTool.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+        clusterNameInHelix, "DC1", DEFAULT_MAX_PARTITIONS_PER_RESOURCE);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
@@ -255,12 +256,11 @@ public class HelixBootstrapUpgradeToolTest {
    * @param expectedResourceCount the expected number of resources in Helix.
    */
   private void verifyResourceCount(HardwareLayout hardwareLayout, long expectedResourceCount) {
-    String clusterName = hardwareLayout.getClusterName();
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
       ZkInfo zkInfo = dcsToZkInfo.get(dc.getName());
       ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.port);
       Assert.assertEquals("Resource count mismatch", expectedResourceCount,
-          admin.getResourcesInCluster(clusterName).size());
+          admin.getResourcesInCluster(clusterNameInHelix).size());
     }
   }
 }

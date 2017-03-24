@@ -403,6 +403,7 @@ public class TestUtils {
     private boolean rackAware;
     private String clusterName;
     private List<JSONArray> datanodeJSONArrays;
+    private Properties properties;
 
     private HardwareLayout hardwareLayout;
 
@@ -461,15 +462,16 @@ public class TestUtils {
       this.numRacks = numRacks;
       this.rackAware = rackAware;
       this.clusterName = clusterName;
-
+      this.properties = new Properties();
+      properties.setProperty("clustermap.cluster.name", "test");
       this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true)),
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(properties)));
     }
 
     void addNewDataNodes(int i) throws JSONException {
       this.dataNodeCount += i;
       this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false)),
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(properties)));
     }
 
     /**

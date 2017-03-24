@@ -25,11 +25,8 @@ public class ClusterMapConfig {
   @Default("com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory")
   public final String clusterMapResourceStatePolicyFactory;
 
-  /**
-   * The fixed timeout based resource state handling checks if we have had a 'threshold'
-   * number of consecutive errors, and if so, considers the resource as down for
-   * 'retry backoff' milliseconds.
-   */
+  // The fixed timeout based resource state handling checks if we have had a 'threshold' number of consecutive errors,
+  // and if so, considers the resource as down for 'retry backoff' milliseconds.
 
   /**
    * The threshold for the number of consecutive errors to tolerate for a datanode.
@@ -66,6 +63,26 @@ public class ClusterMapConfig {
   @Default("")
   public final String clusterMapSslEnabledDatacenters;
 
+  /**
+   * The zk connect string cluster participants should use in the Helix based dynamic cluster manager.
+   */
+  @Config("clustermap.participant.zk.connect.string")
+  @Default("")
+  public final String clusterMapParticipantZkConnectString;
+
+  /**
+   * The clustermap participant factory to use.
+   */
+  @Config("clustermap.participant.factory")
+  @Default("com.github.ambry.clustermap.StaticParticipantFactory")
+  public final String clusterMapParticipantFactory;
+
+  /**
+   * The name of the associated cluster for this node.
+   */
+  @Config("clustermap.cluster.name")
+  public final String clusterMapClusterName;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapResourceStatePolicyFactory = verifiableProperties.getString("clustermap.resourcestatepolicy.factory",
         "com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory");
@@ -80,5 +97,10 @@ public class ClusterMapConfig {
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.retry.backoff.ms", 10 * 60 * 1000, 1,
             30 * 60 * 1000);
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
+    clusterMapClusterName = verifiableProperties.getString("clustermap.cluster.name");
+    clusterMapParticipantFactory = verifiableProperties.getString("clustermap.participant.factory",
+        "com.github.ambry.clustermap.StaticParticipantFactory");
+    clusterMapParticipantZkConnectString =
+        verifiableProperties.getString("clustermap.participant.zk.connect.string", "");
   }
 }

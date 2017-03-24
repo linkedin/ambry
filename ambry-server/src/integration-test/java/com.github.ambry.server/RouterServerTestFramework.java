@@ -168,6 +168,7 @@ class RouterServerTestFramework {
     properties.setProperty("router.request.timeout.ms", "10000");
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(CHUNK_SIZE));
     properties.setProperty("router.put.success.target", "1");
+    properties.setProperty("clustermap.cluster.name", "test");
     return properties;
   }
 

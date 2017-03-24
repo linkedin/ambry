@@ -16,6 +16,8 @@ package com.github.ambry.server;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.ClusterParticipantFactory;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
@@ -54,7 +56,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Ambry server
  */
-public class AmbryServer {
+class AmbryServer {
 
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
@@ -63,6 +65,7 @@ public class AmbryServer {
   private ScheduledExecutorService scheduler = null;
   private StorageManager storageManager = null;
   private ReplicationManager replicationManager = null;
+  private ClusterParticipant clusterParticipant;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
   private final ClusterMap clusterMap;
@@ -73,19 +76,19 @@ public class AmbryServer {
   private ServerMetrics metrics = null;
   private Time time;
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, Time time) throws IOException {
+  AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, Time time) throws IOException {
     this(properties, clusterMap, new LoggingNotificationSystem(), time);
   }
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem,
-      Time time) throws IOException {
+  AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem, Time time)
+      throws IOException {
     this.properties = properties;
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
     this.time = time;
   }
 
-  public void startup() throws InstantiationException {
+  void startup() throws InstantiationException {
     try {
       logger.info("starting");
       logger.info("Setting up JMX.");
@@ -143,6 +146,11 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
+      ClusterParticipantFactory participantFactory =
+          Utils.getObj(clusterMapConfig.clusterMapParticipantFactory, properties, clusterMapConfig);
+      clusterParticipant = participantFactory.getClusterParticipant();
+      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port);
+
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
@@ -153,11 +161,13 @@ public class AmbryServer {
     }
   }
 
-  public void shutdown() {
+  void shutdown() {
 
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
+
+      clusterParticipant.terminate();
 
       if (scheduler != null) {
         scheduler.shutdown();
@@ -201,7 +211,7 @@ public class AmbryServer {
     }
   }
 
-  public void awaitShutdown() throws InterruptedException {
+  void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 }

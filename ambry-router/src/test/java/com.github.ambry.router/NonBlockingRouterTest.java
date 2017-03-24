@@ -118,6 +118,7 @@ public class NonBlockingRouterTest {
     properties.setProperty("router.delete.success.target", Integer.toString(DELETE_SUCCESS_TARGET));
     properties.setProperty("router.connection.checkout.timeout.ms", Integer.toString(CHECKOUT_TIMEOUT_MS));
     properties.setProperty("router.request.timeout.ms", Integer.toString(REQUEST_TIMEOUT_MS));
+    properties.setProperty("clustermap.cluster.name", "test");
     return properties;
   }
 
