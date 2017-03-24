@@ -520,7 +520,6 @@ public class AdminBlobStorageServiceTest {
     doRouterExceptionPipelineTest(testRouter, exceptionMsg);
   }
 
-
   /**
    * Test that the correct service ID is sent to the router on deletes.
    * @throws Exception

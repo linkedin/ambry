@@ -149,7 +149,8 @@ class PutOperation {
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time the Time instance to use.
-   * @param blobProperties the BlobProperties associated with the put operation.        @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
+   * @param blobProperties the BlobProperties associated with the put operation.
+   * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, NotificationSystem notificationSystem, byte[] userMetadata,
@@ -1147,11 +1148,9 @@ class PutOperation {
      * blob is composite. If no first chunk was put successfully, this will do nothing.
      */
     void notifyForFirstChunkCreation() {
-      if (firstChunkIdAndProperties != null) {
-        String chunkId = firstChunkIdAndProperties.getFirst().getID();
-        BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
-        notificationSystem.onBlobCreated(chunkId, chunkProperties, userMetadata, NotificationBlobType.DataChunk);
-      }
+      String chunkId = firstChunkIdAndProperties.getFirst().getID();
+      BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
+      notificationSystem.onBlobCreated(chunkId, chunkProperties, userMetadata, NotificationBlobType.DataChunk);
     }
 
     @Override
