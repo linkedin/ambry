@@ -207,12 +207,17 @@ class PutOperation {
    */
   void maybeNotifyForBlobCreation() {
     if (isOperationComplete()) {
-      metadataPutChunk.maybeNotifyForFirstChunkCreation();
       if (blobId != null) {
         NotificationBlobType notificationBlobType =
             getNumDataChunks() == 1 ? NotificationBlobType.Simple : NotificationBlobType.Composite;
+        if (notificationBlobType == NotificationBlobType.Composite) {
+          metadataPutChunk.notifyForFirstChunkCreation();
+        }
         notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), getUserMetadata(),
             notificationBlobType);
+      } else {
+        // If the metadata chunk was not put successfully, the first chunk must be a data chunk.
+        metadataPutChunk.notifyForFirstChunkCreation();
       }
     }
   }
@@ -1134,16 +1139,14 @@ class PutOperation {
     }
 
     /**
-     * Notify for the creation of the first chunk if this was found to be a composite blob. To be called after the
-     * overall operation is completed.
+     * Notify for the creation of the first chunk. To be called after the overall operation is completed if the overall
+     * blob is composite. If no first chunk was put successfully, this will do nothing.
      */
-    void maybeNotifyForFirstChunkCreation() {
+    void notifyForFirstChunkCreation() {
       if (firstChunkIdAndProperties != null) {
         String chunkId = firstChunkIdAndProperties.getFirst().getID();
         BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
-        if (!chunkId.equals(getBlobIdString())) {
-          notificationSystem.onBlobCreated(chunkId, chunkProperties, userMetadata, NotificationBlobType.DataChunk);
-        }
+        notificationSystem.onBlobCreated(chunkId, chunkProperties, userMetadata, NotificationBlobType.DataChunk);
       }
     }
 
