@@ -22,7 +22,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -68,9 +67,10 @@ public class StatsManagerTest {
     storeMap.put(new Partition(1000, PartitionState.READ_WRITE, 1024 * 1024 * 1024), null);
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
-    properties.put("store.stats.output.file.path", outputFileString);
+    properties.put("stats.output.file.path", outputFileString);
     StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(properties));
-    statsManager = new StatsManager(storageManager, config);
+    statsManager = new StatsManager(storageManager, new ArrayList<>(storeMap.keySet()), new MetricRegistry(), config,
+        SystemTime.getInstance());
   }
 
   /**
@@ -93,32 +93,45 @@ public class StatsManagerTest {
   @Test
   public void testStatsManagerCollectAggregateAndPublish() throws StoreException, IOException, InterruptedException {
     long[][] aggregatedTestData = new long[][]{{1110, 200, 300}, {350}, {500, 300}, {10, 20, 30, 40, 50}};
-    StatsSnapshot aggregatedSnapshot = generateStatsSnapshot(aggregatedTestData);
-    Pair<StatsSnapshot, List<String>> result = statsManager.collectAndAggregate(storeMap.keySet());
-    assertTrue("Aggregated StatsSnapshot does not match with expected value",
-        aggregatedSnapshot.equals(result.getFirst()));
-    assertEquals("Skipped store count mismatch with expected value", 1, result.getSecond().size());
+    StatsSnapshot expectedSnapshot = generateStatsSnapshot(aggregatedTestData);
+    StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
+    List<String> unreachableStores = new ArrayList<>();
+    for (PartitionId partitionId : storeMap.keySet()) {
+      if (!statsManager.collectAndAggregate(actualSnapshot, partitionId)) {
+        unreachableStores.add(partitionId.toString());
+      }
+    }
+    assertTrue("Aggregated StatsSnapshot does not match with expected snapshot",
+        expectedSnapshot.equals(actualSnapshot));
+    assertEquals("Skipped store count mismatch with expected value", 1, unreachableStores.size());
     StatsHeader statsHeader =
         new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), storeMap.keySet().size(),
-            storeMap.keySet().size() - result.getSecond().size(), result.getSecond());
+            storeMap.keySet().size() - unreachableStores.size(), unreachableStores);
     File outputFile = new File(outputFileString);
     if (outputFile.exists()) {
       outputFile.createNewFile();
     }
     long fileLengthBefore = outputFile.length();
-    statsManager.publish(new StatsWrapper(statsHeader, result.getFirst()));
+    statsManager.publish(new StatsWrapper(statsHeader, actualSnapshot));
     assertTrue("Failed to publish stats to file", outputFile.length() > fileLengthBefore);
+  }
+
+  /**
+   * Test to verify {@link StatsManager} can start and shutdown properly.
+   * @throws InterruptedException
+   */
+  @Test
+  public void testStatsManagerStartAndShutdown() throws InterruptedException {
+    statsManager.start();
     statsManager.shutdown();
   }
 
   /**
-   * Test to verify {@link StatsManager} can start.
+   * Test to verify {@link StatsManager} can shutdown properly before started.
    * @throws InterruptedException
    */
   @Test
-  public void testStatsManagerStart() throws InterruptedException {
-    statsManager.start();
-    Thread.sleep(1000);
+  public void testShutdownBeforeStart() throws InterruptedException {
     statsManager.shutdown();
   }
 

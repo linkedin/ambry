@@ -283,7 +283,8 @@ public class BlobStoreStatsTest {
       Map<String, Long> innerQuotaMap = entry.getValue();
       assertEquals("Mismatch on number of containers", innerQuotaMap.size(), innerStatsSnapshotMap.size());
       for (Map.Entry<String, Long> innerEntry : innerQuotaMap.entrySet()) {
-        assertEquals("Mismatch on leaf node value", innerEntry.getValue(), innerStatsSnapshotMap.get(innerEntry.getKey()).getValue());
+        assertEquals("Mismatch on leaf node value", innerEntry.getValue(),
+            innerStatsSnapshotMap.get(innerEntry.getKey()).getValue());
       }
     }
   }

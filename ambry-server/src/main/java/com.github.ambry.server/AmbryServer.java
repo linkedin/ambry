@@ -17,6 +17,8 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -46,6 +48,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -148,7 +151,11 @@ public class AmbryServer {
       networkServer.start();
 
       if (statsConfig.publishEnabled) {
-        statsManager = new StatsManager(storageManager, statsConfig);
+        List<PartitionId> partitionIds = new ArrayList<>();
+        for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
+          partitionIds.add(replicaId.getPartitionId());
+        }
+        statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
         statsManager.start();
       }
 
