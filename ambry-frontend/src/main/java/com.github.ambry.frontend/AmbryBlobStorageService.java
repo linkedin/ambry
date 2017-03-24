@@ -377,7 +377,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               break;
             case DELETE:
               deleteCallback.markStartTime();
-              router.deleteBlob(result, deleteCallback);
+              router.deleteBlob(result, RestUtils.getServiceId(restRequest), deleteCallback);
               break;
             default:
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);

@@ -27,13 +27,17 @@ import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.notification.NotificationBlobType;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -72,6 +76,7 @@ class PutOperation {
   private final NonBlockingRouterMetrics routerMetrics;
   private final ClusterMap clusterMap;
   private final ResponseHandler responseHandler;
+  private final NotificationSystem notificationSystem;
   private final BlobProperties passedInBlobProperties;
   private final byte[] userMetadata;
   private final ReadableStreamChannel channel;
@@ -137,25 +142,27 @@ class PutOperation {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param blobProperties the BlobProperties associated with the put operation.
-   * @param userMetadata the userMetadata associated with the put operation.
+   * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
+   *@param userMetadata the userMetadata associated with the put operation.
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param time the Time instance to use.
+   * @param blobProperties the BlobProperties associated with the put operation.
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
+      ResponseHandler responseHandler, NotificationSystem notificationSystem, byte[] userMetadata,
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
-      Time time) throws RouterException {
+      Time time, BlobProperties blobProperties) throws RouterException {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
+    this.notificationSystem = notificationSystem;
     this.passedInBlobProperties = blobProperties;
     this.userMetadata = userMetadata;
     this.channel = channel;
@@ -195,6 +202,23 @@ class PutOperation {
    */
   boolean isOperationComplete() {
     return operationCompleted;
+  }
+
+  /**
+   * Notify for overall blob creation if the operation is complete and the blob was put successfully. Also ensure that
+   * notifications have been sent out for all successfully put data chunks.
+   */
+  void maybeNotifyForBlobCreation() {
+    if (isOperationComplete()) {
+      boolean composite = !getSuccessfullyPutChunkIdsIfComposite().isEmpty();
+      if (composite) {
+        metadataPutChunk.notifyForFirstChunkCreation();
+      }
+      if (blobId != null) {
+        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), getUserMetadata(),
+            composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
+      }
+    }
   }
 
   /**
@@ -260,6 +284,7 @@ class PutOperation {
       // a data chunk has succeeded.
       logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
+      metadataPutChunk.maybeNotifyForChunkCreation(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
       if (chunk.failedAttempts > 0) {
@@ -537,11 +562,25 @@ class PutOperation {
   }
 
   /**
-   * if this is a composite object, fill the list with successfully put chunk ids.
-   * @return the list of successfully put chunk ids if this is a composite object.
+   * @return the service ID for this put operation.
+   */
+  String getServiceId() {
+    return passedInBlobProperties.getServiceId();
+  }
+
+  /**
+   * If this is a composite object, fill the list with successfully put chunk ids.
+   * @return the list of successfully put chunk ids if this is a composite object, empty list otherwise.
    */
   List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
-    return metadataPutChunk.getSuccessfullyPutChunkIdsIfComposite();
+    List<StoreKey> successfulChunks = metadataPutChunk.getSuccessfullyPutChunkIds();
+    // If the overall operation failed, we treat the successfully put chunks as part of a composite blob.
+    boolean operationFailed = blobId == null || getOperationException() != null;
+    if (operationFailed || successfulChunks.size() > 1) {
+      return successfulChunks;
+    } else {
+      return Collections.emptyList();
+    }
   }
 
   /**
@@ -1074,6 +1113,7 @@ class PutOperation {
    */
   private class MetadataPutChunk extends PutChunk {
     TreeMap<Integer, StoreKey> indexToChunkIds;
+    Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
 
     /**
      * Initialize the MetadataPutChunk.
@@ -1091,6 +1131,31 @@ class PutOperation {
      */
     void addChunkId(BlobId chunkBlobId, int chunkIndex) {
       indexToChunkIds.put(chunkIndex, chunkBlobId);
+    }
+
+    /**
+     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, byte[], NotificationBlobType)} for this
+     * chunk, unless it is the first chunk, in which case it might be an entire simple blob. In that case, save
+     * the {@link BlobProperties} from the first chunk.
+     * @param chunk the {@link PutChunk} created.
+     */
+    void maybeNotifyForChunkCreation(PutChunk chunk) {
+      if (chunk.chunkIndex == 0) {
+        firstChunkIdAndProperties = new Pair<>(chunk.chunkBlobId, chunk.chunkBlobProperties);
+      } else {
+        notificationSystem.onBlobCreated(chunk.chunkBlobId.getID(), chunk.chunkBlobProperties, userMetadata,
+            NotificationBlobType.DataChunk);
+      }
+    }
+
+    /**
+     * Notify for the creation of the first chunk. To be called after the overall operation is completed if the overall
+     * blob is composite. If no first chunk was put successfully, this will do nothing.
+     */
+    void notifyForFirstChunkCreation() {
+      String chunkId = firstChunkIdAndProperties.getFirst().getID();
+      BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
+      notificationSystem.onBlobCreated(chunkId, chunkProperties, userMetadata, NotificationBlobType.DataChunk);
     }
 
     @Override
@@ -1126,17 +1191,10 @@ class PutOperation {
     }
 
     /**
-     * Add all the successfully put chunk ids of the overall blob to the passed in list, if the blob is composite.
-     * @return list of chunk ids associated with this blob if it is composite; empty list otherwise.
+     * @return a list of all of the successfully put chunk ids associated with this blob
      */
-    List<StoreKey> getSuccessfullyPutChunkIdsIfComposite() {
-      List<StoreKey> chunkIdList = new ArrayList<>();
-      if (indexToChunkIds.size() > 1) {
-        for (StoreKey storeKey : indexToChunkIds.values()) {
-          chunkIdList.add(storeKey);
-        }
-      }
-      return chunkIdList;
+    List<StoreKey> getSuccessfullyPutChunkIds() {
+      return new ArrayList<>(indexToChunkIds.values());
     }
 
     /**

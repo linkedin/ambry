@@ -97,14 +97,17 @@ class DeleteManager {
   /**
    * Submits a {@link DeleteOperation} to this {@code DeleteManager}.
    * @param blobIdString The blobId string to be deleted.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
    */
-  void submitDeleteBlobOperation(String blobIdString, FutureResult<Void> futureResult, Callback<Void> callback) {
+  void submitDeleteBlobOperation(String blobIdString, String serviceId, FutureResult<Void> futureResult,
+      Callback<Void> callback) {
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
-          new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, futureResult, callback, time);
+          new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
+              futureResult);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
@@ -206,7 +209,7 @@ class DeleteManager {
   void onComplete(DeleteOperation op) {
     Exception e = op.getOperationException();
     if (e == null) {
-      notificationSystem.onBlobDeleted(op.getBlobId().getID());
+      notificationSystem.onBlobDeleted(op.getBlobId().getID(), op.getServiceId());
     } else {
       routerMetrics.onDeleteBlobError(e);
     }

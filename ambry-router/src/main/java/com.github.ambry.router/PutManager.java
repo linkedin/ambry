@@ -138,8 +138,8 @@ class PutManager {
       FutureResult<String> futureResult, Callback<String> callback) {
     try {
       PutOperation putOperation =
-          new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobProperties, userMetaData,
-              channel, futureResult, callback, routerCallback, chunkArrivalListener, time);
+          new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, userMetaData,
+              channel, futureResult, callback, routerCallback, chunkArrivalListener, time, blobProperties);
       putOperations.add(putOperation);
       putOperation.startReadingFromChannel();
     } catch (RouterException e) {
@@ -238,6 +238,7 @@ class PutManager {
   void onComplete(PutOperation op) {
     Exception e = op.getOperationException();
     String blobId = op.getBlobIdString();
+    op.maybeNotifyForBlobCreation();
     if (blobId == null && e == null) {
       e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationFailureWithUnsetExceptionCount.inc();
@@ -245,9 +246,8 @@ class PutManager {
     if (e != null) {
       blobId = null;
       routerMetrics.onPutBlobError(e);
-      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite());
+      routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite(), op.getServiceId());
     } else {
-      notificationSystem.onBlobCreated(op.getBlobIdString(), op.getBlobProperties(), op.getUserMetadata());
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
     routerMetrics.operationDequeuingRate.mark();

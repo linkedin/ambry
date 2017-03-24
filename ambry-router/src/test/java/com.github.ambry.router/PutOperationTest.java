@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -25,7 +26,6 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
@@ -100,8 +100,10 @@ public class PutOperationTest {
     FutureResult<String> future = new FutureResult<>();
     MockNetworkClient mockNetworkClient = new MockNetworkClient();
     PutOperation op =
-        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobProperties, userMetadata,
-            channel, future, null, new RouterCallback(mockNetworkClient, new ArrayList<StoreKey>()), null, time);
+        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
+            userMetadata, channel, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, time,
+            blobProperties);
     op.startReadingFromChannel();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;

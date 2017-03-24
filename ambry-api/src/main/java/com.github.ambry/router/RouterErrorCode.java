@@ -25,7 +25,7 @@ public enum RouterErrorCode {
    */
   AmbryUnavailable, /**
    * Caller passed in an invalid blob id and so operation could not be attempted. May occur for
-   * {@link Router#getBlob(String, GetBlobOptions)}, {@link Router#deleteBlob(String)} (and their variants) operations.
+   * {@link Router#getBlob(String, GetBlobOptions)}, {@link Router#deleteBlob(String, String)} (and their variants) operations.
    */
   InvalidBlobId, /**
    * Caller passed in an illegal argument for

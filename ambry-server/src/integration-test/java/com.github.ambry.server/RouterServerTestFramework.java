@@ -321,7 +321,7 @@ class RouterServerTestFramework {
    */
   private void startDeleteBlob(final OperationChain opChain) {
     Callback<Void> callback = new TestCallback<>(opChain, false);
-    Future<Void> future = router.deleteBlob(opChain.blobId, callback);
+    Future<Void> future = router.deleteBlob(opChain.blobId, null, callback);
     TestFuture<Void> testFuture = new TestFuture<Void>(future, genLabel("deleteBlob", false), opChain) {
       @Override
       void check() throws Exception {

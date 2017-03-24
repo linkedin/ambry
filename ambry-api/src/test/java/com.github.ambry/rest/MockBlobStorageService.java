@@ -112,7 +112,7 @@ public class MockBlobStorageService implements BlobStorageService {
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.deleteBlob(blobId, new MockDeleteCallback(this, restRequest, restResponseChannel));
+      router.deleteBlob(blobId, null, new MockDeleteCallback(this, restRequest, restResponseChannel));
     }
   }
 

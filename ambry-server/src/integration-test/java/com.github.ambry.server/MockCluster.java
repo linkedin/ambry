@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
+import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -182,12 +183,13 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata) {
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
+      NotificationBlobType notificationBlobType) {
     // ignore
   }
 
   @Override
-  public void onBlobDeleted(String blobId) {
+  public void onBlobDeleted(String blobId, String serviceId) {
     // ignore
   }
 

@@ -520,6 +520,25 @@ public class AdminBlobStorageServiceTest {
     doRouterExceptionPipelineTest(testRouter, exceptionMsg);
   }
 
+  /**
+   * Test that the correct service ID is sent to the router on deletes.
+   * @throws Exception
+   */
+  @Test
+  public void deleteServiceIdTest() throws Exception {
+    AdminTestRouter testRouter = new AdminTestRouter();
+    adminBlobStorageService =
+        new AdminBlobStorageService(adminConfig, adminMetrics, CLUSTER_MAP, responseHandler, testRouter,
+            idConverterFactory, securityServiceFactory);
+    adminBlobStorageService.start();
+    JSONObject headers = new JSONObject();
+    String serviceId = "service-id";
+    headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
+    doOperation(AdminTestUtils.createRestRequest(RestMethod.DELETE, "/", headers, null), new MockRestResponseChannel());
+    assertEquals(serviceId, testRouter.deleteServiceId);
+    doOperation(AdminTestUtils.createRestRequest(RestMethod.DELETE, "/", null, null), new MockRestResponseChannel());
+    assertNull("Service ID should not have been set for this delete", testRouter.deleteServiceId);
+  }
   // helpers
   // general
 
@@ -1345,6 +1364,7 @@ class AdminTestRouter implements Router {
   public OpType exceptionOpType = null;
   public Exception exceptionToReturn = null;
   public RuntimeException exceptionToThrow = null;
+  public String deleteServiceId = null;
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
@@ -1381,12 +1401,13 @@ class AdminTestRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId) {
-    return deleteBlob(blobId, null);
+  public Future<Void> deleteBlob(String blobId, String serviceId) {
+    return deleteBlob(blobId, serviceId, null);
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
+    deleteServiceId = serviceId;
     return completeOperation(null, callback, OpType.DeleteBlob);
   }
 

@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import java.io.IOException;
@@ -194,12 +195,12 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId) {
-    return deleteBlob(blobId, null);
+  public Future<Void> deleteBlob(String blobId, String serviceId) {
+    return deleteBlob(blobId, serviceId, null);
   }
 
   @Override
-  public Future<Void> deleteBlob(String blobId, Callback<Void> callback) {
+  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
     FutureResult<Void> futureResult = new FutureResult<Void>();
     handlePrechecks(futureResult, callback);
     Exception exception = null;
@@ -211,7 +212,7 @@ public class InMemoryRouter implements Router {
         if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
           deletedBlobs.add(blobId);
           if (notificationSystem != null) {
-            notificationSystem.onBlobDeleted(blobId);
+            notificationSystem.onBlobDeleted(blobId, serviceId);
           }
         } else if (!deletedBlobs.contains(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
@@ -334,7 +335,8 @@ class InMemoryBlobPoster implements Runnable {
           new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
       blobs.put(blobId, blob);
       if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), postData.getUsermetadata());
+        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), postData.getUsermetadata(),
+            NotificationBlobType.Simple);
       }
       operationResult = blobId;
     } catch (Exception e) {
