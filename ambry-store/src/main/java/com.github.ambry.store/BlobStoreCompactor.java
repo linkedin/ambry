@@ -103,10 +103,12 @@ class BlobStoreCompactor {
    * @param time the {@link Time} instance to use.
    * @param sessionId the sessionID of the store.
    * @param incarnationId the incarnation ID of the store.
+   * @throws IOException if the {@link CompactionLog} could not be created or if commit/cleanup failed during recovery.
+   * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
       StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, ScheduledExecutorService scheduler,
-      MessageStoreRecovery recovery, Time time, UUID sessionId, UUID incarnationId) {
+      MessageStoreRecovery recovery, Time time, UUID sessionId, UUID incarnationId) throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -120,41 +122,7 @@ class BlobStoreCompactor {
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
-  }
-
-  /**
-   * If a compaction was in progress during a crash/shutdown, fixes the state so that the store is loaded correctly
-   * and compaction can resume smoothly on a call to {@link #resumeCompaction()}. Expected to be called before the
-   * {@link PersistentIndex} is instantiated in the {@link BlobStore}.
-   * @throws IOException if the {@link CompactionLog} could not be created or if commit or cleanup failed.
-   * @throws StoreException if the commit failed.
-   */
-  void fixStateIfRequired() throws IOException, StoreException {
-    if (CompactionLog.isCompactionInProgress(dataDir.getAbsolutePath(), storeId)) {
-      compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, storeKeyFactory, time);
-      CompactionLog.Phase phase = compactionLog.getCompactionPhase();
-      switch (phase) {
-        case COMMIT:
-          commit(true);
-          compactionLog.markCleanupStart();
-          // fall through to CLEANUP
-        case CLEANUP:
-          cleanup(true);
-          compactionLog.markCycleComplete();
-          break;
-        case COPY:
-          recoveryStartToken = compactionLog.getSafeToken();
-          // fall through to the break.
-        case PREPARE:
-        case DONE:
-          break;
-        default:
-          throw new IllegalStateException("Unrecognized compaction phase: " + phase);
-      }
-      if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
-        endCompaction();
-      }
-    }
+    fixStateIfRequired();
   }
 
   /**
@@ -185,8 +153,6 @@ class BlobStoreCompactor {
    * Compacts the store by copying valid data from the log segments in {@code details} to swap spaces and switching
    * the compacted segments out for the swap spaces. Returns once the compaction is complete.
    * @param details the {@link CompactionDetails} for the compaction.
-   * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
-   * in the segments to compact are in the journal.
    * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
    * in the segments to compact are in the journal.
    * @throws IllegalStateException if the compactor has not been initialized.
@@ -257,6 +223,41 @@ class BlobStoreCompactor {
   }
 
   /**
+   * If a compaction was in progress during a crash/shutdown, fixes the state so that the store is loaded correctly
+   * and compaction can resume smoothly on a call to {@link #resumeCompaction()}. Expected to be called before the
+   * {@link PersistentIndex} is instantiated in the {@link BlobStore}.
+   * @throws IOException if the {@link CompactionLog} could not be created or if commit or cleanup failed.
+   * @throws StoreException if the commit failed.
+   */
+  private void fixStateIfRequired() throws IOException, StoreException {
+    if (CompactionLog.isCompactionInProgress(dataDir.getAbsolutePath(), storeId)) {
+      compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, storeKeyFactory, time);
+      CompactionLog.Phase phase = compactionLog.getCompactionPhase();
+      switch (phase) {
+        case COMMIT:
+          commit(true);
+          compactionLog.markCleanupStart();
+          // fall through to CLEANUP
+        case CLEANUP:
+          cleanup(true);
+          compactionLog.markCycleComplete();
+          break;
+        case COPY:
+          recoveryStartToken = compactionLog.getSafeToken();
+          // fall through to the break.
+        case PREPARE:
+        case DONE:
+          break;
+        default:
+          throw new IllegalStateException("Unrecognized compaction phase: " + phase);
+      }
+      if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
+        endCompaction();
+      }
+    }
+  }
+
+  /**
    * Checks the sanity of the provided {@code details}
    * @param details the {@link CompactionDetails} to use for compaction.
    * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
@@ -275,7 +276,7 @@ class BlobStoreCompactor {
     // last offset to compact should be outside the range of the journal
     Offset lastSegmentEndOffset = new Offset(lastSegment.getName(), lastSegment.getEndOffset());
     if (lastSegmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
-      throw new IllegalArgumentException("Some of the offsets provided for compaction are within the jounral");
+      throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
     }
   }
 
@@ -294,11 +295,11 @@ class BlobStoreCompactor {
     Offset startOffsetOfLastIndexSegmentForDelete = getStartOffsetOfLastIndexSegmentForDelete();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
-      // only the very first log segment in the cycle can contain duplicate records.
-      LogSegment logSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
-      LogSegment prevSegment = srcLog.getPrevSegment(logSegment);
+      // only records in the the very first log segment in the cycle can have been copied in a previous cycle
+      LogSegment firstLogSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
+      LogSegment prevSegment = srcLog.getPrevSegment(firstLogSegment);
       if (prevSegment != null) {
-        // duplicate data, if it exists, can only be in the previous log segment.
+        // duplicate data, if it exists, can only be in the log segment just before the first log segment in the cycle.
         Offset startOffset = new Offset(prevSegment.getName(), prevSegment.getStartOffset());
         Offset endOffset = new Offset(prevSegment.getName(), prevSegment.getEndOffset());
         duplicateSearchSpan = new FileSpan(startOffset, endOffset);
@@ -311,12 +312,12 @@ class BlobStoreCompactor {
       if (needsCopying(logSegmentEndOffset) && !copyDataByLogSegment(srcLogSegment, duplicateSearchSpan,
           startOffsetOfLastIndexSegmentForDelete)) {
         if (isActive) {
+          // split the cycle only if there is no shutdown in progress
           compactionLog.splitCurrentCycle(logSegmentName);
         }
-        // else shutdown is in progress.
         break;
       }
-      // only the very first log segment in the cycle can contain duplicate records.
+      // only records in the the very first log segment in the cycle can have been copied in a previous cycle
       duplicateSearchSpan = null;
     }
 

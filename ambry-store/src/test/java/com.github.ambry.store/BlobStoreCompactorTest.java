@@ -685,8 +685,9 @@ public class BlobStoreCompactorTest {
    * @param ioScheduler the {@link DiskIOScheduler} instance to use.
    * @return an instance of {@link BlobStoreCompactor}.
    * @throws IOException
+   * @throws StoreException
    */
-  private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler) throws IOException {
+  private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler) throws IOException, StoreException {
     closeOrExceptionInduced = false;
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config,
@@ -893,7 +894,6 @@ public class BlobStoreCompactorTest {
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    compactor.fixStateIfRequired();
     state.initIndex(state.metricRegistry);
     compactor.initialize(state.index);
     try {
