@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,10 +119,6 @@ public class StorageManager {
       startupThread.join();
     }
     logger.info("Starting storage manager complete");
-  }
-
-  public Set<PartitionId> getPartitionIds() {
-    return partitionToDiskManager.keySet();
   }
 
   /**

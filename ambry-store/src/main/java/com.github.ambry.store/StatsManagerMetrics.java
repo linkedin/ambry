@@ -20,13 +20,11 @@ import com.codahale.metrics.MetricRegistry;
 
 
 class StatsManagerMetrics {
-  final MetricRegistry registry;
   final Counter statsPublishFailureCount;
   final Histogram totalFetchAndAggregateTime;
   final Histogram fetchAndAggregateTimePerStore;
 
   public StatsManagerMetrics(MetricRegistry registry) {
-    this.registry = registry;
     statsPublishFailureCount = registry.counter(MetricRegistry.name(StatsManager.class, "StatsPublishFailureCount"));
     totalFetchAndAggregateTime =
         registry.histogram(MetricRegistry.name(StatsManager.class, "TotalFetchAndAggregateTime"));

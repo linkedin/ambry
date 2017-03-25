@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -32,46 +33,25 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
+import java.util.Random;
 import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
 
+/**
+ * Tests for {@link StatsManager}.
+ */
 public class StatsManagerTest {
   private final StatsManager statsManager;
   private final Map<PartitionId, Store> storeMap;
   private final String outputFileString;
   private final File tempDir;
-
-  public StatsManagerTest() throws IOException, StoreException {
-    tempDir = StoreTestUtils.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10));
-    outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
-    long[][] testData1 = new long[][]{{100, 200, 300}, {100}, {200, 300}};
-    long[][] testData2 = new long[][]{{10}, {50}};
-    long[][] testData3 = new long[][]{{1000}, {200}, {300}, {10, 20, 30, 40, 50}};
-    List<StatsSnapshot> statsSnapshots = new ArrayList<>();
-    statsSnapshots.add(generateStatsSnapshot(testData1));
-    statsSnapshots.add(generateStatsSnapshot(testData2));
-    statsSnapshots.add(generateStatsSnapshot(testData3));
-    storeMap = new HashMap<>();
-    MetricRegistry registry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(registry);
-    for (int i = 0; i < 3; i++) {
-      PartitionId id = new Partition(i, PartitionState.READ_WRITE, 1024 * 1024 * 1024);
-      Store store =
-          new MockBlobStore(UtilsTest.getRandomString(10), metrics, new MockBlobStoreStats(statsSnapshots.get(i)));
-      storeMap.put(id, store);
-    }
-    storeMap.put(new Partition(1000, PartitionState.READ_WRITE, 1024 * 1024 * 1024), null);
-    StorageManager storageManager = new MockStorageManager(storeMap);
-    Properties properties = new Properties();
-    properties.put("stats.output.file.path", outputFileString);
-    StatsManagerConfig config = new StatsManagerConfig(new VerifiableProperties(properties));
-    statsManager = new StatsManager(storageManager, new ArrayList<>(storeMap.keySet()), new MetricRegistry(), config,
-        SystemTime.getInstance());
-  }
+  private final List<StatsSnapshot> statsSnapshots;
+  private final StatsSnapshot preAggregatedSnapshot;
+  private final Random random = new Random();
+  private final StatsManagerConfig config;
 
   /**
    * Deletes the temporary directory.
@@ -83,6 +63,31 @@ public class StatsManagerTest {
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
+  public StatsManagerTest() throws IOException, StoreException {
+    tempDir = StoreTestUtils.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10));
+    outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
+    int[][] testData1 = new int[][]{{1100, 250, 600}, {330}, {500, 300}, {1000, 2000, 3000, 50, 150}};
+    preAggregatedSnapshot = generateStatsSnapshot(testData1);
+    int[][] testData2 = decomposeArray(testData1);
+    int[][] testData3 = decomposeArray(testData1);
+    storeMap = new HashMap<>();
+    statsSnapshots = new ArrayList<>();
+    statsSnapshots.add(generateStatsSnapshot(testData1));
+    statsSnapshots.add(generateStatsSnapshot(testData2));
+    statsSnapshots.add(generateStatsSnapshot(testData3));
+    for (int i = 0; i < 3; i++) {
+      PartitionId id = getTestPartitionId(i);
+      Store store = new MockBlobStore(new MockBlobStoreStats(statsSnapshots.get(i), false));
+      storeMap.put(id, store);
+    }
+    StorageManager storageManager = new MockStorageManager(storeMap);
+    Properties properties = new Properties();
+    properties.put("stats.output.file.path", outputFileString);
+    config = new StatsManagerConfig(new VerifiableProperties(properties));
+    statsManager = new StatsManager(storageManager, new ArrayList<>(storeMap.keySet()), new MetricRegistry(), config,
+        new MockTime());
+  }
+
   /**
    * Test to verify that the {@link StatsManager} is collecting, aggregating and publishing correctly using predefined
    * data sets and mocked {@link Store}s and {@link StorageManager}.
@@ -91,19 +96,15 @@ public class StatsManagerTest {
    * @throws InterruptedException
    */
   @Test
-  public void testStatsManagerCollectAggregateAndPublish() throws StoreException, IOException, InterruptedException {
-    long[][] aggregatedTestData = new long[][]{{1110, 200, 300}, {350}, {500, 300}, {10, 20, 30, 40, 50}};
-    StatsSnapshot expectedSnapshot = generateStatsSnapshot(aggregatedTestData);
+  public void testStatsManagerCollectAggregateAndPublish() throws IOException {
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
     List<String> unreachableStores = new ArrayList<>();
     for (PartitionId partitionId : storeMap.keySet()) {
-      if (!statsManager.collectAndAggregate(actualSnapshot, partitionId)) {
-        unreachableStores.add(partitionId.toString());
-      }
+      statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
-    assertTrue("Aggregated StatsSnapshot does not match with expected snapshot",
-        expectedSnapshot.equals(actualSnapshot));
-    assertEquals("Skipped store count mismatch with expected value", 1, unreachableStores.size());
+    assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
+        preAggregatedSnapshot.equals(actualSnapshot));
+    assertEquals("Unreachable store count mismatch with expected value", 0, unreachableStores.size());
     StatsHeader statsHeader =
         new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), storeMap.keySet().size(),
             storeMap.keySet().size() - unreachableStores.size(), unreachableStores);
@@ -114,6 +115,30 @@ public class StatsManagerTest {
     long fileLengthBefore = outputFile.length();
     statsManager.publish(new StatsWrapper(statsHeader, actualSnapshot));
     assertTrue("Failed to publish stats to file", outputFile.length() > fileLengthBefore);
+  }
+
+  /**
+   * Test to verify the behavior when {@link Store} is null and when a {@link StoreException} is thrown by the
+   * {@link StoreStats}.
+   * @throws StoreException
+   * @throws IOException
+   */
+  @Test
+  public void testStatsManagerWithProblematicStores() throws StoreException, IOException {
+    Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
+    problematicStoreMap.put(getTestPartitionId(1), null);
+    problematicStoreMap.put(getTestPartitionId(2), new MockBlobStore(new MockBlobStoreStats(null, true)));
+    StatsManager testStatsManager =
+        new StatsManager(new MockStorageManager(problematicStoreMap), new ArrayList<>(storeMap.keySet()),
+            new MetricRegistry(), config, new MockTime());
+    ;
+    List<String> unreachableStores = new ArrayList<>();
+    StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
+    for (PartitionId partitionId : problematicStoreMap.keySet()) {
+      testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
+    }
+    assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue().longValue());
+    assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
   }
 
   /**
@@ -140,7 +165,7 @@ public class StatsManagerTest {
    * @param rawData the two dimensional array to be converted
    * @return the result of the conversion in a {@link StatsSnapshot}
    */
-  private StatsSnapshot generateStatsSnapshot(long[][] rawData) {
+  private StatsSnapshot generateStatsSnapshot(int[][] rawData) {
     Map<String, StatsSnapshot> firstSubTreeMap = new HashMap<>();
     long totalSize = 0;
     for (int i = 0; i < rawData.length; i++) {
@@ -148,12 +173,39 @@ public class StatsManagerTest {
       long subTotalSize = 0;
       for (int j = 0; j < rawData[i].length; j++) {
         subTotalSize += rawData[i][j];
-        secondSubTreeMap.put("innerKey_".concat(String.valueOf(j)), new StatsSnapshot(rawData[i][j], null));
+        secondSubTreeMap.put("innerKey_".concat(String.valueOf(j)), new StatsSnapshot(new Long(rawData[i][j]), null));
       }
       totalSize += subTotalSize;
       firstSubTreeMap.put("outerKey_".concat(String.valueOf(i)), new StatsSnapshot(subTotalSize, secondSubTreeMap));
     }
     return new StatsSnapshot(totalSize, firstSubTreeMap);
+  }
+
+  /**
+   * return a {@link PartitionId} for testing purpose.
+   * @return
+   */
+  private PartitionId getTestPartitionId(long id) {
+    return new Partition(id, PartitionState.READ_WRITE, 1024 * 1024 * 1024);
+  }
+
+  /**
+   * Decompose an array randomly from a base array to generate a sub array. The original base array is obtained if the
+   * modified base array is added with the returned sub array.
+   * @param base the base array to be decomposed
+   * @return a sub array that is decomposed randomly from the given base array
+   */
+  private int[][] decomposeArray(int[][] base) {
+    int[][] result = new int[random.nextInt(base.length) + 1][];
+    for (int i = 0; i < result.length; i++) {
+      result[i] = new int[random.nextInt(base[i].length + 1)];
+      for (int j = 0; j < result[i].length; j++) {
+        int partialValue = random.nextInt(base[i][j]);
+        base[i][j] -= partialValue;
+        result[i][j] = partialValue;
+      }
+    }
+    return result;
   }
 
   /**
@@ -171,11 +223,6 @@ public class StatsManagerTest {
     }
 
     @Override
-    public Set<PartitionId> getPartitionIds() {
-      return storeMap.keySet();
-    }
-
-    @Override
     public Store getStore(PartitionId id) {
       return storeMap.get(id);
     }
@@ -187,8 +234,9 @@ public class StatsManagerTest {
   private class MockBlobStore extends BlobStore {
     private final StoreStats storeStats;
 
-    MockBlobStore(String storeId, StorageManagerMetrics storageManagerMetrics, StoreStats storeStats) {
-      super(storeId, null, null, null, storageManagerMetrics, null, 1024, null, null, null, null);
+    MockBlobStore(StoreStats storeStats) {
+      super(UtilsTest.getRandomString(10), null, null, null, new StorageManagerMetrics(new MetricRegistry()), null,
+          1024, null, null, null, null);
       this.storeStats = storeStats;
     }
 
@@ -203,14 +251,19 @@ public class StatsManagerTest {
    */
   private class MockBlobStoreStats extends BlobStoreStats {
     private final StatsSnapshot statsSnapshot;
+    private final boolean throwStoreException;
 
-    MockBlobStoreStats(StatsSnapshot statsSnapshot) {
+    MockBlobStoreStats(StatsSnapshot statsSnapshot, boolean throwStoreException) {
       super(null, null, null);
       this.statsSnapshot = statsSnapshot;
+      this.throwStoreException = throwStoreException;
     }
 
     @Override
-    public StatsSnapshot getStatsSnapshot() {
+    public StatsSnapshot getStatsSnapshot() throws StoreException {
+      if (throwStoreException) {
+        throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
+      }
       return statsSnapshot;
     }
   }
