@@ -145,7 +145,7 @@ class BlobStoreCompactor {
   void close(long waitTimeSecs) throws InterruptedException {
     isActive = false;
     if (waitTimeSecs > 0 && !runningLatch.await(waitTimeSecs, TimeUnit.SECONDS)) {
-      logger.error("Compactor did not shutdown within " + waitTimeSecs + " seconds");
+      logger.error("Compactor did not shutdown within {} seconds", waitTimeSecs);
     }
   }
 
@@ -162,6 +162,8 @@ class BlobStoreCompactor {
   void compact(CompactionDetails details) throws IOException, StoreException {
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
+    } else if (compactionLog != null) {
+      throw new IllegalStateException("There is already a compaction in progress");
     }
     checkSanity(details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details);
@@ -188,7 +190,7 @@ class BlobStoreCompactor {
     1. PREPARE - Initial state of a compaction cycle. Signifies that the cycle has just started.
     2. COPY - Valid data from the segments under compaction is copied over to the swap spaces. If all the
     data cannot be copied, it auto splits the compaction job into two cycles.
-    3. COMMIT - Adds the new log segments to the application log and atomically changes the set of index segments
+    3. COMMIT - Adds the new log segments to the application log and atomically updates the set of index segments
     4. CLEANUP - Cleans up the old log segments and their index files
      */
 
@@ -344,8 +346,9 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Commits the changes made by copying valid data. Commit involves
-   * 1. Renaming temporary log segments
+   * Commits the changes made during {@link CompactionLog.Phase#COPY}. Commit involves
+   * 1. Renaming temporary log segments. This constitutes the on-disk commit. If the server were to crash after this
+   * step, the restart will remove all trace of the old log and index segments.
    * 2. Adding them to the log segments maintained by the application log.
    * 3. Atomically switching the old set of index segments for the new ones (if not recovering).
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
@@ -355,9 +358,9 @@ class BlobStoreCompactor {
   private void commit(boolean recovering) throws IOException, StoreException {
     List<String> logSegmentNames = getTargetLogSegmentNames();
     renameLogSegments(logSegmentNames);
-    commitLogSegments(logSegmentNames, recovering);
+    addNewLogSegmentsToSrcLog(logSegmentNames, recovering);
     if (!recovering) {
-      commitIndexSegments(logSegmentNames);
+      updateSrcIndex(logSegmentNames);
     }
   }
 
@@ -744,13 +747,12 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Commits the log segments with names {@code logSegmentNames}. Committing involves adding them to the application log
-   * instance.
+   * Adds the log segments with names {@code logSegmentNames} to the application log instance.
    * @param logSegmentNames the names of the log segments to commit.
    * @param recovering {@code true} if this function was called in the context of recovery. {@code false} otherwise.
    * @throws IOException if there were any I/O errors creating a log segment
    */
-  private void commitLogSegments(List<String> logSegmentNames, boolean recovering) throws IOException {
+  private void addNewLogSegmentsToSrcLog(List<String> logSegmentNames, boolean recovering) throws IOException {
     for (String logSegmentName : logSegmentNames) {
       File segmentFile = new File(dataDir, LogSegmentNameHelper.nameToFilename(logSegmentName));
       LogSegment segment = new LogSegment(logSegmentName, segmentFile, srcMetrics);
@@ -759,13 +761,14 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Commits all the index segments that refer to log segments in {@code logSegmentNames}. The commit is atomic with
-   * the use of {@link PersistentIndex#changeIndexSegments(List, Set)}.
+   * Adds all the index segments that refer to log segments in {@code logSegmentNames} to, and removes all the index
+   * segments that refer to the log segments that will be cleaned up from the application index. The change is atomic
+   * with the use of {@link PersistentIndex#changeIndexSegments(List, Set)}.
    * @param logSegmentNames the names of the log segments whose index segments need to be committed.
    * @throws IOException if there were any I/O errors in setting up the index segment.
    * @throws StoreException if there were any problems committing the changed index segments.
    */
-  private void commitIndexSegments(List<String> logSegmentNames) throws IOException, StoreException {
+  private void updateSrcIndex(List<String> logSegmentNames) throws IOException, StoreException {
     Set<Offset> indexSegmentsToRemove = new HashSet<>();
     for (String logSegmentName : compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction()) {
       indexSegmentsToRemove.addAll(getIndexSegmentDetails(logSegmentName).keySet());

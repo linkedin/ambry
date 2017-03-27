@@ -55,23 +55,23 @@ class CompactionLog implements Closeable {
   /**
    * Used to determine whether compaction is in progress.
    * @param dir the directory where the compaction log is expected to exist (if any).
-   * @param name the unique name for the store under compaction.
+   * @param storeId the ID of the store under compaction.
    * @return whether compaction is in progress for the store.
    */
-  static boolean isCompactionInProgress(String dir, String name) {
-    return new File(dir, name + COMPACTION_LOG_SUFFIX).exists();
+  static boolean isCompactionInProgress(String dir, String storeId) {
+    return new File(dir, storeId + COMPACTION_LOG_SUFFIX).exists();
   }
 
   /**
    * Creates a new compaction log.
    * @param dir the directory at which the compaction log must be created.
-   * @param name unique name of the store.
+   * @param storeId the ID of the store.
    * @param time the {@link Time} instance to use.
    * @param compactionDetails the details about the compaction.
    */
-  CompactionLog(String dir, String name, Time time, CompactionDetails compactionDetails) throws IOException {
+  CompactionLog(String dir, String storeId, Time time, CompactionDetails compactionDetails) throws IOException {
     this.time = time;
-    file = new File(dir, name + COMPACTION_LOG_SUFFIX);
+    file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (!file.createNewFile()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " already exists");
     }
@@ -84,13 +84,13 @@ class CompactionLog implements Closeable {
   /**
    * Loads an existing compaction log.
    * @param dir the directory at which the log exists.
-   * @param name unique name of the store.
+   * @param storeId the ID of the store.
    * @param storeKeyFactory the {@link StoreKeyFactory} that is used for keys in the {@link BlobStore} being compacted.
    * @param time the {@link Time} instance to use.
    */
-  CompactionLog(String dir, String name, StoreKeyFactory storeKeyFactory, Time time) throws IOException {
+  CompactionLog(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time) throws IOException {
     this.time = time;
-    file = new File(dir, name + COMPACTION_LOG_SUFFIX);
+    file = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (!file.exists()) {
       throw new IllegalArgumentException(file.getAbsolutePath() + " does not exist");
     }

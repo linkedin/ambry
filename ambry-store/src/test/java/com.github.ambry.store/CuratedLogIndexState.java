@@ -344,7 +344,7 @@ class CuratedLogIndexState {
    */
   IndexValue getExpectedValue(MockId id, boolean wantPut) {
     Pair<IndexValue, IndexValue> indexValues = allKeys.get(id);
-    return wantPut ? indexValues.getFirst() : indexValues.getSecond();
+    return wantPut || indexValues.getSecond() == null ? indexValues.getFirst() : indexValues.getSecond();
   }
 
   /**

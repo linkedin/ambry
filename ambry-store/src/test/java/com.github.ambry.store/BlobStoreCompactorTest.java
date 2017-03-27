@@ -158,6 +158,32 @@ public class BlobStoreCompactorTest {
   }
 
   /**
+   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails)} fails when a compaction is already
+   * in progress.
+   * @throws Exception
+   */
+  @Test
+  public void compactWithCompactionInProgressTest() throws Exception {
+    refreshState(false, true);
+    List<String> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(0, segmentsUnderCompaction);
+
+    // create a compaction log in order to mimic a compaction being in progress
+    CompactionLog cLog = new CompactionLog(tempDirStr, STORE_ID, state.time, details);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details);
+      fail("compact() should have failed because a compaction is already in progress");
+    } catch (IllegalStateException e) {
+      // expected. Nothing to do.
+    } finally {
+      cLog.close();
+      compactor.close(0);
+    }
+  }
+
+  /**
    * Tests the case where {@link BlobStoreCompactor#resumeCompaction()} is called without any compaction being in
    * progress.
    * @throws Exception
@@ -186,8 +212,8 @@ public class BlobStoreCompactorTest {
   public void basicTest() throws Exception {
     refreshState(false, true);
     List<String> segmentsUnderCompaction = getLogSegments(0, 2);
-    reduceValidDataSizeInLogSegments(segmentsUnderCompaction, state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
-    long deleteReferenceTimeMs = state.time.milliseconds();
+    long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
+        state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
     compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
   }
 
@@ -644,12 +670,13 @@ public class BlobStoreCompactorTest {
     // keep hard delete enabled
     refreshState(true, true);
     List<String> segmentsUnderCompaction = getLogSegments(0, 2);
-    reduceValidDataSizeInLogSegments(segmentsUnderCompaction, state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
+    long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
+        state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
     throwExceptionBeforeOperation = true;
     Log log = new InterruptionInducingLog(1, Integer.MAX_VALUE);
     assertTrue("Hard delete should be running", state.index.hardDeleter.isRunning());
-    compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction,
-        state.time.milliseconds(), true);
+    compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction, deleteReferenceTimeMs,
+        true);
     assertTrue("Hard delete should be running", state.index.hardDeleter.isRunning());
   }
 
@@ -776,11 +803,12 @@ public class BlobStoreCompactorTest {
    * segments.
    * @param logSegmentsToReduceFrom the names of the log segments to reduce the data from.
    * @param ceilingSize the maximum allowed valid size in these log segments.
+   * @return the time (in ms) at which all the deletes are valid.
    * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  private void reduceValidDataSizeInLogSegments(List<String> logSegmentsToReduceFrom, long ceilingSize)
+  private long reduceValidDataSizeInLogSegments(List<String> logSegmentsToReduceFrom, long ceilingSize)
       throws InterruptedException, IOException, StoreException {
     List<String> logSegments = new ArrayList<>(logSegmentsToReduceFrom);
     long validDataSize = getValidDataSize(logSegmentsToReduceFrom, state.time.milliseconds());
@@ -796,6 +824,8 @@ public class BlobStoreCompactorTest {
         validDataSize = getValidDataSize(logSegmentsToReduceFrom, state.time.milliseconds());
       }
     }
+    state.advanceTime(Time.MsPerSec);
+    return state.time.milliseconds();
   }
 
   /**
@@ -1089,6 +1119,7 @@ public class BlobStoreCompactorTest {
         BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
         checkRecord(id, options);
         options.close();
+        checkIndexValue(id);
       } else if (state.deletedKeys.contains(id)) {
         boolean shouldBeCompacted =
             idsInCompactedLogSegments.contains(id) && state.isDeletedAt(id, deleteReferenceTimeMs);
@@ -1106,6 +1137,7 @@ public class BlobStoreCompactorTest {
           } else {
             checkRecord(id, options);
             options.close();
+            checkIndexValue(id);
           }
         } catch (StoreException e) {
           assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
@@ -1130,6 +1162,7 @@ public class BlobStoreCompactorTest {
           } else {
             checkRecord(id, options);
             options.close();
+            checkIndexValue(id);
           }
         } catch (StoreException e) {
           assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
@@ -1208,16 +1241,14 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Checks the record of an id by ensuring that the {@link IndexValue} received from the store matches what is
+   * Checks the record of an id by ensuring that the {@link BlobReadOptions} received from the store matches what is
    * expected. Also checks the data if the key is not deleted and hard delete enabled.
    * @param id the {@link MockId} whose record needs to be checked.
    * @param options the {@link BlobReadOptions} received from the {@link PersistentIndex}.
    * @throws IOException
    */
   private void checkRecord(MockId id, BlobReadOptions options) throws IOException {
-    List<BlobReadOptions> optionsList = new ArrayList<>();
-    optionsList.add(options);
-    MessageReadSet readSet = new StoreMessageReadSet(optionsList);
+    MessageReadSet readSet = new StoreMessageReadSet(Arrays.asList(options));
     IndexValue value = state.getExpectedValue(id, true);
     assertEquals("Unexpected key in BlobReadOptions", id, options.getStoreKey());
     assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getSize());
@@ -1230,6 +1261,23 @@ public class BlobStoreCompactorTest {
       byte[] expectedData = state.getExpectedData(id, true);
       assertArrayEquals("Data obtained from reset does not match original", expectedData, readBuf.array());
     }
+  }
+
+  /**
+   * Checks that the {@link IndexValue} obtained from store matches what is expected.
+   * @param id the {@link MockId} of the blob whose {@link IndexValue} needs to be checked.
+   * @throws StoreException
+   */
+  private void checkIndexValue(MockId id) throws StoreException {
+    IndexValue value = state.getExpectedValue(id, false);
+    IndexValue valueFromStore = state.index.findKey(id);
+    assertEquals("Unexpected size in IndexValue", value.getSize(), valueFromStore.getSize());
+    assertEquals("Unexpected expiresAtMs in IndexValue", value.getExpiresAtMs(), valueFromStore.getExpiresAtMs());
+    assertEquals("Unexpected op time in IndexValue", value.getOperationTimeInMs(),
+        valueFromStore.getOperationTimeInMs());
+    assertEquals("Unexpected service ID in IndexValue", value.getServiceId(), valueFromStore.getServiceId());
+    assertEquals("Unexpected container ID in IndexValue", value.getContainerId(), valueFromStore.getContainerId());
+    assertEquals("Unexpected flafs in IndexValue", value.getFlags(), valueFromStore.getFlags());
   }
 
   // badInputTest() helpers
