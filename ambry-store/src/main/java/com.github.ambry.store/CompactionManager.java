@@ -20,7 +20,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -86,7 +85,7 @@ class CompactionManager {
       try {
         compactionThread.join(2000);
       } catch (InterruptedException e) {
-        logger.error("Compaction thread join wait was interrupted");
+        logger.error("Compaction thread join wait for {} was interrupted", mountPath);
       }
     }
   }
@@ -116,12 +115,13 @@ class CompactionManager {
    */
   private class CompactionExecutor implements Runnable {
     private final Logger logger = LoggerFactory.getLogger(getClass());
-    private final AtomicBoolean enabled = new AtomicBoolean(true);
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
     private final Set<BlobStore> storesToSkip = new HashSet<>();
     private final long waitTimeMs =
         storeConfig.storeCompactionCheckFrequencyInHours * Time.MinsPerHour * Time.SecsPerMin * Time.MsPerSec;
+
+    private volatile boolean enabled = true;
 
     /**
      * Starts by resuming any compactions that were left halfway. In steady state, it cycles through the stores at a
@@ -141,12 +141,12 @@ class CompactionManager {
         }
       }
       // continue to do compactions as required.
-      while (enabled.get()) {
+      while (enabled) {
         try {
           long startTimeMs = time.milliseconds();
           for (BlobStore store : stores) {
             try {
-              if (!enabled.get()) {
+              if (!enabled) {
                 break;
               }
               if (store.isStarted() && !storesToSkip.contains(store)) {
@@ -160,14 +160,14 @@ class CompactionManager {
               storesToSkip.add(store);
             }
           }
-          if (enabled.get()) {
-            long timeElapsed = time.milliseconds() - startTimeMs;
-            lock.lock();
-            try {
+          lock.lock();
+          try {
+            if (enabled) {
+              long timeElapsed = time.milliseconds() - startTimeMs;
               time.await(waitCondition, waitTimeMs - timeElapsed);
-            } finally {
-              lock.unlock();
             }
+          } finally {
+            lock.unlock();
           }
         } catch (Exception e) {
           logger.error("Compaction execution encountered an error either during wait. Continuing", e);
@@ -179,9 +179,9 @@ class CompactionManager {
      * Disables the executor by disallowing scheduling of any new compaction jobs.
      */
     void disable() {
-      enabled.set(false);
       lock.lock();
       try {
+        enabled = false;
         waitCondition.signal();
       } finally {
         lock.unlock();
