@@ -28,8 +28,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.EncoderFactory;
@@ -49,7 +49,7 @@ public class StatsManager {
   private final StorageManager storageManager;
   private final File statsOutputFile;
   private final long publishPeriodInSecs;
-  private final List<PartitionId> initialPartitionIds;
+  private final List<PartitionId> totalPartitionIds;
   private final StatsManagerMetrics metrics;
   private final Time time;
   private ScheduledExecutorService scheduler = null;
@@ -57,14 +57,17 @@ public class StatsManager {
 
   /**
    * Constructs a {@link StatsManager}.
-   * @param storageManager the {@link StorageManager} to be used to fetch the {@link Store}s.
-   * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period.
+   * @param storageManager the {@link StorageManager} to be used to fetch the {@link Store}s
+   * @param partitionIds a {@link List} of {@link PartitionId}s that are going to be fetched
+   * @param registry the {@link MetricRegistry} to be used for {@link StatsManagerMetrics}
+   * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
+   * @param time the {@link Time} instance to be used for reporting
    * @throws IOException
    */
   public StatsManager(StorageManager storageManager, List<PartitionId> partitionIds, MetricRegistry registry,
       StatsManagerConfig config, Time time) throws IOException {
     this.storageManager = storageManager;
-    initialPartitionIds = partitionIds;
+    totalPartitionIds = partitionIds;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
     metrics = new StatsManagerMetrics(registry);
@@ -78,7 +81,7 @@ public class StatsManager {
     scheduler = Utils.newScheduler(1, false);
     statsAggregator = new StatsAggregator();
     // random initial delay between 1 to 10 minutes to offset nodes from collecting stats at the same time
-    scheduler.scheduleAtFixedRate(statsAggregator, new Random().nextInt(540) + 60, publishPeriodInSecs,
+    scheduler.scheduleAtFixedRate(statsAggregator, ThreadLocalRandom.current().nextInt(540) + 60, publishPeriodInSecs,
         TimeUnit.SECONDS);
   }
 
@@ -176,15 +179,15 @@ public class StatsManager {
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
       StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
       List<String> unreachableStores = new ArrayList<>();
-      Iterator<PartitionId> iterator = initialPartitionIds.iterator();
+      Iterator<PartitionId> iterator = totalPartitionIds.iterator();
       while (!cancelled && iterator.hasNext()) {
         PartitionId partitionId = iterator.next();
         collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
       }
       if (!cancelled) {
         metrics.totalFetchAndAggregateTime.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-        StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), initialPartitionIds.size(),
-            initialPartitionIds.size() - unreachableStores.size(), unreachableStores);
+        StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
+            totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
         try {
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());

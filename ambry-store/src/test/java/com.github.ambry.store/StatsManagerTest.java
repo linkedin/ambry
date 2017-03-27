@@ -23,6 +23,7 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -46,6 +47,10 @@ import static org.junit.Assert.*;
  */
 public class StatsManagerTest {
   private static final long CAPACITY = 1024 * 1024 * 1024;
+  private static final int MAX_ACCOUNT_COUNT = 10;
+  private static final int MIN_ACCOUNT_COUNT = 5;
+  private static final int MAX_CONTAINER_COUNT = 6;
+  private static final int MIN_CONTAINER_COUNT = 3;
   private final StatsManager statsManager;
   private final String outputFileString;
   private final File tempDir;
@@ -67,17 +72,16 @@ public class StatsManagerTest {
   public StatsManagerTest() throws IOException, StoreException {
     tempDir = StoreTestUtils.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10));
     outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
-    int[][] testData0 = new int[][]{{1100, 250, 600}, {330}, {500, 300}, {1000, 2000, 3000, 50, 150}};
-    preAggregatedSnapshot = generateStatsSnapshot(testData0);
-    int[][] testData1 = decomposeArray(testData0);
-    int[][] testData2 = decomposeArray(testData0);
     storeMap = new HashMap<>();
-    storeMap.put(new Partition(0, PartitionState.READ_WRITE, CAPACITY),
-        new MockBlobStore(new MockBlobStoreStats(generateStatsSnapshot(testData0), false)));
-    storeMap.put(new Partition(1, PartitionState.READ_WRITE, CAPACITY),
-        new MockBlobStore(new MockBlobStoreStats(generateStatsSnapshot(testData1), false)));
+    preAggregatedSnapshot = generateRandomSnapshot();
+    Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
+    for (int i = 0; i < 2; i++) {
+      baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
+      storeMap.put(new Partition(i, PartitionState.READ_WRITE, CAPACITY),
+          new MockBlobStore(new MockBlobStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+    }
     storeMap.put(new Partition(2, PartitionState.READ_WRITE, CAPACITY),
-        new MockBlobStore(new MockBlobStoreStats(generateStatsSnapshot(testData2), false)));
+        new MockBlobStore(new MockBlobStoreStats(baseSliceAndNewSlice.getFirst(), false)));
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
@@ -87,8 +91,8 @@ public class StatsManagerTest {
   }
 
   /**
-   * Test to verify that the {@link StatsManager} is collecting, aggregating and publishing correctly using predefined
-   * data sets and mocked {@link Store}s and {@link StorageManager}.
+   * Test to verify that the {@link StatsManager} is collecting, aggregating and publishing correctly using randomly
+   * generated data sets and mock {@link Store}s and {@link StorageManager}.
    * @throws StoreException
    * @throws IOException
    * @throws InterruptedException
@@ -115,8 +119,7 @@ public class StatsManagerTest {
   }
 
   /**
-   * Test to verify the behavior when dealing with a {@link Store} that is null and when a {@link StoreException} is
-   * thrown by the {@link StoreStats}.
+   * Test to verify the behavior when dealing with {@link Store} that is null and when {@link StoreException} is thrown.
    * @throws StoreException
    * @throws IOException
    */
@@ -163,7 +166,7 @@ public class StatsManagerTest {
   }
 
   /**
-   * Test to verify {@link StatsManager} can shutdown properly before started.
+   * Test to verify {@link StatsManager} can shutdown properly even before it's started.
    * @throws InterruptedException
    */
   @Test
@@ -172,43 +175,67 @@ public class StatsManagerTest {
   }
 
   /**
-   * Helper method to convert predefined quota stats represented in two dimensional array into a {@link StatsSnapshot}.
-   * @param rawData the two dimensional array to be converted
-   * @return the result of the conversion in a {@link StatsSnapshot}
+   * Generate a random, two levels of nesting (accountId, containerId) {@link StatsSnapshot} for testing aggregation
+   * @return a {@link StatsSnapshot} with random structure and values
    */
-  private StatsSnapshot generateStatsSnapshot(int[][] rawData) {
-    Map<String, StatsSnapshot> firstSubTreeMap = new HashMap<>();
+  private StatsSnapshot generateRandomSnapshot() {
+    Map<String, StatsSnapshot> accountMap = new HashMap<>();
     long totalSize = 0;
-    for (int i = 0; i < rawData.length; i++) {
-      Map<String, StatsSnapshot> secondSubTreeMap = new HashMap<>();
+    for (int i = 0; i < random.nextInt(MAX_ACCOUNT_COUNT - MIN_ACCOUNT_COUNT + 1) + MIN_ACCOUNT_COUNT; i++) {
+      Map<String, StatsSnapshot> containerMap = new HashMap<>();
       long subTotalSize = 0;
-      for (int j = 0; j < rawData[i].length; j++) {
-        subTotalSize += rawData[i][j];
-        secondSubTreeMap.put("innerKey_".concat(String.valueOf(j)), new StatsSnapshot(new Long(rawData[i][j]), null));
+      for (int j = 0; j < random.nextInt(MAX_CONTAINER_COUNT - MIN_CONTAINER_COUNT + 1) + MIN_CONTAINER_COUNT; j++) {
+        long validSize = random.nextInt(2501) + 500;
+        subTotalSize += validSize;
+        containerMap.put("containerId_".concat(String.valueOf(j)), new StatsSnapshot(validSize, null));
       }
       totalSize += subTotalSize;
-      firstSubTreeMap.put("outerKey_".concat(String.valueOf(i)), new StatsSnapshot(subTotalSize, secondSubTreeMap));
+      accountMap.put("accountId_".concat(String.valueOf(i)), new StatsSnapshot(subTotalSize, containerMap));
     }
-    return new StatsSnapshot(totalSize, firstSubTreeMap);
+    return new StatsSnapshot(totalSize, accountMap);
   }
 
   /**
-   * Decompose an array randomly from a base array to generate a sub array. The original base array is obtained if the
-   * modified base array is added with the returned sub array.
-   * @param base the array to be decomposed (this array will be modified)
-   * @return a sub array that is decomposed randomly from the given base array
+   * Decompose a nested (accountId, containerId) {@link StatsSnapshot} randomly from a given base snapshot into two
+   * slices of the original base snapshot. The given base snapshot is unmodified.
+   * @param baseSnapshot the base snapshot to be used for the decomposition
+   * @return A {@link Pair} of {@link StatsSnapshot}s whose first element is what remains from the base snapshot
+   * after the decomposition and whose second element is the random slice taken from the original base snapshot.
    */
-  private int[][] decomposeArray(int[][] base) {
-    int[][] result = new int[random.nextInt(base.length) + 1][];
-    for (int i = 0; i < result.length; i++) {
-      result[i] = new int[random.nextInt(base[i].length + 1)];
-      for (int j = 0; j < result[i].length; j++) {
-        int partialValue = random.nextInt(base[i][j]);
-        base[i][j] -= partialValue;
-        result[i][j] = partialValue;
+  private Pair<StatsSnapshot, StatsSnapshot> decomposeSnapshot(StatsSnapshot baseSnapshot) {
+    int accountSliceCount = random.nextInt(baseSnapshot.getSubtree().size() + 1);
+    Map<String, StatsSnapshot> accountMap1 = new HashMap<>();
+    Map<String, StatsSnapshot> accountMap2 = new HashMap<>();
+    long partialTotalSize = 0;
+    for (Map.Entry<String, StatsSnapshot> accountEntry : baseSnapshot.getSubtree().entrySet()) {
+      if (accountSliceCount > 0) {
+        int containerSliceCount = random.nextInt(accountEntry.getValue().getSubtree().size() + 1);
+        Map<String, StatsSnapshot> containerMap1 = new HashMap<>();
+        Map<String, StatsSnapshot> containerMap2 = new HashMap<>();
+        long partialSubTotalSize = 0;
+        for (Map.Entry<String, StatsSnapshot> containerEntry : accountEntry.getValue().getSubtree().entrySet()) {
+          if (containerSliceCount > 0) {
+            long baseValue = containerEntry.getValue().getValue();
+            long partialValue = random.nextInt((int) baseValue);
+            containerMap1.put(containerEntry.getKey(), new StatsSnapshot(baseValue - partialValue, null));
+            containerMap2.put(containerEntry.getKey(), new StatsSnapshot(partialValue, null));
+            partialSubTotalSize += partialValue;
+            containerSliceCount--;
+          } else {
+            containerMap1.put(containerEntry.getKey(), containerEntry.getValue());
+          }
+        }
+        accountMap1.put(accountEntry.getKey(),
+            new StatsSnapshot(accountEntry.getValue().getValue() - partialSubTotalSize, containerMap1));
+        accountMap2.put(accountEntry.getKey(), new StatsSnapshot(partialSubTotalSize, containerMap2));
+        partialTotalSize += partialSubTotalSize;
+        accountSliceCount--;
+      } else {
+        accountMap1.put(accountEntry.getKey(), accountEntry.getValue());
       }
     }
-    return result;
+    return new Pair<>(new StatsSnapshot(baseSnapshot.getValue() - partialTotalSize, accountMap1),
+        new StatsSnapshot(partialTotalSize, accountMap2));
   }
 
   /**
