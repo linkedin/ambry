@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * The ClusterMap provides a high-level interface to {@link DataNodeId}s, {@link PartitionId}s and {@link ReplicaId}s.
  */
-public interface ClusterMap {
+public interface ClusterMap extends AutoCloseable {
 
   /**
    * Gets PartitionId based on serialized bytes.
@@ -56,7 +56,7 @@ public interface ClusterMap {
   /**
    * Gets the ReplicaIds stored on the specified DataNodeId.
    *
-   * @param dataNodeId
+   * @param dataNodeId the {@link DataNodeId} whose replicas are to be returned.
    * @return list of ReplicaIds on the specified dataNodeId
    */
   List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId);
@@ -83,5 +83,6 @@ public interface ClusterMap {
   /**
    * Close the cluster map. Any cleanups should be done in this call.
    */
+  @Override
   void close();
 }

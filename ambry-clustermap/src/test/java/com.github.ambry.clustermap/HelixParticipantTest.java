@@ -126,7 +126,7 @@ public class HelixParticipantTest {
     assertTrue(helixManager.isConnected());
     assertEquals(LeaderStandbySMD.name, helixManager.stateModelDef);
     assertEquals(AmbryStateModelFactory.class, helixManager.stateModelFactory.getClass());
-    participant.terminate();
+    participant.close();
     assertFalse(helixManager.isConnected());
   }
 

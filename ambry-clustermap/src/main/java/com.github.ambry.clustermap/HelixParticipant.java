@@ -75,7 +75,7 @@ class HelixParticipant implements ClusterParticipant {
    * Disconnect from the {@link HelixManager}.
    */
   @Override
-  public void terminate() {
+  public void close() {
     if (manager != null) {
       manager.disconnect();
       manager = null;

@@ -181,7 +181,7 @@ public class AmbryServer {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
-      clusterParticipant.terminate();
+      clusterParticipant.close();
       if (scheduler != null) {
         scheduler.shutdown();
         if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {

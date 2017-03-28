@@ -80,7 +80,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public void terminate() {
+        public void close() {
 
         }
       };

@@ -20,7 +20,7 @@ import java.io.IOException;
 /**
  * A ClusterParticipant is a component that makes up the Ambry cluster.
  */
-public interface ClusterParticipant {
+public interface ClusterParticipant extends AutoCloseable {
   /**
    * Initialize the participant.
    */
@@ -29,5 +29,6 @@ public interface ClusterParticipant {
   /**
    * Terminate the participant.
    */
-  void terminate();
+  @Override
+  void close();
 }

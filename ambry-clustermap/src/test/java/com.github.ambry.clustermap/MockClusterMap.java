@@ -292,7 +292,7 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public void close() {
-
+    // No-op.
   }
 }
 

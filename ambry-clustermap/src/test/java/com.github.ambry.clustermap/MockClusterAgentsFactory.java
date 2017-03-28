@@ -50,7 +50,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public void terminate() {
+        public void close() {
 
         }
       };
