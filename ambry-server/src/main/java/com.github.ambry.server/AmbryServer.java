@@ -61,7 +61,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Ambry server
  */
-class AmbryServer {
+public class AmbryServer {
 
   private CountDownLatch shutdownLatch = new CountDownLatch(1);
   private NetworkServer networkServer = null;
@@ -83,12 +83,12 @@ class AmbryServer {
   private ServerMetrics metrics = null;
   private Time time;
 
-  AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
+  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
       throws IOException {
     this(properties, clusterAgentsFactory, new LoggingNotificationSystem(), time);
   }
 
-  AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       NotificationSystem notificationSystem, Time time) {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
@@ -96,7 +96,7 @@ class AmbryServer {
     this.time = time;
   }
 
-  void startup() throws InstantiationException {
+  public void startup() throws InstantiationException {
     try {
       clusterMap = clusterAgentsFactory.getClusterMap();
       clusterParticipant = clusterAgentsFactory.getClusterParticipant();
@@ -177,7 +177,7 @@ class AmbryServer {
     }
   }
 
-  void shutdown() {
+  public void shutdown() {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
@@ -228,7 +228,7 @@ class AmbryServer {
     }
   }
 
-  void awaitShutdown() throws InterruptedException {
+  public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 }
