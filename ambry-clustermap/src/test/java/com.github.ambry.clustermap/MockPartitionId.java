@@ -27,8 +27,12 @@ public class MockPartitionId extends PartitionId {
   public List<ReplicaId> replicaIds;
 
   public MockPartitionId() {
-    partition = 0L;
-    replicaIds = new ArrayList<ReplicaId>(0);
+    this(0L);
+  }
+
+  public MockPartitionId(long partition) {
+    this.partition = partition;
+    replicaIds = new ArrayList<>(0);
   }
 
   public MockPartitionId(long partition, List<MockDataNodeId> dataNodes, int mountPathIndexToUse) {
