@@ -17,6 +17,8 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -24,6 +26,7 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
+import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
@@ -37,6 +40,7 @@ import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.StatsManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -44,6 +48,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -62,6 +67,7 @@ public class AmbryServer {
   private RequestHandlerPool requestHandlerPool = null;
   private ScheduledExecutorService scheduler = null;
   private StorageManager storageManager = null;
+  private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
@@ -103,6 +109,7 @@ public class AmbryServer {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+      StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -143,6 +150,15 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
+      if (statsConfig.publishEnabled) {
+        List<PartitionId> partitionIds = new ArrayList<>();
+        for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
+          partitionIds.add(replicaId.getPartitionId());
+        }
+        statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
+        statsManager.start();
+      }
+
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       metrics.serverStartTimeInMs.update(processingTime);
@@ -164,6 +180,9 @@ public class AmbryServer {
         if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {
           logger.error("Could not terminate all tasks after scheduler shutdown");
         }
+      }
+      if (statsManager != null) {
+        statsManager.shutdown();
       }
       if (networkServer != null) {
         networkServer.shutdown();

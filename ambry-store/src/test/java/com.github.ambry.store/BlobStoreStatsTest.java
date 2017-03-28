@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Random;
 import java.util.TreeMap;
 import org.junit.After;
 import org.junit.Test;
@@ -236,6 +237,56 @@ public class BlobStoreStatsTest {
         totalLogSegmentValidSizeAfterDeletes, totalLogSegmentValidSizeBeforeDeletes - expectedLogSegmentDecrement);
     assertEquals("Delete entries are not properly counted for container valid size",
         totalContainerValidSizeAfterDeletes, totalContainerValidSizeBeforeDeletes - expectedContainerDecrement);
+  }
+
+  /**
+   * Test the static method that converts the quota stats stored in a nested Map to an avro generated
+   * {@link StatsSnapshot} object.
+   */
+  @Test
+  public void testConvertQuotaMapToStatsSnapshot() {
+    Random random = new Random();
+    Map<String, Map<String, Long>> quotaMap = new HashMap<>();
+    Map<String, StatsSnapshot> firstSubTreeMap = new HashMap<>();
+    long total = 0;
+    for (int i = 0; i < 10; i++) {
+      Map<String, StatsSnapshot> secondSubTreeMap = new HashMap<>();
+      Map<String, Long> innerQuotaMap = new HashMap<>();
+      long subTotal = 0;
+      for (int j = 0; j < 3; j++) {
+        long randValue = random.nextInt(10000);
+        subTotal += randValue;
+        innerQuotaMap.put(String.valueOf(j), randValue);
+        secondSubTreeMap.put(String.valueOf(j), new StatsSnapshot(randValue, null));
+      }
+      total += subTotal;
+      quotaMap.put(String.valueOf(i), innerQuotaMap);
+      firstSubTreeMap.put(String.valueOf(i), new StatsSnapshot(subTotal, secondSubTreeMap));
+    }
+    StatsSnapshot statsSnapshot = new StatsSnapshot(total, firstSubTreeMap);
+    StatsSnapshot convertedStatsSnapshot = BlobStoreStats.convertQuotaToStatsSnapshot(quotaMap);
+    assertTrue("Mismatch between the converted StatsSnapshot and expected StatsSnapshot",
+        statsSnapshot.equals(convertedStatsSnapshot));
+  }
+
+  /**
+   * Test the getStatsSnapshot method by verifying the returned {@link StatsSnapshot} against the original {@link Map}.
+   */
+  @Test
+  public void testGetStatsSnapshot() throws StoreException {
+    Map<String, Map<String, Long>> quotaMap = blobStoreStats.getValidDataSizeByContainer();
+    StatsSnapshot statsSnapshot = blobStoreStats.getStatsSnapshot();
+    Map<String, StatsSnapshot> statsSnapshotMap = statsSnapshot.getSubtree();
+    assertEquals("Mismatch on number of accounts", quotaMap.size(), statsSnapshotMap.size());
+    for (Map.Entry<String, Map<String, Long>> entry : quotaMap.entrySet()) {
+      Map<String, StatsSnapshot> innerStatsSnapshotMap = statsSnapshotMap.get(entry.getKey()).getSubtree();
+      Map<String, Long> innerQuotaMap = entry.getValue();
+      assertEquals("Mismatch on number of containers", innerQuotaMap.size(), innerStatsSnapshotMap.size());
+      for (Map.Entry<String, Long> innerEntry : innerQuotaMap.entrySet()) {
+        assertEquals("Mismatch on leaf node value", innerEntry.getValue(),
+            innerStatsSnapshotMap.get(innerEntry.getKey()).getValue());
+      }
+    }
   }
 
   /**

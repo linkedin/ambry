@@ -55,6 +55,7 @@ class BlobStore implements Store {
 
   private Log log;
   private PersistentIndex index;
+  private BlobStoreStats blobStoreStats;
   private boolean started;
   private FileLock fileLock;
 
@@ -123,6 +124,7 @@ class BlobStore implements Store {
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
             sessionId, storeDescriptor.getIncarnationId());
         metrics.initializeIndexGauges(index, capacityInBytes);
+        blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -337,6 +339,11 @@ class BlobStore implements Store {
     } finally {
       context.stop();
     }
+  }
+
+  @Override
+  public StoreStats getStoreStats() {
+    return blobStoreStats;
   }
 
   @Override

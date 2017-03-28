@@ -44,6 +44,28 @@ class BlobStoreStats implements StoreStats {
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
 
+  /**
+   * Convert a given nested {@link Map} of accountId to containerId to valid size to its corresponding
+   * {@link StatsSnapshot} object.
+   * @param quotaMap the nested {@link Map} to be converted
+   * @return the corresponding {@link StatsSnapshot} object.
+   */
+  static StatsSnapshot convertQuotaToStatsSnapshot(Map<String, Map<String, Long>> quotaMap) {
+    Map<String, StatsSnapshot> accountValidSizeMap = new HashMap<>();
+    long totalSize = 0;
+    for (Map.Entry<String, Map<String, Long>> accountEntry : quotaMap.entrySet()) {
+      long subTotalSize = 0;
+      Map<String, StatsSnapshot> containerValidSizeMap = new HashMap<>();
+      for (Map.Entry<String, Long> containerEntry : accountEntry.getValue().entrySet()) {
+        subTotalSize += containerEntry.getValue();
+        containerValidSizeMap.put(containerEntry.getKey(), new StatsSnapshot(containerEntry.getValue(), null));
+      }
+      totalSize += subTotalSize;
+      accountValidSizeMap.put(accountEntry.getKey(), new StatsSnapshot(subTotalSize, containerValidSizeMap));
+    }
+    return new StatsSnapshot(totalSize, accountValidSizeMap);
+  }
+
   BlobStoreStats(PersistentIndex index, Time time, DiskIOScheduler diskIOScheduler) {
     this.index = index;
     this.time = time;
@@ -58,6 +80,15 @@ class BlobStoreStats implements StoreStats {
       totalValidSize += value;
     }
     return new Pair<>(logSegmentValidSizeResult.getFirst(), totalValidSize);
+  }
+
+  /**
+   * {@inheritDoc}
+   * The implementation in {@link BlobStoreStats} returns quota related stats of a {@link BlobStore}.
+   */
+  @Override
+  public StatsSnapshot getStatsSnapshot() throws StoreException {
+    return convertQuotaToStatsSnapshot(getValidDataSizeByContainer());
   }
 
   /**
