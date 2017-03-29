@@ -161,7 +161,7 @@ class DiskManager {
   private Map<String, Throttler> getThrottlers(StoreConfig config, Time time) {
     Map<String, Throttler> throttlers = new HashMap<>();
     // compaction
-    Throttler compactionCopyThrottler = new Throttler(config.storeCompactionBytesPerSec, 1000, true, time);
+    Throttler compactionCopyThrottler = new Throttler(config.storeCleanupOperationsBytesPerSec, 1000, true, time);
     throttlers.put(BlobStoreCompactor.LOG_SEGMENT_COPY_JOB_NAME, compactionCopyThrottler);
     return throttlers;
   }

@@ -76,11 +76,11 @@ public class StoreConfig {
   public final int storeDeletedMessageRetentionDays;
 
   /**
-   * The rate of I/O allowed for hard deletes.
+   * The rate of I/O allowed for compaction and hard deletes.
    */
-  @Config("store.hard.delete.bytes.per.sec")
+  @Config("store.cleanup.operations.bytes.per.sec")
   @Default("1*1024*1024")
-  public final int storeHardDeleteBytesPerSec;
+  public final int storeCleanupOperationsBytesPerSec;
 
   /**
    * Whether hard deletes are to be enabled or not
@@ -110,13 +110,6 @@ public class StoreConfig {
   @Default("7*24")
   public final int storeCompactionCheckFrequencyInHours;
 
-  /*
-   * The rate of I/O allowed for compaction.
-   */
-  @Config("store.compaction.bytes.per.sec")
-  @Default("1*1024*1024")
-  public final int storeCompactionBytesPerSec;
-
   /**
    * The minimum capacity that has to be used (as a percentage of the total capacity) for the store to trigger
    * compaction
@@ -137,12 +130,12 @@ public class StoreConfig {
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
-    storeHardDeleteBytesPerSec = verifiableProperties.getInt("store.hard.delete.bytes.per.sec", 1 * 1024 * 1024);
+    storeCleanupOperationsBytesPerSec =
+        verifiableProperties.getIntInRange("store.cleanup.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
+            Integer.MAX_VALUE);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =
         verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
-    storeCompactionBytesPerSec =
-        verifiableProperties.getIntInRange("store.compaction.bytes.per.sec", 1 * 1024 * 1024, 1, Integer.MAX_VALUE);
     storeMinUsedCapacityToTriggerCompactionInPercentage =
         verifiableProperties.getInt("store.min.used.capacity.to.trigger.compaction.in.percentage", 50);
     storeEnableCompaction = verifiableProperties.getBoolean("store.enable.compaction", false);

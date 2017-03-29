@@ -104,8 +104,8 @@ public class HardDeleter implements Runnable {
     this.hardDelete = hardDelete;
     this.factory = factory;
     this.time = time;
-    throttler = new Throttler(config.storeHardDeleteBytesPerSec, 10, true, time);
-    scanSizeInBytes = config.storeHardDeleteBytesPerSec * 10;
+    throttler = new Throttler(config.storeCleanupOperationsBytesPerSec, 10, true, time);
+    scanSizeInBytes = config.storeCleanupOperationsBytesPerSec * 10;
     messageRetentionSeconds = config.storeDeletedMessageRetentionDays * Time.SecsPerDay;
   }
 

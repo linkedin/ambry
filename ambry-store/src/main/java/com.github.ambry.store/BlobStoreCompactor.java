@@ -297,7 +297,7 @@ class BlobStoreCompactor {
     Offset startOffsetOfLastIndexSegmentForDelete = getStartOffsetOfLastIndexSegmentForDelete();
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
-      // only records in the the very first log segment in the cycle can have been copied in a previous cycle
+      // only records in the the very first log segment in the cycle could have been copied in a previous cycle
       LogSegment firstLogSegment = srcLog.getSegment(logSegmentsUnderCompaction.get(0));
       LogSegment prevSegment = srcLog.getPrevSegment(firstLogSegment);
       if (prevSegment != null) {
@@ -319,7 +319,6 @@ class BlobStoreCompactor {
         }
         break;
       }
-      // only records in the the very first log segment in the cycle can have been copied in a previous cycle
       duplicateSearchSpan = null;
     }
 
@@ -331,17 +330,7 @@ class BlobStoreCompactor {
       tgtIndex.getIndexSegments().lastEntry().getValue().map(true);
     } else {
       // there were no valid entries copied, return any temp segments back to the pool
-      File[] files = dataDir.listFiles(TEMP_LOG_SEGMENTS_FILTER);
-      if (files != null) {
-        for (File file : files) {
-          // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
-          if (!file.delete()) {
-            throw new IllegalStateException("Could not delete segment file: " + file.getAbsolutePath());
-          }
-        }
-      } else {
-        throw new StoreException("Could not list temp files in directory: " + dataDir, StoreErrorCodes.Unknown_Error);
-      }
+      cleanupUnusedTempSegments();
     }
   }
 
@@ -468,17 +457,15 @@ class BlobStoreCompactor {
    */
   private boolean copyDataByLogSegment(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan,
       Offset startOffsetOfLastIndexSegmentForDelete) throws IOException, StoreException {
-    boolean allCopied = true;
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
       if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyDataByIndexSegment(logSegmentToCopy,
           indexSegmentToCopy, duplicateSearchSpan, startOffsetOfLastIndexSegmentForDelete)) {
         // there is a shutdown in progress or there was no space to copy all entries.
-        allCopied = false;
-        break;
+        return false;
       }
     }
-    return allCopied;
+    return true;
   }
 
   /**
@@ -709,6 +696,26 @@ class BlobStoreCompactor {
     return copiedAll;
   }
 
+  /**
+   * Cleans up any unused temporary segments. Can happen only if there were no entries to be copied and all the segments
+   * under compaction can be just dropped.
+   * @throws StoreException if the directory listing did not succeed or if any of the files could not be deleted.
+   */
+  private void cleanupUnusedTempSegments() throws StoreException {
+    File[] files = dataDir.listFiles(TEMP_LOG_SEGMENTS_FILTER);
+    if (files != null) {
+      for (File file : files) {
+        // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
+        if (!file.delete()) {
+          throw new StoreException("Could not delete segment file: " + file.getAbsolutePath(),
+              StoreErrorCodes.Unknown_Error);
+        }
+      }
+    } else {
+      throw new StoreException("Could not list temp files in directory: " + dataDir, StoreErrorCodes.Unknown_Error);
+    }
+  }
+
   // commit() helpers
 
   /**
@@ -761,9 +768,9 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Adds all the index segments that refer to log segments in {@code logSegmentNames} to, and removes all the index
-   * segments that refer to the log segments that will be cleaned up from the application index. The change is atomic
-   * with the use of {@link PersistentIndex#changeIndexSegments(List, Set)}.
+   * Adds all the index segments that refer to log segments in {@code logSegmentNames} to the application index and
+   * removes all the index segments that refer to the log segments that will be cleaned up from the application index.
+   * The change is atomic with the use of {@link PersistentIndex#changeIndexSegments(List, Set)}.
    * @param logSegmentNames the names of the log segments whose index segments need to be committed.
    * @throws IOException if there were any I/O errors in setting up the index segment.
    * @throws StoreException if there were any problems committing the changed index segments.
