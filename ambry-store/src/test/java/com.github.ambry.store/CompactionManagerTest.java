@@ -57,7 +57,7 @@ public class CompactionManagerTest {
     time.sleep(2 * messageRetentionTimeInMs);
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
-    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
+    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
   }
@@ -76,7 +76,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
+    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.enable();
@@ -100,7 +100,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
+    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.disable();
@@ -173,7 +173,7 @@ public class CompactionManagerTest {
       config = new StoreConfig(new VerifiableProperties(properties));
       MetricRegistry metricRegistry = new MetricRegistry();
       StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
-      blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
+      blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
       compactionManager =
           new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
       blobStore.validLogSegments = generateRandomStrings(2);
@@ -200,7 +200,7 @@ public class CompactionManagerTest {
       config = new StoreConfig(new VerifiableProperties(properties));
       MetricRegistry metricRegistry = new MetricRegistry();
       StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
-      blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
+      blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
       compactionManager =
           new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
       blobStore.validLogSegments = generateRandomStrings(2);
@@ -228,7 +228,7 @@ public class CompactionManagerTest {
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     for (int i = 0; i < numStores; i++) {
       MockBlobStore store = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES,
-          compactCallsCountdown);
+          compactCallsCountdown, null);
       // one store should not have any segments to compact
       store.validLogSegments = i == 0 ? null : generateRandomStrings(i);
       stores.add(store);
@@ -274,7 +274,7 @@ public class CompactionManagerTest {
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     for (int i = 0; i < numStores; i++) {
       MockBlobStore store = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES,
-          compactCallsCountdown);
+          compactCallsCountdown, null);
       store.validLogSegments = generateRandomStrings(2);
       if (i == 0) {
         // one store should not be started
@@ -353,6 +353,7 @@ public class CompactionManagerTest {
   private class MockBlobStore extends BlobStore {
     private long usedCapacity;
     private long capacityInBytes;
+    private CompactionDetails details;
     private final CountDownLatch compactCallsCountdown;
     List<String> validLogSegments = null;
 
@@ -365,16 +366,18 @@ public class CompactionManagerTest {
     boolean started = true;
 
     MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes,
-        long usedCapacity) {
-      this(config, metrics, time, capacityInBytes, usedCapacity, new CountDownLatch(0));
+        long usedCapacity, CompactionDetails details) {
+      this(config, metrics, time, capacityInBytes, usedCapacity, new CountDownLatch(0), details);
+      this.details = details;
     }
 
     MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes, long usedCapacity,
-        CountDownLatch compactCallsCountdown) {
+        CountDownLatch compactCallsCountdown, CompactionDetails details) {
       super("", config, null, null, metrics, null, 0, null, null, null, time);
       this.capacityInBytes = capacityInBytes;
       this.usedCapacity = usedCapacity;
       this.compactCallsCountdown = compactCallsCountdown;
+      this.details = details;
     }
 
     @Override
@@ -382,22 +385,9 @@ public class CompactionManagerTest {
       return usedCapacity;
     }
 
-    /**
-     * Return total capacity of the {@link BlobStore} in bytes
-     * @return the total capacity of the {@link BlobStore} in bytes
-     */
     @Override
-    long getCapacityInBytes() {
-      return capacityInBytes;
-    }
-
-    /**
-     * Fetches a list of valid {@link LogSegment} names that are considered valid for the purpose of compaction
-     * @return list of valid {@link LogSegment} names that are considered valid for the purpose of compaction
-     */
-    @Override
-    List<String> getLogSegmentsNotInJournal() throws StoreException {
-      return validLogSegments;
+    CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
+      return details;
     }
 
     @Override

@@ -118,6 +118,13 @@ public class StoreConfig {
   @Default("50")
   public final int storeMinUsedCapacityToTriggerCompactionInPercentage;
 
+  /**
+   * The factory class used to get the compaction policy
+   */
+  @Config("store.compaction.policy.factory")
+  @Default("com.github.ambry.store.DefaultCompactionPolicyFactory")
+  public final String storeCompactionPolicyFactory;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -141,6 +148,8 @@ public class StoreConfig {
     storeEnableCompaction = verifiableProperties.getBoolean("store.enable.compaction", false);
     storeCompactionCheckFrequencyInHours =
         verifiableProperties.getIntInRange("store.compaction.check.frequency.in.hours", 7 * 24, 1, Integer.MAX_VALUE);
+    storeCompactionPolicyFactory = verifiableProperties.getString("store.compaction.policy.factory",
+        "com.github.ambry.store.DefaultCompactionPolicyFactory");
   }
 }
 

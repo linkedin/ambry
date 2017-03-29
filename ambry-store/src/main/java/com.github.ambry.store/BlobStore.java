@@ -376,46 +376,16 @@ class BlobStore implements Store {
   }
 
   /**
-   * Return total capacity of the {@link BlobStore} in bytes
-   * @return the total capacity of the {@link BlobStore} in bytes
+   * Fetch {@link CompactionDetails} based on the {@link CompactionPolicy} for this {@link BlobStore} containing
+   * information about log segments to be compacted
+   * @param compactionPolicy the {@link CompactionPolicy} that needs to be used to determine the {@link CompactionDetails}
+   * @return the {@link CompactionDetails} containing information about log segments to be compacted. Could be
+   * {@code null} if there isn't anything to compact
+   * @throws StoreException on any issues while reading entries from index
    */
-  long getCapacityInBytes() {
-    return capacityInBytes;
-  }
-
-  /**
-   * Fetches a list of {@link LogSegment} names whose entries don't over lap with {@link Journal}. Returns {@code null}
-   * if there aren't any
-   * @return a list of {@link LogSegment} names whose entries don't over lap with {@link Journal}. {@code null}
-   * if there aren't any
-   */
-  List<String> getLogSegmentsNotInJournal() throws StoreException {
-    checkStarted();
-    return index.getLogSegmentsNotInJournal();
-  }
-
-  /**
-   * Fetches segment capacity of a single log segment
-   * @return the segment capacity of a single log segment
-   */
-  long getSegmentCapacity() {
-    return log.getSegmentCapacity();
-  }
-
-  /**
-   * Fetches segment header size of a single log segment
-   * @return the segment header size of a single log segment
-   */
-  long getLogSegmentHeaderSize() {
-    return LogSegment.HEADER_SIZE;
-  }
-
-  /**
-   * Returns an instance of {@link BlobStoreStats} which can be used to get stats about this {@link BlobStore}
-   * @return an instance of {@link BlobStoreStats} which can be used to get stats about this {@link BlobStore}
-   */
-  BlobStoreStats getBlobStoreStats() {
-    return blobStoreStats;
+  CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
+    return compactionPolicy.getCompactionDetails(capacityInBytes, index.getLogUsedCapacity(), log.getSegmentCapacity(),
+        LogSegment.HEADER_SIZE, index.getLogSegmentsNotInJournal(), blobStoreStats);
   }
 
   @Override
