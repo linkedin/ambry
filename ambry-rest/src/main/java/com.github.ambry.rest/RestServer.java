@@ -246,6 +246,8 @@ public class RestServer {
 
   /**
    * Shuts down all the components. Returns when shutdown is FULLY complete.
+   * This method is expected to be called in the exit path as long as the RestServer instance construction was
+   * successful. This is expected to be called even if {@link #start()} did not succeed.
    */
   public void shutdown() {
     logger.info("Shutting down RestServer");

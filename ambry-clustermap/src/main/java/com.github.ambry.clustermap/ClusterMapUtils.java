@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -123,6 +124,19 @@ public class ClusterMapUtils {
       throw new IllegalStateException(
           "Host (" + unqualifiedHostname + ") is unknown so cannot determine fully qualified domain name.");
     }
+  }
+
+  /**
+   * Serialize and return the arguments.
+   * @param shortValue a Short value.
+   * @param longValue a Long value.
+   * @return the serialized byte array.
+   */
+  static byte[] serializeShortAndLong(Short shortValue, Long longValue) {
+    ByteBuffer buffer = ByteBuffer.allocate(Short.BYTES + Long.BYTES);
+    buffer.putShort(shortValue);
+    buffer.putLong(longValue);
+    return buffer.array();
   }
 
   /**

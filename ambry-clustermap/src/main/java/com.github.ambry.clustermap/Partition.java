@@ -16,7 +16,6 @@ package com.github.ambry.clustermap;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -86,10 +85,7 @@ class Partition extends PartitionId {
 
   @Override
   public byte[] getBytes() {
-    ByteBuffer buffer = ByteBuffer.allocate(Partition_Size_In_Bytes);
-    buffer.putShort(Current_Version);
-    buffer.putLong(id);
-    return buffer.array();
+    return ClusterMapUtils.serializeShortAndLong(Current_Version, id);
   }
 
   @Override

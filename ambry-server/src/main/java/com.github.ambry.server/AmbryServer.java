@@ -177,11 +177,17 @@ public class AmbryServer {
     }
   }
 
+  /**
+   * This method is expected to be called in the exit path as long as the AmbryServer instance construction was
+   * successful. This is expected to be called even if {@link #startup()} did not succeed.
+   */
   public void shutdown() {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
-      clusterParticipant.close();
+      if (clusterParticipant != null) {
+        clusterParticipant.close();
+      }
       if (scheduler != null) {
         scheduler.shutdown();
         if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {
@@ -216,7 +222,9 @@ public class AmbryServer {
           logger.error("Error while closing notification system.", e);
         }
       }
-      clusterMap.close();
+      if (clusterMap != null) {
+        clusterMap.close();
+      }
       logger.info("shutdown completed");
     } catch (Exception e) {
       logger.error("Error while shutting down server", e);

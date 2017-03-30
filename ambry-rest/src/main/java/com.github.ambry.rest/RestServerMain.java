@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -38,6 +39,7 @@ public class RestServerMain {
   public static void main(String[] args) {
     final RestServer restServer;
     int exitCode = 0;
+    ClusterMap clusterMap = null;
     try {
       InvocationOptions options = new InvocationOptions(args);
       Properties properties = Utils.loadProps(options.serverPropsFilePath);
@@ -46,11 +48,10 @@ public class RestServerMain {
       ClusterAgentsFactory clusterAgentsFactory =
           Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
+      clusterMap = clusterAgentsFactory.getClusterMap();
       SSLFactory sslFactory = getSSLFactoryIfRequired(verifiableProperties);
       logger.info("Bootstrapping RestServer");
-      restServer =
-          new RestServer(verifiableProperties, clusterAgentsFactory.getClusterMap(), new LoggingNotificationSystem(),
-              sslFactory);
+      restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
@@ -63,6 +64,10 @@ public class RestServerMain {
     } catch (Exception e) {
       logger.error("Exception during bootstrap of RestServer", e);
       exitCode = 1;
+    } finally {
+      if (clusterMap != null) {
+        clusterMap.close();
+      }
     }
     logger.info("Exiting RestServerMain");
     System.exit(exitCode);

@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
@@ -72,7 +73,7 @@ class AmbryReplica implements ReplicaId {
 
   @Override
   public List<AmbryReplica> getPeerReplicaIds() {
-    List<AmbryReplica> replicasOfPartition = partition.getReplicaIds();
+    List<AmbryReplica> replicasOfPartition = new ArrayList<>(partition.getReplicaIds());
     replicasOfPartition.remove(this);
     return replicasOfPartition;
   }

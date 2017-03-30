@@ -357,7 +357,7 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       synchronized (notificationLock) {
-        logger.info("Live instance change triggered with: " + liveInstances);
+        logger.trace("Live instance change triggered with: {}", liveInstances);
         Set<String> liveInstancesSet = new HashSet<>();
         for (LiveInstance liveInstance : liveInstances) {
           liveInstancesSet.add(liveInstance.getInstanceName());
@@ -380,7 +380,7 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onExternalViewChange(List<ExternalView> externalViewList, NotificationContext changeContext) {
       synchronized (notificationLock) {
-        logger.info("ExternalView change triggered with: " + externalViewList);
+        logger.trace("ExternalView change triggered with: {}", externalViewList);
 
         // No action taken at this time.
 
@@ -395,7 +395,7 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
       synchronized (notificationLock) {
-        logger.info("Config change triggered with: ", configs);
+        logger.trace("Config change triggered with: {}", configs);
 
         // No action taken at this time. Going forward, changes like marking partitions back to read-write will go here.
 
@@ -445,13 +445,14 @@ class HelixClusterManager implements ClusterMap {
   /**
    * A callback class used to query information from the {@link HelixClusterManager}
    */
-  public class HelixClusterManagerCallback {
+  class HelixClusterManagerCallback implements ClusterManagerCallback {
     /**
      * Get all replica ids associated with the given {@link AmbryPartition}
      * @param partition the {@link AmbryPartition} for which to get the list of replicas.
      * @return the list of {@link AmbryReplica}s associated with the given partition.
      */
-    List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
+    @Override
+    public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
       return new ArrayList<>(partitionIdToReplicaIds.get(partition));
     }
 
@@ -466,7 +467,7 @@ class HelixClusterManager implements ClusterMap {
      * @return a collection of datanodes in this cluster.
      */
     Collection<AmbryDataNode> getDatanodes() {
-      return instanceNameToDataNodeIdMap.values();
+      return new ArrayList<>(instanceNameToDataNodeIdMap.values());
     }
 
     /**
@@ -530,7 +531,7 @@ class HelixClusterManager implements ClusterMap {
      * @return a collection of partitions in this cluster.
      */
     Collection<AmbryPartition> getPartitions() {
-      return partitionMap.values();
+      return new ArrayList<>(partitionMap.values());
     }
 
     /**

@@ -25,9 +25,6 @@ public class ClusterMapConfig {
   @Default("com.github.ambry.clustermap.FixedBackoffResourceStatePolicyFactory")
   public final String clusterMapResourceStatePolicyFactory;
 
-  // The fixed timeout based resource state handling checks if we have had a 'threshold' number of consecutive errors,
-  // and if so, considers the resource as down for 'retry backoff' milliseconds.
-
   /**
    * The threshold for the number of consecutive errors to tolerate for a datanode.
    */

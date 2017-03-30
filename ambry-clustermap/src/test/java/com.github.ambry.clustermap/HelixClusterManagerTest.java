@@ -19,7 +19,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.PortType;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -43,7 +42,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
@@ -89,9 +87,9 @@ public class HelixClusterManagerTest {
     for (String dcName : dcs) {
       dcsToZkInfo.put(dcName, new ZkInfo(tempDirPath, dcName, port++, false));
     }
-    String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
-    String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
-    String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
+    String hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
+    String partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
+    String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
     JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
     testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 3);
@@ -137,6 +135,9 @@ public class HelixClusterManagerTest {
   @Test
   public void badInstantiationTest() throws Exception {
     // Good test happened in the constructor
+    assertEquals(false, metricRegistry.getGauges()
+        .get(HelixClusterManager.class.getName() + ".helixClusterManagerInstantiationFailed")
+        .getValue());
 
     // Bad test
     Set<ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
@@ -321,149 +322,6 @@ public class HelixClusterManagerTest {
 
       clusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
       assertEquals(0, getCounterValue("getDataNodeIdMismatchCount"));
-    }
-  }
-
-  /**
-   * Test {@link AmbryDataNode}, {@link AmbryDisk}, {@link AmbryPartition} and {@link AmbryReplica}.
-   * @throws Exception
-   */
-  @Test
-  public void helixClusterManagerComponentsTest() throws Exception {
-    if (useComposite) {
-      return;
-    }
-    String hostName = "localhost";
-    int portNum = 2000;
-    long rackId = 1;
-    int sslPortNum = 3000;
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", hostName);
-    props.setProperty("clustermap.cluster.name", "clusterName");
-    props.setProperty("clustermap.datacenter.name", "DC0");
-    props.setProperty("clustermap.ssl.enabled.datacenters", "DC1");
-    ClusterMapConfig clusterMapConfig1 = new ClusterMapConfig(new VerifiableProperties(props));
-    props.setProperty("clustermap.datacenter.name", "DC1");
-    ClusterMapConfig clusterMapConfig2 = new ClusterMapConfig(new VerifiableProperties(props));
-
-    // AmbryDataNode test
-    try {
-      new AmbryDataNode("DC1", clusterMapConfig2, hostName, portNum, rackId, null);
-      fail("Datanode construction should have failed when SSL is enabled and SSL port is null");
-    } catch (IllegalArgumentException e) {
-      // OK
-    }
-    try {
-      new AmbryDataNode("DC1", clusterMapConfig1, hostName, MAX_PORT + 1, rackId, null);
-      fail("Datanode construction should have failed when port num is outside the valid range");
-    } catch (IllegalArgumentException e) {
-      // OK
-    }
-    AmbryDataNode datanode1 = new AmbryDataNode("DC0", clusterMapConfig1, hostName, portNum, rackId, sslPortNum);
-    AmbryDataNode datanode2 = new AmbryDataNode("DC1", clusterMapConfig2, hostName, portNum, rackId, sslPortNum);
-    assertEquals(datanode1.getDatacenterName(), "DC0");
-    assertEquals(datanode1.getHostname(), hostName);
-    assertEquals(datanode1.getPort(), portNum);
-    assertEquals(datanode1.getSSLPort(), sslPortNum);
-    assertEquals(datanode1.getRackId(), rackId);
-    assertTrue(datanode1.hasSSLPort());
-    assertEquals(PortType.PLAINTEXT, datanode1.getPortToConnectTo().getPortType());
-    assertTrue(datanode2.hasSSLPort());
-    assertEquals(PortType.SSL, datanode2.getPortToConnectTo().getPortType());
-    assertEquals(HardwareState.AVAILABLE, datanode1.getState());
-    datanode1.setState(HardwareState.UNAVAILABLE);
-    assertEquals(HardwareState.UNAVAILABLE, datanode1.getState());
-    datanode1.setState(HardwareState.AVAILABLE);
-    assertEquals(HardwareState.AVAILABLE, datanode1.getState());
-    assertFalse(datanode1.compareTo(datanode2) != 0);
-
-    // AmbryDisk tests
-    String mountPath = "/mnt/0";
-    try {
-      new AmbryDisk(clusterMapConfig1, null, mountPath, HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
-      fail("disk initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-    try {
-      new AmbryDisk(clusterMapConfig1, datanode1, null, HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
-      fail("disk initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-    try {
-      new AmbryDisk(clusterMapConfig1, datanode1, "", HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
-      fail("disk initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-    try {
-      new AmbryDisk(clusterMapConfig1, datanode1, "0", HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
-      fail("disk initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-    try {
-      new AmbryDisk(clusterMapConfig1, datanode1, mountPath, HardwareState.UNAVAILABLE, MAX_DISK_CAPACITY_IN_BYTES + 1);
-      fail("disk initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-
-    AmbryDisk disk1 =
-        new AmbryDisk(clusterMapConfig1, datanode1, mountPath, HardwareState.AVAILABLE, MAX_DISK_CAPACITY_IN_BYTES);
-    assertEquals(mountPath, disk1.getMountPath());
-    assertEquals(MAX_DISK_CAPACITY_IN_BYTES, disk1.getRawCapacityInBytes());
-    assertEquals(HardwareState.AVAILABLE, disk1.getState());
-    disk1.setState(HardwareState.UNAVAILABLE);
-    assertEquals(HardwareState.UNAVAILABLE, disk1.getState());
-    disk1.setState(HardwareState.AVAILABLE);
-    assertEquals(HardwareState.AVAILABLE, disk1.getState());
-    assertTrue(disk1.getDataNode().equals(datanode1));
-    datanode1.setState(HardwareState.UNAVAILABLE);
-    assertEquals(HardwareState.UNAVAILABLE, disk1.getState());
-
-    // AmbryPartition tests
-    // All partitions are READ_WRITE initially.
-    List<? extends PartitionId> partitions = clusterManager.getWritablePartitionIds();
-    AmbryPartition partition1 = (AmbryPartition) partitions.get(0);
-    AmbryPartition partition2 = (AmbryPartition) partitions.get(1);
-    assertTrue(partition1.isEqual(partition1.toPathString()));
-    assertTrue(partition1.compareTo(partition1) == 0);
-    assertFalse(partition1.isEqual(partition2.toPathString()));
-    assertTrue(partition1.compareTo(partition2) != 0);
-    partition1.setState(PartitionState.READ_ONLY);
-    assertEquals(partitions.size(), clusterManager.getWritablePartitionIds().size() + 1);
-    assertFalse(clusterManager.getWritablePartitionIds().contains(partition1));
-
-    // AmbryReplica tests
-    try {
-      new AmbryReplica(null, disk1, MAX_REPLICA_CAPACITY_IN_BYTES);
-      fail("Replica initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-
-    try {
-      new AmbryReplica(partition1, null, MAX_REPLICA_CAPACITY_IN_BYTES);
-      fail("Replica initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-
-    try {
-      new AmbryReplica(partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES + 1);
-      fail("Replica initialization should fail with invalid arguments");
-    } catch (IllegalStateException e) {
-      // OK
-    }
-
-    AmbryReplica replica = partition1.getReplicaIds().get(0);
-    assertEquals(replica.getDiskId().getMountPath(), replica.getMountPath());
-    List<AmbryReplica> peerReplicas = replica.getPeerReplicaIds();
-    assertEquals(3 * dcs.length - 1, peerReplicas.size());
-    for (AmbryReplica peerReplica : peerReplicas) {
-      assertEquals(replica.getPartitionId(), peerReplica.getPartitionId());
     }
   }
 

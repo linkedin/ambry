@@ -18,16 +18,19 @@ import java.io.IOException;
 
 
 /**
- * A factory interface to get cluster agents such as {@link ClusterMap} and {@link ClusterParticipant}
+ * A factory interface to get cluster agents such as {@link ClusterMap} and {@link ClusterParticipant}. Each type of
+ * agents should be constructed at most once, and only on demand.
  */
 public interface ClusterAgentsFactory {
   /**
-   * Get a reference to a {@link ClusterMap}
+   * Construct and return the reference or return the reference to the previously constructed
+   * {@link ClusterMap}
    */
   ClusterMap getClusterMap() throws IOException;
 
   /**
-   * Get a reference to a {@link ClusterParticipant}
+   * Construct and return the reference or return the reference to the previously constructed
+   * {@link ClusterParticipant}
    */
   ClusterParticipant getClusterParticipant() throws IOException;
 }

@@ -17,7 +17,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -26,7 +26,7 @@ import java.util.List;
  */
 class AmbryPartition extends PartitionId {
   private final Long id;
-  private final HelixClusterManager.HelixClusterManagerCallback clusterManagerCallback;
+  private final ClusterManagerCallback clusterManagerCallback;
   private volatile PartitionState state;
 
   private static final short VERSION_FIELD_SIZE_IN_BYTES = 2;
@@ -36,11 +36,11 @@ class AmbryPartition extends PartitionId {
   /**
    * Instantiate an AmbryPartition instance.
    * @param id the id associated with this partition.
-   * @param clusterManagerCallback the {@link HelixClusterManager.HelixClusterManagerCallback} to use to make callbacks
+   * @param clusterManagerCallback the {@link ClusterManagerCallback} to use to make callbacks
    *                               to the {@link HelixClusterManager}
    * The initial state defaults to {@link PartitionState#READ_WRITE}.
    */
-  AmbryPartition(long id, HelixClusterManager.HelixClusterManagerCallback clusterManagerCallback) {
+  AmbryPartition(long id, ClusterManagerCallback clusterManagerCallback) {
     this.id = id;
     this.clusterManagerCallback = clusterManagerCallback;
     this.state = PartitionState.READ_WRITE;
@@ -48,15 +48,12 @@ class AmbryPartition extends PartitionId {
 
   @Override
   public byte[] getBytes() {
-    ByteBuffer buffer = ByteBuffer.allocate(PARTITION_SIZE_IN_BYTES);
-    buffer.putShort(CURRENT_VERSION);
-    buffer.putLong(id);
-    return buffer.array();
+    return ClusterMapUtils.serializeShortAndLong(CURRENT_VERSION, id);
   }
 
   @Override
   public List<AmbryReplica> getReplicaIds() {
-    return clusterManagerCallback.getReplicaIdsForPartition(this);
+    return new ArrayList<>(clusterManagerCallback.getReplicaIdsForPartition(this));
   }
 
   @Override
