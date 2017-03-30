@@ -118,8 +118,7 @@ class CompactionManager {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
     private final Set<BlobStore> storesToSkip = new HashSet<>();
-    private final long waitTimeMs =
-        storeConfig.storeCompactionCheckFrequencyInHours * Time.MinsPerHour * Time.SecsPerMin * Time.MsPerSec;
+    private final long waitTimeMs = storeConfig.storeCompactionCheckFrequencyInHours * Time.SecsPerHour * Time.MsPerSec;
 
     private volatile boolean enabled = true;
 
