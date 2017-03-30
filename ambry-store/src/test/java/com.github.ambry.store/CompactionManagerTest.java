@@ -21,8 +21,11 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -33,8 +36,9 @@ import static org.junit.Assert.*;
  */
 public class CompactionManagerTest {
 
-  private static long CAPACITY_IN_BYTES = 10 * 1024 * 1024;
-  private static long DEFAULT_USED_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES * 6 / 10;
+  private static final long CAPACITY_IN_BYTES = 10 * 1024 * 1024;
+  private static final long DEFAULT_USED_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES * 6 / 10;
+  private static final String MOUNT_PATH = "/tmp/";
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   private final Properties properties = new Properties();
   private final Time time = new MockTime();
@@ -54,7 +58,28 @@ public class CompactionManagerTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
-    compactionManager = new CompactionManager(config, time);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
+  }
+
+  /**
+   * Tests the enabling and disabling of the {@link CompactionManager} with and without compaction enabled.
+   */
+  @Test
+  public void testEnableDisable() {
+    // without compaction enabled.
+    compactionManager.enable();
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+
+    // with compaction enabled.
+    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    config = new StoreConfig(new VerifiableProperties(properties));
+    StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
+    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
+    compactionManager.enable();
+    compactionManager.disable();
+    compactionManager.awaitTermination();
   }
 
   /**
@@ -124,7 +149,7 @@ public class CompactionManagerTest {
       MetricRegistry metricRegistry = new MetricRegistry();
       StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
       blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
-      compactionManager = new CompactionManager(config, time);
+      compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
       blobStore.validLogSegments = generateRandomStrings(2);
       if (blobStore.usedCapacity < (config.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0
           * blobStore.capacityInBytes)) {
@@ -150,12 +175,108 @@ public class CompactionManagerTest {
       MetricRegistry metricRegistry = new MetricRegistry();
       StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
       blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
-      compactionManager = new CompactionManager(config, time);
+      compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
       blobStore.validLogSegments = generateRandomStrings(2);
       verifyCompactionDetails(
           new CompactionDetails(time.milliseconds() - messageRetentionDays * Time.SecsPerDay * Time.MsPerSec,
               blobStore.validLogSegments));
     }
+  }
+
+  /**
+   * Tests that compaction is triggered on all stores provided they do not misbehave. Also includes a store that is
+   * not ready for compaction. Ensures that {@link BlobStore#maybeResumeCompaction()} is called before
+   * {@link BlobStore#compact(CompactionDetails)} is called.
+   * @throws Exception
+   */
+  @Test
+  public void testCompactionExecutorHappyPath() throws Exception {
+    int numStores = 3;
+    List<BlobStore> stores = new ArrayList<>();
+    // one store with nothing to compact isn't going to get compact calls.
+    CountDownLatch compactCallsCountdown = new CountDownLatch(numStores - 1);
+    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    for (int i = 0; i < numStores; i++) {
+      MockBlobStore store = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES,
+          compactCallsCountdown);
+      // one store should not have any segments to compact
+      store.validLogSegments = i == 0 ? null : generateRandomStrings(i);
+      stores.add(store);
+    }
+    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, time);
+    compactionManager.enable();
+    assertTrue("Compaction calls did not come within the expected time",
+        compactCallsCountdown.await(1, TimeUnit.SECONDS));
+    for (int i = 0; i < numStores; i++) {
+      MockBlobStore store = (MockBlobStore) stores.get(i);
+      if (store.callOrderException != null) {
+        throw store.callOrderException;
+      }
+      if (i > 0) {
+        assertTrue("Compact was not called", store.compactCalled);
+      } else {
+        // should not call for i == 0 because there are no compaction details.
+        assertFalse("Compact should not have been called", store.compactCalled);
+      }
+    }
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+  }
+
+  /**
+   * Tests that compaction proceeds on all non misbehaving stores even in the presence of some misbehaving stores
+   * (not started/throwing exceptions).
+   * @throws Exception
+   */
+  @Test
+  public void testCompactionWithMisbehavingStores() throws Exception {
+    int numStores = 5;
+    List<BlobStore> stores = new ArrayList<>();
+    // one store that isn't started isn't going to get compact calls.
+    // another store that throws an exception on resumeCompaction() isn't going to get a compact call.
+    CountDownLatch compactCallsCountdown = new CountDownLatch(numStores - 2);
+    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    for (int i = 0; i < numStores; i++) {
+      MockBlobStore store = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES,
+          compactCallsCountdown);
+      store.validLogSegments = generateRandomStrings(2);
+      if (i == 0) {
+        // one store should not be started
+        store.started = false;
+      } else if (i == 1) {
+        // one store should throw on resumeCompaction()
+        store.exceptionToThrowOnResume = new RuntimeException("Misbehaving store");
+      } else if (i == 2) {
+        // one store should throw on compact()
+        store.exceptionToThrowOnCompact = new RuntimeException("Misbehaving store");
+      }
+      stores.add(store);
+    }
+    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, time);
+    compactionManager.enable();
+    assertTrue("Compaction calls did not come within the expected time",
+        compactCallsCountdown.await(1, TimeUnit.SECONDS));
+    for (int i = 0; i < numStores; i++) {
+      MockBlobStore store = (MockBlobStore) stores.get(i);
+      if (store.callOrderException != null) {
+        throw store.callOrderException;
+      }
+      if (i > 1) {
+        assertTrue("Compact was not called", store.compactCalled);
+      } else {
+        // should not call for i == 0 because store has not been started.
+        // should not call for i == 1 because resumeCompaction() would have marked this as a misbehaving store.
+        assertFalse("Compact should not have been called", store.compactCalled);
+      }
+    }
+    compactionManager.disable();
+    compactionManager.awaitTermination();
   }
 
   // helper methods
@@ -176,7 +297,8 @@ public class CompactionManagerTest {
   // verification helper methods
 
   /**
-   * Verifies {@link CompactionManager#getCompactionDetails(BlobStore)} returns expected values i.e. {@code expectedCompactionDetails}
+   * Verifies {@link CompactionManager#getCompactionDetails(BlobStore)} returns expected values i.e.
+   * {@code expectedCompactionDetails}
    * @param expectedCompactionDetails expected {@link CompactionDetails}
    * @throws StoreException
    */
@@ -198,13 +320,28 @@ public class CompactionManagerTest {
   private class MockBlobStore extends BlobStore {
     private long usedCapacity;
     private long capacityInBytes;
+    private final CountDownLatch compactCallsCountdown;
     List<String> validLogSegments = null;
+
+    private boolean resumeCompactionCalled = false;
+    boolean compactCalled = false;
+    Exception callOrderException = null;
+
+    RuntimeException exceptionToThrowOnResume = null;
+    RuntimeException exceptionToThrowOnCompact = null;
+    boolean started = true;
 
     MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes,
         long usedCapacity) {
+      this(config, metrics, time, capacityInBytes, usedCapacity, new CountDownLatch(0));
+    }
+
+    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes, long usedCapacity,
+        CountDownLatch compactCallsCountdown) {
       super("", config, null, null, metrics, null, 0, null, null, null, time);
       this.capacityInBytes = capacityInBytes;
       this.usedCapacity = usedCapacity;
+      this.compactCallsCountdown = compactCallsCountdown;
     }
 
     @Override
@@ -228,6 +365,36 @@ public class CompactionManagerTest {
     @Override
     List<String> getLogSegmentsNotInJournal() throws StoreException {
       return validLogSegments;
+    }
+
+    @Override
+    void compact(CompactionDetails details) {
+      compactCalled = true;
+      compactCallsCountdown.countDown();
+      if (details == null) {
+        callOrderException = new Exception("Called compact() with null details");
+      } else if (!resumeCompactionCalled) {
+        callOrderException = new Exception("Called compact() before calling maybeResumeCompaction()");
+      }
+      if (exceptionToThrowOnCompact != null) {
+        throw exceptionToThrowOnCompact;
+      }
+    }
+
+    @Override
+    void maybeResumeCompaction() {
+      if (resumeCompactionCalled) {
+        callOrderException = new Exception("maybeResumeCompaction() called more than once");
+      }
+      resumeCompactionCalled = true;
+      if (exceptionToThrowOnResume != null) {
+        throw exceptionToThrowOnResume;
+      }
+    }
+
+    @Override
+    public boolean isStarted() {
+      return started;
     }
   }
 }

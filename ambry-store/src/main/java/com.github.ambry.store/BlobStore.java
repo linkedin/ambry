@@ -38,6 +38,7 @@ class BlobStore implements Store {
   static final String SEPARATOR = "_";
   private final static String LockFile = ".lock";
 
+  private final String storeId;
   private final String dataDir;
   private final ScheduledExecutorService taskScheduler;
   private final DiskIOScheduler diskIOScheduler;
@@ -77,6 +78,7 @@ class BlobStore implements Store {
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
+    this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
     this.diskIOScheduler = diskIOScheduler;
@@ -414,9 +416,42 @@ class BlobStore implements Store {
     return started;
   }
 
+  /**
+   * Compacts the store data based on {@code details}.
+   * @param details the {@link CompactionDetails} describing what needs to be compacted.
+   * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
+   * in the segments to compact are in the journal.
+   * @throws IOException if there is any error creating the {@link CompactionLog}.
+   * @throws StoreException if there are any errors during the compaction.
+   */
+  void compact(CompactionDetails details) throws IOException, StoreException {
+    checkStarted();
+    logger.info("Compaction of {} started", this);
+    // TODO: compactor.compact(details);
+    logger.info("Compaction of {} finished", this);
+  }
+
+  /**
+   * Resumes a compaction if one is in progress.
+   * @throws StoreException if there are any errors during the compaction.
+   */
+  void maybeResumeCompaction() throws StoreException {
+    checkStarted();
+    if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
+      logger.info("Resuming compaction of {}", this);
+      // TODO: compactor.resumeCompaction();
+      logger.info("Compaction of {} finished", this);
+    }
+  }
+
   private void checkStarted() throws StoreException {
     if (!started) {
       throw new StoreException("Store not started", StoreErrorCodes.Store_Not_Started);
     }
+  }
+
+  @Override
+  public String toString() {
+    return "StoreId: " + storeId + ". DataDir: " + dataDir + ". Capacity: " + capacityInBytes;
   }
 }

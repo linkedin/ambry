@@ -795,6 +795,10 @@ public class IndexTest {
     } else {
       assertEquals("LogSegments mismatch for non segmented log ", null, state.index.getLogSegmentsNotInJournal());
     }
+    state.closeAndClearIndex();
+    state.reloadIndex(false, false);
+    assertNull("There should be no offsets in the journal", state.index.journal.getFirstOffset());
+    assertNull("There should be no log segments returned", state.index.getLogSegmentsNotInJournal());
   }
 
   /**
