@@ -26,16 +26,20 @@ public class ServerNetworkResponseMetrics extends NetworkSendMetrics {
   private final Histogram responseSendTimeBySize;
   private final Histogram responseTotalTimeBySize;
   private long timeSpentTillNow;
+  private final long blobSize;
+  private final Histogram responseTotalTimePer100Kb;
 
   public ServerNetworkResponseMetrics(Histogram responseQueueTime, Histogram responseSendTime,
       Histogram responseTotalTime, Histogram responseSendTimeBySize, Histogram responseTotalTimeBySize,
-      long timeSpentTillNow) {
+      long timeSpentTillNow, long blobSize, Histogram responseTotalTimePer100Kb) {
     super(responseSendTime);
     this.responseQueueTime = responseQueueTime;
     this.responseTotalTime = responseTotalTime;
     this.responseSendTimeBySize = responseSendTimeBySize;
     this.responseTotalTimeBySize = responseTotalTimeBySize;
     this.timeSpentTillNow = timeSpentTillNow;
+    this.blobSize = blobSize;
+    this.responseTotalTimePer100Kb = responseTotalTimePer100Kb;
   }
 
   /**
@@ -61,6 +65,9 @@ public class ServerNetworkResponseMetrics extends NetworkSendMetrics {
     responseTotalTime.update(timeSpentTillNow);
     if (responseTotalTimeBySize != null) {
       responseTotalTimeBySize.update(timeSpentTillNow);
+    }
+    if (responseTotalTimePer100Kb != null && blobSize > 100 * 1024) {
+      responseTotalTimePer100Kb.update(timeSpentTillNow / (100 * 1024));
     }
   }
 }

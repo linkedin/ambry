@@ -399,7 +399,7 @@ public class AmbryRequests implements RequestAPI {
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
-            metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+            metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent, -1, null));
   }
 
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
@@ -491,7 +491,8 @@ public class AmbryRequests implements RequestAPI {
 
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.replicaMetadataResponseQueueTimeInMs,
-            metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
+            metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent, -1,
+            null));
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
@@ -502,20 +503,23 @@ public class AmbryRequests implements RequestAPI {
       if (blobSize <= ServerMetrics.smallBlob) {
         requestResponseChannel.sendResponse(response, request,
             new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
-                metrics.putSmallBlobProcessingTimeInMs, metrics.putSmallBlobTotalTimeInMs, totalTimeSpent));
+                metrics.putSmallBlobProcessingTimeInMs, metrics.putSmallBlobTotalTimeInMs, totalTimeSpent, blobSize,
+                metrics.putBlobTotalTimePer100kbInMs));
       } else if (blobSize <= ServerMetrics.mediumBlob) {
         requestResponseChannel.sendResponse(response, request,
             new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
-                metrics.putMediumBlobProcessingTimeInMs, metrics.putMediumBlobTotalTimeInMs, totalTimeSpent));
+                metrics.putMediumBlobProcessingTimeInMs, metrics.putMediumBlobTotalTimeInMs, totalTimeSpent, blobSize,
+                metrics.putBlobTotalTimePer100kbInMs));
       } else {
         requestResponseChannel.sendResponse(response, request,
             new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
-                metrics.putLargeBlobProcessingTimeInMs, metrics.putLargeBlobTotalTimeInMs, totalTimeSpent));
+                metrics.putLargeBlobProcessingTimeInMs, metrics.putLargeBlobTotalTimeInMs, totalTimeSpent, blobSize,
+                metrics.putBlobTotalTimePer100kbInMs));
       }
     } else {
       requestResponseChannel.sendResponse(response, request,
           new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-              totalTimeSpent));
+              totalTimeSpent, -1, null));
     }
   }
 
@@ -529,16 +533,17 @@ public class AmbryRequests implements RequestAPI {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
-                  metrics.getSmallBlobProcessingTimeInMs, metrics.getSmallBlobTotalTimeInMs, totalTimeSpent));
+                  metrics.getSmallBlobProcessingTimeInMs, metrics.getSmallBlobTotalTimeInMs, totalTimeSpent, blobSize,
+                  metrics.getBlobTotalTimePer100kbInMs));
         } else {
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                  totalTimeSpent));
+                  totalTimeSpent, -1, null));
         }
       } else {
         requestResponseChannel.sendResponse(response, request,
             new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                totalTimeSpent));
+                totalTimeSpent, -1, null));
       }
     } else if (blobSize <= ServerMetrics.mediumBlob) {
       if (flags == MessageFormatFlags.Blob) {
@@ -546,16 +551,17 @@ public class AmbryRequests implements RequestAPI {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
-                  metrics.getMediumBlobProcessingTimeInMs, metrics.getMediumBlobTotalTimeInMs, totalTimeSpent));
+                  metrics.getMediumBlobProcessingTimeInMs, metrics.getMediumBlobTotalTimeInMs, totalTimeSpent, blobSize,
+                  metrics.getBlobTotalTimePer100kbInMs));
         } else {
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                  totalTimeSpent));
+                  totalTimeSpent, -1, null));
         }
       } else {
         requestResponseChannel.sendResponse(response, request,
             new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                totalTimeSpent));
+                totalTimeSpent, -1, null));
       }
     } else {
       if (flags == MessageFormatFlags.Blob) {
@@ -563,16 +569,17 @@ public class AmbryRequests implements RequestAPI {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime,
-                  metrics.getLargeBlobProcessingTimeInMs, metrics.getLargeBlobTotalTimeInMs, totalTimeSpent));
+                  metrics.getLargeBlobProcessingTimeInMs, metrics.getLargeBlobTotalTimeInMs, totalTimeSpent, blobSize,
+                  metrics.getBlobTotalTimePer100kbInMs));
         } else {
           requestResponseChannel.sendResponse(response, request,
               new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                  totalTimeSpent));
+                  totalTimeSpent, -1, null));
         }
       } else {
         requestResponseChannel.sendResponse(response, request,
             new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, requestTotalTime, null, null,
-                totalTimeSpent));
+                totalTimeSpent, -1, null));
       }
     }
   }
