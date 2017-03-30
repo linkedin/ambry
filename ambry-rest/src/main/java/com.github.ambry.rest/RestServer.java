@@ -13,11 +13,7 @@
  */
 package com.github.ambry.rest;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.JmxReporter;
-import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.*;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.RestServerConfig;
@@ -26,10 +22,14 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
-import java.io.IOException;
-import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 
 /**
@@ -63,7 +63,7 @@ public class RestServer {
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RestServerMetrics restServerMetrics;
-  private final JmxReporter reporter;
+  private final List<Object> reporters;
   private final Router router;
   private final BlobStorageService blobStorageService;
   private final RestRequestHandler restRequestHandler;
@@ -155,7 +155,7 @@ public class RestServer {
     }
     MetricRegistry metricRegistry = clusterMap.getMetricRegistry();
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
-    reporter = JmxReporter.forRegistry(metricRegistry).build();
+    reporters = initReporters(metricRegistry, restServerConfig);
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
@@ -193,6 +193,27 @@ public class RestServer {
     logger.trace("Instantiated RestServer");
   }
 
+  private List<Object> initReporters(MetricRegistry metricRegistry, RestServerConfig restServerConfig) {
+    List<Object> reporters = new ArrayList<Object>();
+    String[] reporterClassArray = restServerConfig.reporterClasses.split(",");
+    for (String reporterClassName : reporterClassArray) {
+      try {
+        Class<?> reporterClass = Class.forName(reporterClassName);
+        Method forRegistry = reporterClass.getDeclaredMethod("forRegistry");
+        forRegistry.setAccessible(true);
+        Object reporterBuilder = forRegistry.invoke(null, metricRegistry);
+        Method reporterBuildMethod = reporterBuilder.getClass().getDeclaredMethod("build");
+        reporterBuildMethod.setAccessible(true);
+        Object reporter = reporterBuildMethod.invoke(reporterBuilder);
+        reporters.add(reporter);
+      } catch (Exception e) {
+        logger.error("build reporter error, class not found", e);
+        throw new RuntimeException(e);
+      }
+    }
+    return reporters;
+  }
+
   /**
    * Starts up all the components required. Returns when startup is FULLY complete.
    * @throws InstantiationException if the RestServer is unable to start.
@@ -202,7 +223,9 @@ public class RestServer {
     long startupBeginTime = System.currentTimeMillis();
     try {
       // ordering is important.
-      reporter.start();
+      for (Object reporter : reporters) {
+        startReporter(reporter);
+      }
       long reporterStartTime = System.currentTimeMillis();
       long elapsedTime = reporterStartTime - startupBeginTime;
       logger.info("JMX reporter start took {} ms", elapsedTime);
@@ -238,6 +261,10 @@ public class RestServer {
       logger.info("RestServer start took {} ms", startupTime);
       restServerMetrics.restServerStartTimeInMs.update(startupTime);
     }
+  }
+
+  private void startReporter(Object reporter) {
+    invokeReporterMethod(reporter, "start");
   }
 
   /**
@@ -280,7 +307,9 @@ public class RestServer {
       logger.info("Router close took {} ms", elapsedTime);
       restServerMetrics.routerCloseTime.update(elapsedTime);
 
-      reporter.stop();
+      for (Object reporter : reporters) {
+        stopReporter(reporter);
+      }
       elapsedTime = System.currentTimeMillis() - routerCloseTime;
       logger.info("JMX reporter shutdown took {} ms", elapsedTime);
       restServerMetrics.jmxReporterShutdownTimeInMs.update(elapsedTime);
@@ -291,6 +320,22 @@ public class RestServer {
       logger.info("RestServer shutdown took {} ms", shutdownTime);
       restServerMetrics.restServerShutdownTimeInMs.update(shutdownTime);
       shutdownLatch.countDown();
+    }
+  }
+
+  private void stopReporter(Object reporter) {
+    invokeReporterMethod(reporter, "stop");
+  }
+
+  private void invokeReporterMethod(Object reporter, String methodName) {
+    Class<?> reporterClass = reporter.getClass();
+    try {
+      Method startMethod = reporterClass.getDeclaredMethod(methodName);
+      startMethod.setAccessible(true);
+      startMethod.invoke(reporter);
+    } catch (Exception e) {
+      logger.error("invoke reporter {}, method {} error", methodName, reporterClass, e);
+      throw new RuntimeException(e);
     }
   }
 
