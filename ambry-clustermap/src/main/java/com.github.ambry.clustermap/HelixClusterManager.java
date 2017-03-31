@@ -55,11 +55,11 @@ class HelixClusterManager implements ClusterMap {
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
   private final Map<String, DcZkInfo> dcToDcZkInfo = new HashMap<>();
-  private final Map<String, AmbryPartition> partitionNameToPartitionIdMap = new ConcurrentHashMap<>();
-  private final Map<String, AmbryDataNode> instanceNameToDataNodeIdMap = new ConcurrentHashMap<>();
-  private final Map<AmbryPartition, Set<AmbryReplica>> partitionIdToReplicaIds = new ConcurrentHashMap<>();
-  private final Map<AmbryDataNode, Set<AmbryReplica>> dataNodeIdToReplicaIds = new ConcurrentHashMap<>();
-  private final Map<AmbryDataNode, Set<AmbryDisk>> dataNodeIdToDiskIds = new ConcurrentHashMap<>();
+  private final Map<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
+  private final Map<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
+  private final Map<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas = new ConcurrentHashMap<>();
+  private final Map<AmbryDataNode, Set<AmbryReplica>> ambryDataNodeToAmbryReplicas = new ConcurrentHashMap<>();
+  private final Map<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
   private final Map<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
   private long clusterWideRawCapacityBytes;
   private long clusterWideAllocatedRawCapacityBytes;
@@ -129,16 +129,16 @@ class HelixClusterManager implements ClusterMap {
         AmbryDataNode datanode = new AmbryDataNode(dcZkInfo.dcName, clusterMapConfig, instanceConfig.getHostName(),
             Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig));
         initializeDisksAndReplicasOnNode(datanode, instanceConfig);
-        instanceNameToDataNodeIdMap.put(instanceName, datanode);
+        instanceNameToAmbryDataNode.put(instanceName, datanode);
         dcZkInfo.clusterChangeListener.allInstances.add(instanceName);
       }
     }
-    for (Set<AmbryDisk> disks : dataNodeIdToDiskIds.values()) {
+    for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
       for (AmbryDisk disk : disks) {
         clusterWideRawCapacityBytes += disk.getRawCapacityInBytes();
       }
     }
-    for (Set<AmbryReplica> partitionReplicas : partitionIdToReplicaIds.values()) {
+    for (Set<AmbryReplica> partitionReplicas : ambryPartitionToAmbryReplicas.values()) {
       long replicaCapacity = partitionReplicas.iterator().next().getCapacityInBytes();
       clusterWideAllocatedRawCapacityBytes += replicaCapacity * partitionReplicas.size();
       clusterWiseAllocatedUsableCapacityBytes += replicaCapacity;
@@ -154,8 +154,8 @@ class HelixClusterManager implements ClusterMap {
    */
   private void initializeDisksAndReplicasOnNode(AmbryDataNode datanode, InstanceConfig instanceConfig)
       throws Exception {
-    dataNodeIdToReplicaIds.put(datanode, new HashSet<AmbryReplica>());
-    dataNodeIdToDiskIds.put(datanode, new HashSet<AmbryDisk>());
+    ambryDataNodeToAmbryReplicas.put(datanode, new HashSet<AmbryReplica>());
+    ambryDataNodeToAmbryDisks.put(datanode, new HashSet<AmbryDisk>());
     List<String> sealedReplicas = getSealedReplicas(instanceConfig);
     Map<String, Map<String, String>> diskInfos = instanceConfig.getRecord().getMapFields();
     for (Map.Entry<String, Map<String, String>> entry : diskInfos.entrySet()) {
@@ -168,7 +168,7 @@ class HelixClusterManager implements ClusterMap {
 
       // Create disk
       AmbryDisk disk = new AmbryDisk(clusterMapConfig, datanode, mountPath, state, capacityBytes);
-      dataNodeIdToDiskIds.get(datanode).add(disk);
+      ambryDataNodeToAmbryDisks.get(datanode).add(disk);
 
       if (!replicasStr.isEmpty()) {
         List<String> replicaInfoList = Arrays.asList(replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR));
@@ -177,12 +177,12 @@ class HelixClusterManager implements ClusterMap {
           // partition name and replica name are the same.
           String partitionName = info[0];
           long replicaCapacity = Long.valueOf(info[1]);
-          AmbryPartition partition = partitionNameToPartitionIdMap.get(partitionName);
+          AmbryPartition partition = partitionNameToAmbryPartition.get(partitionName);
           if (partition == null) {
             // Create partition
             partition = new AmbryPartition(Long.valueOf(partitionName), helixClusterManagerCallback);
-            partitionNameToPartitionIdMap.put(partitionName, partition);
-            partitionIdToReplicaIds.put(partition, new HashSet<AmbryReplica>());
+            partitionNameToAmbryPartition.put(partitionName, partition);
+            ambryPartitionToAmbryReplicas.put(partition, new HashSet<AmbryReplica>());
             partitionMap.put(ByteBuffer.wrap(partition.getBytes()), partition);
           } else {
             ensurePartitionAbsenceOnNodeAndValidateCapacity(partition, datanode, replicaCapacity);
@@ -192,8 +192,8 @@ class HelixClusterManager implements ClusterMap {
           }
           // Create replica
           AmbryReplica replica = new AmbryReplica(partition, disk, replicaCapacity);
-          partitionIdToReplicaIds.get(partition).add(replica);
-          dataNodeIdToReplicaIds.get(datanode).add(replica);
+          ambryPartitionToAmbryReplicas.get(partition).add(replica);
+          ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
         }
       }
     }
@@ -208,7 +208,7 @@ class HelixClusterManager implements ClusterMap {
    */
   private void ensurePartitionAbsenceOnNodeAndValidateCapacity(AmbryPartition partition, AmbryDataNode datanode,
       long expectedReplicaCapacity) {
-    for (AmbryReplica replica : partitionIdToReplicaIds.get(partition)) {
+    for (AmbryReplica replica : ambryPartitionToAmbryReplicas.get(partition)) {
       if (replica.getDataNodeId().equals(datanode)) {
         throw new IllegalStateException("Replica already exists on " + datanode + " for " + partition);
       } else if (replica.getCapacityInBytes() != expectedReplicaCapacity) {
@@ -225,7 +225,7 @@ class HelixClusterManager implements ClusterMap {
 
   @Override
   public AmbryDataNode getDataNodeId(String hostname, int port) {
-    return instanceNameToDataNodeIdMap.get(getInstanceName(hostname, port));
+    return instanceNameToAmbryDataNode.get(getInstanceName(hostname, port));
   }
 
   @Override
@@ -234,12 +234,12 @@ class HelixClusterManager implements ClusterMap {
       throw new IllegalArgumentException("Incompatible type passed in");
     }
     AmbryDataNode datanode = (AmbryDataNode) dataNodeId;
-    return new ArrayList<>(dataNodeIdToReplicaIds.get(datanode));
+    return new ArrayList<>(ambryDataNodeToAmbryReplicas.get(datanode));
   }
 
   @Override
   public List<AmbryDataNode> getDataNodeIds() {
-    return new ArrayList<>(instanceNameToDataNodeIdMap.values());
+    return new ArrayList<>(instanceNameToAmbryDataNode.values());
   }
 
   @Override
@@ -286,7 +286,7 @@ class HelixClusterManager implements ClusterMap {
   public List<AmbryPartition> getWritablePartitionIds() {
     List<AmbryPartition> writablePartitions = new ArrayList<>();
     List<AmbryPartition> healthyWritablePartitions = new ArrayList<>();
-    for (AmbryPartition partition : partitionNameToPartitionIdMap.values()) {
+    for (AmbryPartition partition : partitionNameToAmbryPartition.values()) {
       if (partition.getPartitionState() == PartitionState.READ_WRITE) {
         writablePartitions.add(partition);
         if (areAllReplicasForPartitionUp(partition)) {
@@ -314,7 +314,7 @@ class HelixClusterManager implements ClusterMap {
    * @return true if all associated replicas are up; false otherwise.
    */
   private boolean areAllReplicasForPartitionUp(AmbryPartition partition) {
-    for (AmbryReplica replica : partitionIdToReplicaIds.get(partition)) {
+    for (AmbryReplica replica : ambryPartitionToAmbryReplicas.get(partition)) {
       if (replica.isDown()) {
         return false;
       }
@@ -330,7 +330,7 @@ class HelixClusterManager implements ClusterMap {
    * @return the {@link AmbryReplica} associated with the given parameters.
    */
   AmbryReplica getReplicaForPartitionOnNode(String hostname, int port, String partitionString) {
-    for (AmbryReplica replica : dataNodeIdToReplicaIds.get(getDataNodeId(hostname, port))) {
+    for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(getDataNodeId(hostname, port))) {
       if (replica.getPartitionId().toString().equals(partitionString)) {
         return replica;
       }
@@ -364,9 +364,9 @@ class HelixClusterManager implements ClusterMap {
         }
         for (String instanceName : allInstances) {
           if (liveInstancesSet.contains(instanceName)) {
-            instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.AVAILABLE);
+            instanceNameToAmbryDataNode.get(instanceName).setState(HardwareState.AVAILABLE);
           } else {
-            instanceNameToDataNodeIdMap.get(instanceName).setState(HardwareState.UNAVAILABLE);
+            instanceNameToAmbryDataNode.get(instanceName).setState(HardwareState.UNAVAILABLE);
           }
         }
         if (!liveInstanceChangeTriggered) {
@@ -453,7 +453,7 @@ class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
-      return new ArrayList<>(partitionIdToReplicaIds.get(partition));
+      return new ArrayList<>(ambryPartitionToAmbryReplicas.get(partition));
     }
 
     /**
@@ -467,14 +467,14 @@ class HelixClusterManager implements ClusterMap {
      * @return a collection of datanodes in this cluster.
      */
     Collection<AmbryDataNode> getDatanodes() {
-      return new ArrayList<>(instanceNameToDataNodeIdMap.values());
+      return new ArrayList<>(instanceNameToAmbryDataNode.values());
     }
 
     /**
      * @return the count of the datanodes in this cluster.
      */
     long getDatanodeCount() {
-      return instanceNameToDataNodeIdMap.values().size();
+      return instanceNameToAmbryDataNode.values().size();
     }
 
     /**
@@ -482,7 +482,7 @@ class HelixClusterManager implements ClusterMap {
      */
     long getDownDatanodesCount() {
       long count = 0;
-      for (AmbryDataNode datanode : instanceNameToDataNodeIdMap.values()) {
+      for (AmbryDataNode datanode : instanceNameToAmbryDataNode.values()) {
         if (datanode.getState() == HardwareState.UNAVAILABLE) {
           count++;
         }
@@ -495,7 +495,7 @@ class HelixClusterManager implements ClusterMap {
      */
     Collection<AmbryDisk> getDisks() {
       List<AmbryDisk> disksToReturn = new ArrayList<>();
-      for (Set<AmbryDisk> disks : dataNodeIdToDiskIds.values()) {
+      for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
         disksToReturn.addAll(disks);
       }
       return disksToReturn;
@@ -506,7 +506,7 @@ class HelixClusterManager implements ClusterMap {
      */
     long getDiskCount() {
       long count = 0;
-      for (Set<AmbryDisk> disks : dataNodeIdToDiskIds.values()) {
+      for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
         count += disks.size();
       }
       return count;
@@ -517,7 +517,7 @@ class HelixClusterManager implements ClusterMap {
      */
     long getDownDisksCount() {
       long count = 0;
-      for (Set<AmbryDisk> disks : dataNodeIdToDiskIds.values()) {
+      for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
         for (AmbryDisk disk : disks) {
           if (disk.getState() == HardwareState.UNAVAILABLE) {
             count++;

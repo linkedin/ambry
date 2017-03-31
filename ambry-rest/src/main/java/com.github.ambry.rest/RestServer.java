@@ -71,7 +71,6 @@ public class RestServer {
   private final NioServer nioServer;
   private final PublicAccessLogger publicAccessLogger;
   private final RestServerState restServerState;
-  private final ClusterMap clusterMap;
 
   /**
    * {@link RestServer} specific metrics tracking.
@@ -94,7 +93,6 @@ public class RestServer {
     public final Histogram restServerShutdownTimeInMs;
     public final Histogram restServerStartTimeInMs;
     public final Histogram routerCloseTime;
-    public final Histogram clusterMapCloseTime;
 
     /**
      * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
@@ -131,7 +129,6 @@ public class RestServer {
       restServerStartTimeInMs =
           metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
       routerCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
-      clusterMapCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "ClusterMapCloseTimeInMs"));
 
       Gauge<Integer> restServerStatus = new Gauge<Integer>() {
         @Override
@@ -156,7 +153,6 @@ public class RestServer {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
-    this.clusterMap = clusterMap;
     MetricRegistry metricRegistry = clusterMap.getMetricRegistry();
     RestServerConfig restServerConfig = new RestServerConfig(verifiableProperties);
     reporter = JmxReporter.forRegistry(metricRegistry).build();

@@ -68,10 +68,6 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
 
   @Override
   public ClusterParticipant getClusterParticipant() throws IOException {
-    if (clusterMapConfig == null) {
-      throw new IllegalArgumentException(
-          "Cluster participant creation requires the factory to be initialized with a non-null ClusterMapConfig");
-    }
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         @Override

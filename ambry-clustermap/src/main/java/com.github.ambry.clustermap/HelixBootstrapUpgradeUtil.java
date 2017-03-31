@@ -38,6 +38,44 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 
+/**
+ * A class to bootstrap static cluster map information into Helix.
+ *
+ * For each node that is added to Helix, its {@link InstanceConfig} will contain the node level information, which is
+ * of the following format currently:
+ *
+ *InstanceConfig: {
+ *  "id" : "localhost_17088",                              # id is the instanceName [host_port]
+ *  "mapFields" : {
+ *    "/tmp/c/0" : {                                       # disk is identified by the [mountpath]. DiskInfo conists of:
+ *      "capacityInBytes" : "912680550400",                # [capacity]
+ *      "diskState" : "AVAILABLE",                         # [state]
+ *      "Replicas" : "10:107374182400,"                    # comma-separated list of partition ids whose replicas are
+ *    },                                                   # hosted on this disk in [replica:replicaCapacity] format.
+ *    "/tmp/c/1" : {
+ *      "capacityInBytes" : "912680550400",
+ *      "diskState" : "AVAILABLE",
+ *      "Replicas" : "40:107374182400,20:107374182400,"
+ *    },
+ *    "/tmp/c/2" : {
+ *      "capacityInBytes" : "912680550400",
+ *      "diskState" : "AVAILABLE",
+ *      "Replicas" : "30:107374182400,"
+ *    }
+ *  },
+ *  "listFields" : {
+ *    "SEALED" : [ "20" ]                                  # comma-separated list of sealed replicas on this node.
+ *  },
+ *  "simpleFields" : {
+ *    "HELIX_HOST" : "localhost",                          #  hostname (Helix field)
+ *    "HELIX_PORT" : "17088",                              #  port     (Helix field)
+ *    "datacenter" : "dc1",                                # [datacenterName]
+ *    "rackId" : "1611",                                   # [rackId]
+ *    "sslPort": "27088"                                   # [sslPort]
+ *                                                         #  @todo: version.
+ *  }
+ *}
+ */
 class HelixBootstrapUpgradeUtil {
   private final StaticClusterManager staticClusterMap;
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
