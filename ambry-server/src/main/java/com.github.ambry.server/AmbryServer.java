@@ -40,7 +40,6 @@ import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
-import com.github.ambry.store.StatsManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;

@@ -1,5 +1,5 @@
 {
-  "namespace": "com.github.ambry.store",
+  "namespace": "com.github.ambry.server",
   "type": "record",
   "name": "StatsSnapshot",
   "fields": [

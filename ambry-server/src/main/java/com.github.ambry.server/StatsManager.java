@@ -12,11 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.store;
+package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.StatsManagerConfig;
+import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedOutputStream;
@@ -43,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * The stats manager is responsible for periodic aggregation of node level stats and expose/publish such stats to
  * potential consumers.
  */
-public class StatsManager {
+class StatsManager {
   private static final Logger logger = LoggerFactory.getLogger(StatsManager.class);
 
   private final StorageManager storageManager;
@@ -64,7 +67,7 @@ public class StatsManager {
    * @param time the {@link Time} instance to be used for reporting
    * @throws IOException
    */
-  public StatsManager(StorageManager storageManager, List<PartitionId> partitionIds, MetricRegistry registry,
+  StatsManager(StorageManager storageManager, List<PartitionId> partitionIds, MetricRegistry registry,
       StatsManagerConfig config, Time time) throws IOException {
     this.storageManager = storageManager;
     totalPartitionIds = partitionIds;
@@ -77,7 +80,7 @@ public class StatsManager {
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
-  public void start() {
+  void start() {
     scheduler = Utils.newScheduler(1, false);
     statsAggregator = new StatsAggregator();
     // random initial delay between 1 to 10 minutes to offset nodes from collecting stats at the same time
@@ -88,7 +91,7 @@ public class StatsManager {
   /**
    * Stops the periodic task that is collecting, aggregating and publishing stats.
    */
-  public void shutdown() throws InterruptedException {
+  void shutdown() throws InterruptedException {
     if (statsAggregator != null) {
       statsAggregator.cancel();
     }
@@ -142,7 +145,7 @@ public class StatsManager {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot();
         aggregate(aggregatedSnapshot, statsSnapshot);
-        metrics.fetchAndAggregateTimePerStore.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
+        metrics.fetchAndAggregateTimeMsPerStore.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachableStores.add(partitionId.toString());
       }
@@ -185,7 +188,7 @@ public class StatsManager {
         collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
       }
       if (!cancelled) {
-        metrics.totalFetchAndAggregateTime.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
+        metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
         StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
             totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
         try {

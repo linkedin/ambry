@@ -12,23 +12,26 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.store;
+package com.github.ambry.server;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 
 
+/**
+ * Metrics for {@link StatsManager} and related components.
+ */
 class StatsManagerMetrics {
   final Counter statsPublishFailureCount;
-  final Histogram totalFetchAndAggregateTime;
-  final Histogram fetchAndAggregateTimePerStore;
+  final Histogram totalFetchAndAggregateTimeMs;
+  final Histogram fetchAndAggregateTimeMsPerStore;
 
-  public StatsManagerMetrics(MetricRegistry registry) {
+  StatsManagerMetrics(MetricRegistry registry) {
     statsPublishFailureCount = registry.counter(MetricRegistry.name(StatsManager.class, "StatsPublishFailureCount"));
-    totalFetchAndAggregateTime =
-        registry.histogram(MetricRegistry.name(StatsManager.class, "TotalFetchAndAggregateTime"));
-    fetchAndAggregateTimePerStore =
-        registry.histogram(MetricRegistry.name(StatsManager.class, "FetchAndAggregateTimePerStore"));
+    totalFetchAndAggregateTimeMs =
+        registry.histogram(MetricRegistry.name(StatsManager.class, "TotalFetchAndAggregateTimeMs"));
+    fetchAndAggregateTimeMsPerStore =
+        registry.histogram(MetricRegistry.name(StatsManager.class, "FetchAndAggregateTimeMsPerStore"));
   }
 }
