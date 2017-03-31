@@ -149,7 +149,8 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
-      if (statsConfig.publishEnabled) {
+      if (serverConfig.serverStatsPublishEnabled) {
+        logger.info("Creating StatsManager to publish stats");
         List<PartitionId> partitionIds = new ArrayList<>();
         for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
           partitionIds.add(replicaId.getPartitionId());

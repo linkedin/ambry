@@ -97,11 +97,9 @@ public class StatsManagerTest {
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
     for (int i = 0; i < 2; i++) {
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
-      storeMap.put(new MockPartitionId(i),
-          new MockBlobStore(new MockBlobStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+      storeMap.put(new MockPartitionId(i), new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
     }
-    storeMap.put(new MockPartitionId(2),
-        new MockBlobStore(new MockBlobStoreStats(baseSliceAndNewSlice.getFirst(), false)));
+    storeMap.put(new MockPartitionId(2), new MockStore(new MockStoreStats(baseSliceAndNewSlice.getFirst(), false)));
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
@@ -147,7 +145,7 @@ public class StatsManagerTest {
   public void testStatsManagerWithProblematicStores() throws StoreException, IOException {
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
     problematicStoreMap.put(new MockPartitionId(1), null);
-    Store exceptionStore = new MockBlobStore(new MockBlobStoreStats(null, true));
+    Store exceptionStore = new MockStore(new MockStoreStats(null, true));
     problematicStoreMap.put(new MockPartitionId(2), exceptionStore);
     StatsManager testStatsManager =
         new StatsManager(new MockStorageManager(problematicStoreMap), new ArrayList<>(problematicStoreMap.keySet()),
@@ -280,10 +278,10 @@ public class StatsManagerTest {
   /**
    * Mocked {@link Store} that is intended to return a predefined {@link StoreStats} when getStoreStats is called.
    */
-  private class MockBlobStore implements Store {
+  private class MockStore implements Store {
     private final StoreStats storeStats;
 
-    MockBlobStore(StoreStats storeStats) {
+    MockStore(StoreStats storeStats) {
       this.storeStats = storeStats;
     }
 
@@ -341,11 +339,11 @@ public class StatsManagerTest {
   /**
    * Mocked {@link StoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
    */
-  private class MockBlobStoreStats implements StoreStats {
+  private class MockStoreStats implements StoreStats {
     private final StatsSnapshot statsSnapshot;
     private final boolean throwStoreException;
 
-    MockBlobStoreStats(StatsSnapshot statsSnapshot, boolean throwStoreException) {
+    MockStoreStats(StatsSnapshot statsSnapshot, boolean throwStoreException) {
       this.statsSnapshot = statsSnapshot;
       this.throwStoreException = throwStoreException;
     }

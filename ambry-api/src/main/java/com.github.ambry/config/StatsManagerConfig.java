@@ -34,15 +34,15 @@ public class StatsManagerConfig {
   public final long publishPeriodInSecs;
 
   /**
-   * The option to enable or disable publishing stats.
+   * The time period in seconds to delay before the first stats collection is triggered
    */
-  @Config("stats.publish.enabled")
-  @Default("false")
-  public final boolean publishEnabled;
+  @Config("stats.initial.delay.in.secs")
+  @Default("600")
+  public final int initialDelayInSecs;
 
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
     outputFilePath = verifiableProperties.getString("stats.output.file.path", "/tmp/stats_output.json");
-    publishPeriodInSecs = verifiableProperties.getLong("stats.publish.period.in.secs", 7200);
-    publishEnabled = verifiableProperties.getBoolean("stats.publish.enabled", false);
+    publishPeriodInSecs = verifiableProperties.getLongInRange("stats.publish.period.in.secs", 7200, 0, Long.MAX_VALUE);
+    initialDelayInSecs = verifiableProperties.getIntInRange("stats.initial.delay.in.secs", 600, 0, Integer.MAX_VALUE);
   }
 }

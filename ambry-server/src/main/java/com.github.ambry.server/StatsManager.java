@@ -52,6 +52,7 @@ class StatsManager {
   private final StorageManager storageManager;
   private final File statsOutputFile;
   private final long publishPeriodInSecs;
+  private final int initialDelayInSecs;
   private final List<PartitionId> totalPartitionIds;
   private final StatsManagerMetrics metrics;
   private final Time time;
@@ -73,6 +74,7 @@ class StatsManager {
     totalPartitionIds = partitionIds;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
+    initialDelayInSecs = config.initialDelayInSecs;
     metrics = new StatsManagerMetrics(registry);
     this.time = time;
   }
@@ -84,8 +86,9 @@ class StatsManager {
     scheduler = Utils.newScheduler(1, false);
     statsAggregator = new StatsAggregator();
     // random initial delay between 1 to 10 minutes to offset nodes from collecting stats at the same time
-    scheduler.scheduleAtFixedRate(statsAggregator, ThreadLocalRandom.current().nextInt(540) + 60, publishPeriodInSecs,
-        TimeUnit.SECONDS);
+    int actualDelay = ThreadLocalRandom.current().nextInt(initialDelayInSecs);
+    logger.info("Scheduling stats aggregation job with an initial delay of {} secs", actualDelay);
+    scheduler.scheduleAtFixedRate(statsAggregator, actualDelay, publishPeriodInSecs, TimeUnit.SECONDS);
   }
 
   /**
@@ -179,6 +182,7 @@ class StatsManager {
 
     @Override
     public void run() {
+      logger.info("Aggregating stats");
       long totalFetchAndAggregateStartTimeMs = time.milliseconds();
       StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
       List<String> unreachableStores = new ArrayList<>();
