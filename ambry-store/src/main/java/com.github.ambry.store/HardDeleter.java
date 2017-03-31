@@ -501,7 +501,7 @@ public class HardDeleter implements Runnable {
            crc
            ---
          */
-    if (endToken == null || ((StoreFindToken) endToken).getType().equals(StoreFindToken.Type.Uninitialized)) {
+    if (endToken == null) {
       return;
     }
     final Timer.Context context = metrics.cleanupTokenFlushTime.time();
