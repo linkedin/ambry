@@ -103,6 +103,10 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IdenticalPutAttemptCount"));
   }
 
+  MetricRegistry getRegistry() {
+    return registry;
+  }
+
   void initializeIndexGauges(final PersistentIndex index, final long capacityInBytes) {
     Gauge<Long> currentCapacityUsed = new Gauge<Long>() {
       @Override

@@ -307,16 +307,6 @@ public class LogTest {
       // expected. Nothing to do.
     }
 
-    // cannot add segments that are considered "used"
-    segmentName = LogSegmentNameHelper.getName(activeSegmentPos - 1, 0);
-    segment = getLogSegment(segmentName, SEGMENT_CAPACITY, true);
-    try {
-      log.addSegment(segment, true);
-      fail("Cannot add segment that has to be counted towards used segments");
-    } catch (IllegalArgumentException e) {
-      // expected. Nothing to do.
-    }
-
     // drop the uncounted segment
     assertEquals("Segment not as expected", uncountedSegment, log.getSegment(uncountedSegment.getName()));
     File segmentFile = uncountedSegment.getView().getFirst();

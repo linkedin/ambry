@@ -55,6 +55,7 @@ class BlobStore implements Store {
   private final UUID sessionId = UUID.randomUUID();
 
   private Log log;
+  private BlobStoreCompactor compactor;
   private PersistentIndex index;
   private BlobStoreStats blobStoreStats;
   private boolean started;
@@ -123,8 +124,12 @@ class BlobStore implements Store {
 
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
+        compactor =
+            new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, diskIOScheduler, log, taskScheduler,
+                recovery, time, sessionId, storeDescriptor.getIncarnationId());
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
             sessionId, storeDescriptor.getIncarnationId());
+        compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
         blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);
         started = true;
@@ -394,6 +399,7 @@ class BlobStore implements Store {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
+        compactor.close(2);
         index.close();
         log.close();
         started = false;

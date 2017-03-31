@@ -21,11 +21,9 @@ import java.util.concurrent.locks.Condition;
  */
 public class MockTime extends Time {
   public long currentMilliseconds;
-  public long currentNanoSeconds;
 
   public MockTime(long initialMilliseconds) {
     currentMilliseconds = initialMilliseconds;
-    currentNanoSeconds = initialMilliseconds * NsPerMs;
   }
 
   public MockTime() {
@@ -39,7 +37,7 @@ public class MockTime extends Time {
 
   @Override
   public long nanoseconds() {
-    return currentNanoSeconds;
+    return currentMilliseconds * NsPerMs;
   }
 
   @Override

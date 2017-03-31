@@ -430,18 +430,16 @@ class Log implements Write {
    * @param segment the {@link LogSegment} instance to add.
    * @param increaseUsedSegmentCount {@code true} if the number of segments used has to be incremented, {@code false}
    *                                             otherwise.
-   * @throws IllegalArgumentException if the {@code segment} being added is past the active segment or if the segment
-   *                                  added cannot be counted as "used".
+   * @throws IllegalArgumentException if the {@code segment} being added is past the active segment
    */
   void addSegment(LogSegment segment, boolean increaseUsedSegmentCount) {
-    if (increaseUsedSegmentCount && remainingUnallocatedSegments.decrementAndGet() < 0) {
-      remainingUnallocatedSegments.incrementAndGet();
-      throw new IllegalArgumentException("Cannot add any more log segments that contribute to used segment count");
-    }
     if (LogSegmentNameHelper.COMPARATOR.compare(segment.getName(), activeSegment.getName()) >= 0) {
       throw new IllegalArgumentException(
           "Cannot add segments past the current active segment. Active segment is [" + activeSegment.getName()
               + "]. Tried to add [" + segment.getName() + "]");
+    }
+    if (increaseUsedSegmentCount) {
+      remainingUnallocatedSegments.decrementAndGet();
     }
     segmentsByName.put(segment.getName(), segment);
   }

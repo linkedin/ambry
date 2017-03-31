@@ -275,6 +275,14 @@ class IndexSegment {
   }
 
   /**
+   * Sets the last modified time (secs) of this segment.
+   * @param lastModifiedTimeSec the value to set to (secs).
+   */
+  void setLastModifiedTimeSecs(long lastModifiedTimeSec) {
+    this.lastModifiedTimeSec.set(lastModifiedTimeSec);
+  }
+
+  /**
    * The version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
    * @return the version of the {@link PersistentIndex} that this {@link IndexSegment} is based on
    */
