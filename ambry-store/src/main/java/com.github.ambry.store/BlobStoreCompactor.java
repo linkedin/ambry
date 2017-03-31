@@ -630,8 +630,8 @@ class BlobStoreCompactor {
    */
   private boolean alreadyExistsInTgt(StoreKey key, IndexValue srcValue) throws StoreException {
     IndexValue tgtValue = tgtIndex.findKey(key);
-    return tgtValue != null && srcValue.isFlagSet(IndexValue.Flags.Delete_Index) == tgtValue.isFlagSet(
-        IndexValue.Flags.Delete_Index);
+    return tgtValue != null && (tgtValue.isFlagSet(IndexValue.Flags.Delete_Index) || !srcValue.isFlagSet(
+        IndexValue.Flags.Delete_Index));
   }
 
   /**
@@ -660,29 +660,27 @@ class BlobStoreCompactor {
         diskIOScheduler.getSlice(LOG_SEGMENT_COPY_JOB_NAME, LOG_SEGMENT_COPY_JOB_NAME, writtenLastTime);
         tgtLog.appendFrom(fileChannel, srcValue.getSize());
         FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
-        IndexValue tgtValue;
         if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
           IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
-          if (putValue != null && putValue.getOffset().getName().equals(fileSpan.getStartOffset().getName())) {
-            tgtValue = new IndexValue(putValue.getSize(), putValue.getOffset(), putValue.getExpiresAtMs(),
-                srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
-            tgtValue.setNewOffset(fileSpan.getStartOffset());
-            tgtValue.setNewSize(srcValue.getSize());
+          if (putValue != null) {
+            tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan);
           } else {
-            tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+            IndexValue tgtValue =
+                new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
+                    srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+            tgtValue.setFlag(IndexValue.Flags.Delete_Index);
             tgtValue.clearOriginalMessageOffset();
+            tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
           }
-          tgtValue.setFlag(IndexValue.Flags.Delete_Index);
         } else {
-          tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
+          IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
               srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+          tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
         }
-        IndexEntry entry = new IndexEntry(srcIndexEntry.getKey(), tgtValue);
-        tgtIndex.addToIndex(entry, fileSpan);
-        if (tgtValue.getOperationTimeInMs() == Utils.Infinite_Time) {
-          tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecs);
-        }
+        long lastModifiedTimeSecsToSet =
+            srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
+                : lastModifiedTimeSecs;
+        tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
         writtenLastTime = srcValue.getSize();
       } else if (!isActive) {
         logger.info("Stopping copying because shutdown is in progress");

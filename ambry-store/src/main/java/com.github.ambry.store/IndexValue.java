@@ -178,7 +178,7 @@ class IndexValue {
    * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
    *                              in the same log segment. Set to {@link #UNKNOWN_ORIGINAL_MESSAGE_OFFSET} otherwise.
-   * @param operationTimeInMs operation time in ms of the entry in secs
+   * @param operationTimeInMs the time in ms at which the operation occurred.
    * @param serviceId the serviceId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
    */
@@ -287,6 +287,7 @@ class IndexValue {
    * @param size the size that needs to be set for the {@link IndexValue}
    */
   void setNewSize(long size) {
+
     this.size = size;
   }
 
