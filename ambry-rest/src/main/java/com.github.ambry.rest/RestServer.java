@@ -286,14 +286,8 @@ public class RestServer {
       logger.info("Router close took {} ms", elapsedTime);
       restServerMetrics.routerCloseTime.update(elapsedTime);
 
-      clusterMap.close();
-      long clusterMapCloseTime = System.currentTimeMillis();
-      elapsedTime = clusterMapCloseTime - routerCloseTime;
-      logger.info("clusterMap close took {} ms", elapsedTime);
-      restServerMetrics.clusterMapCloseTime.update(elapsedTime);
-
       reporter.stop();
-      elapsedTime = System.currentTimeMillis() - clusterMapCloseTime;
+      elapsedTime = System.currentTimeMillis() - routerCloseTime;
       logger.info("JMX reporter shutdown took {} ms", elapsedTime);
       restServerMetrics.jmxReporterShutdownTimeInMs.update(elapsedTime);
     } catch (IOException e) {
