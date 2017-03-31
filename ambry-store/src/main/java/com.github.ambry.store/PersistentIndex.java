@@ -699,6 +699,8 @@ class PersistentIndex {
       Offset logEndOffsetBeforeFind = log.getEndOffset();
       StoreFindToken storeToken = resetTokenIfRequired((StoreFindToken) token);
       logger.trace("Time used to validate token: {}", (time.milliseconds() - startTimeInMs));
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
+      storeToken = revalidateStoreFindToken(storeToken, indexSegments);
 
       List<MessageInfo> messageEntries = new ArrayList<MessageInfo>();
       if (!storeToken.getType().equals(StoreFindToken.Type.IndexBased)) {
@@ -713,9 +715,12 @@ class PersistentIndex {
         logger.trace("Journal based token, Time used to get entries: {}", (time.milliseconds() - startTimeInMs));
         // we deliberately obtain a snapshot of the index segments AFTER fetching from the journal. This ensures that
         // any and all entries returned from the journal are guaranteed to be in the obtained snapshot of indexSegments.
-        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
+        indexSegments = validIndexSegments;
 
-        if (entries != null) {
+        // recheck to make sure that offsetToStart hasn't slipped out of the journal. It is possible (but highly
+        // improbable) that the offset has slipped out of the journal and has been compacted b/w the time of getting
+        // entries from the journal to when another view of the index segments was obtained.
+        if (entries != null && offsetToStart.compareTo(journal.getFirstOffset()) >= 0) {
           startTimeInMs = time.milliseconds();
           logger.trace(
               "Index : " + dataDir + " retrieving from journal from offset " + offsetToStart + " total entries "
@@ -750,6 +755,9 @@ class PersistentIndex {
           storeFindToken.setBytesRead(bytesRead);
           return new FindInfo(messageEntries, storeFindToken);
         } else {
+          storeToken = revalidateStoreFindToken(storeToken, indexSegments);
+          offsetToStart = storeToken.getType().equals(StoreFindToken.Type.Uninitialized) ? getStartOffset(indexSegments)
+              : storeToken.getOffset();
           // Find index segment closest to the token offset.
           // Get entries starting from the first key in this offset.
           Map.Entry<Offset, IndexSegment> entry = indexSegments.floorEntry(offsetToStart);
@@ -781,7 +789,6 @@ class PersistentIndex {
         // Find the index segment corresponding to the token indexStartOffset.
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
-        ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
         StoreFindToken newToken =
             findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
                 new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments);
@@ -1316,6 +1323,52 @@ class PersistentIndex {
    */
   void persistIndex() throws StoreException {
     persistor.write();
+  }
+
+  /**
+   * Re-validates the {@code token} to ensure that it is consistent with the current set of index segments. If it is
+   * not, a {@link StoreFindToken.Type#Uninitialized} token is returned.
+   * @param token the {@link StoreFindToken} to revalidate.
+   * @return {@code token} if is consistent with the current set of index segments, a new
+   * {@link StoreFindToken.Type#Uninitialized} token otherwise.
+   */
+  FindToken revalidateFindToken(FindToken token) {
+    return revalidateStoreFindToken((StoreFindToken) token, validIndexSegments);
+  }
+
+  /**
+   * Re-validates the {@code token} to ensure that it is consistent with the given view of {@code indexSegments}. If it
+   * is not, a {@link StoreFindToken.Type#Uninitialized} token is returned.
+   * @param token the {@link StoreFindToken} to revalidate.
+   * @param indexSegments the view of the index segment to revalidate against.
+   * @return {@code token} if is consistent with {@code indexSegments}, a new {@link StoreFindToken.Type#Uninitialized}
+   * token otherwise.
+   */
+  private StoreFindToken revalidateStoreFindToken(StoreFindToken token,
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
+    StoreFindToken revalidatedToken = token;
+    Offset offset = token.getOffset();
+    switch (token.getType()) {
+      case Uninitialized:
+        // nothing to do.
+        break;
+      case JournalBased:
+        Offset floorOffset = indexSegments.floorKey(offset);
+        if (!floorOffset.getName().equals(offset.getName())) {
+          revalidatedToken = new StoreFindToken();
+          logger.info("Reset token {} because it is invalid for the index segment map", token);
+        }
+        break;
+      case IndexBased:
+        if (!indexSegments.containsKey(offset)) {
+          revalidatedToken = new StoreFindToken();
+          logger.info("Reset token {} because it is invalid for the index segment map", token);
+        }
+        break;
+      default:
+        throw new IllegalStateException("Unrecognized token type: " + token.getType());
+    }
+    return revalidatedToken;
   }
 
   /**
