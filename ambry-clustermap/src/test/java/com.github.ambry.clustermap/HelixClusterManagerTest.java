@@ -136,7 +136,7 @@ public class HelixClusterManagerTest {
   public void badInstantiationTest() throws Exception {
     // Good test happened in the constructor
     assertEquals(false, metricRegistry.getGauges()
-        .get(HelixClusterManager.class.getName() + ".helixClusterManagerInstantiationFailed")
+        .get(HelixClusterManager.class.getName() + ".instantiationFailed")
         .getValue());
 
     // Bad test
@@ -156,7 +156,7 @@ public class HelixClusterManagerTest {
       fail("Instantiation should have failed with invalid zk addresses");
     } catch (IOException e) {
       assertEquals(true, metricRegistry.getGauges()
-          .get(HelixClusterManager.class.getName() + ".helixClusterManagerInstantiationFailed")
+          .get(HelixClusterManager.class.getName() + ".instantiationFailed")
           .getValue());
     }
   }

@@ -75,7 +75,7 @@ class HelixClusterManagerMetrics {
         return !instantiated;
       }
     };
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "helixClusterManagerInstantiationFailed"),
+    registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationFailed"),
         helixClusterManagerInstantiationFailed);
   }
 
@@ -113,7 +113,7 @@ class HelixClusterManagerMetrics {
     registry.register(MetricRegistry.name(HelixClusterManager.class, "dataNodeDownCount"), dataNodeDownCount);
 
     for (final AmbryDataNode datanode : clusterMapCallback.getDatanodes()) {
-      final String metricName = datanode.getHostname() + "-" + datanode.getPort() + "-ResourceState";
+      final String metricName = datanode.getHostname() + "-" + datanode.getPort() + "-DataNodeResourceState";
       Gauge<Boolean> dataNodeState = new Gauge<Boolean>() {
         @Override
         public Boolean getValue() {
@@ -147,7 +147,7 @@ class HelixClusterManagerMetrics {
     for (final AmbryDisk disk : clusterMapCallback.getDisks()) {
       final String metricName =
           disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
-              + "-ResourceState";
+              + "-DiskResourceState";
       Gauge<Boolean> diskState = new Gauge<Boolean>() {
         @Override
         public Boolean getValue() {
