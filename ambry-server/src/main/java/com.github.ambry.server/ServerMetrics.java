@@ -147,8 +147,6 @@ public class ServerMetrics {
   public final Counter idDeletedError;
   public final Counter ttlExpiredError;
 
-  public final Counter participantInitializationFailure;
-
   public ServerMetrics(MetricRegistry registry) {
     putBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestQueueTime"));
@@ -269,8 +267,6 @@ public class ServerMetrics {
 
     serverStartTimeInMs = registry.histogram(MetricRegistry.name(AmbryServer.class, "ServerStartTimeInMs"));
     serverShutdownTimeInMs = registry.histogram(MetricRegistry.name(AmbryServer.class, "ServerShutdownTimeInMs"));
-    participantInitializationFailure =
-        registry.counter(MetricRegistry.name(AmbryServer.class, "participantInitializationFailure"));
 
     putBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutBlobRequestRate"));
     getBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobRequestRate"));
