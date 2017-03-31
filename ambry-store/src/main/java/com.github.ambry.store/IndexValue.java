@@ -287,7 +287,6 @@ class IndexValue {
    * @param size the size that needs to be set for the {@link IndexValue}
    */
   void setNewSize(long size) {
-
     this.size = size;
   }
 
