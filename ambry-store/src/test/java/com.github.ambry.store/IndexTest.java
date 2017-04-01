@@ -825,7 +825,7 @@ public class IndexTest {
       long offsetBeforeStart = firstIndexSegmentStartOffset.getOffset() - 1;
 
       Offset[] invalidOffsets =
-          {new Offset(newName, newOffset + 1), new Offset(firstIndexSegmentStartOffset.getName(), offsetBeforeStart)};
+          {new Offset(newName, newOffset), new Offset(firstIndexSegmentStartOffset.getName(), offsetBeforeStart)};
       MockId firstIdInFirstIndexSegment = state.referenceIndex.firstEntry().getValue().firstKey();
 
       for (Offset invalidOffset : invalidOffsets) {
