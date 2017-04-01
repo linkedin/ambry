@@ -1340,7 +1340,7 @@ class PersistentIndex {
    * Re-validates the {@code token} to ensure that it is consistent with the given view of {@code indexSegments}. If it
    * is not, a {@link StoreFindToken.Type#Uninitialized} token is returned.
    * @param token the {@link StoreFindToken} to revalidate.
-   * @param indexSegments the view of the index segment to revalidate against.
+   * @param indexSegments the view of the index segments to revalidate against.
    * @return {@code token} if is consistent with {@code indexSegments}, a new {@link StoreFindToken.Type#Uninitialized}
    * token otherwise.
    */
@@ -1354,15 +1354,15 @@ class PersistentIndex {
         break;
       case JournalBased:
         Offset floorOffset = indexSegments.floorKey(offset);
-        if (!floorOffset.getName().equals(offset.getName())) {
+        if (floorOffset == null || !floorOffset.getName().equals(offset.getName())) {
           revalidatedToken = new StoreFindToken();
-          logger.info("Reset token {} because it is invalid for the index segment map", token);
+          logger.info("Revalidated token {} because it is invalid for the index segment map", token);
         }
         break;
       case IndexBased:
         if (!indexSegments.containsKey(offset)) {
           revalidatedToken = new StoreFindToken();
-          logger.info("Reset token {} because it is invalid for the index segment map", token);
+          logger.info("Revalidated token {} because it is invalid for the index segment map", token);
         }
         break;
       default:

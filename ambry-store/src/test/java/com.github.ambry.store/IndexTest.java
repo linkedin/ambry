@@ -814,21 +814,30 @@ public class IndexTest {
           new StoreFindToken(state.logOrder.lastKey(), state.sessionId, state.incarnationId, false);
       absoluteEndToken.setBytesRead(state.index.getLogUsedCapacity());
 
-      // generate an offset that does not exist.
       Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
-      MockId firstIdInFirstIndexSegment = state.referenceIndex.firstEntry().getValue().firstKey();
+      assertTrue("The first index segment must have an offset > 0", firstIndexSegmentStartOffset.getOffset() > 0);
+
+      // generate an offset that does not exist.
       String newName = LogSegmentNameHelper.getNextGenerationName(firstIndexSegmentStartOffset.getName());
       long newOffset = firstIndexSegmentStartOffset.getOffset() + 1;
-      Offset invalidOffset = new Offset(newName, newOffset + 1);
 
-      // Generate an index based token from invalidOffset
-      StoreFindToken startToken =
-          new StoreFindToken(firstIdInFirstIndexSegment, invalidOffset, state.sessionId, state.incarnationId);
-      doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
+      // Generate an offset that is below the index start offset
+      long offsetBeforeStart = firstIndexSegmentStartOffset.getOffset() - 1;
 
-      // Generate a journal based token from invalidOffset (not in journal and is invalid)
-      startToken = new StoreFindToken(invalidOffset, state.sessionId, state.incarnationId, false);
-      doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
+      Offset[] invalidOffsets =
+          {new Offset(newName, newOffset), new Offset(firstIndexSegmentStartOffset.getName(), offsetBeforeStart)};
+      MockId firstIdInFirstIndexSegment = state.referenceIndex.firstEntry().getValue().firstKey();
+
+      for (Offset invalidOffset : invalidOffsets) {
+        // Generate an index based token from invalidOffset
+        StoreFindToken startToken =
+            new StoreFindToken(firstIdInFirstIndexSegment, invalidOffset, state.sessionId, state.incarnationId);
+        doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
+
+        // Generate a journal based token from invalidOffset (not in journal and is invalid)
+        startToken = new StoreFindToken(invalidOffset, state.sessionId, state.incarnationId, false);
+        doFindEntriesSinceTest(startToken, Long.MAX_VALUE, state.allKeys.keySet(), absoluteEndToken);
+      }
     }
   }
 
