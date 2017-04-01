@@ -128,6 +128,7 @@ class CompactionManager {
      */
     @Override
     public void run() {
+      logger.info("Starting compaction thread");
       // complete any compactions in progress
       for (BlobStore store : stores) {
         if (store.isStarted()) {
@@ -172,6 +173,7 @@ class CompactionManager {
           logger.error("Compaction execution encountered an error either during wait. Continuing", e);
         }
       }
+      logger.info("Stopping compaction thread");
     }
 
     /**
@@ -185,6 +187,7 @@ class CompactionManager {
       } finally {
         lock.unlock();
       }
+      logger.info("Disabled compaction thread");
     }
   }
 }
