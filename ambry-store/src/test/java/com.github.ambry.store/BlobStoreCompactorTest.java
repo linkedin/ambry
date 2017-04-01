@@ -718,8 +718,8 @@ public class BlobStoreCompactorTest {
     closeOrExceptionInduced = false;
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config,
-        new StoreMetrics(STORE_ID, new MetricRegistry()), ioScheduler, log, state.scheduler, state.recovery, state.time,
-        state.sessionId, state.incarnationId);
+        new StoreMetrics(STORE_ID, new MetricRegistry()), ioScheduler, log, state.recovery, state.time, state.sessionId,
+        state.incarnationId);
   }
 
   /**

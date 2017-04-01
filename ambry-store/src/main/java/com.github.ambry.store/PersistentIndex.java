@@ -84,7 +84,6 @@ class PersistentIndex {
     }
   };
 
-  final ScheduledExecutorService scheduler;
   final Journal journal;
   final HardDeleter hardDeleter;
   final Thread hardDeleteThread;
@@ -145,12 +144,13 @@ class PersistentIndex {
   /**
    * Creates a new persistent index
    * @param datadir The directory to use to store the index files
-   * @param scheduler The scheduler that runs regular background tasks
+   * @param scheduler The scheduler that runs persistence tasks. {@code null} if auto-persistence is not required.
    * @param log The log that is represented by this index
    * @param config The store configs for this index
    * @param factory The factory used to create store keys
    * @param recovery The recovery handle to perform recovery on startup
-   * @param hardDelete  The hard delete handle used to perform hard deletes
+   * @param hardDelete  The hard delete handle used to perform hard deletes. {@code null} if hard delete functionality
+   *                    is not required.
    * @param metrics the metrics object
    * @param journal the journal to use
    * @param time the time instance to use
@@ -166,7 +166,6 @@ class PersistentIndex {
     this.dataDir = datadir;
     this.log = log;
     this.time = time;
-    this.scheduler = scheduler;
     this.metrics = metrics;
     this.factory = factory;
     this.config = config;
@@ -215,10 +214,12 @@ class PersistentIndex {
         hardDeleter = null;
       }
 
-      // start scheduler thread to persist index in the background
-      this.scheduler.scheduleAtFixedRate(persistor,
-          config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
-          config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+      if (scheduler != null) {
+        // start scheduler thread to persist index in the background
+        scheduler.scheduleAtFixedRate(persistor,
+            config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
+            config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+      }
       if (hardDelete != null && config.storeEnableHardDelete) {
         logger.info("Index : " + datadir + " Starting hard delete thread ");
         hardDeleteThread = Utils.newThread("hard delete thread " + datadir, hardDeleter, true);
