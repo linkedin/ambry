@@ -88,7 +88,7 @@ public class ConsistencyCheckerTool {
   }
 
   private void collectData(File[] replicas, ArrayList<String> replicasList, Map<String, BlobStatus> blobIdToStatusMap,
-      AtomicLong totalKeysProcessed) throws IOException, InterruptedException, JSONException {
+      AtomicLong totalKeysProcessed) throws Exception {
     DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties);
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {

@@ -1,5 +1,5 @@
-/**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import com.github.ambry.network.PortType;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -152,9 +153,10 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
-    short version = stream.readShort();
-    long id = stream.readLong();
+  public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
+    DataInputStream dataInputStream = new DataInputStream(stream);
+    short version = dataInputStream.readShort();
+    long id = dataInputStream.readLong();
     return partitions.get(id);
   }
 
@@ -188,7 +190,7 @@ public class MockClusterMap implements ClusterMap {
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
     ArrayList<ReplicaId> replicaIdsToReturn = new ArrayList<ReplicaId>();
     for (PartitionId partitionId : partitions.values()) {
-      List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+      List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
         if (replicaId.getDataNodeId().getHostname().compareTo(dataNodeId.getHostname()) == 0
             && replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {
@@ -287,4 +289,10 @@ public class MockClusterMap implements ClusterMap {
         break;
     }
   }
+
+  @Override
+  public void close() {
+    // No-op.
+  }
 }
+

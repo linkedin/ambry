@@ -24,8 +24,8 @@ import com.github.ambry.network.ConnectionPoolTimeoutException;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -52,7 +52,7 @@ public class ResponseHandlerTest {
     }
 
     @Override
-    public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
+    public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
       return null;
     }
 
@@ -90,6 +90,10 @@ public class ResponseHandlerTest {
     public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
       lastReplicaID = replicaId;
       lastReplicaEvents.add(event);
+    }
+
+    @Override
+    public void close() {
     }
 
     public void reset() {

@@ -216,6 +216,9 @@ public class TestSSLUtils {
       File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
     Properties props = new Properties();
     addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias);
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
     return new VerifiableProperties(props);
   }
 

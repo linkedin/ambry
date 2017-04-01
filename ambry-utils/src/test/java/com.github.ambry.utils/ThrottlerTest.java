@@ -42,7 +42,7 @@ public class ThrottlerTest {
     long sleepTimeExpected;
 
     @Override
-    public void sleep(long ms) throws InterruptedException {
+    public void sleep(long ms) {
       currentMilliseconds += ms;
       if (sleepTimeExpected != ms) {
         throw new IllegalArgumentException();

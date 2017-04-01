@@ -14,9 +14,8 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -27,18 +26,20 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
+ * An extension of {@link PartitionId} to be used within the {@link StaticClusterManager}.
+ *
  * A Partition is the unit of data management in Ambry. Each Partition is uniquely identifiable by an ID. Partitions
  * consist of one or more {@link Replica}s. Replicas ensure that a Partition is available and reliable.
  */
-public class Partition extends PartitionId {
+class Partition extends PartitionId {
 
-  private static final long Min_Replica_Capacity_In_Bytes = 1024 * 1024 * 1024L;
-  private static final long Max_Replica_Capacity_In_Bytes = 10995116277760L; // 10 TB
   private static final short Version_Field_Size_In_Bytes = 2;
-  private static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
   private static final short Current_Version = 1;
+  private static final int Partition_Size_In_Bytes = Version_Field_Size_In_Bytes + 8;
 
   private Long id;
   PartitionState partitionState;
@@ -48,7 +49,7 @@ public class Partition extends PartitionId {
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   // For constructing new Partition
-  public Partition(long id, PartitionState partitionState, long replicaCapacityInBytes) {
+  Partition(long id, PartitionState partitionState, long replicaCapacityInBytes) {
     logger.trace("Partition " + id + ", " + partitionState + ", " + replicaCapacityInBytes);
     this.id = id;
     this.partitionState = partitionState;
@@ -58,11 +59,11 @@ public class Partition extends PartitionId {
     validate();
   }
 
-  public Partition(PartitionLayout partitionLayout, JSONObject jsonObject) throws JSONException {
+  Partition(PartitionLayout partitionLayout, JSONObject jsonObject) throws JSONException {
     this(partitionLayout.getHardwareLayout(), jsonObject);
   }
 
-  public Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+  Partition(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Partition " + jsonObject.toString());
     }
@@ -77,17 +78,14 @@ public class Partition extends PartitionId {
     validate();
   }
 
-  public static byte[] readPartitionBytesFromStream(DataInputStream stream) throws IOException {
+  static byte[] readPartitionBytesFromStream(InputStream stream) throws IOException {
     byte[] partitionBytes = Utils.readBytesFromStream(stream, Partition_Size_In_Bytes);
     return partitionBytes;
   }
 
   @Override
   public byte[] getBytes() {
-    ByteBuffer buffer = ByteBuffer.allocate(Partition_Size_In_Bytes);
-    buffer.putShort(Current_Version);
-    buffer.putLong(id);
-    return buffer.array();
+    return ClusterMapUtils.serializeShortAndLong(Current_Version, id);
   }
 
   @Override
@@ -106,19 +104,19 @@ public class Partition extends PartitionId {
     return id.toString().equals(partitionId);
   }
 
-  public long getAllocatedRawCapacityInBytes() {
+  long getAllocatedRawCapacityInBytes() {
     return replicaCapacityInBytes * replicas.size();
   }
 
-  public long getReplicaCapacityInBytes() {
+  long getReplicaCapacityInBytes() {
     return replicaCapacityInBytes;
   }
 
-  public List<Replica> getReplicas() {
+  List<Replica> getReplicas() {
     return replicas;
   }
 
-  public long getId() {
+  long getId() {
     return id;
   }
 
@@ -127,28 +125,18 @@ public class Partition extends PartitionId {
    *
    * @return string representation of the Partition's ID for use as part of file system path.
    */
-  public String toPathString() {
+  String toPathString() {
     return Long.toString(id);
   }
 
   // For constructing new Partition
-  public void addReplica(Replica replica) {
+  void addReplica(Replica replica) {
     replicas.add(replica);
 
     validate();
   }
 
-  protected void validateReplicaCapacityInBytes() {
-    if (replicaCapacityInBytes < Min_Replica_Capacity_In_Bytes) {
-      throw new IllegalStateException(
-          "Invalid disk capacity: " + replicaCapacityInBytes + " is less than " + Min_Replica_Capacity_In_Bytes);
-    } else if (replicaCapacityInBytes > Max_Replica_Capacity_In_Bytes) {
-      throw new IllegalStateException(
-          "Invalid disk capacity: " + replicaCapacityInBytes + " is more than " + Max_Replica_Capacity_In_Bytes);
-    }
-  }
-
-  protected void validateConstraints() {
+  private void validateConstraints() {
     // Ensure each replica is on distinct Disk and DataNode.
     Set<DataNode> dataNodeSet = new HashSet<DataNode>();
     Set<Disk> diskSet = new HashSet<Disk>();
@@ -165,14 +153,14 @@ public class Partition extends PartitionId {
     }
   }
 
-  protected void validate() {
+  private void validate() {
     logger.trace("begin validate.");
-    validateReplicaCapacityInBytes();
+    validateReplicaCapacityInBytes(replicaCapacityInBytes);
     validateConstraints();
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
+  JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject().put("id", id)
         .put("partitionState", partitionState)
         .put("replicaCapacityInBytes", replicaCapacityInBytes)
@@ -223,8 +211,7 @@ public class Partition extends PartitionId {
     return id.compareTo(other.id);
   }
 
-  public void onPartitionReadOnly() {
-    // @todo: Maintain state and handle partition errors. Also note that this method could be accessed concurrently,
-    // and needs to be thread-safe.
+  void onPartitionReadOnly() {
+    // no-op
   }
 }

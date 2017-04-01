@@ -11,12 +11,8 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.tools.admin;
+package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.ClusterMapManager;
-import com.github.ambry.clustermap.HardwareLayout;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.PartitionLayout;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
@@ -117,13 +113,15 @@ public class PartitionManager {
       } catch (FileNotFoundException e) {
         System.out.println("Partition layout path not found. Creating new file");
       }
-      ClusterMapManager manager = null;
+      StaticClusterManager manager = null;
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
       if (fileString == null) {
-        manager = new ClusterMapManager(new PartitionLayout(
-            new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig)));
+        manager = (new StaticClusterAgentsFactory(clusterMapConfig, new PartitionLayout(
+            new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)),
+                clusterMapConfig)))).getClusterMap();
       } else {
-        manager = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
+        manager =
+            (new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       }
       if (operationType.compareToIgnoreCase("AddPartition") == 0) {
         listOpt.add(numberOfPartitionsOpt);

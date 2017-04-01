@@ -13,8 +13,7 @@
  */
 package com.github.ambry.server;
 
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.InvocationOptions;
@@ -35,14 +34,15 @@ public class AmbryMain {
     final AmbryServer ambryServer;
     int exitCode = 0;
     try {
-      final InvocationOptions options = new InvocationOptions(args);
-      final Properties properties = Utils.loadProps(options.serverPropsFilePath);
-      final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-      final ClusterMap clusterMap =
-          new ClusterMapManager(options.hardwareLayoutFilePath, options.partitionLayoutFilePath,
-              new ClusterMapConfig(verifiableProperties));
+      InvocationOptions options = new InvocationOptions(args);
+      Properties properties = Utils.loadProps(options.serverPropsFilePath);
+      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+      ClusterAgentsFactory clusterAgentsFactory =
+          Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping AmbryServer");
-      ambryServer = new AmbryServer(verifiableProperties, clusterMap, SystemTime.getInstance());
+      ambryServer = new AmbryServer(verifiableProperties, clusterAgentsFactory, SystemTime.getInstance());
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {

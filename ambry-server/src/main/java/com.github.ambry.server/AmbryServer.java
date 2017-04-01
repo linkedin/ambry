@@ -15,7 +15,9 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -71,7 +73,9 @@ public class AmbryServer {
   private ReplicationManager replicationManager = null;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private final VerifiableProperties properties;
-  private final ClusterMap clusterMap;
+  private final ClusterAgentsFactory clusterAgentsFactory;
+  private ClusterMap clusterMap;
+  private ClusterParticipant clusterParticipant;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
@@ -79,20 +83,23 @@ public class AmbryServer {
   private ServerMetrics metrics = null;
   private Time time;
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, Time time) throws IOException {
-    this(properties, clusterMap, new LoggingNotificationSystem(), time);
+  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
+      throws IOException {
+    this(properties, clusterAgentsFactory, new LoggingNotificationSystem(), time);
   }
 
-  public AmbryServer(VerifiableProperties properties, ClusterMap clusterMap, NotificationSystem notificationSystem,
-      Time time) throws IOException {
+  public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
+      NotificationSystem notificationSystem, Time time) {
     this.properties = properties;
-    this.clusterMap = clusterMap;
+    this.clusterAgentsFactory = clusterAgentsFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
   }
 
   public void startup() throws InstantiationException {
     try {
+      clusterMap = clusterAgentsFactory.getClusterMap();
+      clusterParticipant = clusterAgentsFactory.getClusterParticipant();
       logger.info("starting");
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
@@ -158,6 +165,7 @@ public class AmbryServer {
         statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
         statsManager.start();
       }
+      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port);
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
@@ -169,12 +177,17 @@ public class AmbryServer {
     }
   }
 
+  /**
+   * This method is expected to be called in the exit path as long as the AmbryServer instance construction was
+   * successful. This is expected to be called even if {@link #startup()} did not succeed.
+   */
   public void shutdown() {
-
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       logger.info("shutdown started");
-
+      if (clusterParticipant != null) {
+        clusterParticipant.close();
+      }
       if (scheduler != null) {
         scheduler.shutdown();
         if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {
@@ -208,6 +221,9 @@ public class AmbryServer {
         } catch (IOException e) {
           logger.error("Error while closing notification system.", e);
         }
+      }
+      if (clusterMap != null) {
+        clusterMap.close();
       }
       logger.info("shutdown completed");
     } catch (Exception e) {

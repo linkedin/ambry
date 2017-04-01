@@ -14,8 +14,8 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
@@ -41,6 +41,7 @@ import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -196,9 +197,10 @@ public class ServerReadPerformance {
       writer = new FileWriter(logFile);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(sslProperties)));
-
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(sslProperties));
+      ClusterMap map =
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -224,7 +226,7 @@ public class ServerReadPerformance {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
       VerifiableProperties vProps = new VerifiableProperties(sslProperties);
       SSLConfig sslConfig = new SSLConfig(vProps);
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+      clusterMapConfig = new ClusterMapConfig(vProps);
       connectionPool =
           new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;

@@ -13,15 +13,21 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import org.I0Itec.zkclient.IDefaultNameSpace;
+import org.I0Itec.zkclient.ZkClient;
+import org.I0Itec.zkclient.ZkServer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -403,6 +409,7 @@ public class TestUtils {
     private boolean rackAware;
     private String clusterName;
     private List<JSONArray> datanodeJSONArrays;
+    private Properties properties;
 
     private HardwareLayout hardwareLayout;
 
@@ -461,15 +468,18 @@ public class TestUtils {
       this.numRacks = numRacks;
       this.rackAware = rackAware;
       this.clusterName = clusterName;
-
+      this.properties = new Properties();
+      properties.setProperty("clustermap.cluster.name", "test");
+      properties.setProperty("clustermap.datacenter.name", "dc1");
+      properties.setProperty("clustermap.host.name", "localhost");
       this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true)),
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(properties)));
     }
 
     void addNewDataNodes(int i) throws JSONException {
       this.dataNodeCount += i;
       this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false)),
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(properties)));
     }
 
     /**
@@ -723,13 +733,13 @@ public class TestUtils {
     }
   }
 
-  public static ClusterMapManager getTestClusterMap(int partitionCount, int replicaCountPerDatacenter,
+  public static StaticClusterManager getTestClusterMap(int partitionCount, int replicaCountPerDatacenter,
       long replicaCapacityInBytes) throws JSONException {
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
-    ClusterMapManager clusterMapManager = new ClusterMapManager(partitionLayout);
+    StaticClusterManager clusterMapManager = new StaticClusterManager(partitionLayout, new MetricRegistry());
     List<PartitionId> allocatedPartitions;
 
     allocatedPartitions =
@@ -739,12 +749,89 @@ public class TestUtils {
     return clusterMapManager;
   }
 
-  public static ClusterMapManager getTestClusterMap() throws JSONException {
+  public static StaticClusterManager getTestClusterMap() throws JSONException {
     int numPartitions = 5;
     int replicaCountPerDatacenter = 2;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
     return getTestClusterMap(numPartitions, replicaCountPerDatacenter, replicaCapacityInBytes);
+  }
+
+  /**
+   * A class to initialize and hold information about each Zk Server.
+   */
+  static class ZkInfo {
+    String dcName;
+    int port;
+    String dataDir;
+    String logDir;
+    ZkServer zkServer;
+
+    /**
+     * Instantiate by starting a Zk server.
+     * @param tempDirPath the temporary directory string to use.
+     * @param dcName the name of the datacenter.
+     * @param port the port at which this Zk server should run on localhost.
+     */
+    ZkInfo(String tempDirPath, String dcName, int port, boolean start) throws IOException {
+      this.dcName = dcName;
+      this.port = port;
+      this.dataDir = tempDirPath + "/dataDir";
+      this.logDir = tempDirPath + "/logDir";
+      if (start) {
+        startZkServer(port, dataDir, logDir);
+      }
+    }
+
+    private void startZkServer(int port, String dataDir, String logDir) {
+      IDefaultNameSpace defaultNameSpace = new IDefaultNameSpace() {
+        @Override
+        public void createDefaultNameSpace(ZkClient zkClient) {
+        }
+      };
+      // start zookeeper
+      zkServer = new ZkServer(dataDir, logDir, defaultNameSpace, port);
+      zkServer.start();
+    }
+
+    void shutdown() {
+      if (zkServer != null) {
+        zkServer.shutdown();
+      }
+    }
+  }
+
+  /**
+   * Construct a ZK layout JSON using predetermined information.
+   * @return the constructed JSON.
+   */
+  static JSONObject constructZkLayoutJSON(Collection<ZkInfo> zkInfos) throws JSONException {
+    JSONArray zkInfosJson = new JSONArray();
+    for (ZkInfo zkInfo : zkInfos) {
+      JSONObject zkInfoJson = new JSONObject();
+      zkInfoJson.put("datacenter", zkInfo.dcName);
+      zkInfoJson.put("zkConnectStr", "localhost:" + zkInfo.port);
+      zkInfosJson.put(zkInfoJson);
+    }
+    return new JSONObject().put("zkInfo", zkInfosJson);
+  }
+
+  /**
+   * Construct a {@link TestHardwareLayout}
+   * @return return the constructed layout.
+   */
+  static TestHardwareLayout constructInitialHardwareLayoutJSON(String clusterName) throws JSONException {
+    return new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 2, 18088, 20, false);
+  }
+
+  /**
+   * Construct a {@link TestPartitionLayout}
+   * @return return the constructed layout.
+   */
+  static TestPartitionLayout constructInitialPartitionLayoutJSON(TestHardwareLayout testHardwareLayout,
+      int partitionCount) throws JSONException {
+    return new TestPartitionLayout(testHardwareLayout, partitionCount, PartitionState.READ_WRITE, 1024L * 1024 * 1024,
+        3);
   }
 }
 

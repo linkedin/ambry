@@ -26,21 +26,21 @@ public interface ReplicaId {
    *
    * @return PartitionId of which this ReplicaId is a member.
    */
-  public PartitionId getPartitionId();
+  PartitionId getPartitionId();
 
   /**
    * Gets the DataNodeId that stores this ReplicaId.
    *
    * @return DataNodeId that stores this ReplicaId.
    */
-  public DataNodeId getDataNodeId();
+  DataNodeId getDataNodeId();
 
   /**
    * Gets the absolute path to the mounted device that stores this ReplicaId.
    *
    * @return absolute mount path.
    */
-  public String getMountPath();
+  String getMountPath();
 
   /**
    * Gets the absolute path to the directory in which this ReplicaId's files are stored on this DataNodeId. The replica
@@ -48,7 +48,7 @@ public interface ReplicaId {
    *
    * @return absolute replica path.
    */
-  public String getReplicaPath();
+  String getReplicaPath();
 
   /**
    * Gets list of this ReplicaId's peers. The peers of a ReplicaId are the other Replicas with which this replica forms
@@ -56,22 +56,22 @@ public interface ReplicaId {
    *
    * @return list of the peers of this ReplicaId.
    */
-  public List<ReplicaId> getPeerReplicaIds();
+  List<? extends ReplicaId> getPeerReplicaIds();
 
   /**
    * Gets the capacity in bytes for this ReplicaId.
    * @return the capacity in bytes
    */
-  public long getCapacityInBytes();
+  long getCapacityInBytes();
 
   /**
    * Gets the DiskId that stores this ReplicaId
    * @return DiskId that stores this ReplicaId
    */
-  public DiskId getDiskId();
+  DiskId getDiskId();
 
   /**
    * Returns true if the replica is down
    */
-  public boolean isDown();
+  boolean isDown();
 }

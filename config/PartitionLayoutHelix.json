@@ -1,0 +1,154 @@
+{
+    "clusterName": "Proto",
+    "version": 3,
+    "partitions": [
+        {
+            "id": 10,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 107374182400,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "port": 15088,
+                    "mountPath": "/tmp/a/0"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 16088,
+                    "mountPath": "/tmp/b/0"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 17088,
+                    "mountPath": "/tmp/c/0"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 18088,
+                    "mountPath": "/tmp/d/0"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 19088,
+                    "mountPath": "/tmp/e/0"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 20088,
+                    "mountPath": "/tmp/f/0"
+                }
+            ]
+        },
+        {
+            "id": 20,
+            "partitionState": "READ_ONLY",
+            "replicaCapacityInBytes": 107374182400,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "port": 15088,
+                    "mountPath": "/tmp/a/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 16088,
+                    "mountPath": "/tmp/b/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 17088,
+                    "mountPath": "/tmp/c/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 18088,
+                    "mountPath": "/tmp/d/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 19088,
+                    "mountPath": "/tmp/e/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 20088,
+                    "mountPath": "/tmp/f/1"
+                }
+            ]
+        },
+        {
+            "id": 30,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 107374182400,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "port": 15088,
+                    "mountPath": "/tmp/a/2"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 16088,
+                    "mountPath": "/tmp/b/2"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 17088,
+                    "mountPath": "/tmp/c/2"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 18088,
+                    "mountPath": "/tmp/d/2"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 19088,
+                    "mountPath": "/tmp/e/2"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 20088,
+                    "mountPath": "/tmp/f/2"
+                }
+            ]
+        },
+        {
+            "id": 40,
+            "partitionState": "READ_WRITE",
+            "replicaCapacityInBytes": 107374182400,
+            "replicas": [
+                {
+                    "hostname": "localhost",
+                    "port": 15088,
+                    "mountPath": "/tmp/a/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 16088,
+                    "mountPath": "/tmp/b/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 17088,
+                    "mountPath": "/tmp/c/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 18088,
+                    "mountPath": "/tmp/d/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 19088,
+                    "mountPath": "/tmp/e/1"
+                },
+                {
+                    "hostname": "localhost",
+                    "port": 20088,
+                    "mountPath": "/tmp/f/1"
+                }
+            ]
+        },
+    ]
+}

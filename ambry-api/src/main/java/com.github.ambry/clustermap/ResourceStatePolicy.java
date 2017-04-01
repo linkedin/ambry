@@ -22,23 +22,34 @@ public interface ResourceStatePolicy {
    *
    * @return true if the state is permanently down, false otherwise.
    */
-  public boolean isHardDown();
+  boolean isHardDown();
 
   /**
    * Checks to see if the state is down (soft or hard).
    *
    * @return true if the state is down, false otherwise.
    */
-  public boolean isDown();
+  boolean isDown();
 
   /**
    * Should be called by the caller every time an error is encountered for the corresponding resource.
    */
-  public void onError();
+  void onError();
 
   /**
    * May be called by the caller when the resource is responsive.
    */
-  public void onSuccess();
+  void onSuccess();
+
+  /**
+   * Should be called if the caller knows outside of the policy that the resource has gone down.
+   */
+  void onHardDown();
+
+  /**
+   * Should be called if the caller knows outside of the policy that the resource is up.
+   */
+  void onHardUp();
+
 }
 

@@ -28,8 +28,10 @@ import org.slf4j.LoggerFactory;
  * A Datacenter in an Ambry cluster. A Datacenter must be uniquely identifiable by its name. A Datacenter is the primary
  * unit at which Ambry hardware is organized (see {@link HardwareLayout})). A Datacenter has zero or more {@link
  * DataNode}s.
+ *
+ * This class is meant to be used within the {@link StaticClusterManager}.
  */
-public class Datacenter {
+class Datacenter {
   private final HardwareLayout hardwareLayout;
   private final String name;
   private final ArrayList<DataNode> dataNodes;
@@ -38,7 +40,7 @@ public class Datacenter {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
+  Datacenter(HardwareLayout hardwareLayout, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("Datacenter " + jsonObject.toString());
@@ -54,15 +56,15 @@ public class Datacenter {
     validate();
   }
 
-  public HardwareLayout getHardwareLayout() {
+  HardwareLayout getHardwareLayout() {
     return hardwareLayout;
   }
 
-  public String getName() {
+  String getName() {
     return name;
   }
 
-  public long getRawCapacityInBytes() {
+  long getRawCapacityInBytes() {
     return rawCapacityInBytes;
   }
 
@@ -74,7 +76,7 @@ public class Datacenter {
     return capacityInBytes;
   }
 
-  public List<DataNode> getDataNodes() {
+  List<DataNode> getDataNodes() {
     return dataNodes;
   }
 
@@ -82,7 +84,7 @@ public class Datacenter {
    * Returns {@code true} if all nodes in the datacenter have rack IDs
    * @return {@code true} if all nodes in the datacenter have rack IDs, {@code false} otherwise
    */
-  public boolean isRackAware() {
+  boolean isRackAware() {
     return rackAware;
   }
 
@@ -129,7 +131,7 @@ public class Datacenter {
     logger.trace("complete validate.");
   }
 
-  public JSONObject toJSONObject() throws JSONException {
+  JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject().put("name", name).put("dataNodes", new JSONArray());
     for (DataNode dataNode : dataNodes) {
       jsonObject.accumulate("dataNodes", dataNode.toJSONObject());

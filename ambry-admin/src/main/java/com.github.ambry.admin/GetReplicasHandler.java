@@ -111,7 +111,7 @@ class GetReplicasHandler {
    * @return A {@link JSONObject} that wraps the replica list.
    * @throws JSONException if there was an error building the {@link JSONObject}.
    */
-  private static JSONObject packageResult(List<ReplicaId> replicaIds) throws JSONException {
+  private static JSONObject packageResult(List<? extends ReplicaId> replicaIds) throws JSONException {
     JSONObject result = new JSONObject();
     if (replicaIds != null) {
       for (ReplicaId replicaId : replicaIds) {

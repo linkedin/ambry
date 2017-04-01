@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 /**
  * An Ambry hardwareLayout consists of a set of {@link Datacenter}s.
  */
-public class HardwareLayout {
+class HardwareLayout {
   private final String clusterName;
   private final long version;
   private final ArrayList<Datacenter> datacenters;
@@ -202,7 +202,7 @@ public class HardwareLayout {
    * @return DataNode or null if not found.
    */
   public DataNode findDataNode(String hostname, int port) {
-    String canonicalHostname = DataNode.getFullyQualifiedDomainName(hostname);
+    String canonicalHostname = ClusterMapUtils.getFullyQualifiedDomainName(hostname);
     logger.trace("host to find host {} port {}", canonicalHostname, port);
     for (Datacenter datacenter : datacenters) {
       logger.trace("datacenter {}", datacenter.getName());

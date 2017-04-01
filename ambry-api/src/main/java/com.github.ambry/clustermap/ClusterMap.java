@@ -14,27 +14,27 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
 
 /**
  * The ClusterMap provides a high-level interface to {@link DataNodeId}s, {@link PartitionId}s and {@link ReplicaId}s.
  */
-public interface ClusterMap {
+public interface ClusterMap extends AutoCloseable {
 
   /**
    * Gets PartitionId based on serialized bytes.
-   * @param stream data input stream that contains the serialized partition bytes
+   * @param stream {@link InputStream} that contains the serialized partition bytes
    * @return deserialized PartitionId
    */
-  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException;
+  PartitionId getPartitionIdFromStream(InputStream stream) throws IOException;
 
   /**
    * Gets a list of partitions that are available for writes.
    */
-  public List<PartitionId> getWritablePartitionIds();
+  List<? extends PartitionId> getWritablePartitionIds();
 
   /**
    * Checks if datacenter name corresponds to some datacenter in this cluster map's hardware layout.
@@ -42,7 +42,7 @@ public interface ClusterMap {
    * @param datacenterName name of datacenter
    * @return true if datacenter with datacenterName is in the hardware layout of this cluster map.
    */
-  public boolean hasDatacenter(String datacenterName);
+  boolean hasDatacenter(String datacenterName);
 
   /**
    * Gets a specific DataNodeId by its hostname and port.
@@ -51,32 +51,38 @@ public interface ClusterMap {
    * @param port of the DataNodeId
    * @return DataNodeId for this hostname and port.
    */
-  public DataNodeId getDataNodeId(String hostname, int port);
+  DataNodeId getDataNodeId(String hostname, int port);
 
   /**
    * Gets the ReplicaIds stored on the specified DataNodeId.
    *
-   * @param dataNodeId
+   * @param dataNodeId the {@link DataNodeId} whose replicas are to be returned.
    * @return list of ReplicaIds on the specified dataNodeId
    */
-  public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId);
+  List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId);
 
   /**
    * Gets the DataNodeIds for all nodes in the cluster.
    *
    * @return list of all DataNodeIds
    */
-  public List<DataNodeId> getDataNodeIds();
+  List<? extends DataNodeId> getDataNodeIds();
 
   /**
    * Gets the MetricRegistry that other users of the ClusterMap ought to use for metrics.
    *
    * @return MetricRegistry
    */
-  public MetricRegistry getMetricRegistry();
+  MetricRegistry getMetricRegistry();
 
   /**
    * Performs the required action for a replica related event.
    */
-  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event);
+  void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event);
+
+  /**
+   * Close the cluster map. Any cleanups should be done in this call.
+   */
+  @Override
+  void close();
 }

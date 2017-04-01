@@ -14,8 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicLong;
-import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,7 +67,7 @@ public class DumpIndexTool {
 
   private static final Logger logger = LoggerFactory.getLogger(DumpIndexTool.class);
 
-  public DumpIndexTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
+  public DumpIndexTool(VerifiableProperties verifiableProperties) throws Exception {
     fileToRead = verifiableProperties.getString("file.to.read");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
@@ -81,8 +80,10 @@ public class DumpIndexTool {
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
-    this.clusterMap = new ClusterMapManager(hardwareLayoutFilePath, partitionLayoutFilePath,
-        new ClusterMapConfig(verifiableProperties));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    this.clusterMap =
+        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
   }
 
   public static void main(String args[]) throws Exception {

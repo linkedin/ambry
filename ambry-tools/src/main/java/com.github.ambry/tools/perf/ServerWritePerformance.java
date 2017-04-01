@@ -14,8 +14,8 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -35,6 +35,7 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
@@ -209,9 +210,10 @@ public class ServerWritePerformance {
       final AtomicLong totalWrites = new AtomicLong(0);
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(sslProperties)));
-
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(sslProperties));
+      ClusterMap map =
+          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       blobIdsWriter = new FileWriter(logFile);
       File performanceFile = new File(System.getProperty("user.dir"), "writeperfresult");
@@ -240,7 +242,7 @@ public class ServerWritePerformance {
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
       VerifiableProperties vProps = new VerifiableProperties(sslProperties);
       SSLConfig sslConfig = new SSLConfig(vProps);
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+      clusterMapConfig = new ClusterMapConfig(vProps);
       connectionPool =
           new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       connectionPool.start();
@@ -334,7 +336,7 @@ public class ServerWritePerformance {
           ConnectedChannel channel = null;
 
           try {
-            List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+            List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(partitionId);

@@ -13,8 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -22,9 +22,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.Properties;
-import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,8 +38,7 @@ public class DumpReplicaTokenTool {
 
   private static final Logger logger = LoggerFactory.getLogger(DumpReplicaTokenTool.class);
 
-  public DumpReplicaTokenTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
-
+  public DumpReplicaTokenTool(VerifiableProperties verifiableProperties) throws Exception {
     fileToRead = verifiableProperties.getString("file.to.read");
     String hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     String partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
@@ -49,8 +46,10 @@ public class DumpReplicaTokenTool {
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
-    clusterMap = new ClusterMapManager(hardwareLayoutFilePath, partitionLayoutFilePath,
-        new ClusterMapConfig(new VerifiableProperties(new Properties())));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    this.clusterMap =
+        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
   }
 
   public static void main(String args[]) throws Exception {

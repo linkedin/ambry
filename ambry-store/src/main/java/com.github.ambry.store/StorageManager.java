@@ -52,7 +52,7 @@ public class StorageManager {
    * @param time the {@link Time} instance to use.
    */
   public StorageManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
-      List<ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
+      List<? extends ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time) throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);

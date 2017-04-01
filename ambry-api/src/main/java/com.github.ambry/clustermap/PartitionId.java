@@ -32,7 +32,7 @@ public abstract class PartitionId implements Resource, Comparable<PartitionId> {
    *
    * @return list of the Replicas that comprise this PartitionId.
    */
-  public abstract List<ReplicaId> getReplicaIds();
+  public abstract List<? extends ReplicaId> getReplicaIds();
 
   /**
    * Gets the state of this PartitionId.

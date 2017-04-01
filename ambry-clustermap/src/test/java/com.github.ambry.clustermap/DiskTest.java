@@ -64,10 +64,19 @@ class TestDisk extends Disk {
  * Tests {@link Disk} class.
  */
 public class DiskTest {
+  private Properties props;
+
+  public DiskTest() {
+    props = new Properties();
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
+  }
+
   @Test
   public void basics() throws JSONException {
     JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     Disk testDisk = new TestDisk(jsonObject, clusterMapConfig);
 
@@ -89,7 +98,7 @@ public class DiskTest {
 
   @Test
   public void validation() throws JSONException {
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
       // Null DataNode
       new Disk(null, TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L),
@@ -118,6 +127,9 @@ public class DiskTest {
     JSONObject jsonObject = TestUtils.getJsonDisk("/mnt1", HardwareState.AVAILABLE, 100 * 1024 * 1024 * 1024L);
     Properties props = new Properties();
     props.setProperty("clustermap.fixedtimeout.disk.retry.backoff.ms", Integer.toString(2000));
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     int threshold = clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold;

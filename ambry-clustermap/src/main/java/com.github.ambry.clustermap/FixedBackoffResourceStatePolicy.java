@@ -13,7 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -26,24 +27,26 @@ import org.slf4j.LoggerFactory;
  */
 class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   private final Object resource;
-  private final boolean hardDown;
+  private final AtomicBoolean hardDown;
   private final AtomicInteger failureCount;
   private final int failureCountThreshold;
   private final long retryBackoffMs;
-  private AtomicLong downUntil;
+  private final AtomicLong downUntil;
+  private final Time time;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public FixedBackoffResourceStatePolicy(Object resource, boolean hardDown, int failureCountThreshold,
-      long retryBackoffMs) {
+  FixedBackoffResourceStatePolicy(Object resource, boolean hardDown, int failureCountThreshold, long retryBackoffMs,
+      Time time) {
     this.resource = resource;
-    this.hardDown = hardDown;
+    this.hardDown = new AtomicBoolean(hardDown);
     this.failureCountThreshold = failureCountThreshold;
     this.retryBackoffMs = retryBackoffMs;
     this.downUntil = new AtomicLong(0);
     this.failureCount = new AtomicInteger(0);
+    this.time = time;
   }
 
-  /*
+  /**
    * On an error, if the failureCount is greater than the threshold, mark the node as down.
    */
   @Override
@@ -51,25 +54,46 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
     int count = failureCount.incrementAndGet();
     if (count >= failureCountThreshold) {
       if (count == failureCountThreshold) {
-        logger.error("Resource " + resource + " has gone down");
+        logger.error("Resource {} has gone down", resource);
       }
       logger.trace("Resource {} remains in down state at time {}; adding downtime of {} ms", resource,
-          SystemTime.getInstance().milliseconds(), retryBackoffMs);
-      downUntil.set(SystemTime.getInstance().milliseconds() + retryBackoffMs);
+          time.milliseconds(), retryBackoffMs);
+      downUntil.set(time.milliseconds() + retryBackoffMs);
     }
   }
 
-  /*
+  /**
+   * Called when it is known externally that the resource has gone down. An immediate call to {@link #isDown()} will
+   * return true.
+   */
+  @Override
+  public void onHardDown() {
+    logger.info("Marking resource {} as Hard down", resource);
+    hardDown.set(true);
+  }
+
+  /**
+   * Called when it is known externally that the resource is up. An immediate call to {@link #isDown()} will return
+   * false.
+   */
+  @Override
+  public void onHardUp() {
+    logger.info("Marking resource {} as Hard up", resource);
+    hardDown.set(false);
+    onSuccess();
+  }
+
+  /**
    * A single response resets the count.
    */
   @Override
   public void onSuccess() {
     if (failureCount.getAndSet(0) >= failureCountThreshold) {
-      logger.info("Resource " + resource + " is back up");
+      logger.info("Resource {} is back up", resource);
     }
   }
 
-  /*
+  /**
    * If the number of failures are above the threshold, the resource will be counted as down unless downUntil is in
    * the past.
    * Note how failureCount is not reset to 0 here. This is so that the node is marked as down if the first request after
@@ -80,10 +104,10 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
   @Override
   public boolean isDown() {
     boolean down = false;
-    if (hardDown) {
+    if (hardDown.get()) {
       down = true;
     } else if (failureCount.get() >= failureCountThreshold) {
-      if (SystemTime.getInstance().milliseconds() < downUntil.get()) {
+      if (time.milliseconds() < downUntil.get()) {
         down = true;
       }
     }
@@ -91,8 +115,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
     if (down) {
       logger.trace(
           "Resource {} is down; failureCount: {}; failureCountThreshold: {}; remaining time: {}; hard down: {}",
-          resource, failureCount.get(), failureCountThreshold,
-          downUntil.get() - SystemTime.getInstance().milliseconds(), hardDown);
+          resource, failureCount.get(), failureCountThreshold, downUntil.get() - time.milliseconds(), hardDown);
     } else {
       logger.trace("Resource {} is not down; failureCount: {}; failureCountThreshold: {}", resource, failureCount.get(),
           failureCountThreshold);
@@ -102,6 +125,6 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
 
   @Override
   public boolean isHardDown() {
-    return hardDown;
+    return hardDown.get();
   }
 }

@@ -13,8 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
-import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 /**
  * PartitionLayout of {@link Partition}s and {@link Replica}s on an Ambry cluster (see {@link HardwareLayout}).
  */
-public class PartitionLayout {
+class PartitionLayout {
   private static final long MinPartitionId = 0;
 
   private final HardwareLayout hardwareLayout;
@@ -250,7 +250,7 @@ public class PartitionLayout {
    * @param stream byte-serialized partition ID
    * @return requested Partition else null.
    */
-  public Partition getPartition(DataInputStream stream) throws IOException {
+  public Partition getPartition(InputStream stream) throws IOException {
     byte[] partitionBytes = Partition.readPartitionBytesFromStream(stream);
     return partitionMap.get(ByteBuffer.wrap(partitionBytes));
   }
