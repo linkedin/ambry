@@ -74,7 +74,7 @@ class StatsManager {
     totalPartitionIds = partitionIds;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
-    initialDelayInSecs = config.initialDelayInSecs;
+    initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
     this.time = time;
   }
@@ -85,8 +85,7 @@ class StatsManager {
   void start() {
     scheduler = Utils.newScheduler(1, false);
     statsAggregator = new StatsAggregator();
-    // random initial delay between 1 to 10 minutes to offset nodes from collecting stats at the same time
-    int actualDelay = ThreadLocalRandom.current().nextInt(initialDelayInSecs);
+    int actualDelay = initialDelayInSecs > 0 ? ThreadLocalRandom.current().nextInt(initialDelayInSecs) : 0;
     logger.info("Scheduling stats aggregation job with an initial delay of {} secs", actualDelay);
     scheduler.scheduleAtFixedRate(statsAggregator, actualDelay, publishPeriodInSecs, TimeUnit.SECONDS);
   }
@@ -148,7 +147,7 @@ class StatsManager {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot();
         aggregate(aggregatedSnapshot, statsSnapshot);
-        metrics.fetchAndAggregateTimeMsPerStore.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
+        metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachableStores.add(partitionId.toString());
       }
@@ -183,25 +182,26 @@ class StatsManager {
     @Override
     public void run() {
       logger.info("Aggregating stats");
-      long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-      StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
-      List<String> unreachableStores = new ArrayList<>();
-      Iterator<PartitionId> iterator = totalPartitionIds.iterator();
-      while (!cancelled && iterator.hasNext()) {
-        PartitionId partitionId = iterator.next();
-        collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
-      }
-      if (!cancelled) {
-        metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-        StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
-            totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
-        try {
+      try {
+        long totalFetchAndAggregateStartTimeMs = time.milliseconds();
+        StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
+        List<String> unreachableStores = new ArrayList<>();
+        Iterator<PartitionId> iterator = totalPartitionIds.iterator();
+        while (!cancelled && iterator.hasNext()) {
+          PartitionId partitionId = iterator.next();
+          collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
+        }
+        if (!cancelled) {
+          metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
+          StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
+              totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
-        } catch (IOException e) {
-          metrics.statsPublishFailureCount.inc();
-          logger.error("IOException when publishing stats to {}", statsOutputFile.getAbsolutePath(), e);
         }
+      } catch (Exception e) {
+        metrics.statsAggregationFailureCount.inc();
+        logger.error("Exception while aggregating stats. Stats output file path - {}",
+            statsOutputFile.getAbsolutePath(), e);
       }
     }
 

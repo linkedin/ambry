@@ -34,15 +34,17 @@ public class StatsManagerConfig {
   public final long publishPeriodInSecs;
 
   /**
-   * The time period in seconds to delay before the first stats collection is triggered
+   * The upper bound for the initial delay in seconds before the first stats collection is triggered. The delay is a
+   * random number b/w 0 (inclusive) and this number (exclusive). If no initial delay is desired, this can be set to 0.
    */
-  @Config("stats.initial.delay.in.secs")
+  @Config("stats.initial.delay.upper.bound.in.secs")
   @Default("600")
-  public final int initialDelayInSecs;
+  public final int initialDelayUpperBoundInSecs;
 
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
     outputFilePath = verifiableProperties.getString("stats.output.file.path", "/tmp/stats_output.json");
     publishPeriodInSecs = verifiableProperties.getLongInRange("stats.publish.period.in.secs", 7200, 0, Long.MAX_VALUE);
-    initialDelayInSecs = verifiableProperties.getIntInRange("stats.initial.delay.in.secs", 600, 0, Integer.MAX_VALUE);
+    initialDelayUpperBoundInSecs =
+        verifiableProperties.getIntInRange("stats.initial.delay.upper.bound.in.secs", 600, 0, Integer.MAX_VALUE);
   }
 }
